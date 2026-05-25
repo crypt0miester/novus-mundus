@@ -1,21 +1,16 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, ResearchProgress, ResearchTemplate, require_extension, EXT_RESEARCH},
-    validation::{
-        require_signer,
-        require_writable,
-    },
-    utils::read_u64,
     emit,
+    error::GameError,
     events::ResearchSpeedup,
+    state::{require_extension, PlayerAccount, ResearchProgress, ResearchTemplate, EXT_RESEARCH},
+    utils::read_u64,
+    validation::{require_signer, require_writable},
 };
 
 /// Speed up research using gems

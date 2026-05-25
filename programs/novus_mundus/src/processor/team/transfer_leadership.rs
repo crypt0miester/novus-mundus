@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::LeadershipTransferred,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Transfer team leadership to another member
@@ -75,13 +73,14 @@ pub fn process(
     let new_leader = unsafe { PlayerAccount::load(&new_leader_data_ref) };
 
     // Team: use load_checked_mut_by_key
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
 
     // Verify same kingdom
-    if current_leader.game_engine != team.game_engine || new_leader.game_engine != team.game_engine {
+    if current_leader.game_engine != team.game_engine || new_leader.game_engine != team.game_engine
+    {
         return Err(GameError::KingdomMismatch.into());
     }
 
@@ -96,14 +95,18 @@ pub fn process(
     }
 
     // Current leader in the team?
-    if current_leader.team_address() == NULL_PUBKEY || &current_leader.team_address() != team_account.address() {
+    if current_leader.team_address() == NULL_PUBKEY
+        || &current_leader.team_address() != team_account.address()
+    {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Validate New Leader
 
     // New leader must be in the team
-    if new_leader.team_address() == NULL_PUBKEY || &new_leader.team_address() != team_account.address() {
+    if new_leader.team_address() == NULL_PUBKEY
+        || &new_leader.team_address() != team_account.address()
+    {
         return Err(GameError::NewLeaderNotMember.into());
     }
 
@@ -116,7 +119,8 @@ pub fn process(
 
     // 7. Verify and Update Current Leader's Slot
 
-    let (expected_current_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), current_slot_index);
+    let (expected_current_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), current_slot_index);
     if current_leader_slot_account.address() != &expected_current_slot {
         return Err(GameError::InvalidPDA.into());
     }

@@ -2,59 +2,288 @@
 
 Port the displaced-plane terrain renderer from
 `sdks/novus-mundus-ts/terrain-builder/src/city/city.js` into
-`apps/web/src/components/world/CityTerrainMap.tsx`, replacing the
-two-canvas viewport-based 2D path with a single WebGL canvas.
+`apps/web/src/components/world/`. A single WebGL scene renders BOTH
+the flat top-down ("2D") view and the tilted ("3D") view; a
+**2D ↔ 3D toggle pill** in the status row animates between them with
+a Google-Maps-style tilt — pitch and per-vertex elevation lerp
+together over ~700 ms so the terrain literally rises out of the
+plate as the camera tilts back.
+
+The existing Canvas2D component (`CityTerrainMap.tsx` today) survives
+as a **WebGL-unavailable fallback only** — see `## Mode toggle` for
+the capability gate. Users on WebGL2-capable browsers (effectively
+everyone in our target audience) see the WebGL renderer in both
+modes; the toggle is a visual-state change, not a backend swap.
 
 The reference renderer and the current web component share the same
 chain-faithful heightmap functions (`terrainElevation`,
 `terrainMoisture`, `elevationToColor` in
-`sdks/novus-mundus-ts/src/calculators/terrain.ts`), so this is a
-rendering-layer swap, not a re-derivation of the math.
+`sdks/novus-mundus-ts/src/calculators/terrain.ts`), so this is a new
+rendering layer, not a re-derivation of the math.
 
-**The current `CityTerrainMap.tsx` does more than a naive 2D-disc
+**The current `CityTerrainMap.tsx` does more than a naive 2D
 renderer.** Read the "Current state" section before touching anything
-— every feature listed there must survive the port.
+— every feature listed there must survive in the WebGL renderer's
+2D mode (and continue working in the Canvas2D fallback).
 
-## Projection: isometric (chosen)
+## Projection: one perspective camera, two pitch presets
 
-Three projections were on the table:
+`THREE.PerspectiveCamera` driven by spherical state `(yaw, pitch,
+distance, target)`, smoothed every frame — model from
+`sdks/novus-mundus-ts/terrain-builder/src/town/camera/IsometricCamera.js`.
 
-1. **World-map style** — top-down 2D viewBox, north up, no tilt (what
-   `RealmMap.tsx` + `useZoomPan` already do). Loses the entire point of
-   the upgrade: elevation is only visible via shading.
-2. **Free perspective + OrbitControls** — what the terrain-builder
-   reference uses. Most flexible, but: foreshortening makes grid cells
-   non-uniform on screen, click math is harder to verify against the
-   on-chain grid, and "I lost my orientation" is a real failure mode
-   for casual players.
-3. **Isometric (orthographic + fixed tilt)** — picked.
-   `THREE.OrthographicCamera` with `pitch = 35.264°` (the
-   `atan(1/√2)` of true iso) and `yaw = 0°` (north up). No perspective
-   distortion, so one world-XZ unit projects to a fixed number of CSS
-   px regardless of position; the grid is uniform across the screen.
+**One camera, two modes.** Switching between 2D and 3D doesn't switch
+projections (ortho ↔ perspective) — it just animates `pitch` and
+`mesh.scale.y` between two presets. This is what makes the
+Google-Maps-style tilt possible; you can't continuously animate
+across two different projection types.
 
-**Honest naming caveat.** "Isometric" with yaw 0° is technically an
-axonometric projection — latitude is foreshortened by
-`cos(35.264°) ≈ 0.816` on screen Y, but longitude maps 1:1. Cells
-look like top-down squares tilted forward, *not* like classic
-diamond tiles. If anyone on the team is picturing SimCity, they
-should look at a mockup first.
+**Mode presets**:
+- **2D mode**: `pitch=0°` (camera looking straight down), `yaw=0°`,
+  `mesh.scale.y=0` (flat plate, no displaced terrain — shading from
+  vertex colors only, matches Canvas2D look). Orbit gesture
+  **disabled** (rotating a top-down view is meaningless; yaw rotation
+  is still allowed via the same orbit affordance because compass-spin
+  on a top-down map is meaningful, but pitch is locked at 0).
+- **3D mode**: `pitch=35°` (cf. `IsometricCamera.js:21`; `city.js:288`
+  uses 40° — pick 35° to match the town camera), `yaw=0°` initial but
+  user-drivable, `mesh.scale.y=1` (full elevation). Orbit fully
+  enabled.
 
-**Why isometric over world-map**: makes mountains actually rise off the
-disc, gives the city view a distinct feel from the realm map (you
-zoom in from the realm view and the projection itself changes — clear
-context switch), and is the conventional projection for city-scale
-gameplay rendering.
+**Pitch bounds depend on mode**. In 2D mode, pitch is locked at 0 (or
+in a thin band `[0°, 5°]` if you want gestural pitch to peek). In 3D
+mode, pitch is clamped `[5°, 82°]` per `city.js:277-278`. The mode
+transition tween crosses the 5° threshold; during the tween,
+pitch-clamp checks are bypassed.
 
-**Why isometric over free orbit**: keeps the grid axis-aligned and
-uniform, which makes the "grid parity" contract trivially verifiable;
-the camera always knows where north is, so a compass is meaningful;
-and there is nothing to "lose" — gestures only zoom and pan.
+**Other defaults** (from the terrain-builder reference):
+- `distance = 4.5` world units (`city.js:289`).
+- `fov = 30°` (`IsometricCamera.js:20`).
+- Smoothing factor `8.0`, zoom momentum `0.88` — see
+  `IsometricCamera.js:33,31`. Smoothing is bypassed during the mode
+  transition (the tween's ease-out IS the curve).
 
-**Yaw**: lock to `yaw = 0°` for v1 so the projected grid keeps the
-same handedness as the 2D disc (longitude → screen X, latitude →
-screen Y). A "rotate camera" button can come later as a quantised
-90° snap, never free rotation.
+**Why a single perspective camera over ortho-2D + perspective-3D**:
+- Continuous animation between modes is the whole point — switching
+  projections discretely defeats the Google-Maps wow moment.
+- Slight foreshortening in 2D mode (cells at the screen corners
+  project ~3% smaller than at centre, at fov=30°/pitch=0°/distance=4.5)
+  is below the perceptibility threshold for top-down city-scale
+  rendering. Verified against Google Maps's own top-down mode.
+- Grid-parity is projection-agnostic — `worldToGrid` raycasts the
+  terrain plane and rounds, so click math is identical whether
+  pitch is 0° or 35°.
+- One controller, one camera matrix, one set of gesture handlers.
+  Less code, fewer edge cases.
+
+**Do not use `OrbitControls` verbatim.** It supports the polar bounds
+but doesn't ship the smoothing / zoom-momentum pattern we want, and
+the mode-transition tween needs direct access to pitch / target /
+scale.y outside the controller's lerp loop. Port
+`IsometricCamera.js:190-231` (the `update(dt)` interpolation block —
+spherical → cartesian with lerp toward target state) and add
+yaw/pitch as user-drivable inputs plus an `isTransitioning` bypass.
+See `## Camera and movement` and `## Mode transition`.
+
+## Mode toggle (2D ↔ 3D)
+
+The toggle changes camera + elevation state **inside the same WebGL
+scene** — see `## Mode transition` for the animation. Mode is not a
+renderer choice; it's two presets of camera + `mesh.scale.y` that
+the user animates between.
+
+- `mapMode: "2d" | "3d"` lives on `useSettings`
+  (`apps/web/src/lib/store/settings.ts`, zustand with `persist`
+  middleware) so it survives navigation and reload. Default `"2d"`.
+- "2D mode" = perspective camera with `pitch=0°`, `yaw=0°`,
+  `mesh.scale.y=0` (flat plate). Visually indistinguishable from the
+  Canvas2D path; orbit gesture disabled (orbiting a top-down view is
+  meaningless).
+- "3D mode" = perspective camera with `pitch=35°`, `yaw=0°` (initial),
+  `mesh.scale.y=1` (full elevation). Orbit gesture enabled
+  (right-drag mouse, two-finger drag with orbit-toggle pill on touch).
+- Tapping the toggle pill animates between these two presets over
+  ~700 ms — see `## Mode transition`.
+
+**WebGL2 unavailable / context creation fails** → orchestrator mounts
+the `CityTerrainMap2DFallback.tsx` (Canvas2D path, the existing
+implementation) instead of `CityTerrainMap3D.tsx`. The toggle pill
+is hidden in that fallback state (the fallback only renders 2D and
+can't tilt). A one-line `aria-live` notice shows once. The user's
+saved `mapMode` is preserved — if the user has 3D saved and WebGL
+later becomes available (e.g. they reload after a driver update),
+they get 3D back.
+
+On `webglcontextrestored`, the WebGL path remounts with the current
+`mapMode`.
+
+The toggle is **not** a hard reload: switching modes preserves
+`selected` / `selectedEntity`, and the tween centres the camera target
+on the selected cell (or city centre if none).
+
+## Mode transition (Google-Maps tilt)
+
+The signature wow moment. Pressing the toggle pill animates camera
+pitch AND per-vertex elevation together — the camera tilts back as
+mountains push up out of the flat plate. Same idea Google Maps uses
+when you tap 3D.
+
+**What animates** (in lockstep, ~700 ms, ease-out):
+
+| Parameter | 2D → 3D | 3D → 2D |
+|---|---|---|
+| `pitch` | `0° → 35°` | `35° → 0°` |
+| `mesh.scale.y` (terrain height multiplier) | `0 → 1` | `1 → 0` |
+| `target.y` (camera look-at height) | `0 → midpointElevation` | reverse |
+
+`mesh.scale.y` is the existing terrain-builder hook
+(`city.js:374` exposes it as `_heightScale` for the debug slider).
+The mesh is built once with full Y values; `scale.y` lerps from 0
+(flat) to 1 (full elevation) — no rebuild, no shader uniforms,
+single `group.scale.y = t` per frame.
+
+**Easing**: `cubic-bezier(0.2, 0.8, 0.2, 1)` — fast launch, gentle
+settle. Implement inline (one helper) rather than pulling a tween
+library:
+```ts
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);
+}
+```
+Or the bezier above if you want the punchier curve — both are
+within ~5% of each other for this duration.
+
+**Driver**: `requestAnimationFrame` loop, runs only while a tween is
+active. Sets a `transitionRef.current = { startTs, fromMode, toMode }`
+on toggle press; each frame computes `t = clamp((now - startTs)/700,
+0, 1)`, applies eased state, calls `requestRender()`. On `t >= 1`,
+clears the ref and flips `useSettings.mapMode` to the new value.
+
+```ts
+function tickTransition(now: number) {
+  const tr = transitionRef.current;
+  if (!tr) return;
+  const t = Math.min(1, (now - tr.startTs) / 700);
+  const e = easeOutCubic(t);
+
+  const pitchA   = tr.fromMode === "3d" ? PITCH_3D : 0;
+  const pitchB   = tr.toMode   === "3d" ? PITCH_3D : 0;
+  const scaleA   = tr.fromMode === "3d" ? 1 : 0;
+  const scaleB   = tr.toMode   === "3d" ? 1 : 0;
+  const targetA  = tr.fromMode === "3d" ? midpointElevation : 0;
+  const targetB  = tr.toMode   === "3d" ? midpointElevation : 0;
+
+  camera.pitch     = lerp(pitchA,  pitchB,  e);
+  terrainMesh.scale.y = lerp(scaleA, scaleB, e);
+  cameraTarget.y   = lerp(targetA, targetB, e);
+
+  requestRender();
+  if (t >= 1) {
+    transitionRef.current = null;
+    useSettings.getState().setMapMode(tr.toMode);
+  } else {
+    requestAnimationFrame(tickTransition);
+  }
+}
+```
+
+`pitch` here is the desired pitch on the camera controller — the
+controller's own smoothing factor is bypassed during the tween
+(`tickTransition` sets both desired AND smoothed pitch so the tween
+curve is the canonical one, not double-smoothed). Same for
+`mesh.scale.y` — written directly, no IsometricCamera-style
+interpolation layer.
+
+**Click + gesture suppression during tween**: `isTransitioning =
+transitionRef.current != null`. While true:
+- All click / pointerdown handlers no-op (don't fire `onPick`).
+- Pan / zoom / orbit gestures are ignored (they'd race the tween
+  and produce visible jitter).
+- Toggle pill is disabled (no double-tap mid-tween reversing the
+  tween partway through — let it finish, then accept input).
+
+**Selection-aware framing**: at tween start, if `selectedEntity` or
+`selected` is non-null, also tween `target.x/z` from current to
+`gridToWorld(selectedCell)` so the focused cell stays centred under
+the tilt. If nothing's selected, target stays at current position
+(usually city centre).
+
+**Reduced motion**: respect `prefers-reduced-motion: reduce`. If set,
+skip the tween entirely and snap to the destination mode's state.
+One-line check at toggle press:
+```ts
+const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+if (reduce) { snapToMode(toMode); return; }
+```
+
+**Performance note**: the tween is the *only* time the WebGL scene
+needs an always-on rAF loop. Outside the tween it stays on the
+render-on-demand policy described in `## Stack decisions`. Start
+the loop on toggle press, stop on tween completion — never both
+modes' rAF cost in steady state.
+
+**Tween direction is symmetric** — 2D → 3D and 3D → 2D use the same
+duration and curve. Some animation systems make the reverse faster
+("snap back"); resist the temptation. Symmetric feels right because
+the toggle pill is a state switch, not a peek.
+
+## In-mode view tweens
+
+Distinct from the mode-transition tween above. While the user stays
+in one mode (2D or 3D), discrete gestures get their own short
+animation so the view doesn't snap-cut on large state deltas.
+
+**Where it fires**:
+- **Double-click** → zoom in 2× at the cursor (Google-Maps
+  convention).
+- **Reset button (`↻`)** → return to that mode's default state
+  (2D: `{scale=1, panOx=0, panOy=0}`; 3D: `{yaw=0, pitch=35°,
+  distance=4.5, target=(0, midpointElevation, 0)}`).
+- **Selection-aware re-centre** when an entity gets selected
+  far from the current viewport centre (optional v1).
+
+**Where it does NOT fire** — wheel and pinch zoom remain instant.
+Per-event delta is small enough that the natural input cadence
+reads as smooth on its own; tweening every wheel tick would
+double-buffer the user's gesture and feel laggy.
+
+**Easing + duration**:
+```ts
+function easeOutCubic(t: number): number {
+  return 1 - Math.pow(1 - t, 3);   // fast departure, gentle settle
+}
+const DURATION_MS = 220;
+```
+
+The 2D file's `animateView()` implements this; the 3D scene must
+match the same curve + duration so 2D-mode and 3D-mode discrete
+zooms feel like the same product. Different from the mode-transition
+tween (`700 ms` because more state is changing and the tilt is the
+focal point); both share `easeOutCubic`.
+
+**Cancellation contract**:
+- Any new wheel / pinch / drag / touch / pointerdown cancels the
+  in-flight tween. The user's gesture always wins — otherwise the
+  view keeps drifting toward an old target while being actively
+  manipulated, which feels broken.
+- Tween cancellation is symmetric: starting a new tween (e.g.
+  double-clicking again mid-zoom) cancels the prior tween cleanly
+  and captures a fresh `start` snapshot from the latest
+  committed view.
+- Implementation: a `viewRef` mirrors the latest `view` synchronously
+  (no React commit lag), and `cancelAnim()` clears the rAF id.
+
+**Reduced-motion**: respect `prefers-reduced-motion: reduce` —
+snap to the destination state instead of tweening. Same rule as
+the mode-transition tween.
+
+**3D scene's mirror**: implement the same tween in
+`city3d/controls.ts` against `(yaw, pitch, distance, target)`. The
+`IsometricCamera.js` smoothing factor (`smoothing = 8.0`) is the
+ambient frame-to-frame interpolation; the in-mode tween *replaces*
+that smoothing for the duration of the tween by directly writing
+the smoothed values from the eased curve. Mode-transition tween
+follows the same bypass pattern.
 
 ## Current state
 
@@ -65,16 +294,37 @@ deferred. Read this carefully before designing the 3D scene.
 
 ### Terrain layer
 - **Viewport-based**, not full-disc. `renderTerrainViewport(terrain,
-  sizeDev, panOx, panOy, viewportRadius, cityRadius)` paints only the
-  visible region at full pixel resolution, re-rendering on every
-  pan/zoom. This is why the current file supports zoom up to **200×**
-  without losing crispness.
-- The 3D port replaces this with mesh-resolution scaling — at deep
-  zoom we want more vertices per cell, not more pixels per cell. See
-  "Mesh resolution" below for the strategy.
+  sizeDevW, sizeDevH, panOx, panOy, viewportRadius, cityRadius)`
+  paints only the visible region at full pixel resolution,
+  re-rendering on every pan/zoom. This is why the current file
+  supports zoom up to **200×** without losing crispness.
+- **Canvas is rectangular**, not square. Tracked as
+  `size: { w, h }`; `gridPerPx` is isotropic anchored to the **shorter
+  dim** (`logicalMin = min(w, h)`), so the disc stays round while the
+  longer axis shows extra terrain past the disc edge. CSS dropped
+  `aspect-ratio: 1` and `border-radius: 50%`; the canvas wrap is now
+  a transparent full-rectangle and the "disc" is purely a renderer
+  artifact.
+- **Edge feather fade** past the city disc — `fadeBand = max(1,
+  cityRadius * 0.08)`. Inside the disc: opaque. Inside `[cityRadius,
+  cityRadius + fadeBand]`: alpha lerps `255 → 0` so the inked terrain
+  melts into the surrounding parchment. Past the band: pixel skipped
+  entirely (alpha 0) so the parchment shows through. The 3D path
+  intentionally does NOT replicate this fade (see "## Mesh build" —
+  square mesh with no radial fade; the inscribed gameplay-disc
+  overlay carries the same "city limits" cue).
+- The 3D port replaces the viewport-pixel renderer with
+  mesh-resolution scaling — at deep zoom we want more vertices per
+  cell, not more pixels per cell. See "Mesh resolution" below for
+  the strategy.
 
 ### Overlay layer
 - **City boundary disc** drawn only when the city edge is in view.
+  **Dashed faint sepia** — `rgba(46, 31, 16, 0.35)`, `lineWidth =
+  0.75 * dpr`, dash `[3*dpr, 3*dpr]`. Reads as an inked shoreline on
+  a map page, not a precise mathematical circle (the terrain alpha
+  already feathers across the edge — this ring just gives a precise
+  "where the chain says no" cue without screaming geometry).
 - **Proximity grid (graph-paper gridlines)** rendered when
   `cssPxPerCell ≥ GRID_OVERLAY_MIN_CSS_PX_PER_CELL` (currently `8` —
   named constant in the file). Stride is a doubling decimation so
@@ -88,24 +338,42 @@ deferred. Read this carefully before designing the 3D scene.
   Threshold is in **CSS px**, not device px, so it stays visually
   consistent across DPRs (a 1-device-px line is 0.5 CSS px on
   Retina — that's the whole reason the threshold is 8 and not 4).
-- **Centre marker** with dark fill, cream stroke. **Radius scales
+  Lines are drawn at **half-integer grid coords** (`gridToDevPx(ox -
+  0.5, …)`) so they bound cells instead of bisecting them — selection
+  squares and occupant tiles fill the cell centred on its integer
+  coord and align cleanly with the grid.
+- **Centre marker** = antique cartographer's town glyph: an 8-rayed
+  star (4 cardinal + 4 diagonal rays) around a small inked nucleus
+  with a cream halo. Stroke `rgba(70, 50, 28, 0.85)`, lineWidth
+  `max(1, 1.25 * dpr)`, `lineCap: round`. Nucleus fill `rgba(70, 50,
+  28, 0.95)`, halo fill `rgba(252, 244, 220, 0.95)`. **Radius scales
   with zoom** so it stays visually anchored to its cell at high
   zoom:
   ```ts
-  const r = Math.max(5 * dpr, Math.min(pxPerCell * 0.6, 14 * dpr));
+  const r = Math.max(6 * dpr, Math.min(pxPerCell * 0.55, 14 * dpr));
+  const nucleusR = Math.max(2 * dpr, r * 0.3);
   ```
-- **Occupant rendering with two modes**, gated on the same
-  `GRID_OVERLAY_MIN_CSS_PX_PER_CELL` threshold:
-  - Low zoom (below threshold): round dots with cream outline;
-    encounters get an inner yellow danger ring.
+- **Occupant rendering — shape distinguished by occupant type.**
+  Palette: `PLAYER_FILL = rgba(160, 100, 45, 1)` (tobacco amber),
+  `WILD_FILL = rgba(115, 55, 30, 1)` (oxblood), `SELECTED_STROKE =
+  rgba(220, 175, 60, 1)`, `CREAM_STROKE = rgba(252, 244, 220, 0.95)`.
+  Two render modes gated on `GRID_OVERLAY_MIN_CSS_PX_PER_CELL`:
+  - Low zoom (below threshold): **player = filled circle**;
+    **wild = filled diamond** (rotated-square path). Shape — not
+    just hue — is the primary distinguisher so they read clearly
+    at the smallest dot size and on the monochrome paper
+    background. No inner yellow danger ring; the diamond shape
+    itself signals "danger" at this scale.
   - High zoom (at or above threshold): filled square tiles matching
-    one grid cell exactly, with outline stroke. Snap tile rect to
-    integer device pixels — sub-pixel offsets give visible seams.
-    The cell footprint must be obvious; this is the whole UX premise
-    of being able to zoom in.
+    one grid cell exactly, with outline stroke. Same tile shape for
+    both occupant types — colour is the only differentiator at this
+    zoom because the cell footprint is the message. Snap tile rect
+    to integer device pixels — sub-pixel offsets give visible
+    seams. The cell footprint must be obvious; this is the whole
+    UX premise of being able to zoom in.
 - **Entity selection ring**: if the selected entity matches an
   occupant, that occupant draws with a yellow stroke instead of cream
-  (`rgba(255, 220, 80, 1)`, `lineWidth` bumped by 1).
+  (`SELECTED_STROKE = rgba(220, 175, 60, 1)`, `lineWidth` bumped by 1).
 - **Landing-cell crosshair** for the intercity picker: orange ring +
   short `+` crosshair, also dual-mode (tile or circle) on the same
   threshold.
@@ -126,12 +394,12 @@ deferred. Read this carefully before designing the 3D scene.
   doesn't run a separate animation frame.
 - **Overlay rendering order** (top down → bottom up so each layer
   reads on top of the previous):
-  1. City boundary ring
+  1. City boundary ring (dashed)
   2. Proximity grid (when threshold hit)
   3. Other-players walks (muted)
   4. Local-player walk (bright)
-  5. Centre marker
-  6. Occupancy dots / tiles (incl. encounter danger ring in dot mode)
+  5. Centre marker (cartographer's star)
+  6. Occupancy circles (player) / diamonds (wild) / tiles (high zoom)
   7. Selection ring + crosshair
 
 ### Inputs / affordances — must keep working
@@ -156,9 +424,13 @@ deferred. Read this carefully before designing the 3D scene.
     gridLong: number;
   }
   ```
-  The internal `OccupiedCell` carries an extra `occupant: string`
-  field (base58 of the location's occupant PDA) so click → entity
-  promotion has the pubkey on hand without a re-fetch.
+  The `OccupiedCell` shape (with the extra `occupant: string` —
+  base58 of the location's occupant PDA — so click → entity promotion
+  has the pubkey on hand without a re-fetch) is exported from
+  `apps/web/src/lib/hooks/useCityOccupied.ts`. The component reads it
+  via the `useCityOccupied(cityId)` hook; the hook seeds zustand from
+  the SDK once per cityId and otherwise reads from the WS-fed
+  `s.locations` map. No GPA polling.
 - The exported `WalkLine` shape is load-bearing for in-flight
   intracity rendering — used both for the local player (singular
   `travel` prop) and for every other walker in the city (`otherWalks`
@@ -183,16 +455,26 @@ deferred. Read this carefully before designing the 3D scene.
   - `otherWalks?: WalkLine[]` — every other player intracity-walking
     in the viewed city. Parent is responsible for excluding the local
     player; duplicates would just draw twice.
-- Wheel/pinch zoom **1× – 200×**, drag pan, dbl-click reset, click
-  suppression after drag, touch parity.
+- Wheel/pinch zoom **1× – 200×**, drag pan, **double-click zooms IN
+  2× at the cursor** with a cubic ease-out tween (220 ms) — does NOT
+  reset (reset is the `↻` chip in the top-right). Click suppression
+  after drag, touch parity.
 - **350 ms touch click-suppression** after pinch — preserves UX on
   iOS where a phantom click otherwise fires at end of pinch.
 - **rAF-batched pan with explicit final flush on mouseup/touchend**
   — pixel deltas accumulate in `pendingDx/pendingDy` and flush once
   per paint; on release the rAF is cancelled and `flushPan` runs
   inline so final position is exact.
-- Hover readout: `Water | Land | Peak`, metres from centre,
-  `impassable` tag.
+- **Animated view tweens** for discrete gestures (double-click +
+  reset). See `## In-mode view tweens` below — the 3D scene must
+  match the same easing + cancellation contract for its own
+  in-mode reset / zoom-tween.
+- Hover readout: **`Water | Shore | Land | Hill | Peak`**, metres
+  from centre, `impassable` tag. Label bucketing (passable land):
+  `t < 0.1 → Shore`, `t < 0.5 → Land`, `t ≥ 0.5 → Hill`, where
+  `t = (elevation − waterLine) / (peakLine − waterLine)`. Water/Peak
+  remain driven by `s.isWater` / `s.isMountain` from
+  `sampleTerrain`.
 - **Click semantics with entity selection** — exactly as currently
   implemented in `handleClick`:
   - Click outside disc → `onEntitySelect(null)` and return.
@@ -221,7 +503,7 @@ deferred. Read this carefully before designing the 3D scene.
   pick an empty cell to land." (lowercase 'c', "player" not "soul").
   Aria-label on the canvas wrap: "Terrain disc for {city.name}.
   Click an occupant to inspect them, or pick an empty cell to land.
-  Scroll or pinch to zoom, drag to pan, double-click to reset."
+  Scroll or pinch to zoom, drag to pan, double-click to zoom in."
   Both must port verbatim — the entity-inspect framing is what
   tells users the dot is clickable.
 
@@ -299,17 +581,19 @@ outside disc → `null`). The scene component never needs to know
 about `EntityPanel`, `intracity_start`, the morph bar, or the
 "Approach" / "Walk to" labels.
 
-### Pan clamp (correction to Rev 1)
-The clamp keeps the **entire visible region** inside the city disc,
-not just the centre:
+### Pan clamp (2D path — still circular)
+The 2D viewport clamp keeps the **entire visible region** inside the
+city disc, not just the centre:
 ```
 max = radiusGridUnits − radiusGridUnits / scale
 length(panOx, panOy) ≤ max
 ```
 Otherwise the canvas's transparent outside-disc pixels show the
-parchment background bleeding through the terrain. Port this
-constraint verbatim into the 3D path — the math is the same, the
-viewport just becomes the camera frustum.
+parchment background bleeding through the terrain.
+
+The 3D path uses a **square AABB** clamp on the camera target — see
+`## Square pan clamp` in the camera section. The two clamps are
+intentionally different because the 3D view is square, not circular.
 
 ## Reference renderer (what we're porting)
 
@@ -324,16 +608,23 @@ From `terrain-builder/src/city/city.js:79-213`:
   `MeshLambertMaterial({ vertexColors: true })` after
   `computeVertexNormals()`.
 - `OrbitControls` constrained: minPolar 5°, maxPolar 82°,
-  minDistance ∝ km, maxDistance 9, `screenSpacePanning: false`.
+  minDistance ∝ km, maxDistance 9, `screenSpacePanning: false`. We
+  port the polar bounds and distance scaling; we do NOT use
+  `OrbitControls` itself — see `## Camera and movement`.
 - Decoration: large ocean floor plane, circular `MeshPhongMaterial`
   water surface at `waterLine` height, thin boundary `RingGeometry`,
-  anchor debug spheres, city name as `CSS2DObject`.
+  anchor debug spheres, city name as `CSS2DObject`. The water surface
+  and boundary become *square* in our port (`## Markers` and
+  `## Mesh build`).
 - HUD: bottom-left coord/alt (raycaster), bottom-right scale bar,
   top-right compass SVG.
 - `scene.fog = FogExp2(0x08101e, 0.055)`.
 
-The reference uses a perspective camera and `OrbitControls`. Neither
-is appropriate for this port — see "Camera and movement" below.
+Smoothing pattern comes from
+`terrain-builder/src/town/camera/IsometricCamera.js:190-231` — the
+`update(dt)` interpolation block lerps yaw/pitch/distance/target
+toward desireds with `factor = 1 - exp(-smoothing * dt)`. Port that
+on top of `city.js`'s polar bounds; see `## Camera and movement`.
 
 ## Stack decisions
 
@@ -420,6 +711,16 @@ by default — `ColorManagement.enabled = true`,
 washed-out, too-bright terrain that does not visually match the 2D
 `ImageData` path.
 
+**Visual reference is the antique-map palette** in
+`sdks/novus-mundus-ts/src/calculators/terrain.ts` —
+`elevationToColor` was retuned to sit inside the realm-map vocabulary
+(parchment cream, sepia ink, wax-seal orange): desaturated slate
+water, dark-base-to-cream-cap peaks, muted olive lush lowland, warm
+pale-sand beach. The 3D path's vertex colors must match this output
+exactly. The linearization fix below is still the correct way to get
+there — but the side-by-side comparison target is the antique palette,
+not the previous saturated palette this section was written against.
+
 Two viable fixes; pick (A):
 
 **(A) Linearize at mesh-build time.** Add this helper to
@@ -489,14 +790,12 @@ encounter dot ends up sitting in water.
   marker Y placement) returns the same expression — markers must sit
   on the *analytical* terrain, not on whatever the triangle-
   interpolated surface samples to at that pixel.
-- **Edge fade**: the band between `0.92·rgu` and `rgu` falls toward
-  `waterLine − 30` in the mesh, but `isPassable(terrain, ox, oy)` is
-  computed from the *raw* `terrainElevation` and ignores the fade.
-  This is intentional — the fade is decorative, the passability
-  contract belongs to the chain. Markers inside the fade band still
-  use chain elevation for their Y, not the faded one, otherwise a
-  player on shoreline cell `(rgu − 5, 0)` would sink under the water
-  plane.
+- **No edge fade in the 3D path.** The square mesh renders all
+  vertices at their chain elevation; there is no radial
+  `0.92·rgu → rgu` fade to `waterLine - 30`. The chain's circular
+  gameplay disc is shown separately as an inscribed-circle overlay
+  (see `## Inscribed gameplay disc` below), not as a fade in the
+  mesh. The 2D path's radial fade is unchanged.
 
 **Round-trip property to verify in dev:**
 ```
@@ -532,28 +831,73 @@ implementations and confirming they pick the same cell.
 
 ```
 apps/web/src/components/world/
-├── CityTerrainMap.tsx          (orchestrator: occupancy fetch, status,
-│                                 hover readout, click contract, entity
-│                                 selection)
-├── CityTerrainMap.module.css   (unchanged shell; add `.canvas3d`,
-│                                 `.errorOverlay`)
+├── CityTerrainMap.tsx                (THIN orchestrator: capability
+│                                       check at mount, owns
+│                                       occupancy/walks props, status
+│                                       row + toggle pill, click
+│                                       contract branching, entity
+│                                       selection. Mounts the WebGL
+│                                       renderer by default; mounts
+│                                       the Canvas2D fallback only if
+│                                       WebGL2 init fails.)
+├── CityTerrainMap.module.css         (existing shell; add `.canvas3d`,
+│                                       `.toggle3DPill`,
+│                                       `.orbitTogglePill`)
+├── CityTerrainMap2DFallback.tsx      (renamed from today's
+│                                       CityTerrainMap.tsx — the
+│                                       Canvas2D viewport renderer.
+│                                       Mounted ONLY when WebGL2 is
+│                                       unavailable. Does not animate;
+│                                       does not implement 3D mode.
+│                                       Toggle pill is hidden when
+│                                       this is the active renderer.)
 └── city3d/
-    ├── CityTerrainScene.tsx    (the three.js renderer; props-only API,
-    │                             no imperative handle in v1)
-    ├── coords.ts               (worldToGrid / gridToWorld /
-    │                             getElevationAt + srgbToLinear)
-    ├── buildTerrainMesh.ts     (PlaneGeometry build from CityTerrain;
-    │                             uses coords.ts)
-    ├── markers.ts              (InstancedMesh layers: player/encounter
-    │                             dots & tiles, centre, selection,
-    │                             boundary)
-    └── controls.ts             (ortho pan/zoom + click-vs-drag
-                                  suppression; mirrors current 2D
-                                  gesture math; uses propsRef pattern)
+    ├── CityTerrainMapWebGL.tsx       (the three.js scene; renders
+    │                                   both 2D and 3D modes via
+    │                                   camera + mesh.scale.y state.
+    │                                   Owns the mode-transition tween.
+    │                                   Props-only API, no imperative
+    │                                   handle in v1.)
+    ├── coords.ts                     (worldToGrid / gridToWorld /
+    │                                   getElevationAt + srgbToLinear +
+    │                                   cssPxPerCellAt)
+    ├── buildTerrainMesh.ts           (square PlaneGeometry build from
+    │                                   CityTerrain; uses coords.ts)
+    ├── markers.ts                    (InstancedMesh layers:
+    │                                   player/encounter dots & tiles,
+    │                                   centre, selection, square
+    │                                   boundary, inscribed disc)
+    ├── controls.ts                   (perspective camera controller:
+    │                                   yaw/pitch/distance/target with
+    │                                   smoothing; mirrors
+    │                                   IsometricCamera.js + orbit;
+    │                                   exposes isTransitioning bypass)
+    └── transition.ts                 (mode-transition tween driver —
+                                        the rAF loop described in
+                                        `## Mode transition`)
 ```
 
-`CityTerrainMap.tsx` mounts `<CityTerrainScene>` instead of the two
-2D `<canvas>` elements.
+**Shared prop surface (contract)**: `CityTerrainMap2DFallback` and
+`CityTerrainMapWebGL` MUST consume the same `Props` interface,
+exported from `CityTerrainMap.tsx`. The orchestrator passes through
+identically; the only difference between mounting one vs the other
+is the renderer backend. Future feature work on either path must
+update both consumers and the shared interface in the same PR to
+prevent drift.
+
+The orchestrator's capability check runs at mount: try to create a
+WebGL2 context; on success, mount `CityTerrainMapWebGL`; on failure,
+mount `CityTerrainMap2DFallback` and hide the toggle pill. The
+`useSettings.mapMode` value is read by `CityTerrainMapWebGL` to pick
+its initial camera state and to wire the toggle pill's tween. The
+fallback ignores `mapMode` (it only renders 2D, no transitions).
+
+**Steady-state layout**:
+- WebGL-capable users (~100% of target audience): see
+  `CityTerrainMapWebGL`, can toggle between 2D and 3D modes with the
+  Google-Maps tilt animation. Default landing is 2D mode.
+- WebGL-unavailable users: see `CityTerrainMap2DFallback`, no toggle
+  pill, no 3D access. Functionally complete, just no tilt.
 
 ## Scene API — props, no imperative handle in v1
 
@@ -590,6 +934,10 @@ export interface CityTerrainSceneProps {
     gridLat: number;
     gridLong: number;
     passable: boolean;
+    /* True when the cell is on the square mesh but outside the chain's
+     * circular gameplay disc (rgu). Orchestrator surfaces "Outside
+     * city bounds" and skips onSelect. Always false in the 2D path. */
+    outOfBounds: boolean;
     entityAtCell: CityTerrainEntity | null;  // null = empty cell
   }) => void;
   onHover: (info: HoverInfo | null) => void;
@@ -615,105 +963,239 @@ Premature otherwise.
 
 ## Camera and movement
 
-**Camera**:
-- `THREE.OrthographicCamera`. Frustum sized from a constant
-  `FRUSTUM_HEIGHT = meshSize * 1.15` so the city disc fills ~85% of
-  the viewport at zoom = 1, leaving a small parchment margin.
-- Fixed pitch `35.264°`. Fixed yaw `0°` (north up).
-- Camera target stays on the terrain plane at `Y = midpointElevation
-  ≈ ((waterLine + peakLine) / 2 / 255) * maxH`, not at world origin —
-  keeps zoom-in feeling like you're diving toward the ground.
+**Camera state — spherical, smoothed**
 
-**Zoom is `camera.zoom`, not frustum size**:
+State is `(yaw, pitch, distance, target)` plus smoothed mirrors that
+lerp toward those desireds every frame. Camera *position* is derived,
+never directly set:
+
 ```ts
-camera.zoom = clamp(camera.zoom * factor, 1, 200);
-camera.updateProjectionMatrix();
-requestRender();
+const cosPitch = Math.cos(sPitch);
+const sinPitch = Math.sin(sPitch);
+const cosYaw   = Math.cos(sYaw);
+const sinYaw   = Math.sin(sYaw);
+camera.position.set(
+  sTarget.x + sDistance * sinYaw * cosPitch,
+  sTarget.y + sDistance * sinPitch,
+  sTarget.z + sDistance * cosYaw * cosPitch,
+);
+camera.lookAt(sTarget);
 ```
-Range `[1, 200]` matches the current 2D file. **Not** `[1, 6]` as Rev 1
-proposed — that would delete the "cells visible" UX.
 
-**On resize**:
+That block is `IsometricCamera.js:217-231` — port it. Smoothing is
+exponential `factor = 1 - exp(-smoothing * dt)`, `smoothing = 8.0`.
+
+**Defaults and bounds** (cf. `IsometricCamera.js` + `city.js:275-283`):
+- **Initial state depends on `useSettings.mapMode`** (read once at
+  mount):
+  - `mapMode === "2d"` (default): `yaw=0`, `pitch=0°`, `distance=4.5`,
+    `target=(0, 0, 0)`, `mesh.scale.y=0`.
+  - `mapMode === "3d"`: `yaw=0`, `pitch=35° DEG`, `distance=4.5`,
+    `target=(0, midpointElevation, 0)`, `mesh.scale.y=1`.
+- Yaw: free, no wrap clamp (both modes).
+- Pitch bounds: 2D mode locks pitch at `0°` (orbit handler suppresses
+  pitch deltas, only yaw). 3D mode clamps pitch `[5°, 82°]`
+  (`city.js:277`). Mode-transition tween crosses this band freely.
+- Distance: `minDistance = 20 / radiusKm`, `maxDistance = dMin × 200`
+  so the displayed zoom ratio matches the 2D file's `[1, 200]` range.
+  Status row still shows `1×–200×` as `dMax / distance`. Same in both
+  modes.
+- Target.y: pinned per mode (0 in 2D, `midpointElevation` in 3D —
+  the tween lerps between them so zoom-in always dives toward the
+  ground rather than above it).
+- `target.x/z`: clamped per `## Square pan clamp` below (same in
+  both modes).
+
+**Zoom — distance + momentum**
+
 ```ts
-const aspect = w / h;
-const half = FRUSTUM_HEIGHT / 2;
-camera.left   = -half * aspect;
-camera.right  =  half * aspect;
-camera.top    =  half;
-camera.bottom = -half;
+// onWheel:
+zoomVelocity += deltaY > 0 ? +ZOOM_SPEED : -ZOOM_SPEED;
+
+// In update(dt):
+if (abs(zoomVelocity) > 0.0001) {
+  distance = clamp(distance + zoomVelocity, dMin, dMax);
+  zoomVelocity *= ZOOM_MOMENTUM;            // 0.88, IsometricCamera.js:31
+} else {
+  zoomVelocity = 0;
+}
+```
+
+**Zoom-to-cursor** is still a dual raycast (pre and post), but the
+delta is applied to `target` (which drives the smoothed camera
+position), not directly to `camera.position`:
+```ts
+function zoomAt(clientX, clientY, deltaSteps) {
+  const before = raycastTerrain(clientX, clientY);
+  zoomVelocity += deltaSteps * ZOOM_SPEED;
+  // ... distance updates next frame; re-raycast post-update and
+  //     correct the target by (before - after) on XZ.
+}
+```
+
+Equivalent to the previous ortho `zoomAt`, but the correction lands
+on the spherical target rather than `camera.position`.
+
+**Pan — camera-relative on the ground plane**
+
+The ortho `cos(PITCH)` trick goes away. Use `IsometricCamera.js:288-297`
+verbatim: derive right + forward vectors from `(target - camera)`
+projected to XZ, scale by `panSpeed * distance`:
+```ts
+const camDir = tmp.copy(sTarget).sub(camera.position);
+right  .set(-camDir.z, 0, camDir.x).normalize();
+forward.set( camDir.x, 0, camDir.z).normalize();
+const k = PAN_SPEED * sDistance;
+target.addScaledVector(right,  -pixelDx * k);
+target.addScaledVector(forward, pixelDy * k);
+target.y = midpointElevation;
+clampTarget();
+```
+`PAN_SPEED ≈ 0.001` (`IsometricCamera.js:32`). Scaling by distance
+gives consistent feel at every zoom level.
+
+**Orbit — yaw + pitch from drag**
+
+New input, doesn't exist in either the Canvas2D path or
+`IsometricCamera` (town camera lets you pan but not orbit). Bind
+right-drag (mouse) and the orbit-toggle pill (touch — see Gestures
+below):
+```ts
+yaw += -pixelDx * ORBIT_SPEED;          // always allowed
+if (mapMode === "3d") {
+  pitch += -pixelDy * ORBIT_SPEED;
+  pitch  = clamp(pitch, MIN_POLAR, MAX_POLAR);   // 5°, 82°
+}
+// In 2D mode: pitch delta ignored, only yaw rotates.
+```
+`ORBIT_SPEED ≈ 0.005` rad/px. Yaw is unconstrained in both modes
+(spinning a top-down map compass-style is meaningful and meets the
+"move around nicely" bar). Pitch is locked in 2D mode and clamped
+in 3D mode. Smoothing carries through automatically — yaw/pitch
+lerp toward desired in `update(dt)`. Orbit handler is suppressed
+entirely while a mode transition is in flight (see `## Mode
+transition`).
+
+## Square pan clamp
+
+Replaces the disc clamp. Keep the entire visible region inside the
+square mesh footprint at every camera position:
+```ts
+const halfSide = meshSize / 2;
+// Visible half-extent on the ground at current camera distance/fov:
+const visibleHalf = sDistance * Math.tan(fov / 2);     // worst case
+const maxOffset   = Math.max(0, halfSide - visibleHalf);
+target.x = clamp(target.x, -maxOffset, maxOffset);
+target.z = clamp(target.z, -maxOffset, maxOffset);
+```
+Apply the clamp to *both* the desired `target` AND the smoothed
+`sTarget` so the visible camera never overshoots the bound
+(`IsometricCamera.js:202-215` does both).
+
+The **2D disc** clamp at `apps/web/src/components/world/CityTerrainMap.tsx`
+is unchanged — that path is keeping its circular viewport.
+
+## Resize
+
+```ts
+camera.aspect = w / h;
 camera.updateProjectionMatrix();
 renderer.setSize(w, h, false);
 requestRender();
 ```
 `ResizeObserver` + `window.addEventListener('resize')` belt-and-
-suspenders, matching `MagicRing.tsx`.
+suspenders, matching `MagicRing.tsx`. No frustum math — perspective
+is aspect-driven.
 
-**Zoom-to-cursor with ortho + tilt** (the 2D `zoomAt` math does *not*
-translate directly because of the 35° pitch — needs a raycast on
-each side of the zoom):
-```ts
-function zoomAt(clientX: number, clientY: number, factor: number) {
-  const before = raycastTerrain(clientX, clientY);
-  if (!before) return;
-  camera.zoom = clamp(camera.zoom * factor, 1, 200);
-  camera.updateProjectionMatrix();
-  const after = raycastTerrain(clientX, clientY);
-  if (!after) return;
-  const dx = before.x - after.x;
-  const dz = before.z - after.z;
-  camera.position.x += dx;
-  camera.position.z += dz;
-  controls.target.x += dx;
-  controls.target.z += dz;
-  clampPan();
-  requestRender();
-}
-```
+## Gestures
 
-**Pan in world units with a tilted camera**. Screen Y is foreshortened
-by `cos(PITCH)`:
-```ts
-const worldPerPx = FRUSTUM_HEIGHT / (camera.zoom * canvasHeightPx);
-const worldDx = -pixelDx * worldPerPx;
-const worldDz =  pixelDy * worldPerPx / Math.cos(PITCH);
-```
-Apply to both `camera.position` and target — yaw and pitch never
-change.
+| | Mouse | Touch |
+|---|---|---|
+| **Pan** | Left-drag (4 px threshold) | One-finger drag (6 px threshold) |
+| **Zoom** | Wheel · ctrl+wheel ×0.35 (trackpad pinch) | Two-finger pinch |
+| **Orbit (yaw always; pitch in 3D only)** | Right-drag | Two-finger drag *while* orbit toggle on |
+| **Zoom in 2×** at cursor | Double-click (tweened) | Double-tap (tweened) |
+| **Reset view** | `.resetBtn` pill (tweened) | `.resetBtn` pill (tweened) |
+| **Toggle 2D ↔ 3D** | `.toggle3DPill` | `.toggle3DPill` |
+| **Orbit toggle** | — | Pill button next to the reset pill |
 
-**`clampPan`** (entire visible region inside city disc, matching
-current behaviour):
-```ts
-const visibleHalfW = (camera.right - camera.left) / (2 * camera.zoom);
-const visibleHalfH = (camera.top   - camera.bottom) / (2 * camera.zoom);
-const visibleRadius = Math.hypot(visibleHalfW, visibleHalfH / Math.cos(PITCH));
-const cityWorldRadius = meshSize / 2;
-const maxOffset = Math.max(0, cityWorldRadius - visibleRadius);
-// Clamp target offset from world origin to maxOffset.
-```
+Rationale on the touch orbit toggle: with three gesture meanings
+(pan, zoom, orbit) and only two finger-counts, something has to
+multiplex. A discoverable toggle pill (default OFF — pan is the
+intuitive default) beats overloading two-finger drag with both zoom
+and orbit by axis. Mouse users get right-drag for free.
 
-**Gestures** — one source of truth, all bound to the WebGL canvas
-wrap. Port the current 2D event handlers wholesale:
-- **Pan**: mouse drag (4 px threshold), one-finger touch drag (6 px
-  threshold). Pixel deltas accumulate in `pendingDx/pendingDy` and
-  flush once per rAF; on release the rAF is cancelled and `flushPan`
-  runs inline for an exact final position.
-- **Zoom**: mouse wheel, ctrl+wheel (trackpad pinch dampened
-  ×0.35), two-finger touch pinch.
-- **Reset**: double-click / double-tap + `.resetBtn` pill.
-- **Drag-vs-click suppression**: preserve `suppressClickRef`.
-- **350 ms touch click-suppression after pinch** — not optional;
-  phantom click selection on iOS otherwise.
-- **No keyboard movement** in v1; `role="application"` aria-label
-  documents the gestures.
+**Reset view** restores the active mode's defaults:
+- In 2D: `yaw=0°, pitch=0°, distance=4.5, target=(0, 0, 0)`,
+  `mesh.scale.y=0`.
+- In 3D: `yaw=0°, pitch=35°, distance=4.5,
+  target=(0, midpointElevation, 0)`, `mesh.scale.y=1`.
+
+`zoomVelocity` is zeroed (`IsometricCamera.js:148`). Reset never
+crosses modes — pressing reset in 2D doesn't pop you into 3D.
+
+**Drag-vs-click suppression** preserved via `suppressClickRef` — same
+contract as the 2D path.
+
+**350 ms touch click-suppression after pinch** — not optional;
+phantom click selection on iOS otherwise.
+
+**Keyboard** (optional, recommend shipping in Phase 1 since
+"move around nicely" is a stated requirement):
+- `WASD` / arrows: pan the target on the ground plane (~`0.3 *
+  distance` units/sec).
+- `Q`/`E`: yaw ±.
+- `R`/`F`: pitch ± within polar bounds.
+- `+`/`-`: zoom.
+- Space: reset view.
+
+If keyboard slips to Phase 2, drop the keymap rows but keep the
+`role="application"` aria-label documenting available gestures.
 
 **`touch-action: none`** on the canvas wrap. (Already on the current
 wrap; carry it onto the new one or one-finger drag will steal page
 scroll.)
 
-**Do not use `OrbitControls`** — built around a polar camera and
-free rotation. Write the controller in `city3d/controls.ts` mirroring
-the existing 2D gesture math but mutating `camera.position`,
-`camera.zoom`, and `controls.target` instead of a CSS transform.
+**Why not OrbitControls** — built around free polar rotation and
+doesn't smooth or carry zoom momentum. Write the controller in
+`city3d/controls.ts` porting `IsometricCamera.js`'s `update(dt)` +
+event handlers, with orbit added on top.
+
+## Click semantics under square view
+
+The Canvas2D fallback's click contract from `## Current state → Click
+semantics with entity selection` ports almost verbatim to the WebGL
+scene. Two deltas: "outside disc" and tween suppression.
+
+- **Click while a mode-transition tween is in flight** → ignored. No
+  `onPick`, no `onEntitySelect`. The tween locks input for ~700 ms
+  to prevent the user racing the camera. The toggle pill is also
+  disabled during this window. See `## Mode transition`.
+- **Click outside the square mesh** (raycast misses entirely) →
+  `onEntitySelect(null)` and return. (Was: outside disc.)
+- **Click on an occupied cell** → `onEntitySelect({pubkey, occupantType,
+  gridLat, gridLong})` and return. **`onSelect` is never called for
+  occupied cells.** Same as fallback.
+- **Click on empty cell, inside the inscribed gameplay disc** →
+  `onEntitySelect(null)`, then `onSelect(gridLat, gridLong)` if wired
+  AND the cell is passable. Same as fallback.
+- **Click on empty cell, *outside* the inscribed disc but still on the
+  square mesh** → `onEntitySelect(null)`, then `onPick` reports
+  `{...passable: false, outOfBounds: true}` (extend the existing
+  `onPick` payload with `outOfBounds`). The orchestrator surfaces a
+  one-line "Outside city bounds" notice next to the action bar; no
+  `onSelect` fires. This is the gameplay-vs-rendering wedge: the user
+  sees a corner of square terrain but can't land there because the
+  chain bounds-check rejects it.
+- **Click on empty impassable cell, inside the disc** →
+  `onEntitySelect(null)` only; no `onSelect`. Same as fallback.
+
+The orchestrator (`CityTerrainMap.tsx`) implements this branching —
+the scene component just hands raw hits up via `onPick`, including the
+new `outOfBounds: boolean` field. The same orchestrator branches on
+2D vs 3D mode and applies the same rules (the 2D file's
+"outside disc → null" rule is just the special case of `outOfBounds`
+in 2D, where the canvas itself has no out-of-disc clickable region).
 
 ## Mesh resolution
 
@@ -750,9 +1232,19 @@ Build per the reference, with these corrections:
   Selection ring, boundary ring, water surface, and proximity-grid
   plane (Phase 2) all sit at or near the terrain Y — without polygon
   offset they z-fight.
-- **Anchor count = 0 short-circuit**: build a flat disc at elevation
-  128, skip the elevation lookup loop, boundary ring + "terrain
-  unset" status still render. Matches current 2D behaviour.
+- **Anchor count = 0 short-circuit**: build a flat square at elevation
+  128, skip the elevation lookup loop, square boundary + "terrain
+  unset" status still render. Matches the Canvas2D fallback's
+  short-circuit but on the square mesh.
+- **Build once with full Y**. The mesh is built with `(elevation /
+  255) * maxH` written into vertex Y exactly as the reference
+  `city.js:126-128` does. The 2D mode does NOT re-build the mesh
+  with flat Y — instead, set `terrainMesh.scale.y = 0` and the same
+  vertices appear flat at the plate. This is the load-bearing trick
+  for the mode-transition tween: `scale.y` lerps from 0 → 1 over
+  ~700 ms and mountains rise out of the plate without a rebuild.
+  See `## Mode transition`. (Reference: `city.js:374`'s
+  `_heightScale` setter exposes the same hook for the debug slider.)
 
 ## Lights
 
@@ -777,24 +1269,60 @@ the billboard-vs-not problem entirely.
 
 Two render modes, mirroring the 2D path. Threshold is the same
 `GRID_OVERLAY_MIN_CSS_PX_PER_CELL` (currently `8` CSS px per grid
-cell) used by the proximity grid — not `4`. Read it once into a
-`useMemo` (`cssPxPerCell = canvasCssWidth / (2 × viewportRadius)`)
-and gate every dual-mode marker on the same expression so the
-transition is atomic.
+cell) used by the proximity grid — not `4`.
+
+**`cssPxPerCell` under perspective**: cells project to different
+screen sizes depending on depth, so define `cssPxPerCell` as the
+projected size of one cell **at the camera target** (the centre of
+attention) — a single representative number. Helper in
+`city3d/coords.ts`:
+
+```ts
+export function cssPxPerCellAt(
+  camera: THREE.PerspectiveCamera,
+  target: THREE.Vector3,
+  rgu: number,
+  meshSize: number,
+  canvasHeightPx: number,
+): number {
+  // World-XZ size of one cell:
+  const cellWorld = meshSize / rgu;
+  // Vertical world-extent that fills the canvas at this distance:
+  const distance = camera.position.distanceTo(target);
+  const visibleWorldH = 2 * distance * Math.tan((camera.fov * Math.PI / 180) / 2);
+  return (cellWorld / visibleWorldH) * canvasHeightPx;
+}
+```
+
+Recompute every camera change (zoom, pan, orbit) and gate every
+dual-mode marker on the same expression so the transition is atomic
+across all of them. Status row `· cells visible` indicator reads
+the same number.
+
+**Palette (must match the Canvas2D fallback, antique-map tuned)**:
+- `PLAYER_FILL = rgba(160, 100, 45, 1)` — tobacco amber.
+- `WILD_FILL = rgba(115, 55, 30, 1)` — oxblood.
+- `SELECTED_STROKE = rgba(220, 175, 60, 1)` — selection highlight.
+- `CREAM_STROKE = rgba(252, 244, 220, 0.95)` — outline + halo.
 
 ### Low-zoom dot mode (`cssPxPerCell < GRID_OVERLAY_MIN_CSS_PX_PER_CELL`)
-- **Player dot** = `CircleGeometry(rDot, 24)` filled
-  `rgba(180, 83, 9, 1)`, plus a concentric `RingGeometry(rDot,
-  rDot * 1.18, 24)` filled cream `rgba(255, 250, 235, 0.95)`. Both
-  lie flat on the terrain at `getElevationAt(ox, oy) + maxH * 0.005`.
-  `InstancedMesh` per layer, `frustumCulled = false` (or fat bounding
-  sphere) so distant instances don't get culled.
-- **Encounter dot** = same pattern, red `rgba(160, 30, 30, 1)`. Plus
-  an inner yellow danger ring (`CircleGeometry(rDot * 0.55, 16)`,
-  additive blending) as a third `InstancedMesh`. **Dot mode only**
-  — the danger ring is hidden in tile mode (the tile fill already
-  reads as "danger" at that scale).
-- **Selected entity** stroke override → yellow `rgba(255, 220, 80, 1)`
+
+**Shape distinguishes occupant type** — same contract as the
+Canvas2D fallback. Different `InstancedMesh` per layer (no
+multi-shape instance trickery).
+
+- **Player** = `CircleGeometry(rDot, 24)` filled `PLAYER_FILL`,
+  plus a concentric `RingGeometry(rDot, rDot * 1.18, 24)` filled
+  `CREAM_STROKE`. Both lie flat on the terrain at `getElevationAt(ox,
+  oy) + maxH * 0.005`. `InstancedMesh` per layer, `frustumCulled =
+  false` (or fat bounding sphere) so distant instances don't get
+  culled.
+- **Wild** = `ShapeGeometry` of a 4-vertex diamond (rotated square)
+  filled `WILD_FILL`, with the same concentric `RingGeometry` cream
+  outline pattern. **No inner danger ring** — the diamond shape
+  itself signals "danger" at this scale, same as the Canvas2D
+  fallback.
+- **Selected entity** stroke override → `SELECTED_STROKE`
   applied per-instance via `setColorAt`, `lineWidth` bumped by 1 (in
   3D this becomes a slightly thicker outline ring on the same
   instance).
@@ -802,33 +1330,50 @@ transition is atomic.
   rDot * 1.7, 64)` orange ink + `+` crosshair strips.
 
 ### High-zoom tile mode (`cssPxPerCell ≥ GRID_OVERLAY_MIN_CSS_PX_PER_CELL`)
-- Same `InstancedMesh` layers but the inner geometry swaps from
-  `CircleGeometry` to `PlaneGeometry(cellSize, cellSize)` where
-  `cellSize = (1 / rgu) * meshSize`. The outline ring layer swaps to
-  4 thin border strips (or a `RingGeometry`-shaped square frame —
+- Same shape-distinguished layers collapse to a single tile shape
+  per cell: `PlaneGeometry(cellSize, cellSize)` where `cellSize =
+  (1 / rgu) * meshSize`, filled with `PLAYER_FILL` or `WILD_FILL`
+  depending on occupant type. The outline ring layer swaps to 4
+  thin border strips (or a `RingGeometry`-shaped square frame —
   picker's call). Snap world position to grid centres so the tile
   rect aligns with the underlying flat-shaded mesh cell.
 - **Selection ring** swaps to a tile-rect outline (`PlaneGeometry`
   with stroke-only material or 4 strips) at the selected cell — same
-  pattern as the 2D file's `if (renderAsTiles)` branch at the
-  selected-cell draw step.
+  pattern as the Canvas2D fallback's `if (renderAsTiles)` branch.
 
 Switch is driven by `cssPxPerCell` crossing the threshold; instance
 visibility toggles, no rebuild.
 
 ### Other markers
-- **Centre marker** = single (non-instanced) flat ring + filled disc
-  at `(0, getElevationAt(0, 0) + bias, 0)`, dark ink + cream ring.
-  **Radius scales with zoom** per the 2D path —
-  `rWorld = max(rDotMin, min(0.6 * cellWorld, rDotMax))` where
-  `cellWorld = meshSize / rgu` — so the marker stays anchored to its
-  cell at every zoom level.
+- **Centre marker — antique cartographer's town glyph**, mirroring
+  the Canvas2D fallback. 8-rayed star (4 cardinal + 4 diagonal,
+  diagonals at `r * 0.65`) drawn as a `BufferGeometry` of line
+  segments, stroke `rgba(70, 50, 28, 0.85)`. Inked nucleus
+  (`CircleGeometry`) fill `rgba(70, 50, 28, 0.95)`. Cream halo
+  (`RingGeometry` slightly larger than the nucleus) fill
+  `rgba(252, 244, 220, 0.95)`. All non-instanced, all at
+  `(0, getElevationAt(0, 0) + bias, 0)`. **Radius scales with zoom**
+  per the Canvas2D fallback: `rWorld = max(rDotMin, min(0.55 *
+  cellWorld, rDotMax))` where `cellWorld = meshSize / rgu`, and
+  `nucleusR = max(2 * scale, rWorld * 0.3)` — so the glyph stays
+  anchored to its cell at every zoom level.
 - **Selection ring** dimensions per the dual-mode section above.
-- **City boundary ring** = `RingGeometry(meshSize/2 * 0.99,
-  meshSize/2 * 1.01, 128)`, faint sepia
-  `rgba(46, 31, 16, 0.55)`, flat at midpoint elevation. Visible only
-  when the city edge is within the camera frustum (cull or fade
-  based on `view.scale` vs. visible-radius math).
+- **City boundary frame (square)** = four `LineSegments` along the
+  edges of the `meshSize × meshSize` plane, faint sepia
+  `rgba(46, 31, 16, 0.55)`, flat at midpoint elevation. (Use
+  `EdgesGeometry(new PlaneGeometry(meshSize, meshSize))` rotated to
+  XZ — single draw call, single material, easy to dispose.) Visible
+  at every camera position; the frame is the visual "you are looking
+  at one city" cue. Replaces the 2D path's `RingGeometry` boundary.
+- **Inscribed gameplay disc** = thin dashed `LineLoop` at radius
+  `meshSize/2` (the inscribed circle of the square mesh). Faint
+  sepia `rgba(46, 31, 16, 0.35)`, dash matched to the Canvas2D
+  fallback's `[3, 3]*dpr` pattern (use `LineDashedMaterial` with
+  comparable world-units dashes), flat at midpoint elevation, label
+  "city limits" via tooltip on hover. Mirrors the Canvas2D
+  fallback's dashed boundary line one-for-one. Picks outside this
+  ring surface a "Outside city bounds" notice in the action bar.
+  See `## Click semantics under square view` below.
 - **Proximity grid (Phase 1, load-bearing at high zoom)**: a
   `LineSegments` net at midpoint elevation, rebuilt on zoom/pan when
   `cssPxPerCell ≥ GRID_OVERLAY_MIN_CSS_PX_PER_CELL`. Stride is the
@@ -905,8 +1450,10 @@ and call `mesh.count = actual` per update; no resize/realloc.
 - Hover throttled to ~30 Hz (drop `pointermove` events more frequent
   than every 33 ms). Raycasting per `pointermove` melts mid-range
   laptops without this.
-- Hover readout (`Water | Land | Peak`, metres, `impassable`) → same
-  React DOM nodes the current file uses, fed via `onHover` callback.
+- Hover readout (`Water | Shore | Land | Hill | Peak`, metres,
+  `impassable`) → same React DOM nodes the current file uses, fed
+  via `onHover` callback. Bucket thresholds per the Canvas2D
+  fallback: `t < 0.1 → Shore`, `t < 0.5 → Land`, `t ≥ 0.5 → Hill`.
   Do not recreate the reference's `_hudEl` DOM manipulation — that
   pattern doesn't fit React.
 
@@ -933,36 +1480,58 @@ return () => {
 Order matters: cancel pending frames first, then unbind events, then
 remove DOM, then dispose GPU resources.
 
-## Phase 1 — terrain + markers + click (full parity)
+## Phase 1 — 3D mode shipped behind a toggle, with full parity
 
-Goal: full feature parity with the current 2D component in one WebGL
-component, isometric from day 1.
+Goal: 2D path stays default and untouched. 3D path ships in a new
+`city3d/` directory with full feature parity vs. the 2D viewport,
+selected by a `useSettings.mapMode` toggle pill in the status row.
 
-- Mesh build per "Mesh build" + "Color management" above.
-- Camera, gestures, lights per the sections above.
-- Markers per "Markers" above — both low-zoom dot mode and high-zoom
-  tile mode, including the entity-selection yellow override, the
-  zoom-scaled centre marker, the dual-mode selection ring, the
-  proximity grid lines, **and the in-flight walk lines for the local
-  player (`travel`) plus every other intracity walker in the city
-  (`otherWalks`)**.
-- Walk-data source must be `useCityPlayers(cityId)` (zustand-backed,
-  live via the program-wide WS) — NOT `useWorldPlayers` (the 30 s
-  tanstack-query polling path). See "Live other-players state" for
-  the full data flow. The 3D port consumes the same shapes via the
-  same props.
-- Click + hover use `THREE.Raycaster` against the terrain mesh →
+- **Orchestrator**: extract `CityTerrainMap2D.tsx` (current
+  implementation, renamed). New `CityTerrainMap.tsx` reads
+  `useSettings(s => s.mapMode)` and mounts either `CityTerrainMap2D`
+  or `CityTerrainMap3D`, passing the same prop set. Toggle pill +
+  3D-disabled fallback flag live in the orchestrator.
+- **Mesh build** per "Mesh build" + "Color management" — square
+  geometry, no radial fade, square boundary frame, dashed inscribed
+  gameplay-disc overlay.
+- **Camera**: perspective + `(yaw, pitch, distance, target)` smoothed
+  via the `IsometricCamera` lerp pattern. Polar bounds 5°–82°.
+  Defaults `yaw=0, pitch=35°, distance=4.5`. Distance mapped to
+  display zoom 1×–200×. Pan clamp is the square AABB (`## Square pan
+  clamp`).
+- **Gestures** per the gestures table: pan, zoom, orbit (right-drag /
+  touch-orbit-toggle), reset, drag-vs-click suppression, 350 ms iOS
+  pinch suppression, `touch-action: none`. Keyboard shortcuts
+  optional for v1.
+- **Markers** per "Markers" — both low-zoom dot mode and high-zoom
+  tile mode (gated on `cssPxPerCellAt(camera, target, …)`), the
+  entity-selection yellow override, the zoom-scaled centre marker,
+  the dual-mode selection ring, the proximity grid lines, **and the
+  in-flight walk lines for the local player (`travel`) plus every
+  other intracity walker in the city (`otherWalks`)**.
+- **Walk-data source** must be `useCityPlayers(cityId)`
+  (zustand-backed, live via the program-wide WS) — NOT
+  `useWorldPlayers` (the 30 s tanstack-query polling path). See
+  "Live other-players state" for the full data flow. The 3D scene
+  consumes the same shapes via the same props the 2D file already
+  receives.
+- **Occupancy source** is `useCityOccupied(cityId)` from
+  `apps/web/src/lib/hooks/useCityOccupied.ts` — both modes read it.
+  No GPA polling.
+- **Click + hover** use `THREE.Raycaster` against the terrain mesh →
   `worldToGrid(point.x, point.z, rgu)` → entity lookup against
-  `occupied`, then `onPick({gridLat, gridLong, passable,
-  entityAtCell})`. The orchestrator (`CityTerrainMap.tsx`)
-  implements the entity-vs-landing branching from "Click semantics"
-  — the scene component just hands raw hits up.
-- Renderer setup mirrors `MagicRing.tsx` (try/catch, WebGL2 gate,
-  `setPixelRatio` before `setSize`, transparent clear).
-- Re-uses the existing `.canvasWrap` shell, status row (including
-  the zoom multiplier + `· cells visible` indicator), hover readout
-  `aria-live`, legend, and reset button. Only the canvas pair
-  (`terrainCanvasRef` + `overlayCanvasRef`) is replaced.
+  `occupied`, then `onPick({gridLat, gridLong, passable, outOfBounds,
+  entityAtCell})`. Orchestrator implements the entity-vs-landing-vs-
+  out-of-bounds branching from `## Click semantics under square view`;
+  the scene just hands raw hits up.
+- **Renderer setup** mirrors `MagicRing.tsx` (try/catch, WebGL2 gate,
+  `setPixelRatio` before `setSize`, transparent clear). On WebGL2-
+  unavailable or context-creation throw, orchestrator flips fallback
+  flag to 2D and disables the toggle pill.
+- **Re-uses** the existing `.canvasWrap` shell, status row (incl.
+  zoom multiplier + `· cells visible` indicator), hover readout
+  `aria-live`, legend, reset button. Status row gains the 2D/3D
+  toggle pill and (touch only) the orbit-toggle pill.
 
 ## Phase 2 — polish (optional, can land later)
 
@@ -993,12 +1562,6 @@ component, isometric from day 1.
 
 ## Decisions deferred
 
-- **2D fallback.** Don't ship a runtime 2D/3D toggle until we have a
-  reason to keep the 2D code path alive. WebGL2 is universally
-  available in our target browsers and the heightmap math is the same
-  cost in both. WebGL2 unavailable falls back to the
-  `onContextLost` overlay, not a runtime 2D render. If a fallback is
-  needed later, the 2D path lives in git history.
 - **Web Worker offload.** Skip. Mesh build at 256² × ~8 anchors is
   well under the existing main-thread budget. Revisit if a city ships
   with > 32 anchors.
@@ -1012,10 +1575,24 @@ component, isometric from day 1.
 
 - **WebGL context loss or no context at all** — wire
   `webglcontextlost` / `restored` plus the `MagicRing.tsx` try/catch
-  + WebGL2 gate at construction. On any of these, fire
-  `onContextLost` and render a parchment-styled "tap to retry"
-  overlay (don't silently die). On restore, rebuild mesh from current
-  `terrain` prop.
+  + WebGL2 gate at construction. On any of these, the orchestrator
+  unmounts `CityTerrainMapWebGL` and mounts the
+  `CityTerrainMap2DFallback` (Canvas2D path). The 2D ↔ 3D toggle
+  pill is hidden in the fallback state (the fallback can't tilt).
+  A one-line `aria-live` notice shows once ("3D rendering
+  unavailable — using 2D mode"). The user's saved
+  `useSettings.mapMode` is preserved — if they had 3D selected, they
+  get the tilt back as soon as WebGL becomes available again. On
+  `webglcontextrestored`, the orchestrator unmounts the fallback
+  and remounts `CityTerrainMapWebGL` in the saved mode.
+- **Tween hijack by gestures** — clicks, drags, pinches, and toggle
+  re-presses during the ~700 ms transition can race the camera and
+  produce visible jitter. Mitigation: `isTransitioning` flag set by
+  the rAF driver, consumed by every gesture handler AND the toggle
+  pill `disabled` prop. Symmetric for 2D → 3D and 3D → 2D.
+- **Reduced-motion users** — respect `prefers-reduced-motion:
+  reduce`. Skip the tween, snap to destination state. Verified by
+  the matchMedia check in `## Mode transition`.
 - **DPR thrash on retina + dynamic ResizeObserver** — clamp
   `setPixelRatio` to 2 and re-use the existing 150 ms debounce on
   `logicalSize` for `renderer.setSize`.
@@ -1034,9 +1611,10 @@ component, isometric from day 1.
 - **Mesh under-sampling at zoom 200** — mitigated by the proximity
   grid overlay and tile-rendered occupants providing cell structure
   visually. Phase 2 dynamic LOD is the long-term fix.
-- **`anchorCount == 0`** — mesh build short-circuits to a flat disc at
-  elevation 128; boundary ring + "terrain unset" status keep
-  displaying. Matches current behaviour.
+- **`anchorCount == 0`** — 3D mesh build short-circuits to a flat
+  square at elevation 128; square boundary + inscribed disc + "terrain
+  unset" status keep displaying. 2D path's short-circuit (flat disc at
+  elevation 128) is unchanged.
 - **Camera-occluded occupancy dots** in Phase 2 — instanced rings
   sitting on the terrain are visually correct (a player behind a
   mountain *should* be occluded for v1), but a "show all" toggle may
@@ -1046,10 +1624,41 @@ component, isometric from day 1.
 
 ## Acceptance checklist (full migration done)
 
-- [ ] Visual: tilted terrain disc renders with shaded elevation,
-      boundary ring, parchment-toned background. Color visually
-      matches the current 2D path side-by-side (sRGB linearization
-      verified).
+- [ ] Visual: tilted terrain **square** renders with shaded
+      elevation, **square boundary frame**, **dashed inscribed
+      gameplay-disc overlay**, parchment-toned background. Color
+      visually matches the current 2D path side-by-side (sRGB
+      linearization verified).
+- [ ] **2D ↔ 3D toggle pill** in status row triggers the tilt tween
+      between two camera + scale.y presets inside the SAME WebGL
+      scene. Choice persists in `useSettings.mapMode` zustand store
+      across navigation and reload.
+- [ ] **Mode transition (Google-Maps tilt)**: pressing the pill
+      animates `pitch` (0° ↔ 35°) AND `mesh.scale.y` (0 ↔ 1) AND
+      `target.y` (0 ↔ midpointElevation) in lockstep over ~700 ms
+      with `easeOutCubic` (or `cubic-bezier(0.2, 0.8, 0.2, 1)`).
+      Terrain literally rises out of the flat plate as the camera
+      tilts back; reverse on 3D → 2D.
+- [ ] **Tween input suppression**: clicks, pans, zooms, orbits, AND
+      re-presses of the toggle pill are all ignored while
+      `isTransitioning` is true. No jitter, no half-completed tween.
+- [ ] **Selection-aware tween framing**: if `selectedEntity` or
+      `selected` is non-null at tween start, target.x/z also tweens
+      from current to `gridToWorld(selectedCell)` so the focused
+      cell stays centred. If nothing's selected, target stays put.
+- [ ] **`prefers-reduced-motion: reduce`** → tween is skipped; state
+      snaps to destination instantly.
+- [ ] **WebGL2 unavailable / context creation fails** → orchestrator
+      mounts `CityTerrainMap2DFallback` (Canvas2D path) and HIDES
+      the toggle pill. One-line `aria-live` notice shows once. The
+      saved `useSettings.mapMode` is preserved.
+- [ ] **Context restored** while in fallback → orchestrator
+      unmounts the fallback, remounts `CityTerrainMapWebGL` in the
+      saved mode, toggle pill reappears.
+- [ ] **Mode switch preserves state**: selecting an entity in 2D
+      then toggling to 3D keeps the entity selected; the tween
+      frames the camera target on the selected cell. Same the
+      other way. No `onEntitySelect(null)` fires on mode change.
 - [ ] `onSelect` rejects impassable terrain and occupied cells.
 - [ ] **Entity selection**: click on player/encounter dot fires
       `onEntitySelect(entity)`; click on empty passable cell fires
@@ -1062,10 +1671,34 @@ component, isometric from day 1.
       preserved).
 - [ ] **350 ms touch click-suppression** after pinch on iOS — no
       phantom selection.
-- [ ] Double-tap / dedicated reset button recentres.
-- [ ] Hover readout emits `Water | Land | Peak`, metres from centre,
-      `impassable` tag. Throttled to ~30 Hz, doesn't pin a CPU core.
-- [ ] Zoom range 1× – 200×, anchored at cursor.
+- [ ] Double-click / double-tap zooms IN 2× at the cursor with a
+      cubic ease-out tween (220 ms); does NOT reset. Reset is only
+      via the dedicated `↻` button (also tweened).
+- [ ] In-mode tween cancellation: any wheel / pinch / drag / new
+      pointerdown during a zoom-tween or reset-tween cancels it
+      immediately and hands control back to the user's gesture.
+- [ ] Hover readout emits `Water | Shore | Land | Hill | Peak`,
+      metres from centre, `impassable` tag. Bucket thresholds match
+      the Canvas2D fallback: `t < 0.1 → Shore`, `t < 0.5 → Land`,
+      `t ≥ 0.5 → Hill`. Throttled to ~30 Hz, doesn't pin a CPU core.
+- [ ] **3D camera**: right-drag (mouse) and two-finger drag with
+      orbit-toggle ON (touch) change yaw and pitch within polar
+      bounds (5°–82°), smoothed via the `IsometricCamera` lerp
+      pattern. Yaw wraps freely; pitch never crosses the horizon.
+- [ ] **3D reset view** button restores `yaw=0°, pitch=35°,
+      distance=4.5, target=(0, midpointElevation, 0)` and zeroes
+      `zoomVelocity`.
+- [ ] **Square pan clamp** keeps the visible region inside the
+      `meshSize × meshSize` square at every camera distance, yaw,
+      and pitch. No parchment bleed past mesh edges.
+- [ ] **Out-of-bounds click**: picking an empty cell on the square
+      mesh but outside the inscribed gameplay-disc fires `onPick`
+      with `outOfBounds: true`; the orchestrator surfaces a
+      one-line "Outside city bounds" notice and does **not** call
+      `onSelect`. Picks inside the inscribed disc behave per the
+      2D contract.
+- [ ] Zoom range 1× – 200× (mapped to `distance` under perspective,
+      anchored at cursor via dual raycast).
 - [ ] Low-zoom dot mode and high-zoom tile mode both render
       correctly; transition is at
       `cssPxPerCell ≥ GRID_OVERLAY_MIN_CSS_PX_PER_CELL` (currently 8).
@@ -1095,26 +1728,33 @@ component, isometric from day 1.
       `isHomeDestination`.
 - [ ] Empty-state readout copy and aria-label match the current
       file's strings verbatim.
-- [ ] **Local player's walk line** renders on the disc whenever
-      `isIntracityTravel && viewedCity === player.currentCity` — full
-      brightness style; marker advances each `chainNow` tick and
-      glides smoothly between start and arrival; disappears the
-      moment `intracity_complete` fires (no stale leftover).
-- [ ] **Other players' walks** render whenever any other player
-      satisfies `travelType === Intracity && arrivalTime > 0 &&
-      currentCity === viewedCity` — muted style (per "Walk lines"
-      style table); self never appears in this set.
+- [ ] **Local player's walk line** renders on the map (both modes)
+      whenever `isIntracityTravel && viewedCity ===
+      player.currentCity` — full brightness style; marker advances
+      each `chainNow` tick and glides smoothly between start and
+      arrival; disappears the moment `intracity_complete` fires (no
+      stale leftover).
+- [ ] **Other players' walks** render on the map (both modes)
+      whenever any other player satisfies `travelType === Intracity
+      && arrivalTime > 0 && currentCity === viewedCity` — muted
+      style (per "Walk lines" style table); self never appears in
+      this set.
 - [ ] **Walk source is live, not polled**: `useCityPlayers` reads
       `otherPlayers` from zustand fed by the program-wide WebSocket;
       starting/completing a walk on another wallet reflects on the
-      disc within one RTT, NOT up to 30 s later. The cold-start
+      map within one RTT, NOT up to 30 s later. The cold-start
       fetch in `useCityPlayers` no-ops when boot has already seeded
       `otherPlayers`.
-- [ ] Pan clamp keeps entire visible region inside the city disc —
-      no parchment bleed at any zoom or pan position.
-- [ ] Resize: ortho frustum recomputed, no aspect squash.
-- [ ] Status row, occupancy poll, visibility-pause behaviour
+- [ ] 2D pan clamp: visible region stays inside the city disc.
+      3D pan clamp: visible region stays inside the square mesh
+      (`## Square pan clamp`). Neither leaks parchment past its edge
+      at any zoom or pan position.
+- [ ] Resize: 3D camera aspect updated, no squash. 2D viewport math
       unchanged.
+- [ ] Status row unchanged; both modes read occupancy from the same
+      zustand-backed `useCityOccupied(cityId)` (no polling — WS
+      streams Location updates into the store; the hook seeds once
+      per cityId change).
 - [ ] Full-sheet override in `map-tab.tsx:956-965` and the embedded
       scroll-panel layout both render correctly at their respective
       sizes (CSS module already handles both via flex + aspect-ratio).
@@ -1122,12 +1762,30 @@ component, isometric from day 1.
       now — no read-only branch to test separately.
 - [ ] WebGL2 unavailable / context creation fails: parchment-styled
       "tap to retry" overlay, no white screen.
-- [ ] No always-on rAF: idle CPU ~0% in chrome devtools profiler when
-      the panel is mounted but not interacted with.
+- [ ] No always-on rAF in steady state: idle CPU ~0% in chrome
+      devtools profiler when the panel is mounted but not interacted
+      with. The mode-transition tween IS allowed an rAF loop for the
+      ~700 ms it runs, then must stop.
 - [ ] Mount/unmount 10× in a row: `renderer.info.memory.geometries`
       and `.textures` return to zero. No leaks.
 - [ ] `bun typecheck` and the e2e suite that exercises landing-cell
       selection still pass.
+
+## Open follow-ups (track separately)
+
+- **Walk-line palette mismatch with occupant palette.** When the
+  antique palette landed in `CityTerrainMap.tsx`, occupants moved
+  to `PLAYER_FILL = rgba(160, 100, 45)` (tobacco amber) /
+  `WILD_FILL = rgba(115, 55, 30)` (oxblood), but the walk lines
+  still use the prior **seal-orange `rgba(180, 83, 9)`** family.
+  Result: the local player's dot and the local player's walk line
+  are now visually different oranges. Decide: either (a) align
+  walk lines to `PLAYER_FILL` for visual consistency, or (b)
+  intentionally keep seal-orange as the "in-flight" cue
+  distinguished from the static occupant. The doc's walk-lines
+  style table currently cites the seal-orange code, so it stays
+  accurate either way — just pick one and update both code and
+  table together. Affects the Canvas2D fallback AND the 3D scene.
 
 ## Out of scope
 

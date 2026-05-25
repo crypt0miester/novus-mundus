@@ -10,20 +10,16 @@
 //! TRANSITIONING status requires finalize_transition (needs cleanup verification).
 
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{CASTLE_STATUS_CONTEST, CASTLE_STATUS_PROTECTED, CASTLE_STATUS_VULNERABLE},
     emit,
     error::GameError,
     events::CastleStatusChanged,
     state::CastleAccount,
-    constants::{
-        CASTLE_STATUS_CONTEST, CASTLE_STATUS_PROTECTED, CASTLE_STATUS_VULNERABLE,
-    },
 };
 
 /// Update Castle Status instruction data
@@ -40,17 +36,14 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        _caller,
-        castle_account,
-    ]);
+    crate::extract_accounts!(accounts, [_caller, castle_account,]);
 
     // Get current timestamp
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     let old_status = castle.status;
     let mut new_status = old_status;

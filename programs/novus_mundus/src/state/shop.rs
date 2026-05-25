@@ -1,20 +1,14 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
+use crate::constants::{
+    ALLOWED_TOKEN_SEED, BUNDLE_SEED, DAILY_DEAL_SEED, DAO_PROMOTION_SEED, FLASH_SALE_SEED,
+    PLAYER_PURCHASE_SEED, SEASONAL_SALE_SEED, SHOP_CONFIG_SEED, SHOP_ITEM_SEED, WEEKLY_SALE_SEED,
 };
 use pinocchio::AccountView;
-use crate::constants::{
-    SHOP_CONFIG_SEED, SHOP_ITEM_SEED, BUNDLE_SEED, DAILY_DEAL_SEED,
-    FLASH_SALE_SEED, WEEKLY_SALE_SEED, SEASONAL_SALE_SEED,
-    DAO_PROMOTION_SEED, PLAYER_PURCHASE_SEED, ALLOWED_TOKEN_SEED,
-};
-
+use pinocchio::{error::ProgramError, Address};
 
 // SHOP CONFIG ACCOUNT (Global Settings)
 
 // PDA: ["shop_config", game_engine]
 // Lifecycle: PERSISTENT (never closed)
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -22,10 +16,10 @@ pub struct ShopConfigAccount {
     /// Account discriminator (AccountKey::ShopConfig)
     pub account_key: u8,
     // Discount Caps (8 bytes) - basis points
-    pub max_base_discount_bps: u16,      // Layer 1 cap (6000 = 60%)
-    pub max_bundle_discount_bps: u16,    // Layer 2 cap (3500 = 35%)
-    pub max_fib_discount_bps: u16,       // Layer 3 cap (2000 = 20%)
-    pub max_total_discount_bps: u16,     // Combined cap (7500 = 75%)
+    pub max_base_discount_bps: u16,   // Layer 1 cap (6000 = 60%)
+    pub max_bundle_discount_bps: u16, // Layer 2 cap (3500 = 35%)
+    pub max_fib_discount_bps: u16,    // Layer 3 cap (2000 = 20%)
+    pub max_total_discount_bps: u16,  // Combined cap (7500 = 75%)
 
     // Sale Limits (8 bytes)
     pub max_flash_sales_per_day: u8,
@@ -42,11 +36,11 @@ pub struct ShopConfigAccount {
     pub diamond_threshold: u64,
 
     // Milestone Discount Rates (10 bytes) - basis points
-    pub bronze_discount_bps: u16,        // 200 = 2%
-    pub silver_discount_bps: u16,        // 400 = 4%
-    pub gold_discount_bps: u16,          // 600 = 6%
-    pub platinum_discount_bps: u16,      // 800 = 8%
-    pub diamond_discount_bps: u16,       // 1000 = 10%
+    pub bronze_discount_bps: u16,   // 200 = 2%
+    pub silver_discount_bps: u16,   // 400 = 4%
+    pub gold_discount_bps: u16,     // 600 = 6%
+    pub platinum_discount_bps: u16, // 800 = 8%
+    pub diamond_discount_bps: u16,  // 1000 = 10%
 
     // Loyalty Streak Discounts (8 bytes)
     pub streak_day_2_bps: u16,
@@ -59,17 +53,17 @@ pub struct ShopConfigAccount {
     pub total_novi_burned: u64,
 
     // State (8 bytes)
-    pub next_flash_sale_id: u64,         // Incrementing ID for flash sales
+    pub next_flash_sale_id: u64, // Incrementing ID for flash sales
 
     // SOL Oracle Configuration (100 bytes)
     // Used for token payments: convert token USD price to SOL amount
-    pub sol_pyth_feed: Address,           // Pyth SOL/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
-    pub sol_switchboard_feed: Address,    // Switchboard SOL/USD *feed ID* — 32-byte OracleQuote feed id (NOT an account)
+    pub sol_pyth_feed: Address, // Pyth SOL/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
+    pub sol_switchboard_feed: Address, // Switchboard SOL/USD *feed ID* — 32-byte OracleQuote feed id (NOT an account)
     /// Switchboard On-Demand queue account pubkey. Pins the `queue` account
     /// passed to `QuoteVerifier` and seeds the oracle-quote PDA
     /// (`["oracle_quote", switchboard_queue]`). All-zero = not configured.
     pub switchboard_queue: Address,
-    pub sol_max_staleness_slots: u16,    // Max price age — SECONDS for Pyth, SLOTS (quote max_age) for Switchboard
+    pub sol_max_staleness_slots: u16, // Max price age — SECONDS for Pyth, SLOTS (quote max_age) for Switchboard
     pub sol_confidence_threshold_bps: u16, // Max confidence interval, bps — Pyth only (Switchboard confidence is enforced inside the verified quote)
 
     // Reserved (8 bytes)
@@ -104,16 +98,15 @@ impl ShopConfigAccount {
         pinocchio::Address::create_program_address(
             &[SHOP_CONFIG_SEED, game_engine.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
-
 
 // SHOP ITEM ACCOUNT (Individual Item Definition)
 
 // PDA: ["shop_item", game_engine, item_id.to_le_bytes()]
 // Lifecycle: PERSISTENT (admin can close if delisted)
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -121,27 +114,27 @@ pub struct ShopItemAccount {
     /// Account discriminator (AccountKey::ShopItem)
     pub account_key: u8,
     // Item Info (8 bytes)
-    pub item_type: u16,                  // Maps to ItemType enum
-    pub category: u8,                    // 0=Equipment, 1=Consumable, 2=Material, 3=Cosmetic
-    pub rarity: u8,                      // 0=Common...4=Legendary
-    pub quantity_per_purchase: u16,      // Units received per purchase
-    pub base_stats_bps: u16,             // Bonus stats in basis points
+    pub item_type: u16,             // Maps to ItemType enum
+    pub category: u8,               // 0=Equipment, 1=Consumable, 2=Material, 3=Cosmetic
+    pub rarity: u8,                 // 0=Common...4=Legendary
+    pub quantity_per_purchase: u16, // Units received per purchase
+    pub base_stats_bps: u16,        // Bonus stats in basis points
 
     // Pricing (16 bytes)
-    pub price_sol_lamports: u64,         // 0 = not sold for SOL
-    pub _reserved_price: [u8; 8],        // Previously price_gems, now reserved
+    pub price_sol_lamports: u64,  // 0 = not sold for SOL
+    pub _reserved_price: [u8; 8], // Previously price_gems, now reserved
 
     // Availability (16 bytes)
-    pub available_from: i64,             // 0 = always available
-    pub available_until: i64,            // 0 = no end
+    pub available_from: i64,  // 0 = always available
+    pub available_until: i64, // 0 = no end
 
     // Stock (16 bytes)
-    pub max_global_stock: u64,           // 0 = unlimited
+    pub max_global_stock: u64, // 0 = unlimited
     pub current_global_stock: u64,
 
     // Limits (8 bytes)
-    pub max_per_player: u32,             // 0 = unlimited
-    pub max_per_day: u16,                // 0 = unlimited
+    pub max_per_player: u32, // 0 = unlimited
+    pub max_per_day: u16,    // 0 = unlimited
     pub _padding: [u8; 2],
 
     // State (2 bytes)
@@ -176,33 +169,39 @@ impl ShopItemAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, item_id: u32, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        item_id: u32,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let item_id_bytes = item_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[SHOP_ITEM_SEED, game_engine.as_ref(), &item_id_bytes, &bump_seed],
+            &[
+                SHOP_ITEM_SEED,
+                game_engine.as_ref(),
+                &item_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
-
 // BUNDLE ITEM (embedded in BundleAccount)
-
 
 #[repr(C)]
 #[derive(Copy, Clone, Default)]
 pub struct BundleItem {
-    pub item_id: u32,                    // References ShopItemAccount
-    pub quantity: u32,                   // Amount of this item
+    pub item_id: u32,  // References ShopItemAccount
+    pub quantity: u32, // Amount of this item
 }
-
 
 // BUNDLE ACCOUNT (Pre-Built Bundle)
 
 // PDA: ["bundle", game_engine, bundle_id.to_le_bytes()]
 // Lifecycle: PERSISTENT (admin can close if delisted)
-
 
 pub const MAX_BUNDLE_ITEMS: usize = 10;
 
@@ -212,11 +211,11 @@ pub struct BundleAccount {
     /// Account discriminator (AccountKey::ShopBundle)
     pub account_key: u8,
     // Bundle Info (8 bytes)
-    pub tier: u8,                        // 0=Starter...4=Supreme
-    pub category: u8,                    // 0=Equipment...3=Mixed
-    pub item_count: u8,                  // 2-10 items
-    pub requires_subscription: u8,       // 0=None, 1=Rookie+...4=Legendary
-    pub savings_bps: u16,                // Advertised savings
+    pub tier: u8,                  // 0=Starter...4=Supreme
+    pub category: u8,              // 0=Equipment...3=Mixed
+    pub item_count: u8,            // 2-10 items
+    pub requires_subscription: u8, // 0=None, 1=Rookie+...4=Legendary
+    pub savings_bps: u16,          // Advertised savings
     pub is_active: bool,
     pub _padding: u8,
 
@@ -262,22 +261,30 @@ impl BundleAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, bundle_id: u32, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        bundle_id: u32,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bundle_id_bytes = bundle_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[BUNDLE_SEED, game_engine.as_ref(), &bundle_id_bytes, &bump_seed],
+            &[
+                BUNDLE_SEED,
+                game_engine.as_ref(),
+                &bundle_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
-
 
 // DAILY DEAL ACCOUNT (Rotating Daily Deals)
 
 // PDA: ["daily_deal", game_engine, slot_index]
 // Lifecycle: PERSISTENT (updated in place daily)
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -285,10 +292,10 @@ pub struct DailyDealAccount {
     /// Account discriminator (AccountKey::DailyDeal)
     pub account_key: u8,
     // Current Deal (16 bytes)
-    pub item_id: u32,                    // Current item on deal
-    pub discount_bps: u16,               // 1500-4000 (15-40%)
+    pub item_id: u32,      // Current item on deal
+    pub discount_bps: u16, // 1500-4000 (15-40%)
     pub _padding1: [u8; 2],
-    pub started_at: i64,                 // When this deal became active
+    pub started_at: i64, // When this deal became active
 
     // Next Deal - pre-computed (8 bytes)
     pub next_item_id: u32,
@@ -323,21 +330,29 @@ impl DailyDealAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, slot_index: u8, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        slot_index: u8,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[DAILY_DEAL_SEED, game_engine.as_ref(), &[slot_index], &bump_seed],
+            &[
+                DAILY_DEAL_SEED,
+                game_engine.as_ref(),
+                &[slot_index],
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
-
 
 // FLASH SALE ACCOUNT (Time-Limited Flash Sales)
 
 // PDA: ["flash_sale", game_engine, sale_id.to_le_bytes()]
 // Lifecycle: CLOSABLE -> rent returns to `payer` after sale ends/sells out
-
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -366,16 +381,16 @@ pub struct FlashSaleAccount {
     /// Account discriminator (AccountKey::FlashSale)
     pub account_key: u8,
     // Payer for rent return (32 bytes)
-    pub payer: Address,                   // Receives rent on close
+    pub payer: Address, // Receives rent on close
 
     // Item (8 bytes)
-    pub item_id: u32,                    // Item or bundle ID
+    pub item_id: u32, // Item or bundle ID
     pub is_bundle: bool,
-    pub status: u8,                      // FlashSaleStatus
-    pub discount_bps: u16,               // Up to 5000 (50%)
+    pub status: u8,        // FlashSaleStatus
+    pub discount_bps: u16, // Up to 5000 (50%)
 
     // Timing (24 bytes)
-    pub announced_at: i64,               // 30 min before start
+    pub announced_at: i64, // 30 min before start
     pub starts_at: i64,
     pub ends_at: i64,
 
@@ -415,28 +430,35 @@ impl FlashSaleAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, sale_id: u64, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        sale_id: u64,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let sale_id_bytes = sale_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[FLASH_SALE_SEED, game_engine.as_ref(), &sale_id_bytes, &bump_seed],
+            &[
+                FLASH_SALE_SEED,
+                game_engine.as_ref(),
+                &sale_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if this sale can be closed (ended or sold out)
     pub fn can_close(&self) -> bool {
-        self.status == FlashSaleStatus::Ended as u8 ||
-        self.status == FlashSaleStatus::SoldOut as u8
+        self.status == FlashSaleStatus::Ended as u8 || self.status == FlashSaleStatus::SoldOut as u8
     }
 }
-
 
 // WEEKLY SALE ACCOUNT (Weekly Themed Specials)
 
 // PDA: ["weekly_sale", game_engine, week_number.to_le_bytes()]
 // Lifecycle: CLOSABLE -> close after week ends, rent to `payer`
-
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -457,13 +479,13 @@ pub struct WeeklySaleAccount {
     pub payer: Address,
 
     // Theme (8 bytes)
-    pub theme: u8,                       // WeeklySaleTheme
-    pub bonus_type: u8,                  // What bonus applies
-    pub bonus_value_bps: u16,            // 1000 = 10%
+    pub theme: u8,            // WeeklySaleTheme
+    pub bonus_type: u8,       // What bonus applies
+    pub bonus_value_bps: u16, // 1000 = 10%
     pub _padding1: [u8; 4],
 
     // Category Discounts (8 bytes)
-    pub category_discounts: [u16; 4],    // Per category discount
+    pub category_discounts: [u16; 4], // Per category discount
 
     // Timing (16 bytes)
     pub starts_at: i64,
@@ -501,13 +523,23 @@ impl WeeklySaleAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, week_number: u64, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        week_number: u64,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let week_bytes = week_number.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[WEEKLY_SALE_SEED, game_engine.as_ref(), &week_bytes, &bump_seed],
+            &[
+                WEEKLY_SALE_SEED,
+                game_engine.as_ref(),
+                &week_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if this sale can be closed (week has ended)
@@ -516,12 +548,10 @@ impl WeeklySaleAccount {
     }
 }
 
-
 // SEASONAL SALE ACCOUNT (Event-Tied Sales)
 
 // PDA: ["seasonal_sale", game_engine, event_pubkey]
 // Lifecycle: CLOSABLE -> close after event ends, rent to `payer`
-
 
 pub const MAX_FEATURED_ITEMS: usize = 10;
 
@@ -542,15 +572,15 @@ pub struct SeasonalSaleAccount {
     pub payer: Address,
 
     // Sale Info (32 bytes)
-    pub name: [u8; 32],                  // "Summer Combat Festival"
+    pub name: [u8; 32], // "Summer Combat Festival"
 
     // Featured Items (60 bytes) - up to 10 items
-    pub featured_item_ids: [u32; MAX_FEATURED_ITEMS],    // 40 bytes
+    pub featured_item_ids: [u32; MAX_FEATURED_ITEMS], // 40 bytes
     pub featured_discounts_bps: [u16; MAX_FEATURED_ITEMS], // 20 bytes
 
     // Config (8 bytes)
     pub featured_count: u8,
-    pub status: u8,                      // SeasonalSaleStatus
+    pub status: u8, // SeasonalSaleStatus
     pub global_discount_bps: u16,
     pub _padding1: [u8; 4],
 
@@ -594,12 +624,22 @@ impl SeasonalSaleAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, event: &Address, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        event: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[SEASONAL_SALE_SEED, game_engine.as_ref(), event.as_ref(), &bump_seed],
+            &[
+                SEASONAL_SALE_SEED,
+                game_engine.as_ref(),
+                event.as_ref(),
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if this sale can be closed
@@ -608,12 +648,10 @@ impl SeasonalSaleAccount {
     }
 }
 
-
 // DAO PROMOTION ACCOUNT (Community-Voted Promotions)
 
 // PDA: ["dao_promo", game_engine, proposal_id.to_le_bytes()]
 // Lifecycle: CLOSABLE -> close after ends or budget exhausted, rent to `payer`
-
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -642,7 +680,7 @@ pub struct DAOPromotionAccount {
     pub cosmetic_discount_bps: u16,
     pub global_discount_bps: u16,
     pub max_discount_bps: u16,
-    pub status: u8,                      // DAOPromotionStatus
+    pub status: u8, // DAOPromotionStatus
     pub _padding1: [u8; 3],
 
     // Timing (24 bytes)
@@ -687,28 +725,36 @@ impl DAOPromotionAccount {
         )
     }
 
-    pub fn create_pda(game_engine: &Address, proposal_id: u64, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        proposal_id: u64,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let proposal_bytes = proposal_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[DAO_PROMOTION_SEED, game_engine.as_ref(), &proposal_bytes, &bump_seed],
+            &[
+                DAO_PROMOTION_SEED,
+                game_engine.as_ref(),
+                &proposal_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if this promotion can be closed
     pub fn can_close(&self) -> bool {
-        self.status == DAOPromotionStatus::Ended as u8 ||
-        self.status == DAOPromotionStatus::BudgetExhausted as u8
+        self.status == DAOPromotionStatus::Ended as u8
+            || self.status == DAOPromotionStatus::BudgetExhausted as u8
     }
 }
-
 
 // PLAYER PURCHASE ACCOUNT (Per-Player Purchase Tracking)
 
 // PDA: ["player_purchase", player, item_id.to_le_bytes()]
 // Lifecycle: CLOSABLE -> close when lifetime limit reached OR item delisted
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -716,9 +762,9 @@ pub struct PlayerPurchaseAccount {
     /// Account discriminator (AccountKey::PlayerPurchase)
     pub account_key: u8,
     // Tracking (24 bytes)
-    pub lifetime_purchased: u64,         // Total ever purchased
-    pub purchased_today: u64,            // Reset daily
-    pub last_purchase_day: u64,          // Day number for reset
+    pub lifetime_purchased: u64, // Total ever purchased
+    pub purchased_today: u64,    // Reset daily
+    pub last_purchase_day: u64,  // Day number for reset
 
     // Reserved (8 bytes)
     pub _reserved: [u8; 8],
@@ -749,19 +795,25 @@ impl PlayerPurchaseAccount {
         let item_id_bytes = item_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[PLAYER_PURCHASE_SEED, player.as_ref(), &item_id_bytes, &bump_seed],
+            &[
+                PLAYER_PURCHASE_SEED,
+                player.as_ref(),
+                &item_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if this account can be closed
     /// - Item delisted (is_active = false)
     /// - OR lifetime limit reached AND no daily limit
     pub fn can_close(&self, item: &ShopItemAccount) -> bool {
-        !item.is_active ||
-        (item.max_per_player > 0 &&
-         self.lifetime_purchased >= item.max_per_player as u64 &&
-         item.max_per_day == 0)
+        !item.is_active
+            || (item.max_per_player > 0
+                && self.lifetime_purchased >= item.max_per_player as u64
+                && item.max_per_day == 0)
     }
 
     /// Get current day number (for daily reset tracking)
@@ -779,9 +831,7 @@ impl PlayerPurchaseAccount {
     }
 }
 
-
 // SHOP CATEGORY ENUM
-
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
@@ -806,18 +856,16 @@ impl ShopCategory {
     }
 }
 
-
 // BUNDLE TIER ENUM
-
 
 #[repr(u8)]
 #[derive(Copy, Clone, PartialEq, Eq)]
 pub enum BundleTier {
-    Starter = 0,   // 2 items, -10%
-    Combat = 1,    // 3 items, -15%
-    Crafter = 2,   // 4 items, -20%
-    Explorer = 3,  // 5 items, -25%
-    Supreme = 4,   // 6+ items, -35%
+    Starter = 0,  // 2 items, -10%
+    Combat = 1,   // 3 items, -15%
+    Crafter = 2,  // 4 items, -20%
+    Explorer = 3, // 5 items, -25%
+    Supreme = 4,  // 6+ items, -35%
 }
 
 impl BundleTier {
@@ -835,21 +883,19 @@ impl BundleTier {
     /// Get the base discount for this tier (basis points)
     pub fn base_discount_bps(self) -> u16 {
         match self {
-            Self::Starter => 1000,   // 10%
-            Self::Combat => 1500,    // 15%
-            Self::Crafter => 2000,   // 20%
-            Self::Explorer => 2500,  // 25%
-            Self::Supreme => 3500,   // 35%
+            Self::Starter => 1000,  // 10%
+            Self::Combat => 1500,   // 15%
+            Self::Crafter => 2000,  // 20%
+            Self::Explorer => 2500, // 25%
+            Self::Supreme => 3500,  // 35%
         }
     }
 }
-
 
 // ALLOWED TOKEN ACCOUNT (Token Payment Whitelist)
 
 // PDA: ["allowed_token", game_engine, token_mint]
 // Lifecycle: CLOSABLE (DAO controls token support)
-
 
 #[repr(C)]
 #[derive(Copy, Clone)]
@@ -860,13 +906,13 @@ pub struct AllowedTokenAccount {
     pub mint: Address,
 
     // Dual Oracle Configuration (64 bytes)
-    pub pyth_feed: Address,                 // Pyth TOKEN/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
-    pub switchboard_feed: Address,          // Switchboard TOKEN/USD *feed ID* — 32-byte OracleQuote feed id (NOT an account)
+    pub pyth_feed: Address, // Pyth TOKEN/USD *feed ID* — 32-byte Pyth feed identifier, NOT an account
+    pub switchboard_feed: Address, // Switchboard TOKEN/USD *feed ID* — 32-byte OracleQuote feed id (NOT an account)
 
     // Pricing Parameters (8 bytes)
-    pub max_staleness_slots: u16,          // Max price age, SECONDS — Pyth only (Switchboard uses the shop-config quote max_age)
-    pub confidence_threshold_bps: u16,     // Max confidence interval, bps — Pyth only (see sol_confidence_threshold_bps)
-    pub discount_bps: u16,                 // Discount for using this token
+    pub max_staleness_slots: u16, // Max price age, SECONDS — Pyth only (Switchboard uses the shop-config quote max_age)
+    pub confidence_threshold_bps: u16, // Max confidence interval, bps — Pyth only (see sol_confidence_threshold_bps)
+    pub discount_bps: u16,             // Discount for using this token
     pub _padding: [u8; 2],
 
     // Pricing model + Reserved + Bump (16 bytes total)
@@ -895,19 +941,33 @@ impl AllowedTokenAccount {
     /// Use this only during account creation
     pub fn derive_pda(game_engine: &Address, token_mint: &Address) -> (Address, u8) {
         pinocchio::Address::find_program_address(
-            &[ALLOWED_TOKEN_SEED, game_engine.as_ref(), token_mint.as_ref()],
+            &[
+                ALLOWED_TOKEN_SEED,
+                game_engine.as_ref(),
+                token_mint.as_ref(),
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(game_engine: &Address, token_mint: &Address, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        token_mint: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[ALLOWED_TOKEN_SEED, game_engine.as_ref(), token_mint.as_ref(), &bump_seed],
+            &[
+                ALLOWED_TOKEN_SEED,
+                game_engine.as_ref(),
+                token_mint.as_ref(),
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify AllowedTokenAccount immutably.
@@ -917,26 +977,21 @@ impl AllowedTokenAccount {
         game_engine: &Address,
         token_mint: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, token_mint);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "AllowedTokenAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::AllowedToken)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::AllowedToken,
+                "AllowedTokenAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "AllowedTokenAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify AllowedTokenAccount mutably.
@@ -946,26 +1001,21 @@ impl AllowedTokenAccount {
         game_engine: &Address,
         token_mint: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, token_mint);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "AllowedTokenAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::AllowedToken)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::AllowedToken,
+                "AllowedTokenAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "AllowedTokenAccount", account)?;
+        Ok(loaded)
     }
 
     /// Validate allowed token account PDA using stored bump (fast)

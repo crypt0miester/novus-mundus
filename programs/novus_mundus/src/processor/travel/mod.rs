@@ -1,3 +1,5 @@
+pub mod intercity_cancel;
+pub mod intercity_complete;
 /// Travel processors - intercity and intracity movement
 ///
 /// Intercity travel:
@@ -13,12 +15,9 @@
 ///
 /// Speed-up:
 /// - speedup: Spend gems to reduce remaining travel time (tiered: 50%, 75%, 87.5% reduction)
-
 pub mod intercity_start;
-pub mod intercity_complete;
-pub mod intercity_cancel;
 pub mod intercity_teleport;
-pub mod intracity_start;
-pub mod intracity_complete;
 pub mod intracity_cancel;
+pub mod intracity_complete;
+pub mod intracity_start;
 pub mod speedup;

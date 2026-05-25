@@ -1,5 +1,5 @@
-use pinocchio::error::ProgramError;
 use crate::error::GameError;
+use pinocchio::error::ProgramError;
 
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -75,9 +75,9 @@ impl TryFrom<u8> for Theme {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum TravelType {
-    None = 0,        // Not currently traveling
-    Intracity = 1,   // Moving within same city (fast, ~1-5 min)
-    Intercity = 2,   // Moving between cities (slow, ~10 min - 2 hours)
+    None = 0,      // Not currently traveling
+    Intracity = 1, // Moving within same city (fast, ~1-5 min)
+    Intercity = 2, // Moving between cities (slow, ~10 min - 2 hours)
 }
 
 impl TryFrom<u8> for TravelType {
@@ -176,12 +176,12 @@ impl EncounterType {
     /// Get despawn duration in seconds
     pub fn despawn_duration(self) -> i64 {
         match self {
-            Self::Common => 3_600,        // 1 hour
-            Self::Uncommon => 7_200,      // 2 hours
-            Self::Rare => 14_400,         // 4 hours
-            Self::Epic => 43_200,         // 12 hours
-            Self::Legendary => 86_400,    // 24 hours
-            Self::WorldEvent => 604_800,  // 7 days
+            Self::Common => 3_600,       // 1 hour
+            Self::Uncommon => 7_200,     // 2 hours
+            Self::Rare => 14_400,        // 4 hours
+            Self::Epic => 43_200,        // 12 hours
+            Self::Legendary => 86_400,   // 24 hours
+            Self::WorldEvent => 604_800, // 7 days
         }
     }
 
@@ -197,9 +197,9 @@ impl EncounterType {
             Self::Common => 1_000,
             Self::Uncommon => 5_000,
             Self::Rare => 25_000,
-            Self::Epic => 0,          // DAO only (no cost)
-            Self::Legendary => 0,     // DAO only (no cost)
-            Self::WorldEvent => 0,    // DAO only (no cost)
+            Self::Epic => 0,       // DAO only (no cost)
+            Self::Legendary => 0,  // DAO only (no cost)
+            Self::WorldEvent => 0, // DAO only (no cost)
         }
     }
 }
@@ -221,14 +221,14 @@ impl TryFrom<u8> for EncounterType {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum EventType {
-    TotalDamageDealt = 0,        // Accumulative: sum all damage
-    MostAttacksWonPvP = 1,       // Accumulative: count PvP wins
-    MostAttacksWonPvE = 2,       // Accumulative: count PvE wins
-    HighestCash = 3,             // Snapshot: max cash_on_hand
-    MostXPGained = 4,            // Accumulative: sum XP deltas
-    MostEncountersDefeated = 5,  // Accumulative: count defeats
-    MostResourcesCollected = 6,  // Accumulative: sum resources
-    MostNoviConsumed = 7,        // Accumulative: sum novi burned/spent
+    TotalDamageDealt = 0,       // Accumulative: sum all damage
+    MostAttacksWonPvP = 1,      // Accumulative: count PvP wins
+    MostAttacksWonPvE = 2,      // Accumulative: count PvE wins
+    HighestCash = 3,            // Snapshot: max cash_on_hand
+    MostXPGained = 4,           // Accumulative: sum XP deltas
+    MostEncountersDefeated = 5, // Accumulative: count defeats
+    MostResourcesCollected = 6, // Accumulative: sum resources
+    MostNoviConsumed = 7,       // Accumulative: sum novi burned/spent
 }
 
 impl EventType {
@@ -267,10 +267,10 @@ impl TryFrom<u8> for EventType {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum PrizeType {
-    LockedNovi = 0,  // → player.locked_novi
-    Gems = 1,        // → player.gems
-    Cash = 2,        // → player.cash_on_hand
-    SPLToken = 3,    // CPI transfer from event vault to player token account
+    LockedNovi = 0, // → player.locked_novi
+    Gems = 1,       // → player.gems
+    Cash = 2,       // → player.cash_on_hand
+    SPLToken = 3,   // CPI transfer from event vault to player token account
 }
 
 impl PrizeType {

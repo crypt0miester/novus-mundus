@@ -1,18 +1,10 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
+    constants::HERO_COLLECTION_SEED,
     error::GameError,
     state::GameEngine,
-    constants::HERO_COLLECTION_SEED,
-    validation::{
-        require_signer,
-        require_writable,
-        require_empty,
-    },
+    validation::{require_empty, require_signer, require_writable},
 };
 
 /// Initialize the hero NFT collection (DAO only) (136)
@@ -60,10 +52,8 @@ pub fn process(
     }
 
     // 4. SAFETY: Verify hero_collection PDA derivation
-    let (expected_collection_pda, collection_bump) = Address::find_program_address(
-        &[HERO_COLLECTION_SEED],
-        program_id,
-    );
+    let (expected_collection_pda, collection_bump) =
+        Address::find_program_address(&[HERO_COLLECTION_SEED], program_id);
 
     if hero_collection.address() != &expected_collection_pda {
         return Err(GameError::InvalidPDA.into());
@@ -79,13 +69,14 @@ pub fn process(
     let collection_signer = pinocchio::cpi::Signer::from(&collection_seeds);
 
     p_core::instructions::CreateCollectionV1 {
-        collection: hero_collection,  // Collection PDA signs
-        update_authority: game_engine,  // Game engine can update metadata
+        collection: hero_collection,   // Collection PDA signs
+        update_authority: game_engine, // Game engine can update metadata
         payer: dao_authority,
         system_program,
         name: b"Novus Mundus Heroes",
         uri: b"https://novusmundus.gg/heroes/collection",
-    }.invoke_signed(&[collection_signer])?;
+    }
+    .invoke_signed(&[collection_signer])?;
 
     Ok(())
 }

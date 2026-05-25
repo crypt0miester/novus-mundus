@@ -1,16 +1,14 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::EventAccount,
-    validation::{require_writable, require_owner},
     emit,
+    error::GameError,
     events::game_event::GameEventFinalized,
+    state::EventAccount,
+    validation::{require_owner, require_writable},
 };
 
 /// Finalize event

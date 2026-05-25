@@ -11,15 +11,15 @@
 //! - GarrisonContributionAccount: ["garrison", castle_pubkey, contributor_pubkey]
 //! - TeamCastleRewardAccount: ["team_castle_reward", castle_pubkey, member_pubkey]
 
-use pinocchio::Address;
 use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
-use crate::constants::{
-    CASTLE_SEED, KING_REGISTRY_SEED, COURT_SEED, GARRISON_SEED, TEAM_CASTLE_REWARD_SEED,
-    CASTLE_STATUS_CONTEST, CASTLE_STATUS_PROTECTED,
-    CASTLE_STATUS_VULNERABLE, CASTLE_STATUS_TRANSITIONING,
-};
 use super::player::NULL_PUBKEY;
+use crate::constants::{
+    CASTLE_SEED, CASTLE_STATUS_CONTEST, CASTLE_STATUS_PROTECTED, CASTLE_STATUS_TRANSITIONING,
+    CASTLE_STATUS_VULNERABLE, COURT_SEED, GARRISON_SEED, KING_REGISTRY_SEED,
+    TEAM_CASTLE_REWARD_SEED,
+};
 
 // CASTLE TIER ENUM
 
@@ -54,11 +54,11 @@ impl CastleTier {
     /// Get the reward multiplier in basis points
     pub const fn multiplier_bps(self) -> u16 {
         match self {
-            Self::Outpost => 2500,    // 0.25x
-            Self::Keep => 5000,       // 0.5x
+            Self::Outpost => 2500,     // 0.25x
+            Self::Keep => 5000,        // 0.5x
             Self::Stronghold => 10000, // 1.0x
-            Self::Fortress => 15000,  // 1.5x
-            Self::Citadel => 20000,   // 2.0x
+            Self::Fortress => 15000,   // 1.5x
+            Self::Citadel => 20000,    // 2.0x
         }
     }
 
@@ -214,8 +214,8 @@ pub struct CastleAccount {
     pub _padding2: [u8; 3],
 
     // Location (16 bytes)
-    pub latitude: i32,    // Fixed-point (×1,000,000)
-    pub longitude: i32,   // Fixed-point (×1,000,000)
+    pub latitude: i32,  // Fixed-point (×1,000,000)
+    pub longitude: i32, // Fixed-point (×1,000,000)
     pub _padding_loc: [u8; 8],
 
     // Ruler Info (80 bytes)
@@ -316,8 +316,8 @@ impl CastleAccount {
     /// Check if castle is protected
     /// Uses effective_protection_duration which includes watchtower bonus
     pub fn is_protected(&self, now: i64) -> bool {
-        self.status == CASTLE_STATUS_PROTECTED &&
-        now < self.contest_end_at + self.effective_protection_duration()
+        self.status == CASTLE_STATUS_PROTECTED
+            && now < self.contest_end_at + self.effective_protection_duration()
     }
 
     /// Check if castle is vacant
@@ -342,10 +342,10 @@ impl CastleAccount {
 
     /// Check if castle can have court appointed
     pub fn can_appoint_court(&self, now: i64) -> bool {
-        self.can_have_court() &&
-        self.status != CASTLE_STATUS_CONTEST &&
-        self.status != CASTLE_STATUS_TRANSITIONING &&
-        now >= self.contest_end_at
+        self.can_have_court()
+            && self.status != CASTLE_STATUS_CONTEST
+            && self.status != CASTLE_STATUS_TRANSITIONING
+            && now >= self.contest_end_at
     }
 
     /// Check if castle can be attacked
@@ -363,7 +363,9 @@ impl CastleAccount {
         match self.status {
             CASTLE_STATUS_CONTEST => now < self.contest_end_at,
             CASTLE_STATUS_VULNERABLE => true,
-            CASTLE_STATUS_PROTECTED => now >= self.contest_end_at + self.effective_protection_duration(),
+            CASTLE_STATUS_PROTECTED => {
+                now >= self.contest_end_at + self.effective_protection_duration()
+            }
             CASTLE_STATUS_TRANSITIONING => now < self.contest_end_at,
             _ => false,
         }
@@ -434,20 +436,37 @@ impl CastleAccount {
         let city_id_bytes = city_id.to_le_bytes();
         let castle_id_bytes = castle_id.to_le_bytes();
         pinocchio::Address::find_program_address(
-            &[CASTLE_SEED, game_engine.as_ref(), &city_id_bytes, &castle_id_bytes],
+            &[
+                CASTLE_SEED,
+                game_engine.as_ref(),
+                &city_id_bytes,
+                &castle_id_bytes,
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Address, city_id: u16, castle_id: u16, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        city_id: u16,
+        castle_id: u16,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let castle_id_bytes = castle_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[CASTLE_SEED, game_engine.as_ref(), &city_id_bytes, &castle_id_bytes, &bump_seed],
+            &[
+                CASTLE_SEED,
+                game_engine.as_ref(),
+                &city_id_bytes,
+                &castle_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a CastleAccount
@@ -457,34 +476,26 @@ impl CastleAccount {
         city_id: u16,
         castle_id: u16,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, castle_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "CastleAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Castle)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::Castle, "CastleAccount")?
+        };
         if loaded.castle_id != castle_id || loaded.city_id != city_id {
             return Err(crate::error::GameError::InvalidParameter.into());
         }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "CastleAccount",
+            account,
+        )?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "CastleAccount", account)?;
+        Ok(loaded)
     }
 
     /// Check if castle belongs to a specific kingdom
@@ -499,34 +510,30 @@ impl CastleAccount {
         city_id: u16,
         castle_id: u16,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, castle_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "CastleAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Castle)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Castle,
+                "CastleAccount",
+            )?
+        };
         if loaded.castle_id != castle_id || loaded.city_id != city_id {
             return Err(crate::error::GameError::InvalidParameter.into());
         }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "CastleAccount",
+            account,
+        )?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "CastleAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load without explicit game_engine - re-derives PDA from stored data
@@ -534,54 +541,38 @@ impl CastleAccount {
     pub fn load_checked_by_key<'a>(
         account: &'a pinocchio::AccountView,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Castle)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        // Re-derive PDA from stored game_engine, city_id, castle_id
-        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.city_id, loaded.castle_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::Castle, "CastleAccount")?
+        };
+        let (expected_pda, bump) =
+            Self::derive_pda(&loaded.game_engine, loaded.city_id, loaded.castle_id);
+        crate::validation::require_pda_eq(account, &expected_pda, "CastleAccount")?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "CastleAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load mutably without explicit game_engine - re-derives PDA from stored data
     pub fn load_checked_mut_by_key<'a>(
         account: &'a pinocchio::AccountView,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Castle)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        // Re-derive PDA from stored game_engine, city_id, castle_id
-        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.city_id, loaded.castle_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Castle,
+                "CastleAccount",
+            )?
+        };
+        let (expected_pda, bump) =
+            Self::derive_pda(&loaded.game_engine, loaded.city_id, loaded.castle_id);
+        crate::validation::require_pda_eq(account, &expected_pda, "CastleAccount")?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "CastleAccount", account)?;
+        Ok(loaded)
     }
 }
 
@@ -687,10 +678,7 @@ impl KingRegistryAccount {
     /// Derive PDA for a king registry account
     /// Seeds: [KING_REGISTRY_SEED, king_pubkey]
     pub fn derive_pda(king: &Address) -> (Address, u8) {
-        pinocchio::Address::find_program_address(
-            &[KING_REGISTRY_SEED, king.as_ref()],
-            &crate::ID,
-        )
+        pinocchio::Address::find_program_address(&[KING_REGISTRY_SEED, king.as_ref()], &crate::ID)
     }
 
     /// Create PDA from known bump
@@ -699,7 +687,8 @@ impl KingRegistryAccount {
         pinocchio::Address::create_program_address(
             &[KING_REGISTRY_SEED, king.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a KingRegistryAccount
@@ -707,30 +696,24 @@ impl KingRegistryAccount {
         account: &'a pinocchio::AccountView,
         king: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(king);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "KingRegistryAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::KingRegistry)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::KingRegistry,
+                "KingRegistryAccount",
+            )?
+        };
         if loaded.king != *king {
             return Err(crate::error::GameError::InvalidParameter.into());
         }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        crate::validation::require_bump_eq(loaded.bump, bump, "KingRegistryAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify a KingRegistryAccount mutably
@@ -738,30 +721,24 @@ impl KingRegistryAccount {
         account: &'a pinocchio::AccountView,
         king: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(king);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "KingRegistryAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::KingRegistry)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::KingRegistry,
+                "KingRegistryAccount",
+            )?
+        };
         if loaded.king != *king {
             return Err(crate::error::GameError::InvalidParameter.into());
         }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        crate::validation::require_bump_eq(loaded.bump, bump, "KingRegistryAccount", account)?;
+        Ok(loaded)
     }
 }
 
@@ -815,12 +792,17 @@ impl CourtPositionAccount {
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(castle: &Address, position_type: u8, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        castle: &Address,
+        position_type: u8,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
             &[COURT_SEED, castle.as_ref(), &[position_type], &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
@@ -913,7 +895,9 @@ impl GarrisonContributionAccount {
     /// Calculate power contribution for loot distribution
     pub fn calculate_power(&self) -> u64 {
         // Unit power: tier1=10, tier2=25, tier3=60 (matching combat constants)
-        let unit_power = self.units_1.saturating_mul(10)
+        let unit_power = self
+            .units_1
+            .saturating_mul(10)
             .saturating_add(self.units_2.saturating_mul(25))
             .saturating_add(self.units_3.saturating_mul(60));
 
@@ -923,7 +907,9 @@ impl GarrisonContributionAccount {
         // Hero bonus: defense_bps as flat power bonus
         let hero_power = self.hero_defense_bps as u64;
 
-        unit_power.saturating_add(weapon_power).saturating_add(hero_power)
+        unit_power
+            .saturating_add(weapon_power)
+            .saturating_add(hero_power)
     }
 
     /// Derive PDA for a garrison contribution account
@@ -936,12 +922,22 @@ impl GarrisonContributionAccount {
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(castle: &Address, contributor: &Address, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        castle: &Address,
+        contributor: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[GARRISON_SEED, castle.as_ref(), contributor.as_ref(), &bump_seed],
+            &[
+                GARRISON_SEED,
+                castle.as_ref(),
+                contributor.as_ref(),
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
@@ -1003,24 +999,29 @@ impl TeamCastleRewardAccount {
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(castle: &Address, member: &Address, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        castle: &Address,
+        member: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[TEAM_CASTLE_REWARD_SEED, castle.as_ref(), member.as_ref(), &bump_seed],
+            &[
+                TEAM_CASTLE_REWARD_SEED,
+                castle.as_ref(),
+                member.as_ref(),
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
 // HELPER FUNCTIONS
 
 /// Calculate reward with tier multiplier and treasury bonus
-pub fn calculate_reward(
-    base_rate: u64,
-    tier_mult_bps: u16,
-    treasury_level: u8,
-    days: u64,
-) -> u64 {
+pub fn calculate_reward(base_rate: u64, tier_mult_bps: u16, treasury_level: u8, days: u64) -> u64 {
     if days == 0 {
         return 0;
     }

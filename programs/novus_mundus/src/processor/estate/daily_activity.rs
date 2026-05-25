@@ -1,16 +1,19 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, GameEngine, ResearchProgress, NULL_PUBKEY},
-    helpers::{estate::{has_building, academy_daily_time_reduction}, mint_tokens, validate_token_account_owner},
     constants::GAME_ENGINE_SEED,
+    error::GameError,
+    helpers::{
+        estate::{academy_daily_time_reduction, has_building},
+        mint_tokens, validate_token_account_owner,
+    },
+    state::{
+        BuildingType, EstateAccount, GameEngine, PlayerAccount, ResearchProgress, NULL_PUBKEY,
+    },
     validation::{require_signer, require_writable},
 };
 
@@ -49,7 +52,7 @@ fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow
 
         // Dawn or Midday
         BuildingType::Workshop => &[TimeWindow::Dawn, TimeWindow::Midday],
-        BuildingType::Dock => &[TimeWindow::Dawn, TimeWindow::Midday],   // Like Workshop
+        BuildingType::Dock => &[TimeWindow::Dawn, TimeWindow::Midday], // Like Workshop
         BuildingType::Vault => &[TimeWindow::Dawn, TimeWindow::Midday],
         BuildingType::Forge => &[TimeWindow::Dawn, TimeWindow::Midday],
 
@@ -65,12 +68,12 @@ fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow
         BuildingType::Citadel => &[TimeWindow::Dusk],
 
         // Expansion buildings
-        BuildingType::Camp => &[TimeWindow::Dawn],                         // Military, like Barracks
-        BuildingType::Mine => &[TimeWindow::Dawn, TimeWindow::Midday],     // Like Workshop
-        BuildingType::Farm => &[TimeWindow::Dawn, TimeWindow::Midday],     // Morning chores
-        BuildingType::DungeonEntry => &[TimeWindow::Dusk],                 // Nighttime exploration
-        BuildingType::TransportBay => &[TimeWindow::Midday],               // Midday travel prep
-        BuildingType::Infirmary => &[TimeWindow::Dusk],                    // Evening care
+        BuildingType::Camp => &[TimeWindow::Dawn], // Military, like Barracks
+        BuildingType::Mine => &[TimeWindow::Dawn, TimeWindow::Midday], // Like Workshop
+        BuildingType::Farm => &[TimeWindow::Dawn, TimeWindow::Midday], // Morning chores
+        BuildingType::DungeonEntry => &[TimeWindow::Dusk], // Nighttime exploration
+        BuildingType::TransportBay => &[TimeWindow::Midday], // Midday travel prep
+        BuildingType::Infirmary => &[TimeWindow::Dusk], // Evening care
 
         // Mansion handled by daily_claim.rs (any time)
         BuildingType::Mansion => &[],
@@ -81,13 +84,21 @@ fn building_allowed_windows(building_type: BuildingType) -> &'static [TimeWindow
 /// Returns 0 for buildings >= 16 (tracked via expansion_daily instead)
 fn building_bitflag(building_type: BuildingType) -> u16 {
     let bit = building_type as u8;
-    if bit >= 16 { 0 } else { 1u16 << bit }
+    if bit >= 16 {
+        0
+    } else {
+        1u16 << bit
+    }
 }
 
 /// Get the expansion bitflag for buildings 16+ (bit 0 = type 16, bit 1 = type 17, etc.)
 fn expansion_bitflag(building_type: BuildingType) -> u8 {
     let bit = building_type as u8;
-    if bit < 16 { 0 } else { 1u8 << (bit - 16) }
+    if bit < 16 {
+        0
+    } else {
+        1u8 << (bit - 16)
+    }
 }
 
 // Daily Activity Processor
@@ -129,19 +140,22 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (6 required, 3 optional)
-    crate::extract_accounts!(accounts, [
-        owner,
-        game_authority,
-        player_account,
-        estate_account,
-        game_engine_account,
-        hero_mint, // Required for Sanctuary, otherwise NULL_PUBKEY
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            game_authority,
+            player_account,
+            estate_account,
+            game_engine_account,
+            hero_mint, // Required for Sanctuary, otherwise NULL_PUBKEY
+        ]
+    );
 
     // Optional accounts
     let player_token_account = accounts.get(6); // For Treasury minting
-    let novi_mint = accounts.get(7);            // For Treasury minting
-    let research_progress = accounts.get(8);    // For Academy time reduction
+    let novi_mint = accounts.get(7); // For Treasury minting
+    let research_progress = accounts.get(8); // For Academy time reduction
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -153,8 +167,8 @@ pub fn process(
     if instruction_data.len() < 2 {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let building_type = BuildingType::from_u8(instruction_data[0])
-        .ok_or(ProgramError::InvalidInstructionData)?;
+    let building_type =
+        BuildingType::from_u8(instruction_data[0]).ok_or(ProgramError::InvalidInstructionData)?;
     let score = instruction_data[1].min(100); // Cap at 100
 
     // 4. Validate game_authority against GameEngine
@@ -370,14 +384,16 @@ fn grant_building_rewards(
             // Also awards mastery XP to the Academy building
 
             // Get Academy building info
-            let (academy_level, academy_mastery) = if let Some(academy) = estate.find_building(BuildingType::Academy) {
-                (academy.level, academy.mastery_level)
-            } else {
-                (1, 0)
-            };
+            let (academy_level, academy_mastery) =
+                if let Some(academy) = estate.find_building(BuildingType::Academy) {
+                    (academy.level, academy.mastery_level)
+                } else {
+                    (1, 0)
+                };
 
             // Calculate time reduction
-            let time_reduction = academy_daily_time_reduction(score, academy_mastery, academy_level);
+            let time_reduction =
+                academy_daily_time_reduction(score, academy_mastery, academy_level);
 
             // Apply to active research if research_progress account provided
             if let Some(research_account) = research_progress {
@@ -391,7 +407,8 @@ fn grant_building_rewards(
                     let now = clock.unix_timestamp;
                     let min_complete = now + 60; // Minimum 60 seconds remaining
 
-                    research.completes_at = research.completes_at
+                    research.completes_at = research
+                        .completes_at
                         .saturating_sub(time_reduction)
                         .max(min_complete);
                 }
@@ -428,7 +445,10 @@ fn grant_building_rewards(
 
             // NFT-Only System: hero_mint IS the hero's identity
             // Verify hero is locked to this player (in active_heroes)
-            let is_locked = player.active_heroes_arr().iter().any(|&mint| &mint == hero_mint.address());
+            let is_locked = player
+                .active_heroes_arr()
+                .iter()
+                .any(|&mint| &mint == hero_mint.address());
             if !is_locked {
                 return Err(GameError::Unauthorized.into());
             }
@@ -464,10 +484,8 @@ fn grant_building_rewards(
             let novi = 100 + (score_multiplier * 8);
 
             // Require token accounts for Treasury
-            let token_account = player_token_account
-                .ok_or(GameError::MissingRequiredAccount)?;
-            let mint = novi_mint
-                .ok_or(GameError::MissingRequiredAccount)?;
+            let token_account = player_token_account.ok_or(GameError::MissingRequiredAccount)?;
+            let mint = novi_mint.ok_or(GameError::MissingRequiredAccount)?;
             crate::require_keys_eq!(
                 mint.address().as_array(),
                 &crate::constants::NOVI_MINT_ADDRESS,
@@ -478,13 +496,7 @@ fn grant_building_rewards(
             // Verify token account belongs to the PlayerAccount PDA
             validate_token_account_owner(token_account, player_account.address())?;
 
-            // Load GameEngine to get bump for PDA signer
-            // Validate game_engine account (ownership + PDA + discriminator + bump), then
-            // use raw pointer access to avoid holding RefCell borrows across the mint_tokens CPI.
-            {
-                let _ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-            }
-            let game_engine = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
+            let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
             // Create PDA signer for GameEngine (mint authority)
             let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
@@ -493,13 +505,7 @@ fn grant_building_rewards(
             let signer = pinocchio::cpi::Signer::from(&seeds);
 
             // Mint NOVI tokens to player's token account
-            mint_tokens(
-                mint,
-                token_account,
-                game_engine_account,
-                novi,
-                &[signer],
-            )?;
+            mint_tokens(mint, token_account, game_engine_account, novi, &[signer])?;
 
             // Also update soft balance tracker for consistency
             player.locked_novi = player.locked_novi.saturating_add(novi);

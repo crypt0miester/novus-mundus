@@ -6,23 +6,21 @@
 //! clearing their buffs and closing the CourtPositionAccount.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
     events::CourtDismissed,
-    state::{
-        CastleAccount, CourtPositionAccount, PlayerAccount,
-        player::{NULL_PUBKEY, EXT_COURT, COURT_OFFSET, CourtSection},
-    },
     helpers::close_account,
-    validation::{require_owner, require_initialized},
+    state::{
+        player::{CourtSection, COURT_OFFSET, EXT_COURT, NULL_PUBKEY},
+        CastleAccount, CourtPositionAccount, PlayerAccount,
+    },
+    validation::{require_initialized, require_owner},
 };
 
 /// Resign Court instruction data
@@ -42,13 +40,16 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        player_wallet,
-        player_account,
-        castle_account,
-        court_position_account,
-        rent_recipient,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_wallet,
+            player_account,
+            castle_account,
+            court_position_account,
+            rent_recipient,
+        ]
+    );
 
     // Verify signer
     if !player_wallet.is_signer() {
@@ -67,7 +68,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Load court position to get position_type
     require_owner(court_position_account, program_id)?;

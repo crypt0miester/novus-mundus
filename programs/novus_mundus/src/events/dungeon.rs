@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Dungeon system events - The Catacombs roguelike PvE
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player enters a dungeon
 pub struct DungeonEntered {

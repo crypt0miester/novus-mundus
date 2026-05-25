@@ -1,7 +1,6 @@
 /// Event eligibility and anti-Sybil checks (pure logic)
 ///
 /// All functions operate on primitives and can be tested independently.
-
 use crate::error::GameError;
 
 /// Check event eligibility based on transfer ratio
@@ -67,11 +66,7 @@ pub fn check_transfer_ratio(
 /// // Account created 5 days ago, requires 7 days
 /// check_account_age(now - (5 * 86400), now, 7 * 86400)   // FAIL
 /// ```
-pub fn check_account_age(
-    created_at: i64,
-    now: i64,
-    min_age_seconds: i64,
-) -> Result<(), GameError> {
+pub fn check_account_age(created_at: i64, now: i64, min_age_seconds: i64) -> Result<(), GameError> {
     let age = now - created_at;
 
     if age < min_age_seconds {
@@ -98,10 +93,7 @@ pub fn check_account_age(
 /// check_activity_requirement(25, 20)  // OK (25 >= 20)
 /// check_activity_requirement(5, 20)   // FAIL (5 < 20)
 /// ```
-pub fn check_activity_requirement(
-    total_attacks: u64,
-    min_attacks: u64,
-) -> Result<(), GameError> {
+pub fn check_activity_requirement(total_attacks: u64, min_attacks: u64) -> Result<(), GameError> {
     if total_attacks < min_attacks {
         return Err(GameError::PlayerInactive);
     }
@@ -132,11 +124,11 @@ pub fn check_activity_requirement(
 /// ```
 pub fn get_transfer_ratio_for_prize(reserved_novi_prize: u64) -> f64 {
     if reserved_novi_prize < 25_000 {
-        10.0  // Low-value events: lenient (10:1 ratio)
+        10.0 // Low-value events: lenient (10:1 ratio)
     } else if reserved_novi_prize < 100_000 {
-        3.0   // Medium-value events: moderate (3:1 ratio)
+        3.0 // Medium-value events: moderate (3:1 ratio)
     } else {
-        2.0   // High-value events: strict (2:1 ratio)
+        2.0 // High-value events: strict (2:1 ratio)
     }
 }
 
@@ -156,11 +148,11 @@ pub fn get_transfer_ratio_for_prize(reserved_novi_prize: u64) -> f64 {
 /// ```
 pub fn get_min_age_for_prize(reserved_novi_prize: u64) -> i64 {
     if reserved_novi_prize < 25_000 {
-        7 * 86400     // 7 days
+        7 * 86400 // 7 days
     } else if reserved_novi_prize < 100_000 {
-        30 * 86400    // 30 days
+        30 * 86400 // 30 days
     } else {
-        60 * 86400    // 60 days
+        60 * 86400 // 60 days
     }
 }
 
@@ -180,11 +172,11 @@ pub fn get_min_age_for_prize(reserved_novi_prize: u64) -> i64 {
 /// ```
 pub fn get_min_attacks_for_prize(reserved_novi_prize: u64) -> u64 {
     if reserved_novi_prize < 25_000 {
-        5     // Low-value: minimal activity
+        5 // Low-value: minimal activity
     } else if reserved_novi_prize < 100_000 {
-        20    // Medium-value: moderate activity
+        20 // Medium-value: moderate activity
     } else {
-        50    // High-value: significant activity
+        50 // High-value: significant activity
     }
 }
 

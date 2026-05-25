@@ -22,13 +22,13 @@ export const CITY_TYPES: readonly CityTypeFraming[] = [
     type: 0,
     name: "Capital",
     icon: "♛",
-    line: "Built on an old seat of power. The foundations run deep here — and so do the rivals who want them.",
+    line: "Built on an old seat of power. The foundations run deep here and so do the rivals who want them.",
   },
   {
     type: 1,
     name: "Resource",
     icon: "⛏",
-    line: "Built over what the old world buried. The digging is rich — and the digging is where the danger sleeps.",
+    line: "Built over what the old world buried. The digging is rich and the digging is where the danger sleeps.",
   },
   {
     type: 2,
@@ -40,7 +40,7 @@ export const CITY_TYPES: readonly CityTypeFraming[] = [
     type: 3,
     name: "Trade",
     icon: "◆",
-    line: "A crossroads. Coin and rumor move through these gates — and soon enough, word of you.",
+    line: "A crossroads. Coin and rumor move through these gates and soon enough, word of you.",
   },
 ];
 
@@ -93,7 +93,7 @@ export const BUILDING_FRAMING: Readonly<Record<number, BuildingFraming>> = {
   },
   [BuildingId.Market]: {
     role: "Where the holding trades",
-    line: "The caravan road ends at this gate — the holding's one window on the world's commerce.",
+    line: "The caravan road ends at this gate, the holding's one window on the world's commerce.",
   },
   [BuildingId.Academy]: {
     role: "Where knowledge is dug up",
@@ -121,7 +121,7 @@ export const BUILDING_FRAMING: Readonly<Record<number, BuildingFraming>> = {
   },
   [BuildingId.Camp]: {
     role: "Where workers are taken in",
-    line: "Walls for the people who labor — not soldiers, hands. A holding needs both kinds.",
+    line: "Walls for the people who labor, not soldiers, hands. A holding needs both kinds.",
   },
   [BuildingId.Mine]: {
     role: "The shaft into the dark",

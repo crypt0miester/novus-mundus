@@ -11,29 +11,22 @@
 //! to the contributor's wallet (unlocked state).
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{CASTLE_STATUS_TRANSITIONING, GARRISON_SEED, HERO_TEMPLATE_SEED},
     emit,
     error::GameError,
     events::CastleTransitionProgress,
+    helpers::{add_hero_buffs_to_player_with_location, close_account, parse_hero_nft},
     state::{
-        CastleAccount, GarrisonContributionAccount, PlayerAccount, HeroTemplate,
-        player::NULL_PUBKEY,
-        is_hero_at_home, location_bonus_for_tier,
+        is_hero_at_home, location_bonus_for_tier, player::NULL_PUBKEY, CastleAccount,
+        GarrisonContributionAccount, HeroTemplate, PlayerAccount,
     },
-    constants::{CASTLE_STATUS_TRANSITIONING, GARRISON_SEED, HERO_TEMPLATE_SEED},
-    helpers::{
-        close_account,
-        parse_hero_nft,
-        add_hero_buffs_to_player_with_location,
-    },
-    validation::{require_owner, require_initialized, require_pda},
+    validation::{require_initialized, require_owner, require_pda},
 };
 
 /// Phase constant for event
@@ -59,16 +52,19 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        _crank,
-        castle_account,
-        contributor_account,
-        garrison_account,
-        rent_recipient,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            _crank,
+            castle_account,
+            contributor_account,
+            garrison_account,
+            rent_recipient,
+        ]
+    );
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle is in transitioning state
     if castle.status != CASTLE_STATUS_TRANSITIONING {
@@ -113,19 +109,37 @@ pub fn process(
     }
 
     // Return units to contributor
-    contributor.defensive_unit_1 = contributor.defensive_unit_1.saturating_add(garrison.units_1);
-    contributor.defensive_unit_2 = contributor.defensive_unit_2.saturating_add(garrison.units_2);
-    contributor.defensive_unit_3 = contributor.defensive_unit_3.saturating_add(garrison.units_3);
+    contributor.defensive_unit_1 = contributor
+        .defensive_unit_1
+        .saturating_add(garrison.units_1);
+    contributor.defensive_unit_2 = contributor
+        .defensive_unit_2
+        .saturating_add(garrison.units_2);
+    contributor.defensive_unit_3 = contributor
+        .defensive_unit_3
+        .saturating_add(garrison.units_3);
 
     // Return weapons to contributor
-    contributor.melee_weapons = contributor.melee_weapons.saturating_add(garrison.melee_weapons);
-    contributor.ranged_weapons = contributor.ranged_weapons.saturating_add(garrison.ranged_weapons);
-    contributor.siege_weapons = contributor.siege_weapons.saturating_add(garrison.siege_weapons);
+    contributor.melee_weapons = contributor
+        .melee_weapons
+        .saturating_add(garrison.melee_weapons);
+    contributor.ranged_weapons = contributor
+        .ranged_weapons
+        .saturating_add(garrison.ranged_weapons);
+    contributor.siege_weapons = contributor
+        .siege_weapons
+        .saturating_add(garrison.siege_weapons);
 
     // Return any loot to contributor
-    contributor.melee_weapons = contributor.melee_weapons.saturating_add(garrison.loot_melee);
-    contributor.ranged_weapons = contributor.ranged_weapons.saturating_add(garrison.loot_ranged);
-    contributor.siege_weapons = contributor.siege_weapons.saturating_add(garrison.loot_siege);
+    contributor.melee_weapons = contributor
+        .melee_weapons
+        .saturating_add(garrison.loot_melee);
+    contributor.ranged_weapons = contributor
+        .ranged_weapons
+        .saturating_add(garrison.loot_ranged);
+    contributor.siege_weapons = contributor
+        .siege_weapons
+        .saturating_add(garrison.loot_siege);
 
     // Handle hero return
     let hero_mint_key = garrison.hero_mint;
@@ -183,9 +197,20 @@ pub fn process(
                 let template_data = hero_template_account.try_borrow()?;
                 let template = unsafe { HeroTemplate::load(&template_data) };
                 let at_home = is_hero_at_home(parsed_hero.origin_city, contributor.current_city);
-                let location_bonus = if at_home { location_bonus_for_tier(crate::state::tier_from_mint_cost(template.mint_cost_sol)) } else { 0 };
+                let location_bonus = if at_home {
+                    location_bonus_for_tier(crate::state::tier_from_mint_cost(
+                        template.mint_cost_sol,
+                    ))
+                } else {
+                    0
+                };
                 contributor.set_slot_location_bonus_at(slot, location_bonus);
-                add_hero_buffs_to_player_with_location(contributor, parsed_hero.level, template, location_bonus);
+                add_hero_buffs_to_player_with_location(
+                    contributor,
+                    parsed_hero.level,
+                    template,
+                    location_bonus,
+                );
                 drop(template_data);
             }
             drop(nft_data);
@@ -202,7 +227,8 @@ pub fn process(
                 authority: garrison_account,
                 system_program,
                 log_wrapper: p_core_program,
-            }.invoke_signed(&[garrison_signer])?;
+            }
+            .invoke_signed(&[garrison_signer])?;
         } else {
             // All slots full: transfer to contributor's wallet (unlocked)
             // rent_recipient is the contributor's wallet
@@ -217,7 +243,8 @@ pub fn process(
                 authority: garrison_account,
                 system_program,
                 log_wrapper: p_core_program,
-            }.invoke_signed(&[garrison_signer])?;
+            }
+            .invoke_signed(&[garrison_signer])?;
         }
     } else {
         // No hero - drop borrows

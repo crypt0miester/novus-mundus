@@ -1,8 +1,7 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 use solana_sha256_hasher::hashv as sha256_hashv;
 
@@ -29,9 +28,9 @@ pub fn compute_name_hash(name: &[u8]) -> [u8; 32] {
 }
 
 /// TLD House Program ID: TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S
-pub const TLD_HOUSE_PROGRAM_ID: Address = Address::new_from_array(
-    five8_const::decode_32_const("TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S"),
-);
+pub const TLD_HOUSE_PROGRAM_ID: Address = Address::new_from_array(five8_const::decode_32_const(
+    "TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S",
+));
 
 /// TldHouse account layout (Anchor):
 /// - 8 bytes: discriminator
@@ -71,7 +70,11 @@ pub fn get_tld_from_tld_house(tld_house: &AccountView) -> Result<&[u8], ProgramE
     let tld = &full_slice[tld_start..tld_start + tld_len];
 
     // Trim trailing zeros (shouldn't have any but just in case)
-    let end = tld.iter().rposition(|&b| b != 0).map(|i| i + 1).unwrap_or(tld_len);
+    let end = tld
+        .iter()
+        .rposition(|&b| b != 0)
+        .map(|i| i + 1)
+        .unwrap_or(tld_len);
 
     Ok(&tld[..end])
 }

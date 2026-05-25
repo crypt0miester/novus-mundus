@@ -1,16 +1,14 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, UserAccount, GameEngine},
-    helpers::estate::{vault_novi_cap_bonus_bps, load_estate_for_player},
     emit,
+    error::GameError,
     events::NoviLocked,
+    helpers::estate::{load_estate_for_player, vault_novi_cap_bonus_bps},
+    state::{GameEngine, PlayerAccount, UserAccount},
 };
 
 /// Update locked NOVI balance based on time elapsed since last update
@@ -58,11 +56,7 @@ use crate::{
 ///
 /// # Instruction Data
 /// None
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    _data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
 
     crate::extract_accounts!(accounts, exact [
@@ -85,21 +79,14 @@ pub fn process(
     // Verify token account belongs to the PlayerAccount PDA
     crate::helpers::validate_token_account_owner(player_token_account, player_account.address())?;
 
-    // 3. Load Accounts
+    // 3. Load Accounts (validates program ownership + discriminator + PDA + stored owner)
 
-    let mut player_data_ref = player_account.try_borrow_mut()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
-
-    let user_data_ref = user_account.try_borrow()?;
-    let user_data = unsafe { UserAccount::load(&user_data_ref) };
+    let player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let _user_data = UserAccount::load_checked(user_account, owner.address(), program_id)?;
 
     // 4. Validate Ownership
 
     if !player_data.is_owner(owner.address()) {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    if &user_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
@@ -121,12 +108,7 @@ pub fn process(
 
     // 7. Determine Generation Rate from Subscription Tier
 
-    // Validate GameEngine fully (ownership + PDA + discriminator + bump), then
-    // use raw pointer access to avoid holding RefCell borrows across the mint_tokens CPI.
-    {
-        let _ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    }
-    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Determine active tier (free tier 0 if expired)
     let tier_index = if player_data.subscription_end > now {
@@ -172,8 +154,7 @@ pub fn process(
 
     // 10. Update Player Balance (with cap)
 
-    let new_balance = player_data.locked_novi
-        .saturating_add(tokens_to_generate);
+    let new_balance = player_data.locked_novi.saturating_add(tokens_to_generate);
 
     // Apply cap
     player_data.locked_novi = new_balance.min(max_locked_novi);
@@ -185,7 +166,8 @@ pub fn process(
     // 12. Actually MINT tokens via CPI
 
     // Only mint the actual tokens generated (respecting the cap)
-    let actual_tokens_generated = new_balance.min(max_locked_novi)
+    let actual_tokens_generated = new_balance
+        .min(max_locked_novi)
         .saturating_sub(player_data.locked_novi.saturating_sub(tokens_to_generate));
 
     if actual_tokens_generated > 0 {
@@ -194,7 +176,11 @@ pub fn process(
         // Create PDA signer for GameEngine (mint authority)
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let bump_seed = [game_engine_data.bump];
-        let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let seeds = crate::seeds!(
+            crate::constants::GAME_ENGINE_SEED,
+            &kingdom_id_bytes,
+            &bump_seed
+        );
         let signer = pinocchio::cpi::Signer::from(&seeds);
 
         crate::require_keys_eq!(

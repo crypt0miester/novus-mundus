@@ -1,8 +1,7 @@
-use pinocchio::Address;
+use crate::constants::{TEAM_INVITE_SEED, TEAM_SEED, TEAM_SLOT_SEED};
 use pinocchio::error::ProgramError;
 use pinocchio::AccountView;
-use crate::constants::{TEAM_SEED, TEAM_SLOT_SEED, TEAM_INVITE_SEED};
-use crate::error::GameError;
+use pinocchio::Address;
 
 // TEAM ACCOUNT (272 bytes)
 
@@ -16,61 +15,61 @@ pub struct TeamAccount {
     pub account_key: u8,
 
     // KINGDOM & IDENTITY (80 bytes)
-    pub game_engine: Address,        // 32 - Kingdom this team belongs to
-    pub id: u64,                    // 8 - Unique team ID (for PDA derivation)
-    pub leader: Address,             // 32 - Team leader's player account pubkey
-    pub bump: u8,                   // 1 - PDA bump seed
-    pub disbanded: bool,            // 1 - True if team has been disbanded
-    pub _padding0: [u8; 6],         // 6 - Alignment to 8 bytes
+    pub game_engine: Address, // 32 - Kingdom this team belongs to
+    pub id: u64,              // 8 - Unique team ID (for PDA derivation)
+    pub leader: Address,      // 32 - Team leader's player account pubkey
+    pub bump: u8,             // 1 - PDA bump seed
+    pub disbanded: bool,      // 1 - True if team has been disbanded
+    pub _padding0: [u8; 6],   // 6 - Alignment to 8 bytes
 
     // NAME (40 bytes)
-    pub name: [u8; 32],             // 32 - Team name (UTF-8)
-    pub name_len: u8,               // 1 - Actual name length
-    pub _padding1: [u8; 7],         // 7 - Alignment to 8 bytes
+    pub name: [u8; 32],     // 32 - Team name (UTF-8)
+    pub name_len: u8,       // 1 - Actual name length
+    pub _padding1: [u8; 7], // 7 - Alignment to 8 bytes
 
     // MEMBERSHIP (8 bytes)
-    pub member_count: u16,          // 2 - Current member count
-    pub max_members: u16,           // 2 - Max members (tier-based, can be upgraded)
-    pub _padding2: [u8; 4],         // 4 - Alignment to 8 bytes
+    pub member_count: u16,  // 2 - Current member count
+    pub max_members: u16,   // 2 - Max members (tier-based, can be upgraded)
+    pub _padding2: [u8; 4], // 4 - Alignment to 8 bytes
 
     // TIMESTAMPS (16 bytes)
-    pub created_at: i64,            // 8 - Team creation timestamp
-    pub last_activity: i64,         // 8 - Last activity (for inactive team cleanup)
+    pub created_at: i64,    // 8 - Team creation timestamp
+    pub last_activity: i64, // 8 - Last activity (for inactive team cleanup)
 
     // TREASURY (8 bytes)
-    pub treasury: u64,              // 8 - Current treasury balance
+    pub treasury: u64, // 8 - Current treasury balance
 
     // SETTINGS & PERMISSIONS (8 bytes)
-    pub settings: u8,               // 1 - Bitfield: public, auto_accept, etc.
-    pub min_level_to_join: u8,      // 1 - Minimum player level to join
-    pub role_permissions: [u8; 5],  // 5 - Permission bitfield per rank (index = rank 0-4)
-    pub _padding3: u8,              // 1 - Alignment to 8 bytes
+    pub settings: u8,              // 1 - Bitfield: public, auto_accept, etc.
+    pub min_level_to_join: u8,     // 1 - Minimum player level to join
+    pub role_permissions: [u8; 5], // 5 - Permission bitfield per rank (index = rank 0-4)
+    pub _padding3: u8,             // 1 - Alignment to 8 bytes
 
     // MOTD (40 bytes)
-    pub motd: [u8; 32],             // 32 - Message of the day (reduced for alignment)
-    pub motd_len: u8,               // 1 - MOTD length
-    pub _padding4: [u8; 7],         // 7 - Alignment to 8 bytes
+    pub motd: [u8; 32],     // 32 - Message of the day (reduced for alignment)
+    pub motd_len: u8,       // 1 - MOTD length
+    pub _padding4: [u8; 7], // 7 - Alignment to 8 bytes
 
     // TREASURY SECURITY (72 bytes)
     // Index 0=Rank1, 1=Rank2, 2=Rank3, 3=Rank4. Rank 0 (leader) always has unlimited access.
-    pub treasury_instant_limit: [u64; 4],  // 32 - Max per-tx instant withdrawal per rank
-    pub treasury_daily_cap: [u64; 4],      // 32 - Max daily instant withdrawal per rank
-    pub treasury_cooldown_hours: u8,       // 1  - Hours before large request executable (1-72)
-    pub _treasury_reserved: [u8; 7],       // 7  - Alignment to 8 bytes
+    pub treasury_instant_limit: [u64; 4], // 32 - Max per-tx instant withdrawal per rank
+    pub treasury_daily_cap: [u64; 4],     // 32 - Max daily instant withdrawal per rank
+    pub treasury_cooldown_hours: u8,      // 1  - Hours before large request executable (1-72)
+    pub _treasury_reserved: [u8; 7],      // 7  - Alignment to 8 bytes
 }
 
 // Settings bitfield constants
 impl TeamAccount {
-    pub const SETTING_PUBLIC: u8 = 1 << 0;        // Anyone can join (no invite needed)
-    pub const SETTING_AUTO_ACCEPT: u8 = 1 << 1;   // Auto-accept join requests
+    pub const SETTING_PUBLIC: u8 = 1 << 0; // Anyone can join (no invite needed)
+    pub const SETTING_AUTO_ACCEPT: u8 = 1 << 1; // Auto-accept join requests
 
     // Permission bits (stored per-rank in role_permissions array)
-    pub const PERM_INVITE: u8 = 1 << 0;      // Can invite new members
-    pub const PERM_KICK: u8 = 1 << 1;        // Can kick lower-ranked members
-    pub const PERM_MOTD: u8 = 1 << 2;        // Can set message of the day
-    pub const PERM_PROMOTE: u8 = 1 << 3;     // Can promote members below their rank
-    pub const PERM_TREASURY: u8 = 1 << 4;    // Can withdraw from treasury
-    pub const PERM_SETTINGS: u8 = 1 << 5;    // Can change team settings
+    pub const PERM_INVITE: u8 = 1 << 0; // Can invite new members
+    pub const PERM_KICK: u8 = 1 << 1; // Can kick lower-ranked members
+    pub const PERM_MOTD: u8 = 1 << 2; // Can set message of the day
+    pub const PERM_PROMOTE: u8 = 1 << 3; // Can promote members below their rank
+    pub const PERM_TREASURY: u8 = 1 << 4; // Can withdraw from treasury
+    pub const PERM_SETTINGS: u8 = 1 << 5; // Can change team settings
 
     // Default permissions by rank (index = rank, lower rank = more power)
     // Rank 0 (Leader): All permissions
@@ -79,23 +78,23 @@ impl TeamAccount {
     // Rank 3: None
     // Rank 4: None
     pub const DEFAULT_ROLE_PERMISSIONS: [u8; 5] = [
-        0xFF,   // Rank 0 (Leader) - all permissions
-        0x3F,   // Rank 1 - all standard permissions
-        0x07,   // Rank 2 - invite, kick, motd
-        0x00,   // Rank 3 - none
-        0x00,   // Rank 4 - none
+        0xFF, // Rank 0 (Leader) - all permissions
+        0x3F, // Rank 1 - all standard permissions
+        0x07, // Rank 2 - invite, kick, motd
+        0x00, // Rank 3 - none
+        0x00, // Rank 4 - none
     ];
 
     // Treasury security constants
-    pub const MIN_COOLDOWN_HOURS: u8 = 1;         // Minimum 1 hour cooldown
-    pub const MAX_COOLDOWN_HOURS: u8 = 72;        // Maximum 72 hours (3 days)
-    pub const DEFAULT_COOLDOWN_HOURS: u8 = 8;     // Default 8 hours
+    pub const MIN_COOLDOWN_HOURS: u8 = 1; // Minimum 1 hour cooldown
+    pub const MAX_COOLDOWN_HOURS: u8 = 72; // Maximum 72 hours (3 days)
+    pub const DEFAULT_COOLDOWN_HOURS: u8 = 8; // Default 8 hours
 
     // Default treasury limits per rank (index 0=Rank1, 1=Rank2, 2=Rank3, 3=Rank4)
     // Rank 0 (leader) always has unlimited access - not in array
     // Leader can modify these to give any rank treasury access
-    pub const DEFAULT_INSTANT_LIMIT: [u64; 4] = [1000, 100, 0, 0];   // Per-tx limit
-    pub const DEFAULT_DAILY_CAP: [u64; 4] = [5000, 500, 0, 0];       // Daily cap
+    pub const DEFAULT_INSTANT_LIMIT: [u64; 4] = [1000, 100, 0, 0]; // Per-tx limit
+    pub const DEFAULT_DAILY_CAP: [u64; 4] = [5000, 500, 0, 0]; // Daily cap
 
     /// Get permissions for a specific rank
     pub fn get_rank_permissions(&self, rank: u8) -> u8 {
@@ -127,7 +126,7 @@ impl TeamAccount {
     /// Rank 0 (leader) = unlimited, Ranks 1-4 use configurable array
     pub fn get_instant_limit(&self, rank: u8) -> u64 {
         match rank {
-            0 => u64::MAX,  // Leader has unlimited instant access
+            0 => u64::MAX, // Leader has unlimited instant access
             1..=4 => self.treasury_instant_limit[(rank - 1) as usize],
             _ => 0,
         }
@@ -137,7 +136,7 @@ impl TeamAccount {
     /// Rank 0 (leader) = unlimited, Ranks 1-4 use configurable array
     pub fn get_daily_cap(&self, rank: u8) -> u64 {
         match rank {
-            0 => u64::MAX,  // Leader has unlimited daily access
+            0 => u64::MAX, // Leader has unlimited daily access
             1..=4 => self.treasury_daily_cap[(rank - 1) as usize],
             _ => 0,
         }
@@ -145,7 +144,8 @@ impl TeamAccount {
 
     /// Get cooldown in seconds (clamped to valid range)
     pub fn get_cooldown_seconds(&self) -> i64 {
-        let hours = self.treasury_cooldown_hours
+        let hours = self
+            .treasury_cooldown_hours
             .max(Self::MIN_COOLDOWN_HOURS)
             .min(Self::MAX_COOLDOWN_HOURS);
         (hours as i64) * 3600
@@ -161,7 +161,12 @@ impl TeamAccount {
     }
 
     /// Check if amount qualifies for instant withdrawal (within both limits)
-    pub fn can_withdraw_instant(&self, rank: u8, amount: u64, already_withdrawn_today: u64) -> bool {
+    pub fn can_withdraw_instant(
+        &self,
+        rank: u8,
+        amount: u64,
+        already_withdrawn_today: u64,
+    ) -> bool {
         if !self.has_treasury_access(rank) {
             return false;
         }
@@ -197,13 +202,18 @@ impl TeamAccount {
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Address, team_id: u64, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        team_id: u64,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let team_id_bytes = team_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
             &[TEAM_SEED, game_engine.as_ref(), &team_id_bytes, &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a TeamAccount immutably.
@@ -213,30 +223,23 @@ impl TeamAccount {
         game_engine: &Address,
         team_id: u64,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, team_id);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Team)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::Team, "TeamAccount")?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "TeamAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a TeamAccount mutably.
@@ -246,30 +249,23 @@ impl TeamAccount {
         game_engine: &Address,
         team_id: u64,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, team_id);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Team)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(account, super::AccountKey::Team, "TeamAccount")?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "TeamAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a TeamAccount by key immutably.
@@ -278,27 +274,16 @@ impl TeamAccount {
     pub fn load_checked_by_key<'a>(
         account: &'a AccountView,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Team)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        // Use stored game_engine and id to re-derive and validate PDA
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::Team, "TeamAccount")?
+        };
         let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.id);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamAccount")?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify a TeamAccount by key mutably.
@@ -307,27 +292,16 @@ impl TeamAccount {
     pub fn load_checked_mut_by_key<'a>(
         account: &'a AccountView,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Team)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        // Use stored game_engine and id to re-derive and validate PDA
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(account, super::AccountKey::Team, "TeamAccount")?
+        };
         let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, loaded.id);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamAccount")?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamAccount", account)?;
+        Ok(loaded)
     }
 
     /// Check if team belongs to a specific kingdom
@@ -337,14 +311,12 @@ impl TeamAccount {
 
     /// Get name as &str
     pub fn name(&self) -> &str {
-        core::str::from_utf8(&self.name[0..self.name_len as usize])
-            .unwrap_or("")
+        core::str::from_utf8(&self.name[0..self.name_len as usize]).unwrap_or("")
     }
 
     /// Get MOTD as &str
     pub fn motd(&self) -> &str {
-        core::str::from_utf8(&self.motd[0..self.motd_len as usize])
-            .unwrap_or("")
+        core::str::from_utf8(&self.motd[0..self.motd_len as usize]).unwrap_or("")
     }
 
     /// Check if team is disbanded
@@ -432,31 +404,31 @@ pub struct TeamMemberSlot {
     pub account_key: u8,
 
     // REFERENCES (64 bytes)
-    pub team: Address,               // 32 - Team account pubkey
-    pub player: Address,             // 32 - Player account pubkey (not wallet!)
+    pub team: Address,   // 32 - Team account pubkey
+    pub player: Address, // 32 - Player account pubkey (not wallet!)
 
     // TIMESTAMPS (8 bytes)
-    pub joined_at: i64,             // 8 - When member joined
+    pub joined_at: i64, // 8 - When member joined
 
     // METADATA (8 bytes)
-    pub slot_index: u16,            // 2 - Slot index (0 to max_members-1)
-    pub bump: u8,                   // 1 - PDA bump seed
-    pub rank: u8,                   // 1 - Rank level (0=highest to 4=lowest)
-    pub _reserved: [u8; 4],         // 4 - Future use
+    pub slot_index: u16,    // 2 - Slot index (0 to max_members-1)
+    pub bump: u8,           // 1 - PDA bump seed
+    pub rank: u8,           // 1 - Rank level (0=highest to 4=lowest)
+    pub _reserved: [u8; 4], // 4 - Future use
 
     // TREASURY TRACKING (16 bytes)
-    pub treasury_withdrawn_today: u64,  // 8 - Amount withdrawn via instant today
-    pub last_treasury_day: u16,         // 2 - Day number (unix_ts / 86400) for reset
-    pub _treasury_padding: [u8; 6],     // 6 - Alignment to 8 bytes
+    pub treasury_withdrawn_today: u64, // 8 - Amount withdrawn via instant today
+    pub last_treasury_day: u16,        // 2 - Day number (unix_ts / 86400) for reset
+    pub _treasury_padding: [u8; 6],    // 6 - Alignment to 8 bytes
 }
 
 // Team ranks (5-level hierarchy, lower number = more power)
 impl TeamMemberSlot {
-    pub const RANK_0: u8 = 0;    // Leader - full control, cannot be kicked
-    pub const RANK_1: u8 = 1;    // High rank - nearly all permissions
-    pub const RANK_2: u8 = 2;    // Mid rank - moderate permissions
-    pub const RANK_3: u8 = 3;    // Low rank - basic permissions
-    pub const RANK_4: u8 = 4;    // Lowest rank - minimal permissions
+    pub const RANK_0: u8 = 0; // Leader - full control, cannot be kicked
+    pub const RANK_1: u8 = 1; // High rank - nearly all permissions
+    pub const RANK_2: u8 = 2; // Mid rank - moderate permissions
+    pub const RANK_3: u8 = 3; // Low rank - basic permissions
+    pub const RANK_4: u8 = 4; // Lowest rank - minimal permissions
 }
 
 impl TeamMemberSlot {
@@ -485,26 +457,21 @@ impl TeamMemberSlot {
         team: &Address,
         slot_index: u16,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(team, slot_index);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamMemberSlot")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::TeamMemberSlot)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::TeamMemberSlot,
+                "TeamMemberSlot",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamMemberSlot", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify a TeamMemberSlot mutably.
@@ -513,26 +480,21 @@ impl TeamMemberSlot {
         team: &Address,
         slot_index: u16,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(team, slot_index);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamMemberSlot")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::TeamMemberSlot)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::TeamMemberSlot,
+                "TeamMemberSlot",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamMemberSlot", account)?;
+        Ok(loaded)
     }
 
     /// Initialize a new team member slot
@@ -592,7 +554,7 @@ impl TeamMemberSlot {
     pub fn get_withdrawn_today(&self, current_timestamp: i64) -> u64 {
         let current_day = Self::day_from_timestamp(current_timestamp);
         if self.last_treasury_day != current_day {
-            0  // New day, counter would be reset
+            0 // New day, counter would be reset
         } else {
             self.treasury_withdrawn_today
         }
@@ -619,18 +581,18 @@ pub struct TeamInviteAccount {
     pub account_key: u8,
 
     // IDENTITY (72 bytes - aligned to 8)
-    pub team: Address,               // 32 - Team account pubkey
-    pub invitee: Address,            // 32 - Invitee's player account pubkey
-    pub bump: u8,                   // 1 - PDA bump seed
-    pub _padding0: [u8; 7],         // 7 - Alignment to 8 bytes
+    pub team: Address,      // 32 - Team account pubkey
+    pub invitee: Address,   // 32 - Invitee's player account pubkey
+    pub bump: u8,           // 1 - PDA bump seed
+    pub _padding0: [u8; 7], // 7 - Alignment to 8 bytes
 
     // INVITE INFO (48 bytes)
-    pub inviter: Address,            // 32 - Who sent the invite (for UI display)
-    pub created_at: i64,            // 8 - When invite was created
-    pub expires_at: i64,            // 8 - When invite expires (0 = never)
+    pub inviter: Address, // 32 - Who sent the invite (for UI display)
+    pub created_at: i64,  // 8 - When invite was created
+    pub expires_at: i64,  // 8 - When invite expires (0 = never)
 
     // RESERVED (8 bytes)
-    pub _reserved: [u8; 8],         // 8 - Future use (aligned)
+    pub _reserved: [u8; 8], // 8 - Future use (aligned)
 }
 
 impl TeamInviteAccount {
@@ -654,12 +616,22 @@ impl TeamInviteAccount {
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(team: &Address, invitee: &Address, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        team: &Address,
+        invitee: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[TEAM_INVITE_SEED, team.as_ref(), invitee.as_ref(), &bump_seed],
+            &[
+                TEAM_INVITE_SEED,
+                team.as_ref(),
+                invitee.as_ref(),
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a TeamInviteAccount immutably.
@@ -668,26 +640,21 @@ impl TeamInviteAccount {
         team: &Address,
         invitee: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(team, invitee);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamInviteAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::TeamInvite)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::TeamInvite,
+                "TeamInviteAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamInviteAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify a TeamInviteAccount mutably.
@@ -696,26 +663,21 @@ impl TeamInviteAccount {
         team: &Address,
         invitee: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(team, invitee);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "TeamInviteAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::TeamInvite)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::TeamInvite,
+                "TeamInviteAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "TeamInviteAccount", account)?;
+        Ok(loaded)
     }
 
     /// Check if invite has expired
@@ -764,17 +726,17 @@ pub struct TreasuryRequest {
     pub account_key: u8,
 
     // IDENTITY (64 bytes)
-    pub team: Address,               // 32 - Team account pubkey
-    pub requester: Address,          // 32 - Requester's player account pubkey
+    pub team: Address,      // 32 - Team account pubkey
+    pub requester: Address, // 32 - Requester's player account pubkey
 
     // REQUEST DATA (24 bytes)
-    pub amount: u64,                // 8 - Amount requested
-    pub created_at: i64,            // 8 - When request was created
-    pub executable_at: i64,         // 8 - When request becomes executable (created_at + cooldown)
+    pub amount: u64,        // 8 - Amount requested
+    pub created_at: i64,    // 8 - When request was created
+    pub executable_at: i64, // 8 - When request becomes executable (created_at + cooldown)
 
     // METADATA (16 bytes)
-    pub bump: u8,                   // 1 - PDA bump seed
-    pub _reserved: [u8; 15],        // 15 - Future use + alignment
+    pub bump: u8,            // 1 - PDA bump seed
+    pub _reserved: [u8; 15], // 15 - Future use + alignment
 }
 
 impl TreasuryRequest {
@@ -792,18 +754,32 @@ impl TreasuryRequest {
     /// Seeds: [TREASURY_REQUEST_SEED, team_pubkey, requester_pubkey]
     pub fn derive_pda(team: &Address, requester: &Address) -> (Address, u8) {
         pinocchio::Address::find_program_address(
-            &[crate::constants::TREASURY_REQUEST_SEED, team.as_ref(), requester.as_ref()],
+            &[
+                crate::constants::TREASURY_REQUEST_SEED,
+                team.as_ref(),
+                requester.as_ref(),
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(team: &Address, requester: &Address, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        team: &Address,
+        requester: &Address,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[crate::constants::TREASURY_REQUEST_SEED, team.as_ref(), requester.as_ref(), &bump_seed],
+            &[
+                crate::constants::TREASURY_REQUEST_SEED,
+                team.as_ref(),
+                requester.as_ref(),
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if request is past cooldown and can be executed

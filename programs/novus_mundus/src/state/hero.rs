@@ -1,9 +1,6 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
-};
 use crate::constants::HERO_TEMPLATE_SEED;
 use crate::logic::safe_math::exp_growth;
+use pinocchio::{error::ProgramError, Address};
 
 /// Active ability kind. 0 = no ability. Player triggers via use_ability ix.
 ///
@@ -13,12 +10,12 @@ use crate::logic::safe_math::exp_growth;
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum AbilityKind {
     None = 0,
-    BuffNext = 1,         // next combat action: +param1 bps to stat
-    CritNext = 2,         // next outgoing attack: auto-crit
-    ShieldNext = 3,       // next incoming defense: ×2
-    EncounterSkip = 4,    // next encounter: auto-success
-    InstantResource = 5,  // immediate: cash_on_hand += param1
-    FragmentRefund = 6,   // immediate: fragments += param1
+    BuffNext = 1,        // next combat action: +param1 bps to stat
+    CritNext = 2,        // next outgoing attack: auto-crit
+    ShieldNext = 3,      // next incoming defense: ×2
+    EncounterSkip = 4,   // next encounter: auto-success
+    InstantResource = 5, // immediate: cash_on_hand += param1
+    FragmentRefund = 6,  // immediate: fragments += param1
 }
 
 impl AbilityKind {
@@ -83,7 +80,7 @@ pub enum HeroCategory {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BuffStat {
-    None = 0,                          // Unused slot
+    None = 0, // Unused slot
     AttackPower = 1,
     DefensePower = 2,
     CashCollectionRate = 3,
@@ -100,8 +97,8 @@ pub enum BuffStat {
     EncounterDamage = 14,
     LootBonus = 15,
     ArmorEfficiency = 16,
-    MiningAffinity = 17,               // Bonus yield from mining expeditions
-    FishingAffinity = 18,              // Bonus yield from fishing expeditions
+    MiningAffinity = 17,  // Bonus yield from mining expeditions
+    FishingAffinity = 18, // Bonus yield from fishing expeditions
 }
 
 impl BuffStat {
@@ -141,9 +138,9 @@ impl BuffStat {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BuffConfig {
-    pub stat: u8,                      // BuffStat enum (0 = None/unused)
-    pub base_bps: u16,                 // Base buff at level 1 (basis points)
-    pub _reserved: [u8; 2],            // Reserved for future use (maintains 5-byte alignment)
+    pub stat: u8,           // BuffStat enum (0 = None/unused)
+    pub base_bps: u16,      // Base buff at level 1 (basis points)
+    pub _reserved: [u8; 2], // Reserved for future use (maintains 5-byte alignment)
 }
 
 impl BuffConfig {
@@ -175,38 +172,38 @@ pub struct HeroTemplate {
     /// Account discriminator
     pub account_key: u8,
     // Identity
-    pub template_id: u16,              // Unique ID (0-65535)
-    pub name: [u8; 32],                // "Alexander the Great"
-    pub hero_type: u8,                 // HeroType enum
-    pub category: u8,                  // HeroCategory enum
+    pub template_id: u16, // Unique ID (0-65535)
+    pub name: [u8; 32],   // "Alexander the Great"
+    pub hero_type: u8,    // HeroType enum
+    pub category: u8,     // HeroCategory enum
 
     // Minting config
-    pub mint_cost_sol: u64,            // Lamports (e.g., 50_000_000 = 0.05 SOL)
-    pub supply_cap: u32,               // 0 = unlimited
-    pub minted_count: u32,             // Current supply
-    pub enabled: bool,                 // Can be minted?
-    pub event_exclusive: bool,         // Only during events?
-    pub required_player_level: u8,     // Min player level
+    pub mint_cost_sol: u64,        // Lamports (e.g., 50_000_000 = 0.05 SOL)
+    pub supply_cap: u32,           // 0 = unlimited
+    pub minted_count: u32,         // Current supply
+    pub enabled: bool,             // Can be minted?
+    pub event_exclusive: bool,     // Only during events?
+    pub required_player_level: u8, // Min player level
 
     // Meditation requirements
     // 0 = can meditate anywhere, non-zero = MUST be in specific city
     // Links heroes to their origin/sacred cities for thematic immersion
-    pub meditation_city_id: u16,       // City ID required for meditation
+    pub meditation_city_id: u16, // City ID required for meditation
 
     // Buff configuration (up to 4 buffs)
     // Each buff scales as: base_bps × (√φ)^level
     pub buffs: [BuffConfig; 4],
 
     pub bump: u8,
-    pub _padding: [u8; 3],             // Reduced from 6 to 3 (added 2 bytes for city_id, 1 for alignment)
+    pub _padding: [u8; 3], // Reduced from 6 to 3 (added 2 bytes for city_id, 1 for alignment)
 
     // ability_kind: see AbilityKind enum above; 0 = no ability.
     pub ability_kind: u8,
-    pub ability_stat: u8,              // BuffStat for kind=1, else 0
-    pub ability_param1: u16,           // bps/amount depending on kind
-    pub ability_param2: u32,           // duration secs for kind=1, else 0
-    pub ability_cooldown_secs: u32,    // cooldown between uses (per slot)
-    pub _ability_padding: [u8; 4],     // alignment
+    pub ability_stat: u8,           // BuffStat for kind=1, else 0
+    pub ability_param1: u16,        // bps/amount depending on kind
+    pub ability_param2: u32,        // duration secs for kind=1, else 0
+    pub ability_cooldown_secs: u32, // cooldown between uses (per slot)
+    pub _ability_padding: [u8; 4],  // alignment
 }
 
 impl HeroTemplate {
@@ -238,7 +235,8 @@ impl HeroTemplate {
         pinocchio::Address::create_program_address(
             &[HERO_TEMPLATE_SEED, &template_id_bytes, &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
@@ -353,7 +351,9 @@ pub fn calculate_weighted_power_for_level(level: u32, template: &HeroTemplate) -
     let mut total: u64 = 0;
 
     for buff_config in template.buffs.iter() {
-        if buff_config.stat == 0 { continue; }
+        if buff_config.stat == 0 {
+            continue;
+        }
 
         // Calculate buff value deterministically: base × (√φ)^level
         let buff_value = buff_config.value_at_level(level);
@@ -386,11 +386,11 @@ pub fn calculate_weighted_power_for_level(level: u32, template: &HeroTemplate) -
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum HeroTier {
-    Common = 0,      // 2% location bonus
-    Rare = 1,        // 4% location bonus
-    Epic = 2,        // 6% location bonus
-    Legendary = 3,   // 8% location bonus
-    Mythic = 4,      // 10% location bonus
+    Common = 0,    // 2% location bonus
+    Rare = 1,      // 4% location bonus
+    Epic = 2,      // 6% location bonus
+    Legendary = 3, // 8% location bonus
+    Mythic = 4,    // 10% location bonus
 }
 
 impl HeroTier {
@@ -411,11 +411,11 @@ impl HeroTier {
     #[inline]
     pub const fn location_bonus_bps(self) -> u16 {
         match self {
-            Self::Common => 200,      // 2%
-            Self::Rare => 400,        // 4%
-            Self::Epic => 600,        // 6%
-            Self::Legendary => 800,   // 8%
-            Self::Mythic => 1000,     // 10%
+            Self::Common => 200,    // 2%
+            Self::Rare => 400,      // 4%
+            Self::Epic => 600,      // 6%
+            Self::Legendary => 800, // 8%
+            Self::Mythic => 1000,   // 10%
         }
     }
 }
@@ -430,12 +430,12 @@ impl HeroTier {
 #[inline]
 pub const fn location_bonus_for_tier(tier: u8) -> u16 {
     match tier {
-        0 => 200,   // Common: 2%
-        1 => 400,   // Rare: 4%
-        2 => 600,   // Epic: 6%
-        3 => 800,   // Legendary: 8%
-        4 => 1000,  // Mythic: 10%
-        _ => 0,     // Invalid tier
+        0 => 200,  // Common: 2%
+        1 => 400,  // Rare: 4%
+        2 => 600,  // Epic: 6%
+        3 => 800,  // Legendary: 8%
+        4 => 1000, // Mythic: 10%
+        _ => 0,    // Invalid tier
     }
 }
 
@@ -491,17 +491,19 @@ pub const fn tier_from_mint_cost(mint_cost_lamports: u64) -> u8 {
 /// - Mythic(4): 250,000 (25,000 NOVI)
 pub fn calculate_burn_reward(level: u32, tier: u8) -> Result<u64, ProgramError> {
     let tier_base: u64 = match tier {
-        0 => 500,       // Common: 50 NOVI
-        1 => 5_000,     // Rare: 500 NOVI
-        2 => 20_000,    // Epic: 2,000 NOVI
-        3 => 100_000,   // Legendary: 10,000 NOVI
-        4 => 250_000,   // Mythic: 25,000 NOVI
-        _ => 500,       // Default to Common
+        0 => 500,     // Common: 50 NOVI
+        1 => 5_000,   // Rare: 500 NOVI
+        2 => 20_000,  // Epic: 2,000 NOVI
+        3 => 100_000, // Legendary: 10,000 NOVI
+        4 => 250_000, // Mythic: 25,000 NOVI
+        _ => 500,     // Default to Common
     };
     let lvl = level.max(1) as u64;
-    let lvl_squared = lvl.checked_mul(lvl)
+    let lvl_squared = lvl
+        .checked_mul(lvl)
         .ok_or(ProgramError::ArithmeticOverflow)?;
-    tier_base.checked_mul(lvl_squared)
+    tier_base
+        .checked_mul(lvl_squared)
         .ok_or(ProgramError::ArithmeticOverflow)
 }
 
@@ -515,7 +517,10 @@ pub fn calculate_burn_reward(level: u32, tier: u8) -> Result<u64, ProgramError> 
 ///
 /// Conversion: 1 SOL ≈ 10,000 NOVI (with 1 decimal = 100,000)
 /// mint_cost_lamports / 1_000_000_000 × 100_000 = mint_cost_lamports / 10_000
-pub fn calculate_mint_bonus(mint_cost_lamports: u64, sanctuary_level: u8) -> Result<u64, ProgramError> {
+pub fn calculate_mint_bonus(
+    mint_cost_lamports: u64,
+    sanctuary_level: u8,
+) -> Result<u64, ProgramError> {
     let bonus_bps: u64 = match sanctuary_level {
         0..=4 => return Ok(0),
         5..=9 => 500,    // 5%
@@ -527,7 +532,8 @@ pub fn calculate_mint_bonus(mint_cost_lamports: u64, sanctuary_level: u8) -> Res
     // 1 SOL = 1_000_000_000 lamports = 100_000 NOVI (with decimal)
     // novi_equiv = mint_cost_lamports / 10_000
     let novi_equivalent = mint_cost_lamports / 10_000;
-    novi_equivalent.checked_mul(bonus_bps)
+    novi_equivalent
+        .checked_mul(bonus_bps)
         .ok_or(ProgramError::ArithmeticOverflow)
         .map(|v| v / 10_000)
 }

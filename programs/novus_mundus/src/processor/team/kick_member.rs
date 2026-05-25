@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::MemberKicked,
+    helpers::close_account,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Kick a member from the team
@@ -79,7 +77,7 @@ pub fn process(
     let kicked = unsafe { PlayerAccount::load_mut(&mut kicked_data_ref) };
 
     // Team: use load_checked_mut_by_key
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -105,7 +103,8 @@ pub fn process(
     }
 
     // 6. Verify Kicker's Slot and Get Rank
-    let (expected_kicker_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), kicker_slot_index);
+    let (expected_kicker_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), kicker_slot_index);
     if kicker_slot_account.address() != &expected_kicker_slot {
         return Err(GameError::InvalidPDA.into());
     }
@@ -140,7 +139,8 @@ pub fn process(
     }
 
     // 8. Verify Kicked Slot PDA and Get Target Rank
-    let (expected_kicked_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), kicked_slot_index);
+    let (expected_kicked_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), kicked_slot_index);
     if kicked_slot_account.address() != &expected_kicked_slot {
         return Err(GameError::InvalidPDA.into());
     }

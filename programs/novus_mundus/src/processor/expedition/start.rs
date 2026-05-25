@@ -22,27 +22,23 @@
 //! - Hero provides MiningAffinity or FishingAffinity buff
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::{
-        EXPEDITION_SEED, EXPEDITION_MINING, EXPEDITION_FISHING, EXPEDITION_MAX_TIER,
-        MINING_NOVI_COST, MINING_WORKSHOP_REQ,
-        FISHING_NOVI_COST, FISHING_DOCK_REQ,
-        PLAYER_SEED,
+        EXPEDITION_FISHING, EXPEDITION_MAX_TIER, EXPEDITION_MINING, EXPEDITION_SEED,
+        FISHING_DOCK_REQ, FISHING_NOVI_COST, MINING_NOVI_COST, MINING_WORKSHOP_REQ, PLAYER_SEED,
     },
-    error::GameError,
-    state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY},
-    helpers::estate::{load_estate_for_player, require_mine, require_dock},
-    utils::{read_u8, read_u64},
-    validation::{require_signer, require_writable, require_owner, require_empty},
     emit,
+    error::GameError,
     events::ExpeditionStarted,
+    helpers::estate::{load_estate_for_player, require_dock, require_mine},
+    state::{ExpeditionAccount, PlayerAccount, NULL_PUBKEY},
+    utils::{read_u64, read_u8},
+    validation::{require_empty, require_owner, require_signer, require_writable},
 };
 
 /// Start a Mining or Fishing Expedition
@@ -81,13 +77,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 5, up to 8 with hero)
-    crate::extract_accounts!(accounts, [
-        owner,
-        player_account,
-        expedition_account,
-        estate_account,
-        system_program,
-    ], rest = hero_accounts);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            player_account,
+            expedition_account,
+            estate_account,
+            system_program,
+        ],
+        rest = hero_accounts
+    );
 
     // Optional hero accounts (if len >= 8)
     let has_hero_accounts = accounts.len() >= 8;
@@ -148,10 +148,16 @@ pub fn process(
         }
 
         // Check Mine level requirement for tier (split from Workshop)
-        let required_level = MINING_WORKSHOP_REQ.get(tier as usize).copied().unwrap_or(20);
+        let required_level = MINING_WORKSHOP_REQ
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(20);
         require_mine(estate, required_level)?;
 
-        MINING_NOVI_COST.get(tier as usize).copied().unwrap_or(30_000)
+        MINING_NOVI_COST
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(30_000)
     } else {
         // Fishing requires has_fishing and Dock building level
         if !player_data.has_fishing() {
@@ -162,7 +168,10 @@ pub fn process(
         let required_level = FISHING_DOCK_REQ.get(tier as usize).copied().unwrap_or(20);
         require_dock(estate, required_level)?;
 
-        FISHING_NOVI_COST.get(tier as usize).copied().unwrap_or(30_000)
+        FISHING_NOVI_COST
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(30_000)
     };
 
     // 11. Validate sufficient locked NOVI
@@ -182,13 +191,16 @@ pub fn process(
     }
 
     // 13. LOCK OPERATIVES - Deduct from player (returned on claim)
-    player_data.operative_unit_1 = player_data.operative_unit_1
+    player_data.operative_unit_1 = player_data
+        .operative_unit_1
         .checked_sub(operative_unit_1)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_2 = player_data.operative_unit_2
+    player_data.operative_unit_2 = player_data
+        .operative_unit_2
         .checked_sub(operative_unit_2)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_3 = player_data.operative_unit_3
+    player_data.operative_unit_3 = player_data
+        .operative_unit_3
         .checked_sub(operative_unit_3)
         .ok_or(GameError::MathOverflow)?;
 
@@ -209,14 +221,21 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     let duration_hours = if expedition_type == EXPEDITION_MINING {
-        crate::constants::MINING_DURATION_HOURS.get(tier as usize).copied().unwrap_or(1)
+        crate::constants::MINING_DURATION_HOURS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(1)
     } else {
-        crate::constants::FISHING_DURATION_HOURS.get(tier as usize).copied().unwrap_or(1)
+        crate::constants::FISHING_DURATION_HOURS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(1)
     };
     let duration_seconds = duration_hours as i64 * 3600;
 
     // 17. Deduct locked NOVI
-    player_data.locked_novi = player_data.locked_novi
+    player_data.locked_novi = player_data
+        .locked_novi
         .checked_sub(novi_cost)
         .ok_or(GameError::MathOverflow)?;
 
@@ -224,11 +243,7 @@ pub fn process(
     let lamports = crate::utils::rent_exempt_const(ExpeditionAccount::LEN);
 
     let bump_seed = [expedition_bump];
-    let expedition_seeds = crate::seeds!(
-        EXPEDITION_SEED,
-        owner.address(),
-        &bump_seed
-    );
+    let expedition_seeds = crate::seeds!(EXPEDITION_SEED, owner.address(), &bump_seed);
     let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
     CreateAccount {
@@ -237,7 +252,8 @@ pub fn process(
         lamports,
         space: ExpeditionAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[expedition_signer])?;
+    }
+    .invoke_signed(&[expedition_signer])?;
 
     // 19. Handle optional hero NFT transfer (escrow to expedition PDA)
     let hero_mint_key = if has_hero_accounts {
@@ -264,12 +280,18 @@ pub fn process(
                 authority: owner,
                 system_program,
                 log_wrapper: p_core_program,
-            }.invoke()?;
+            }
+            .invoke()?;
         } else if current_owner_key == *player_account.address().as_array() {
             // Hero is locked in PlayerAccount PDA - need PDA signer
             let player_bump = player_data.bump;
             let player_bump_seed = [player_bump];
-            let player_seeds = crate::seeds!(PLAYER_SEED, player_data.game_engine.as_ref(), owner.address(), &player_bump_seed);
+            let player_seeds = crate::seeds!(
+                PLAYER_SEED,
+                player_data.game_engine.as_ref(),
+                owner.address(),
+                &player_bump_seed
+            );
             let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
             p_core::instructions::TransferV1 {
@@ -280,7 +302,8 @@ pub fn process(
                 authority: player_account,
                 system_program,
                 log_wrapper: p_core_program,
-            }.invoke_signed(&[player_signer])?;
+            }
+            .invoke_signed(&[player_signer])?;
 
             // Clear the active_heroes slot since hero is now on expedition
             for i in 0..3 {
@@ -309,7 +332,7 @@ pub fn process(
         expedition_type,
         tier,
         expedition_bump,
-        player_data.current_city,  // Store expedition location for origin city bonus
+        player_data.current_city, // Store expedition location for origin city bonus
         now,
         operative_unit_1,
         operative_unit_2,

@@ -1,25 +1,23 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, HeroTemplate, NULL_PUBKEY},
-    helpers::{
-        parse_hero_nft,
-        estate::{
-            can_meditate, load_estate_for_player, get_sanctuary_level,
-            meditation_level_cap, sanctuary_meditation_max_seconds,
-        },
-    },
     constants::HERO_TEMPLATE_SEED,
-    validation::{require_signer, require_writable, require_owner},
-    utils::read_u8,
     emit,
+    error::GameError,
     events::MeditationStarted,
+    helpers::{
+        estate::{
+            can_meditate, get_sanctuary_level, load_estate_for_player, meditation_level_cap,
+            sanctuary_meditation_max_seconds,
+        },
+        parse_hero_nft,
+    },
+    state::{HeroTemplate, PlayerAccount, NULL_PUBKEY},
+    utils::read_u8,
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Start hero meditation at the Sanctuary
@@ -105,8 +103,7 @@ pub fn process(
     // 9. Parse hero data from NFT
     // NFT-Only System: All hero state is stored in NFT attributes
     let nft_data = hero_mint.try_borrow()?;
-    let parsed_hero = parse_hero_nft(&nft_data)
-        .ok_or(GameError::InvalidParameter)?;
+    let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // 10. Load Hero Template and verify city requirement

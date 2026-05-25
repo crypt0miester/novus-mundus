@@ -1,21 +1,12 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{GameEngine, DungeonTemplate},
     constants::DUNGEON_TEMPLATE_SEED,
-    validation::{
-        require_signer,
-        require_writable,
-        require_key_match,
-    },
-    utils::{read_u8, read_u16, read_u32, read_u64},
+    error::GameError,
+    state::{DungeonTemplate, GameEngine},
+    utils::{read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Create a dungeon template (DAO only)
@@ -93,11 +84,19 @@ pub fn process(
     let rooms_per_floor = read_u8(instruction_data, 4, "create_template.rooms_per_floor")?;
     let checkpoint_interval = read_u8(instruction_data, 5, "create_template.checkpoint_interval")?;
     let min_player_level = read_u8(instruction_data, 6, "create_template.min_player_level")?;
-    let required_building_level = read_u8(instruction_data, 7, "create_template.required_building_level")?;
+    let required_building_level = read_u8(
+        instruction_data,
+        7,
+        "create_template.required_building_level",
+    )?;
 
     let stamina_cost = read_u16(instruction_data, 8, "create_template.stamina_cost")?;
 
-    let boss_power_multiplier = read_u16(instruction_data, 10, "create_template.boss_power_multiplier")?;
+    let boss_power_multiplier = read_u16(
+        instruction_data,
+        10,
+        "create_template.boss_power_multiplier",
+    )?;
 
     // Skip bump and padding1 (bytes 12-15)
 
@@ -123,7 +122,11 @@ pub fn process(
 
     // Parse darkness config
     let darkness_base_bps = read_u16(instruction_data, 100, "create_template.darkness_base_bps")?;
-    let darkness_per_floor_bps = read_u16(instruction_data, 102, "create_template.darkness_per_floor_bps")?;
+    let darkness_per_floor_bps = read_u16(
+        instruction_data,
+        102,
+        "create_template.darkness_per_floor_bps",
+    )?;
 
     // Parse time limit
     let time_limit_seconds = read_u32(instruction_data, 104, "create_template.time_limit_seconds")?;
@@ -131,9 +134,14 @@ pub fn process(
     // Parse reward config
     let base_xp_per_room = read_u64(instruction_data, 108, "create_template.base_xp_per_room")?;
 
-    let base_novi_per_floor = read_u64(instruction_data, 116, "create_template.base_novi_per_floor")?;
+    let base_novi_per_floor =
+        read_u64(instruction_data, 116, "create_template.base_novi_per_floor")?;
 
-    let completion_bonus_bps = read_u16(instruction_data, 124, "create_template.completion_bonus_bps")?;
+    let completion_bonus_bps = read_u16(
+        instruction_data,
+        124,
+        "create_template.completion_bonus_bps",
+    )?;
 
     let reward_scaling_bps = read_u16(instruction_data, 126, "create_template.reward_scaling_bps")?;
 
@@ -178,7 +186,8 @@ pub fn process(
         lamports,
         space: DungeonTemplate::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize template data
     let mut template_data = dungeon_template.try_borrow_mut()?;

@@ -1,16 +1,11 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use p_switchboard::OracleQuote;
 use crate::{
     error::GameError,
     state::{GameEngine, OracleQuotePda, ShopConfigAccount},
-    validation::{require_signer, require_writable, require_owner},
     utils::unlikely,
+    validation::{require_owner, require_signer, require_writable},
 };
+use p_switchboard::OracleQuote;
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
 
 /// Crank the Switchboard oracle-quote PDA with a fresh verified quote.
 ///
@@ -40,14 +35,17 @@ pub fn process(
     accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    crate::extract_accounts!(accounts, [
-        cranker,
-        game_engine_account,
-        shop_config_account,
-        oracle_quote_account,
-        switchboard_queue,
-        instructions_sysvar,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            cranker,
+            game_engine_account,
+            shop_config_account,
+            oracle_quote_account,
+            switchboard_queue,
+            instructions_sysvar,
+        ]
+    );
 
     require_signer(cranker)?;
     require_writable(oracle_quote_account)?;

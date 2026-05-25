@@ -22,6 +22,14 @@ export interface CLIContext {
   connection: Connection;
   env: Environment;
   kingdomId: number;
+  /* Kingdom name (max 32 UTF-8 bytes, zero-padded on chain). */
+  kingdomName: string;
+  /* Theme enum: 0=Medieval, 1=Cyberpunk, 2=SciFi, 3=Modern, 4=PostApocalyptic. */
+  theme: number;
+  /* When kingdom gameplay begins (unix seconds). 0 = immediately. */
+  kingdomStartTime: number;
+  /* When registration closes (unix seconds). 0 = never. */
+  registrationClosesAt: number;
   daoAuthority: Keypair;
   treasury: Keypair;
   gameEngine: PublicKey;
@@ -37,12 +45,45 @@ export interface ParsedArgs {
   extra: string;
   env: Environment;
   kingdomId: number;
+  kingdomName?: string;
+  theme?: number;
+  kingdomStartTime?: number;
+  registrationClosesAt?: number;
   authorityPath: string;
   treasuryPath: string;
   dryRun: boolean;
   verbose: boolean;
   from: number;
   flags: string[];
+}
+
+const THEME_NAMES: Record<string, number> = {
+  medieval: 0,
+  cyberpunk: 1,
+  scifi: 2,
+  modern: 3,
+  postapocalyptic: 4,
+};
+
+function parseTheme(v: string): number {
+  const n = Number(v);
+  if (Number.isInteger(n) && n >= 0 && n <= 4) return n;
+  const key = v.trim().toLowerCase().replace(/[\s_-]/g, '');
+  const mapped = THEME_NAMES[key];
+  if (mapped === undefined) {
+    throw new Error(`Invalid --theme "${v}". Use 0-4 or one of: ${Object.keys(THEME_NAMES).join(', ')}`);
+  }
+  return mapped;
+}
+
+function parseTimestamp(v: string): number {
+  /* Accept raw unix seconds or an ISO date. */
+  if (/^-?\d+$/.test(v.trim())) return parseInt(v, 10);
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms)) {
+    throw new Error(`Invalid timestamp "${v}". Pass unix seconds or an ISO date.`);
+  }
+  return Math.floor(ms / 1000);
 }
 
 const RPC_URLS: Record<Environment, string> = {
@@ -76,6 +117,18 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       case '--kingdom-id':
         args.kingdomId = parseInt(argv[++i], 10);
+        break;
+      case '--kingdom-name':
+        args.kingdomName = argv[++i];
+        break;
+      case '--theme':
+        args.theme = parseTheme(argv[++i]);
+        break;
+      case '--kingdom-start-time':
+        args.kingdomStartTime = parseTimestamp(argv[++i]);
+        break;
+      case '--registration-closes-at':
+        args.registrationClosesAt = parseTimestamp(argv[++i]);
         break;
       case '--authority':
         args.authorityPath = argv[++i];
@@ -161,6 +214,10 @@ export async function buildContext(args: ParsedArgs): Promise<CLIContext> {
     connection,
     env: args.env,
     kingdomId: args.kingdomId,
+    kingdomName: args.kingdomName ?? 'Genesis',
+    theme: args.theme ?? 3,
+    kingdomStartTime: args.kingdomStartTime ?? 0,
+    registrationClosesAt: args.registrationClosesAt ?? 0,
     daoAuthority,
     treasury,
     gameEngine,

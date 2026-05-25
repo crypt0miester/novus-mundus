@@ -1,24 +1,18 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 
 use crate::{
-    error::GameError,
-    state::{LootAccount, PlayerAccount, UserAccount, GameEngine},
     constants::{PLAYER_SEED, USER_SEED},
-    logic::calculate_networth,
-    helpers::close_account,
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
-    },
     emit,
+    error::GameError,
     events::LootClaimed,
+    helpers::close_account,
+    logic::calculate_networth,
+    state::{GameEngine, LootAccount, PlayerAccount, UserAccount},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Claim loot and transfer rewards to player
@@ -61,7 +55,15 @@ pub fn process(
     require_owner(loot, program_id)?;
 
     // Validate PDAs
-    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let player_bump = require_pda(
+        player,
+        &[
+            PLAYER_SEED,
+            game_engine.address().as_ref(),
+            owner.address().as_ref(),
+        ],
+        program_id,
+    )?;
     let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Load Loot Account
@@ -128,43 +130,52 @@ pub fn process(
     // 7. TRANSFER REWARDS (all checked operations)
 
     // Cash
-    player_data.cash_on_hand = player_data.cash_on_hand
+    player_data.cash_on_hand = player_data
+        .cash_on_hand
         .checked_add(loot_data.cash)
         .ok_or(GameError::MathOverflow)?;
 
     // Reserved Novi
-    user_data.reserved_novi = user_data.reserved_novi
+    user_data.reserved_novi = user_data
+        .reserved_novi
         .checked_add(loot_data.reserved_novi)
         .ok_or(GameError::MathOverflow)?;
 
     // Weapons (all types)
-    player_data.melee_weapons = player_data.melee_weapons
+    player_data.melee_weapons = player_data
+        .melee_weapons
         .checked_add(loot_data.melee_weapons)
         .ok_or(GameError::MathOverflow)?;
-    player_data.ranged_weapons = player_data.ranged_weapons
+    player_data.ranged_weapons = player_data
+        .ranged_weapons
         .checked_add(loot_data.ranged_weapons)
         .ok_or(GameError::MathOverflow)?;
-    player_data.siege_weapons = player_data.siege_weapons
+    player_data.siege_weapons = player_data
+        .siege_weapons
         .checked_add(loot_data.siege_weapons)
         .ok_or(GameError::MathOverflow)?;
 
     // Produce
-    player_data.produce = player_data.produce
+    player_data.produce = player_data
+        .produce
         .checked_add(loot_data.produce)
         .ok_or(GameError::MathOverflow)?;
 
     // Vehicles
-    player_data.vehicles = player_data.vehicles
+    player_data.vehicles = player_data
+        .vehicles
         .checked_add(loot_data.vehicles)
         .ok_or(GameError::MathOverflow)?;
 
     // Fragments (for hero leveling)
-    player_data.fragments = player_data.fragments
+    player_data.fragments = player_data
+        .fragments
         .checked_add(loot_data.fragments)
         .ok_or(GameError::MathOverflow)?;
 
     // Gems (for speed-ups)
-    player_data.gems = player_data.gems
+    player_data.gems = player_data
+        .gems
         .checked_add(loot_data.gems)
         .ok_or(GameError::MathOverflow)?;
 

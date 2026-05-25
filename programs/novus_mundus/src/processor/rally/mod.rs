@@ -1,3 +1,5 @@
+pub mod cancel;
+pub mod close_rally;
 /// Rally management processors (Strategic Combat System)
 ///
 /// Rally Lifecycle:
@@ -12,12 +14,9 @@
 /// - Gather (0): Speed up travel to rally point (payer: participant OR leader)
 /// - March (1): Speed up army march to target (payer: leader only)
 /// - Return (2): Speed up return journey (payer: participant only)
-
 pub mod create;
+pub mod execute;
 pub mod join;
 pub mod leave;
-pub mod execute;
-pub mod cancel;
-pub mod speedup;
 pub mod process_return;
-pub mod close_rally;
+pub mod speedup;

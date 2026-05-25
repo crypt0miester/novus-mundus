@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Name service events - player and team name operations
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player name is set
 pub struct PlayerNameSet {

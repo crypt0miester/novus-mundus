@@ -6,14 +6,12 @@
 //!
 //! Seeds: ["expedition", player_pubkey]
 
-use pinocchio::Address;
 use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
 use crate::constants::{
-    EXPEDITION_SEED,
-    EXPEDITION_MINING, EXPEDITION_FISHING,
-    MINING_DURATION_HOURS, FISHING_DURATION_HOURS,
-    SECONDS_PER_HOUR,
+    EXPEDITION_FISHING, EXPEDITION_MINING, EXPEDITION_SEED, FISHING_DURATION_HOURS,
+    MINING_DURATION_HOURS, SECONDS_PER_HOUR,
 };
 
 use super::player::NULL_PUBKEY;
@@ -203,9 +201,15 @@ impl ExpeditionAccount {
     /// Get the duration of this expedition in seconds
     pub fn duration_seconds(&self) -> i64 {
         let hours = if self.expedition_type == EXPEDITION_MINING {
-            MINING_DURATION_HOURS.get(self.tier as usize).copied().unwrap_or(1)
+            MINING_DURATION_HOURS
+                .get(self.tier as usize)
+                .copied()
+                .unwrap_or(1)
         } else {
-            FISHING_DURATION_HOURS.get(self.tier as usize).copied().unwrap_or(1)
+            FISHING_DURATION_HOURS
+                .get(self.tier as usize)
+                .copied()
+                .unwrap_or(1)
         };
         hours as i64 * SECONDS_PER_HOUR
     }
@@ -224,9 +228,15 @@ impl ExpeditionAccount {
     /// (1 strike per hour of expedition duration)
     pub fn max_strikes(&self) -> u8 {
         if self.expedition_type == EXPEDITION_MINING {
-            MINING_DURATION_HOURS.get(self.tier as usize).copied().unwrap_or(1)
+            MINING_DURATION_HOURS
+                .get(self.tier as usize)
+                .copied()
+                .unwrap_or(1)
         } else {
-            FISHING_DURATION_HOURS.get(self.tier as usize).copied().unwrap_or(1)
+            FISHING_DURATION_HOURS
+                .get(self.tier as usize)
+                .copied()
+                .unwrap_or(1)
         }
     }
 
@@ -237,7 +247,8 @@ impl ExpeditionAccount {
 
     /// Get the next strike window time (1 strike per hour)
     pub fn next_strike_time(&self) -> i64 {
-        self.start_time.saturating_add(self.strikes as i64 * SECONDS_PER_HOUR)
+        self.start_time
+            .saturating_add(self.strikes as i64 * SECONDS_PER_HOUR)
     }
 
     /// Check if a strike is ready to be performed
@@ -289,10 +300,7 @@ impl ExpeditionAccount {
     /// Derive PDA for an expedition account
     /// Seeds: [EXPEDITION_SEED, player]
     pub fn derive_pda(player: &Address) -> (Address, u8) {
-        pinocchio::Address::find_program_address(
-            &[EXPEDITION_SEED, player.as_ref()],
-            &crate::ID,
-        )
+        pinocchio::Address::find_program_address(&[EXPEDITION_SEED, player.as_ref()], &crate::ID)
     }
 
     /// Create PDA from known bump
@@ -301,9 +309,13 @@ impl ExpeditionAccount {
         pinocchio::Address::create_program_address(
             &[EXPEDITION_SEED, player.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
 // Compile-time size verification
-const _: () = assert!(ExpeditionAccount::LEN == 112, "ExpeditionAccount size changed");
+const _: () = assert!(
+    ExpeditionAccount::LEN == 112,
+    "ExpeditionAccount size changed"
+);

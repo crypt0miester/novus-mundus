@@ -1,20 +1,14 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, ResearchProgress, ResearchTemplate, require_extension, EXT_RESEARCH},
-    validation::{
-        require_owner,
-        require_signer,
-        require_writable,
-    },
     emit,
+    error::GameError,
     events::ResearchCancelled,
+    state::{require_extension, PlayerAccount, ResearchProgress, ResearchTemplate, EXT_RESEARCH},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Cancel active research (NO refund)

@@ -1,21 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
     constants::DUNGEON_RUN_SEED,
-    helpers::estate::{load_estate_for_player, has_building_at_level},
-    utils::{read_u8, read_u16},
-    validation::{require_signer, require_writable, require_game_authority},
     emit,
+    error::GameError,
     events::DungeonEntered,
+    helpers::estate::{has_building_at_level, load_estate_for_player},
+    state::{DungeonRun, DungeonStatus, DungeonTemplate, PlayerAccount, RoomType},
+    utils::{read_u16, read_u8},
+    validation::{require_game_authority, require_signer, require_writable},
 };
 
 /// Enter a dungeon and start a new run
@@ -44,25 +42,24 @@ use crate::{
 /// - dungeon_id: u16 (2 bytes, little-endian)
 /// - first_room_type: u8 (chosen by backend; authenticated by the game_authority signature)
 /// - hero_specialization: u8 (0=Warrior, 1=Guardian, 2=Scout, 3=Tactician)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse accounts (game_authority co-signs to authenticate first_room_type)
-    crate::extract_accounts!(accounts, [
-        owner,
-        game_authority,
-        player_account,
-        dungeon_template_account,
-        dungeon_run_account,
-        estate_account,
-        hero_mint,
-        hero_collection,
-        system_program,
-        p_core_program,
-        game_engine_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            game_authority,
+            player_account,
+            dungeon_template_account,
+            dungeon_run_account,
+            estate_account,
+            hero_mint,
+            hero_collection,
+            system_program,
+            p_core_program,
+            game_engine_account,
+        ]
+    );
 
     // 2. Validate signers
     require_signer(owner)?;
@@ -77,8 +74,7 @@ pub fn process(
     let hero_specialization = read_u8(data, 3, "hero_specialization")?;
 
     // Validate room type
-    let room_type = RoomType::from_u8(first_room_type)
-        .ok_or(GameError::InvalidParameter)?;
+    let room_type = RoomType::from_u8(first_room_type).ok_or(GameError::InvalidParameter)?;
 
     // Validate hero specialization (0-3)
     if hero_specialization > 3 {
@@ -86,7 +82,7 @@ pub fn process(
     }
 
     // 4. Load and validate player using load_checked_mut_by_key (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
@@ -94,7 +90,12 @@ pub fn process(
     // 4a. Validate game_authority against the player's kingdom GameEngine.
     // The game_authority signature is what authenticates the backend-rolled
     // first_room_type — without it a client could freely pick the opening room.
-    require_game_authority(game_engine_account, game_authority, &player.game_engine, program_id)?;
+    require_game_authority(
+        game_engine_account,
+        game_authority,
+        &player.game_engine,
+        program_id,
+    )?;
 
     // 5. Validate dungeon run doesn't already exist
     // (account should have 0 lamports if not created)
@@ -118,17 +119,23 @@ pub fn process(
 
     // Check DungeonEntry building level (dungeons require DungeonEntry, split from Arena)
     let estate = load_estate_for_player(estate_account, &player, program_id)?;
-    if !has_building_at_level(&estate, crate::state::BuildingType::DungeonEntry, template.required_building_level) {
+    if !has_building_at_level(
+        &estate,
+        crate::state::BuildingType::DungeonEntry,
+        template.required_building_level,
+    ) {
         return Err(GameError::DungeonEntryRequired.into());
     }
 
     // Calculate building bonuses (5% per level, capped at 25%)
-    let xp_building_bonus_bps = estate.find_building(crate::state::BuildingType::Academy)
+    let xp_building_bonus_bps = estate
+        .find_building(crate::state::BuildingType::Academy)
         .filter(|b| b.is_active())
         .map(|b| ((b.level as u16) * 500).min(2500)) // 5% per level, max 25%
         .unwrap_or(0);
 
-    let novi_building_bonus_bps = estate.find_building(crate::state::BuildingType::Treasury)
+    let novi_building_bonus_bps = estate
+        .find_building(crate::state::BuildingType::Treasury)
         .filter(|b| b.is_active())
         .map(|b| ((b.level as u16) * 500).min(2500)) // 5% per level, max 25%
         .unwrap_or(0);
@@ -175,11 +182,7 @@ pub fn process(
 
     // Create account - signer seeds use player_account.address()
     let run_bump_seed = [run_bump];
-    let run_seeds = crate::seeds!(
-        DUNGEON_RUN_SEED,
-        player_account.address(),
-        &run_bump_seed
-    );
+    let run_seeds = crate::seeds!(DUNGEON_RUN_SEED, player_account.address(), &run_bump_seed);
     let run_signer = pinocchio::cpi::Signer::from(&run_seeds);
 
     CreateAccount {
@@ -188,7 +191,8 @@ pub fn process(
         lamports: run_lamports,
         space: DungeonRun::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[run_signer])?;
+    }
+    .invoke_signed(&[run_signer])?;
 
     // 10. Transfer hero NFT to DungeonRun PDA using MPL Core
     p_core::instructions::TransferV1 {
@@ -199,10 +203,13 @@ pub fn process(
         authority: owner,
         system_program,
         log_wrapper: p_core_program,
-    }.invoke()?;
+    }
+    .invoke()?;
 
     // 11. Consume stamina
-    player.encounter_stamina = player.encounter_stamina.saturating_sub(template.stamina_cost as u64);
+    player.encounter_stamina = player
+        .encounter_stamina
+        .saturating_sub(template.stamina_cost as u64);
 
     // Snapshot DEFENSIVE units (for combat, not operative units which are for resources)
     let remaining_units = [
@@ -222,7 +229,6 @@ pub fn process(
     let player_name = player.name;
 
     // Drop player borrow before initializing run
-    drop(player);
 
     // 12. Initialize DungeonRun
     let mut run_data_ref = dungeon_run_account.try_borrow_mut()?;

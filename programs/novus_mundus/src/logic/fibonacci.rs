@@ -7,7 +7,10 @@ pub fn is_fibonacci(n: u64) -> bool {
         return true;
     }
 
-    let five_n_squared = match (5u128).checked_mul(n as u128).and_then(|x| x.checked_mul(n as u128)) {
+    let five_n_squared = match (5u128)
+        .checked_mul(n as u128)
+        .and_then(|x| x.checked_mul(n as u128))
+    {
         Some(val) => val,
         None => return false, // Overflow, not a valid Fibonacci number
     };

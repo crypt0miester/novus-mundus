@@ -1,5 +1,5 @@
-use pinocchio::Address;
 use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
 use crate::constants::LOCATION_SEED;
 
@@ -27,26 +27,26 @@ pub const OCCUPANT_ENCOUNTER: u8 = 2;
 #[derive(Copy, Clone)]
 pub struct LocationAccount {
     /// Account discriminator (AccountKey::Location)
-    pub account_key: u8,            // 1 byte
+    pub account_key: u8, // 1 byte
 
     /// Kingdom this location belongs to
-    pub game_engine: Address,        // 32 bytes
+    pub game_engine: Address, // 32 bytes
     /// Grid latitude (coordinate × 10000, rounded)
-    pub grid_lat: i32,              // 4 bytes
+    pub grid_lat: i32, // 4 bytes
     /// Grid longitude (coordinate × 10000, rounded)
-    pub grid_long: i32,             // 4 bytes
+    pub grid_long: i32, // 4 bytes
     /// City this cell belongs to
-    pub city_id: u16,               // 2 bytes
+    pub city_id: u16, // 2 bytes
     /// PDA bump seed
-    pub bump: u8,                   // 1 byte
+    pub bump: u8, // 1 byte
     /// Type of occupant (0=none, 1=player, 2=encounter)
-    pub occupant_type: u8,          // 1 byte
+    pub occupant_type: u8, // 1 byte
     /// Entity currently occupying this cell (NULL_OCCUPANT if empty)
-    pub occupant: Address,           // 32 bytes
+    pub occupant: Address, // 32 bytes
     /// Timestamp when occupant arrived/spawned (or will arrive if traveling)
-    pub occupied_since: i64,        // 8 bytes
+    pub occupied_since: i64, // 8 bytes
     /// Who created this location (receives rent refund when closed)
-    pub location_creator: Address,   // 32 bytes
+    pub location_creator: Address, // 32 bytes
     /// Expected arrival time for traveling occupants (0 if already arrived)
     /// Used for speed-based reservation stealing
     pub reserved_arrival_time: i64, // 8 bytes
@@ -124,28 +124,53 @@ impl LocationAccount {
 
     /// Derive the PDA for a location cell
     /// Seeds: [LOCATION_SEED, game_engine, city_id, grid_lat, grid_long]
-    pub fn derive_pda(game_engine: &Address, city_id: u16, grid_lat: i32, grid_long: i32) -> (Address, u8) {
+    pub fn derive_pda(
+        game_engine: &Address,
+        city_id: u16,
+        grid_lat: i32,
+        grid_long: i32,
+    ) -> (Address, u8) {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
 
         pinocchio::Address::find_program_address(
-            &[LOCATION_SEED, game_engine.as_ref(), &city_bytes, &lat_bytes, &long_bytes],
+            &[
+                LOCATION_SEED,
+                game_engine.as_ref(),
+                &city_bytes,
+                &lat_bytes,
+                &long_bytes,
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Address, city_id: u16, grid_lat: i32, grid_long: i32, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        city_id: u16,
+        grid_lat: i32,
+        grid_long: i32,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let city_bytes = city_id.to_le_bytes();
         let lat_bytes = grid_lat.to_le_bytes();
         let long_bytes = grid_long.to_le_bytes();
         let bump_seed = [bump];
 
         pinocchio::Address::create_program_address(
-            &[LOCATION_SEED, game_engine.as_ref(), &city_bytes, &lat_bytes, &long_bytes, &bump_seed],
+            &[
+                LOCATION_SEED,
+                game_engine.as_ref(),
+                &city_bytes,
+                &lat_bytes,
+                &long_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a LocationAccount immutably.
@@ -156,30 +181,27 @@ impl LocationAccount {
         grid_lat: i32,
         grid_long: i32,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, grid_lat, grid_long);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "LocationAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Location)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::Location,
+                "LocationAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "LocationAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "LocationAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a LocationAccount mutably.
@@ -190,30 +212,27 @@ impl LocationAccount {
         grid_lat: i32,
         grid_long: i32,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, grid_lat, grid_long);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "LocationAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Location)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Location,
+                "LocationAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "LocationAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "LocationAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Check if location belongs to a specific kingdom
@@ -225,14 +244,14 @@ impl LocationAccount {
     /// Returns 8 adjacent cells in order: N, NE, E, SE, S, SW, W, NW
     pub fn adjacent_cells(grid_lat: i32, grid_long: i32) -> [(i32, i32); 8] {
         [
-            (grid_lat + 1, grid_long),      // N
-            (grid_lat + 1, grid_long + 1),  // NE
-            (grid_lat, grid_long + 1),      // E
-            (grid_lat - 1, grid_long + 1),  // SE
-            (grid_lat - 1, grid_long),      // S
-            (grid_lat - 1, grid_long - 1),  // SW
-            (grid_lat, grid_long - 1),      // W
-            (grid_lat + 1, grid_long - 1),  // NW
+            (grid_lat + 1, grid_long),     // N
+            (grid_lat + 1, grid_long + 1), // NE
+            (grid_lat, grid_long + 1),     // E
+            (grid_lat - 1, grid_long + 1), // SE
+            (grid_lat - 1, grid_long),     // S
+            (grid_lat - 1, grid_long - 1), // SW
+            (grid_lat, grid_long - 1),     // W
+            (grid_lat + 1, grid_long - 1), // NW
         ]
     }
 }
@@ -263,9 +282,9 @@ mod tests {
         assert_eq!(adjacent[0], (101, 200)); // N
         assert_eq!(adjacent[1], (101, 201)); // NE
         assert_eq!(adjacent[2], (100, 201)); // E
-        assert_eq!(adjacent[3], (99, 201));  // SE
-        assert_eq!(adjacent[4], (99, 200));  // S
-        assert_eq!(adjacent[5], (99, 199));  // SW
+        assert_eq!(adjacent[3], (99, 201)); // SE
+        assert_eq!(adjacent[4], (99, 200)); // S
+        assert_eq!(adjacent[5], (99, 199)); // SW
         assert_eq!(adjacent[6], (100, 199)); // W
         assert_eq!(adjacent[7], (101, 199)); // NW
     }

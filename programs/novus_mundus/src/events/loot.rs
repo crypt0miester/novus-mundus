@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Loot events - rewards from encounters and activities
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when loot is claimed from an encounter
 pub struct LootClaimed {

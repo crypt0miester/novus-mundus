@@ -122,6 +122,13 @@
   /* `grab` cues that the map is draggable — switches to `grabbing` while a
    * drag-pan is active via the .panning modifier the React tree sets. */
   cursor: grab;
+  /* Drag-pan + click-to-select fire word-selection on city labels embedded
+   * in the SVG (and on any text the browser finds nearby). The map is
+   * pure UI, so suppress selection across the whole sheet. The right-hand
+   * scroll panel (.scroll) stays selectable because it carries actual
+   * readable content like the city lore. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 .sheet:active {
   cursor: grabbing;
@@ -178,7 +185,7 @@
 
 .sheetBackBtn {
   position: absolute;
-  top: 14px;
+  bottom: 14px;
   right: 14px;
   width: 32px;
   height: 32px;
@@ -206,6 +213,12 @@
 .sheetBackBtn:focus-visible {
   outline: 2px solid var(--seal, #b45309);
   outline-offset: 2px;
+}
+.sheetBackIcon {
+  width: 16px;
+  height: 16px;
+  stroke-width: 1.8;
+  display: block;
 }
 
 /* paper grain — a tiled SVG noise overlay */
@@ -521,24 +534,16 @@
   animation: ringDraw 0.55s 0.08s ease-out forwards;
 }
 
-/* entrance — cities seep in like ink */
+/* The parchment is meant to read as already-inked — no entrance animation.
+ * Hover still nudges the dot so the cursor cue stays. */
 .cityGroup {
-  opacity: 0;
-  animation: ink 0.7s ease-out forwards;
+  opacity: 1;
   cursor: pointer;
 }
 .cityGroup:hover .cityDot {
   transform: scale(1.18);
 }
 
-@keyframes ink {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
-  }
-}
 @keyframes ringDraw {
   to {
     stroke-dashoffset: 0;
@@ -849,7 +854,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .road,
-  .cityGroup,
   .selectedOuter,
   .selectedInner {
     animation: none;

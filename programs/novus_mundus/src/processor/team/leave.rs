@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::TeamLeft,
+    helpers::close_account,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Leave a team
@@ -59,11 +57,11 @@ pub fn process(
 
     // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }

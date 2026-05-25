@@ -1,18 +1,14 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use pinocchio::sysvars::{clock::Clock, Sysvar};
 
 use crate::{
+    emit,
     error::GameError,
+    events::RallyClosed,
     helpers::close_account,
     state::{RallyAccount, RallyStatus},
-    validation::{require_writable, require_owner},
-    emit,
-    events::RallyClosed,
+    validation::{require_owner, require_writable},
 };
 
 /// Close a completed or cancelled rally

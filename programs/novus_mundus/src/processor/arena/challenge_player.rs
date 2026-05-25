@@ -20,29 +20,26 @@
 //! 13. `[WRITE]` arena_season: ArenaSeasonAccount
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::{
-        SECONDS_PER_DAY, ARENA_MAX_DAILY_BATTLES, ARENA_MAX_BATTLES_PER_OPPONENT,
-        ARENA_MATCH_EXPIRY_SECONDS, ARENA_BASE_WIN_POINTS, ARENA_BASE_LOSS_POINTS,
-        ARENA_DRAW_POINTS, ARENA_UNDERDOG_BONUS_BPS, ARENA_ELO_K_FACTOR,
-        DEFENSIVE_UNIT_1_POWER, DEFENSIVE_UNIT_2_POWER, DEFENSIVE_UNIT_3_POWER,
-        ARENA_MELEE_WEAPON_POWER, ARENA_RANGED_WEAPON_POWER, ARENA_SIEGE_WEAPON_POWER,
-        ARENA_ARMOR_POWER,
+        ARENA_ARMOR_POWER, ARENA_BASE_LOSS_POINTS, ARENA_BASE_WIN_POINTS, ARENA_DRAW_POINTS,
+        ARENA_ELO_K_FACTOR, ARENA_MATCH_EXPIRY_SECONDS, ARENA_MAX_BATTLES_PER_OPPONENT,
+        ARENA_MAX_DAILY_BATTLES, ARENA_MELEE_WEAPON_POWER, ARENA_RANGED_WEAPON_POWER,
+        ARENA_SIEGE_WEAPON_POWER, ARENA_UNDERDOG_BONUS_BPS, DEFENSIVE_UNIT_1_POWER,
+        DEFENSIVE_UNIT_2_POWER, DEFENSIVE_UNIT_3_POWER, SECONDS_PER_DAY,
     },
     error::GameError,
-    state::{
-        ArenaSeasonAccount, ArenaParticipantAccount, ArenaLoadoutAccount, ArenaStatus,
-        PlayerAccount, EstateAccount, GameEngine, BuffStat,
-    },
-    validation::{require_signer, require_owner, require_data_len},
     helpers::parse_hero_nft,
-    utils::{read_u64, read_i64, read_u32},
+    state::{
+        ArenaLoadoutAccount, ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, BuffStat,
+        EstateAccount, GameEngine, PlayerAccount,
+    },
+    utils::{read_i64, read_u32, read_u64},
+    validation::{require_data_len, require_owner, require_signer},
 };
 
 /// Instruction data for challenge_player
@@ -56,22 +53,25 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (14 required)
-    crate::extract_accounts!(accounts, [
-        challenger_authority,
-        game_authority,
-        game_engine,
-        challenger_player,
-        challenger_participant,
-        challenger_loadout,
-        challenger_hero,
-        challenger_estate,
-        defender_player,
-        defender_participant,
-        defender_loadout,
-        defender_hero,
-        defender_estate,
-        arena_season,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            challenger_authority,
+            game_authority,
+            game_engine,
+            challenger_player,
+            challenger_participant,
+            challenger_loadout,
+            challenger_hero,
+            challenger_estate,
+            defender_player,
+            defender_participant,
+            defender_loadout,
+            defender_hero,
+            defender_estate,
+            arena_season,
+        ]
+    );
 
     // 2. Validate Signers
     require_signer(challenger_authority)?;
@@ -93,7 +93,6 @@ pub fn process(
     if game_authority.address() != &ge_data.game_authority {
         return Err(GameError::Unauthorized.into());
     }
-    drop(ge_data);
 
     // 6. Load Arena Season and validate
     require_owner(arena_season, program_id)?;
@@ -135,7 +134,7 @@ pub fn process(
     drop(defender_player_raw);
 
     // 8. Load Participants (kingdom-scoped, keyed by player PDA)
-    let mut challenger_part = ArenaParticipantAccount::load_checked_mut(
+    let challenger_part = ArenaParticipantAccount::load_checked_mut(
         challenger_participant,
         game_engine.address(),
         season_id,
@@ -143,7 +142,7 @@ pub fn process(
         program_id,
     )?;
 
-    let mut defender_part = ArenaParticipantAccount::load_checked_mut(
+    let defender_part = ArenaParticipantAccount::load_checked_mut(
         defender_participant,
         game_engine.address(),
         season_id,
@@ -197,11 +196,8 @@ pub fn process(
     }
 
     // Opponent cooldown - max 2 battles vs same opponent per 24h window
-    let battles_vs_opponent = challenger_part.count_opponent_in_window(
-        &defender_part.player,
-        now,
-        SECONDS_PER_DAY,
-    );
+    let battles_vs_opponent =
+        challenger_part.count_opponent_in_window(&defender_part.player, now, SECONDS_PER_DAY);
     if battles_vs_opponent >= ARENA_MAX_BATTLES_PER_OPPONENT {
         return Err(GameError::ArenaOpponentCooldownActive.into());
     }
@@ -243,12 +239,11 @@ pub fn process(
         program_id,
     );
 
-    drop(challenger_player_data);
-
     // Calculate arena power for defender
     // Re-borrow defender player data
     let defender_player_raw2 = defender_player.try_borrow()?;
-    let defender_player_data2 = unsafe { &*(defender_player_raw2.as_ptr() as *const PlayerAccount) };
+    let defender_player_data2 =
+        unsafe { &*(defender_player_raw2.as_ptr() as *const PlayerAccount) };
 
     let defender_power = calculate_arena_power(
         &defender_loadout_data,
@@ -259,20 +254,14 @@ pub fn process(
     );
 
     drop(defender_player_raw2);
-    drop(challenger_loadout_data);
-    drop(defender_loadout_data);
 
     // Determine winner (simple power comparison)
     let challenger_won = challenger_power > defender_power;
     let is_draw = challenger_power == defender_power;
 
     // Calculate points for both players
-    let (challenger_points, defender_points) = calculate_battle_points(
-        challenger_won,
-        is_draw,
-        challenger_power,
-        defender_power,
-    );
+    let (challenger_points, defender_points) =
+        calculate_battle_points(challenger_won, is_draw, challenger_power, defender_power);
 
     // Update ELO ratings
     let (new_challenger_elo, new_defender_elo) = update_elo(
@@ -286,7 +275,9 @@ pub fn process(
 
     // Update challenger
     challenger_part.last_match_id = match_id;
-    challenger_part.total_points = challenger_part.total_points.saturating_add(challenger_points);
+    challenger_part.total_points = challenger_part
+        .total_points
+        .saturating_add(challenger_points);
     challenger_part.elo_rating = new_challenger_elo;
     if challenger_won {
         challenger_part.wins = challenger_part.wins.saturating_add(1);
@@ -314,9 +305,6 @@ pub fn process(
     let defender_player_key = defender_part.player;
     let defender_total_points = defender_part.total_points;
 
-    drop(challenger_part);
-    drop(defender_part);
-
     season.update_leaderboard(challenger_player_key, challenger_total_points);
     season.update_leaderboard(defender_player_key, defender_total_points);
 
@@ -338,17 +326,26 @@ fn calculate_arena_power(
         .saturating_add(loadout.defensive_units[2].saturating_mul(DEFENSIVE_UNIT_3_POWER));
 
     // Equipment power
-    let equipment_power = loadout.melee_weapons
+    let equipment_power = loadout
+        .melee_weapons
         .saturating_mul(ARENA_MELEE_WEAPON_POWER)
-        .saturating_add(loadout.ranged_weapons.saturating_mul(ARENA_RANGED_WEAPON_POWER))
-        .saturating_add(loadout.siege_weapons.saturating_mul(ARENA_SIEGE_WEAPON_POWER))
+        .saturating_add(
+            loadout
+                .ranged_weapons
+                .saturating_mul(ARENA_RANGED_WEAPON_POWER),
+        )
+        .saturating_add(
+            loadout
+                .siege_weapons
+                .saturating_mul(ARENA_SIEGE_WEAPON_POWER),
+        )
         .saturating_add(loadout.armor_pieces.saturating_mul(ARENA_ARMOR_POWER));
 
     let base_power = unit_power.saturating_add(equipment_power);
 
     // Research buffs (from PlayerCore)
-    let research_bonus_bps = player.research_attack_bps() as u64
-        + player.research_defense_bps() as u64;
+    let research_bonus_bps =
+        player.research_attack_bps() as u64 + player.research_defense_bps() as u64;
 
     // Hero buffs (cached on PlayerCore from active heroes)
     let hero_bonus_bps = player.hero_attack_bps() as u64
@@ -365,8 +362,8 @@ fn calculate_arena_power(
     let blessed_bonus_bps = player.blessed_hero_bonus_bps() as u64;
 
     // Equipped item bonuses (from Forge crafted equipment)
-    let equipped_bonus_bps = player.equipped_weapon_bonus_bps() as u64
-        + player.equipped_armor_bonus_bps() as u64;
+    let equipped_bonus_bps =
+        player.equipped_weapon_bonus_bps() as u64 + player.equipped_armor_bonus_bps() as u64;
 
     // Arena-specific hero bonus (if loadout specifies a hero)
     // Heroes are Metaplex Core NFTs - parse buff data from NFT attributes
@@ -377,7 +374,9 @@ fn calculate_arena_power(
                 let mut bonus: u64 = 0;
                 for i in 0..(parsed_hero.buff_count as usize) {
                     let buff = &parsed_hero.buffs[i];
-                    if buff.stat == BuffStat::AttackPower as u8 || buff.stat == BuffStat::DefensePower as u8 {
+                    if buff.stat == BuffStat::AttackPower as u8
+                        || buff.stat == BuffStat::DefensePower as u8
+                    {
                         // Buff values are stored directly (not per-level) in NFT
                         bonus += buff.value as u64;
                     }
@@ -439,9 +438,19 @@ fn calculate_battle_points(
     }
 
     let (winner_power, loser_power, winner_base, loser_base) = if challenger_won {
-        (challenger_power, defender_power, ARENA_BASE_WIN_POINTS, ARENA_BASE_LOSS_POINTS)
+        (
+            challenger_power,
+            defender_power,
+            ARENA_BASE_WIN_POINTS,
+            ARENA_BASE_LOSS_POINTS,
+        )
     } else {
-        (defender_power, challenger_power, ARENA_BASE_WIN_POINTS, ARENA_BASE_LOSS_POINTS)
+        (
+            defender_power,
+            challenger_power,
+            ARENA_BASE_WIN_POINTS,
+            ARENA_BASE_LOSS_POINTS,
+        )
     };
 
     // Underdog bonus: if winner had less power, they get bonus points
@@ -453,7 +462,8 @@ fn calculate_battle_points(
             0
         };
         // Apply underdog bonus (5% per 10% disadvantage)
-        let underdog_bonus = (winner_base * disadvantage_bps * ARENA_UNDERDOG_BONUS_BPS) / (10000 * 1000);
+        let underdog_bonus =
+            (winner_base * disadvantage_bps * ARENA_UNDERDOG_BONUS_BPS) / (10000 * 1000);
         winner_base.saturating_add(underdog_bonus)
     } else {
         winner_base
@@ -483,10 +493,34 @@ fn update_elo(
     // Using lookup-style approximation for common differences
     let challenger_expected = match diff.abs() {
         0..=50 => 50,
-        51..=100 => if diff > 0 { 36 } else { 64 },
-        101..=200 => if diff > 0 { 24 } else { 76 },
-        201..=300 => if diff > 0 { 15 } else { 85 },
-        _ => if diff > 0 { 9 } else { 91 },
+        51..=100 => {
+            if diff > 0 {
+                36
+            } else {
+                64
+            }
+        }
+        101..=200 => {
+            if diff > 0 {
+                24
+            } else {
+                76
+            }
+        }
+        201..=300 => {
+            if diff > 0 {
+                15
+            } else {
+                85
+            }
+        }
+        _ => {
+            if diff > 0 {
+                9
+            } else {
+                91
+            }
+        }
     };
 
     let defender_expected = 100 - challenger_expected;
@@ -501,8 +535,10 @@ fn update_elo(
     };
 
     // New ELO = old + K * (actual - expected) / 100
-    let challenger_delta = (ARENA_ELO_K_FACTOR as i64 * (challenger_actual - challenger_expected as i64)) / 100;
-    let defender_delta = (ARENA_ELO_K_FACTOR as i64 * (defender_actual - defender_expected as i64)) / 100;
+    let challenger_delta =
+        (ARENA_ELO_K_FACTOR as i64 * (challenger_actual - challenger_expected as i64)) / 100;
+    let defender_delta =
+        (ARENA_ELO_K_FACTOR as i64 * (defender_actual - defender_expected as i64)) / 100;
 
     let new_challenger = (challenger_elo as i64 + challenger_delta).max(100) as u32;
     let new_defender = (defender_elo as i64 + defender_delta).max(100) as u32;

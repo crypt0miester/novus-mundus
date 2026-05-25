@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Combat events - PvP and PvE combat outcomes
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player attacks another player (PvP)
 pub struct PlayerAttacked {

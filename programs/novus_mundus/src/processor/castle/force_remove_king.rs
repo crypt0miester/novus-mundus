@@ -1,4 +1,5 @@
-    //! Force Remove King - DAO forcibly removes a king
+
+//! Force Remove King - DAO forcibly removes a king
 //!
 //! Instruction 287
 //!
@@ -7,24 +8,19 @@
 //! to make castle vacant.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::CASTLE_STATUS_TRANSITIONING,
     emit,
     error::GameError,
     events::KingForceRemoved,
-    state::{
-        CastleAccount, KingRegistryAccount, PlayerAccount, GameEngine,
-        player::NULL_PUBKEY,
-    },
-    constants::CASTLE_STATUS_TRANSITIONING,
-    validation::require_owner,
+    state::{player::NULL_PUBKEY, CastleAccount, GameEngine, KingRegistryAccount, PlayerAccount},
     utils::read_u16,
+    validation::require_owner,
 };
 
 /// Force Remove King instruction data
@@ -44,13 +40,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        dao_authority,
-        game_engine_account,
-        castle_account,
-        king_account,
-        king_registry,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            dao_authority,
+            game_engine_account,
+            castle_account,
+            king_account,
+            king_registry,
+        ]
+    );
 
     // Verify signer
     if !dao_authority.is_signer() {
@@ -70,7 +69,7 @@ pub fn process(
     let castle_id = read_u16(instruction_data, 2, "castle_id")?;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle has a king (is not vacant)
     if castle.king == NULL_PUBKEY {
@@ -130,7 +129,6 @@ pub fn process(
         removed_king_name: king_name,
         timestamp: now,
     });
-
 
     Ok(())
 }

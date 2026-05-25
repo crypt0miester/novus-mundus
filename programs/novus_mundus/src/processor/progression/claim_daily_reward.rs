@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    logic::{grant_xp_with_time_bonus, calculate_daily_rewards, safe_math::apply_bp_bonus},
-    state::{PlayerAccount, GameEngine},
-    validation::{require_signer, require_writable},
     emit,
-    events::{DailyRewardClaimed, XpGained, PlayerLeveledUp},
+    error::GameError,
+    events::{DailyRewardClaimed, PlayerLeveledUp, XpGained},
+    logic::{calculate_daily_rewards, grant_xp_with_time_bonus, safe_math::apply_bp_bonus},
+    state::{GameEngine, PlayerAccount},
+    validation::{require_signer, require_writable},
 };
 
 /// Claim daily reward
@@ -44,7 +42,7 @@ pub fn process(
 
     // 2. Validate Accounts
 
-    require_signer(player_owner)?;  // CRITICAL: Prevents anyone claiming rewards for others
+    require_signer(player_owner)?; // CRITICAL: Prevents anyone claiming rewards for others
     require_writable(player_owner)?;
     require_writable(player_account)?;
 
@@ -111,12 +109,10 @@ pub fn process(
     // 9. Grant Rewards
 
     // Cash reward
-    player_data.cash_on_hand = player_data.cash_on_hand
-        .saturating_add(rewards.cash);
+    player_data.cash_on_hand = player_data.cash_on_hand.saturating_add(rewards.cash);
 
     // Produce reward
-    player_data.produce = player_data.produce
-        .saturating_add(rewards.produce);
+    player_data.produce = player_data.produce.saturating_add(rewards.produce);
 
     // XP reward (also handles level-ups) - with time-of-day bonus!
     // Golden hours (Dawn/Dusk) grant φ² bonus, night grants √φ bonus

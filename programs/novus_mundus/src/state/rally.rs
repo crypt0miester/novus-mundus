@@ -1,8 +1,5 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
-};
-use crate::constants::{RALLY_SEED, RALLY_PARTICIPANT_SEED};
+use crate::constants::{RALLY_PARTICIPANT_SEED, RALLY_SEED};
+use pinocchio::{error::ProgramError, Address};
 
 // Rally Status
 
@@ -59,29 +56,29 @@ pub struct RallyAccount {
     pub account_key: u8,
 
     // Kingdom Reference (32 bytes)
-    pub game_engine: Address,                // Kingdom this rally belongs to
+    pub game_engine: Address, // Kingdom this rally belongs to
 
     // Identity (48 bytes)
-    pub id: u64,                            // Unique rally ID
-    pub creator: Address,                    // Rally leader (created it)
-    pub team: Address,                       // Team this rally belongs to
+    pub id: u64,          // Unique rally ID
+    pub creator: Address, // Rally leader (created it)
+    pub team: Address,    // Team this rally belongs to
 
     // Location (8 bytes)
-    pub rally_city: u16,                    // City where rally gathers
-    pub target_city: u16,                   // City where target is
-    pub target_type: u8,                    // 0 = player, 1 = encounter
+    pub rally_city: u16,  // City where rally gathers
+    pub target_city: u16, // City where target is
+    pub target_type: u8,  // 0 = player, 1 = encounter
     pub _padding1: [u8; 3],
 
     // Target (32 bytes)
-    pub target: Address,                     // Target player or encounter
+    pub target: Address, // Target player or encounter
 
     // Timing (48 bytes)
-    pub created_at: i64,                    // When rally was created
-    pub gather_at: i64,                     // Deadline to arrive at rally point
-    pub execute_at: i64,                    // Legacy: when rally executes (= gather_at for compatibility)
-    pub march_started_at: i64,              // When march began (0 if not started)
-    pub arrive_at: i64,                     // When army arrives at target
-    pub march_duration: i32,                // March duration in seconds
+    pub created_at: i64,       // When rally was created
+    pub gather_at: i64,        // Deadline to arrive at rally point
+    pub execute_at: i64,       // Legacy: when rally executes (= gather_at for compatibility)
+    pub march_started_at: i64, // When march began (0 if not started)
+    pub arrive_at: i64,        // When army arrives at target
+    pub march_duration: i32,   // March duration in seconds
     pub _padding2: [u8; 4],
 
     // Leader's buffs - apply to entire rally damage (16 bytes)
@@ -95,34 +92,34 @@ pub struct RallyAccount {
     pub _padding3: [u8; 2],
 
     // Participants (8 bytes)
-    pub min_participants: u8,               // Minimum required to start
-    pub max_participants: u8,               // Maximum allowed
-    pub participant_count: u8,              // Current joined count
-    pub arrived_count: u8,                  // How many arrived at rally point
-    pub marched_count: u8,                  // How many included in march
-    pub returned_count: u8,                 // How many have returned home
+    pub min_participants: u8,  // Minimum required to start
+    pub max_participants: u8,  // Maximum allowed
+    pub participant_count: u8, // Current joined count
+    pub arrived_count: u8,     // How many arrived at rally point
+    pub marched_count: u8,     // How many included in march
+    pub returned_count: u8,    // How many have returned home
     pub _padding4: [u8; 2],
 
     // Aggregated totals (40 bytes)
-    pub total_units: u64,                   // Sum of all committed units
-    pub total_melee_weapons: u64,           // Sum of all committed melee
-    pub total_ranged_weapons: u64,          // Sum of all committed ranged
-    pub total_siege_weapons: u64,           // Sum of all committed siege
-    pub total_power: u64,                   // Calculated attack power
+    pub total_units: u64,          // Sum of all committed units
+    pub total_melee_weapons: u64,  // Sum of all committed melee
+    pub total_ranged_weapons: u64, // Sum of all committed ranged
+    pub total_siege_weapons: u64,  // Sum of all committed siege
+    pub total_power: u64,          // Calculated attack power
 
     // Combat results (24 bytes)
-    pub total_casualties: u64,              // Total units lost
-    pub attack_damage_dealt: u64,           // Damage dealt to target
-    pub defense_damage_received: u64,       // Damage received from target
+    pub total_casualties: u64,        // Total units lost
+    pub attack_damage_dealt: u64,     // Damage dealt to target
+    pub defense_damage_received: u64, // Damage received from target
 
     // Resource loot (16 bytes)
-    pub total_loot_cash: u64,               // Cash looted from target
-    pub total_loot_locked_novi: u64,        // Locked NOVI looted
+    pub total_loot_cash: u64,        // Cash looted from target
+    pub total_loot_locked_novi: u64, // Locked NOVI looted
 
     // Weapon loot (24 bytes)
-    pub total_loot_melee: u64,              // Melee weapons looted
-    pub total_loot_ranged: u64,             // Ranged weapons looted
-    pub total_loot_siege: u64,              // Siege weapons looted/captured
+    pub total_loot_melee: u64,  // Melee weapons looted
+    pub total_loot_ranged: u64, // Ranged weapons looted
+    pub total_loot_siege: u64,  // Siege weapons looted/captured
 
     // Other loot (32 bytes)
     pub total_loot_produce: u64,
@@ -131,9 +128,9 @@ pub struct RallyAccount {
     pub total_loot_gems: u64,
 
     // Status (8 bytes)
-    pub status: u8,                         // RallyStatus enum
-    pub fallback_triggered: bool,           // True if target had no garrison
-    pub attacker_won: bool,                 // True if rally won the battle
+    pub status: u8,               // RallyStatus enum
+    pub fallback_triggered: bool, // True if target had no garrison
+    pub attacker_won: bool,       // True if rally won the battle
     pub bump: u8,
     pub _padding5: [u8; 4],
 }
@@ -179,9 +176,8 @@ impl RallyAccount {
 
     /// Check if rally can be closed
     pub fn can_close(&self) -> bool {
-        (self.status == RallyStatus::Completed as u8 ||
-         self.status == RallyStatus::Cancelled as u8) &&
-        self.all_returned()
+        (self.status == RallyStatus::Completed as u8 || self.status == RallyStatus::Cancelled as u8)
+            && self.all_returned()
     }
 
     /// Get status as enum
@@ -207,19 +203,36 @@ impl RallyAccount {
     /// Seeds: [RALLY_SEED, game_engine, creator, rally_id]
     pub fn derive_pda(game_engine: &Address, creator: &Address, rally_id: u64) -> (Address, u8) {
         pinocchio::Address::find_program_address(
-            &[RALLY_SEED, game_engine.as_ref(), creator.as_ref(), &rally_id.to_le_bytes()],
+            &[
+                RALLY_SEED,
+                game_engine.as_ref(),
+                creator.as_ref(),
+                &rally_id.to_le_bytes(),
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Address, creator: &Address, rally_id: u64, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        creator: &Address,
+        rally_id: u64,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let rally_id_bytes = rally_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[RALLY_SEED, game_engine.as_ref(), creator.as_ref(), &rally_id_bytes, &bump_seed],
+            &[
+                RALLY_SEED,
+                game_engine.as_ref(),
+                creator.as_ref(),
+                &rally_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a RallyAccount immutably.
@@ -230,30 +243,23 @@ impl RallyAccount {
         creator: &Address,
         rally_id: u64,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, creator, rally_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "RallyAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Rally)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::Rally, "RallyAccount")?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "RallyAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "RallyAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a RallyAccount mutably.
@@ -264,30 +270,23 @@ impl RallyAccount {
         creator: &Address,
         rally_id: u64,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, creator, rally_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "RallyAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Rally)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(account, super::AccountKey::Rally, "RallyAccount")?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "RallyAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "RallyAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Check if rally belongs to a specific kingdom
@@ -312,12 +311,12 @@ pub struct RallyParticipant {
     pub account_key: u8,
 
     // Identity (48 bytes)
-    pub rally_id: u64,                      // Which rally
-    pub rally_creator: Address,              // Rally creator (for PDA derivation)
-    pub participant: Address,                // This participant's wallet
+    pub rally_id: u64,          // Which rally
+    pub rally_creator: Address, // Rally creator (for PDA derivation)
+    pub participant: Address,   // This participant's wallet
 
     // Home location (4 bytes)
-    pub home_city: u16,                     // Where to return after rally
+    pub home_city: u16, // Where to return after rally
     pub _padding1: [u8; 2],
 
     // Units COMMITTED - deducted from player at join (24 bytes)
@@ -341,20 +340,20 @@ pub struct RallyParticipant {
     pub _padding2: [u8; 2],
 
     // Hero (40 bytes)
-    pub hero: Address,                       // Committed hero (NULL_PUBKEY if none)
-    pub hero_power_contribution: u64,       // Hero's power contribution
+    pub hero: Address,                // Committed hero (NULL_PUBKEY if none)
+    pub hero_power_contribution: u64, // Hero's power contribution
 
     // Travel to rally point (24 bytes)
-    pub travel_started_at: i64,             // When started traveling to rally
-    pub arrives_at_rally: i64,              // When they'll arrive at rally point
-    pub travel_duration: i32,               // Travel duration in seconds
+    pub travel_started_at: i64, // When started traveling to rally
+    pub arrives_at_rally: i64,  // When they'll arrive at rally point
+    pub travel_duration: i32,   // Travel duration in seconds
     pub _padding3: [u8; 4],
 
     // Status flags (8 bytes)
-    pub arrived_at_rally: bool,             // Has arrived at rally point?
-    pub included_in_march: bool,            // Was included in the march?
-    pub returned: bool,                     // Has returned home?
-    pub is_leader: bool,                    // Is this the rally leader?
+    pub arrived_at_rally: bool,  // Has arrived at rally point?
+    pub included_in_march: bool, // Was included in the march?
+    pub returned: bool,          // Has returned home?
+    pub is_leader: bool,         // Is this the rally leader?
     pub _padding4: [u8; 4],
 
     // Combat casualties (24 bytes)
@@ -378,13 +377,13 @@ pub struct RallyParticipant {
     pub loot_gems: u64,
 
     // Return journey (16 bytes)
-    pub return_started_at: i64,             // When return journey started
-    pub return_duration: i32,               // Return trip duration
+    pub return_started_at: i64, // When return journey started
+    pub return_duration: i32,   // Return trip duration
     pub _padding5: [u8; 4],
 
     // Contribution tracking (16 bytes)
-    pub contribution_power: u64,            // Total power contributed
-    pub contribution_bps: u16,              // Percentage of rally power (for loot share)
+    pub contribution_power: u64, // Total power contributed
+    pub contribution_bps: u16,   // Percentage of rally power (for loot share)
     pub bump: u8,
     pub _padding6: [u8; 5],
 }
@@ -443,15 +442,21 @@ impl RallyParticipant {
     pub fn weapons_returned(&self) -> (u64, u64, u64) {
         let total_units = self.total_units();
         if total_units == 0 {
-            return (self.melee_weapons_committed, self.ranged_weapons_committed, self.siege_weapons_committed);
+            return (
+                self.melee_weapons_committed,
+                self.ranged_weapons_committed,
+                self.siege_weapons_committed,
+            );
         }
 
         let surviving = self.total_surviving_units();
         let survival_ratio_bps = ((surviving as u128 * 10000) / total_units as u128) as u64;
 
         // Melee and ranged proportional to survival
-        let melee_returned = (self.melee_weapons_committed as u128 * survival_ratio_bps as u128 / 10000) as u64;
-        let ranged_returned = (self.ranged_weapons_committed as u128 * survival_ratio_bps as u128 / 10000) as u64;
+        let melee_returned =
+            (self.melee_weapons_committed as u128 * survival_ratio_bps as u128 / 10000) as u64;
+        let ranged_returned =
+            (self.ranged_weapons_committed as u128 * survival_ratio_bps as u128 / 10000) as u64;
         // Siege is consumed during combat - calculated separately
         let siege_returned = 0u64; // Siege consumed in execute
 
@@ -485,7 +490,12 @@ impl RallyParticipant {
 
     /// Derive the PDA for a rally participant account
     /// Seeds: [RALLY_PARTICIPANT_SEED, game_engine, rally_creator, rally_id, participant]
-    pub fn derive_pda(game_engine: &Address, rally_creator: &Address, rally_id: u64, participant: &Address) -> (Address, u8) {
+    pub fn derive_pda(
+        game_engine: &Address,
+        rally_creator: &Address,
+        rally_id: u64,
+        participant: &Address,
+    ) -> (Address, u8) {
         pinocchio::Address::find_program_address(
             &[
                 RALLY_PARTICIPANT_SEED,
@@ -518,7 +528,8 @@ impl RallyParticipant {
                 &bump_seed,
             ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a RallyParticipant immutably.
@@ -529,26 +540,22 @@ impl RallyParticipant {
         rally_id: u64,
         participant: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let (expected_pda, bump) = Self::derive_pda(game_engine, rally_creator, rally_id, participant);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        let (expected_pda, bump) =
+            Self::derive_pda(game_engine, rally_creator, rally_id, participant);
+        crate::validation::require_pda_eq(account, &expected_pda, "RallyParticipant")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::RallyParticipant)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::RallyParticipant,
+                "RallyParticipant",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "RallyParticipant", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify a RallyParticipant mutably.
@@ -559,26 +566,22 @@ impl RallyParticipant {
         rally_id: u64,
         participant: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let (expected_pda, bump) = Self::derive_pda(game_engine, rally_creator, rally_id, participant);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        let (expected_pda, bump) =
+            Self::derive_pda(game_engine, rally_creator, rally_id, participant);
+        crate::validation::require_pda_eq(account, &expected_pda, "RallyParticipant")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::RallyParticipant)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::RallyParticipant,
+                "RallyParticipant",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "RallyParticipant", account)?;
+        Ok(loaded)
     }
 }
 

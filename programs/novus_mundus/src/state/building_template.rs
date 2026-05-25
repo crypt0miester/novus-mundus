@@ -1,12 +1,8 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    error::ProgramError,
-};
 use crate::constants::BUILDING_TEMPLATE_SEED;
 use crate::error::GameError;
 use crate::logic::safe_math::exp_growth;
 use crate::state::AccountKey;
+use pinocchio::{error::ProgramError, AccountView, Address};
 
 /// Building Template — DAO-controlled cost/time configuration for one
 /// `BuildingType`. One PDA per building type (seed `building_template` + the
@@ -65,7 +61,8 @@ impl BuildingTemplate {
         pinocchio::Address::create_program_address(
             &[BUILDING_TEMPLATE_SEED, &[building_type], &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// NOVI cost of an action performed at `level`.
@@ -74,8 +71,13 @@ impl BuildingTemplate {
     /// `base x (cost_growth_bps/10_000)^L`, per-step integer floor — exactly
     /// the previous `cost x 2618 / 1000` per-level loop (26_180/10_000 == 2618/1000).
     pub fn calculate_construction_cost(&self, level: u8) -> u64 {
-        exp_growth(self.base_novi_cost, self.cost_growth_bps as u64, 10_000, level as u32)
-            .unwrap_or(u64::MAX)
+        exp_growth(
+            self.base_novi_cost,
+            self.cost_growth_bps as u64,
+            10_000,
+            level as u32,
+        )
+        .unwrap_or(u64::MAX)
     }
 
     /// Construction time in seconds for an action performed at `level`.
@@ -88,7 +90,8 @@ impl BuildingTemplate {
             self.time_growth_bps as u64,
             10_000,
             (level / 5) as u32,
-        ).unwrap_or(i64::MAX as u64);
+        )
+        .unwrap_or(i64::MAX as u64);
         time.min(i64::MAX as u64) as i64
     }
 

@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Token events - NOVI operations (withdraw, reserved to claimed)
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when reserved NOVI is moved to locked
 pub struct NoviReservedToLocked {

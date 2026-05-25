@@ -5,17 +5,12 @@
 //! DAO-only instruction to update castle configuration parameters
 //! such as reward rates, upgrade costs, and other settings.
 
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::{
     error::GameError,
     state::{CastleAccount, GameEngine},
-    utils::{read_u8, read_u16, read_u64},
+    utils::{read_u16, read_u64, read_u8},
 };
 
 /// Update Castle Config instruction data
@@ -41,11 +36,10 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        dao_authority,
-        game_engine_account,
-        castle_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [dao_authority, game_engine_account, castle_account,]
+    );
 
     // Verify signer
     if !dao_authority.is_signer() {
@@ -68,16 +62,16 @@ pub fn process(
     let config_type = instruction_data[0];
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     match config_type {
         CONFIG_REWARD_RATES => {
             // 6 consecutive u64 reward rates starting at byte 1. Each read_u64
             // bounds-checks its own slice, so a short buffer fails cleanly.
-            castle.king_novi_per_day   = read_u64(instruction_data, 1,  "king_novi")?;
-            castle.king_cash_per_day   = read_u64(instruction_data, 9,  "king_cash")?;
-            castle.court_novi_per_day  = read_u64(instruction_data, 17, "court_novi")?;
-            castle.court_cash_per_day  = read_u64(instruction_data, 25, "court_cash")?;
+            castle.king_novi_per_day = read_u64(instruction_data, 1, "king_novi")?;
+            castle.king_cash_per_day = read_u64(instruction_data, 9, "king_cash")?;
+            castle.court_novi_per_day = read_u64(instruction_data, 17, "court_novi")?;
+            castle.court_cash_per_day = read_u64(instruction_data, 25, "court_cash")?;
             castle.member_novi_per_day = read_u64(instruction_data, 33, "member_novi")?;
             castle.member_cash_per_day = read_u64(instruction_data, 41, "member_cash")?;
         }

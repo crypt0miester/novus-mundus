@@ -17,22 +17,22 @@
 //! - week_number: u16 (2 bytes)
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    constants::{PRIZE_DISTRIBUTION, GAME_ENGINE_SEED},
-    error::GameError,
-    state::{PlayerAccount, DungeonLeaderboard, GameEngine},
-    validation::{require_signer, require_writable, require_owner, require_key_match, require_data_len},
-    helpers::{mint_tokens, validate_token_account_owner},
-    utils::read_u16,
+    constants::{GAME_ENGINE_SEED, PRIZE_DISTRIBUTION},
     emit,
+    error::GameError,
     events::DungeonLeaderboardPrizeClaimed,
+    helpers::{mint_tokens, validate_token_account_owner},
+    state::{DungeonLeaderboard, GameEngine, PlayerAccount},
+    utils::read_u16,
+    validation::{
+        require_data_len, require_key_match, require_owner, require_signer, require_writable,
+    },
 };
 
 /// Seconds per week (7 days)
@@ -93,12 +93,18 @@ pub fn process(
     }
 
     // 5. Load player (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.address(), owner.address(), program_id)?;
+    let player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 6. Load and validate leaderboard PDA (kingdom-scoped)
     require_owner(leaderboard_account, program_id)?;
 
-    let (expected_pda, lb_bump) = DungeonLeaderboard::derive_pda(game_engine.address(), dungeon_id, week_number);
+    let (expected_pda, lb_bump) =
+        DungeonLeaderboard::derive_pda(game_engine.address(), dungeon_id, week_number);
     if leaderboard_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -118,7 +124,8 @@ pub fn process(
     }
 
     // 7. Find player's rank on leaderboard
-    let rank = leaderboard.find_rank(player_account.address())
+    let rank = leaderboard
+        .find_rank(player_account.address())
         .ok_or(GameError::NotOnLeaderboard)?;
 
     // Check if already claimed
@@ -128,7 +135,8 @@ pub fn process(
 
     // 8. Calculate prize based on rank
     let prize_bps = PRIZE_DISTRIBUTION[rank] as u64;
-    let prize_amount = leaderboard.prize_pool
+    let prize_amount = leaderboard
+        .prize_pool
         .saturating_mul(prize_bps)
         .checked_div(10_000)
         .unwrap_or(0);
@@ -151,7 +159,6 @@ pub fn process(
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
     let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::cpi::Signer::from(&seeds);
-    drop(game_engine_data);
 
     // 11. Mint NOVI tokens to player's token account
     if prize_amount > 0 {
@@ -166,8 +173,6 @@ pub fn process(
         // Update player's locked_novi balance
         player.locked_novi = player.locked_novi.saturating_add(prize_amount);
     }
-
-    drop(player);
 
     // 12. Emit event
     emit!(DungeonLeaderboardPrizeClaimed {

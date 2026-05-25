@@ -1,19 +1,17 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::GAME_ENGINE_SEED,
-    error::GameError,
-    state::{EstateAccount, GameEngine, PlayerAccount},
-    helpers::{estate::require_mansion, mint_tokens, validate_token_account_owner},
-    validation::{require_signer, require_writable, require_owner, require_key_match},
-    logic::safe_math::apply_bp_bonus,
     emit,
+    error::GameError,
     events::estate::EstateDailyClaimed,
+    helpers::{estate::require_mansion, mint_tokens, validate_token_account_owner},
+    logic::safe_math::apply_bp_bonus,
+    state::{EstateAccount, GameEngine, PlayerAccount},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// Daily Login Claim (Mansion)
@@ -135,48 +133,42 @@ pub fn process(
     let base_xp: u64 = 10;
 
     // Apply mansion bonus then streak multiplier
-    let materials_with_mansion = apply_bp_bonus(base_materials, mansion_bonus_bps)
-        .unwrap_or(base_materials);
-    let novi_with_mansion = apply_bp_bonus(base_novi, mansion_bonus_bps)
-        .unwrap_or(base_novi);
-    let xp_with_mansion = apply_bp_bonus(base_xp, mansion_bonus_bps)
-        .unwrap_or(base_xp);
+    let materials_with_mansion =
+        apply_bp_bonus(base_materials, mansion_bonus_bps).unwrap_or(base_materials);
+    let novi_with_mansion = apply_bp_bonus(base_novi, mansion_bonus_bps).unwrap_or(base_novi);
+    let xp_with_mansion = apply_bp_bonus(base_xp, mansion_bonus_bps).unwrap_or(base_xp);
 
     // Apply streak multiplier (already in bps where 10000 = 1.0x)
-    let final_materials = materials_with_mansion
-        .saturating_mul(streak_multiplier_bps as u64) / 10000;
-    let final_novi = novi_with_mansion
-        .saturating_mul(streak_multiplier_bps as u64) / 10000;
-    let final_xp = xp_with_mansion
-        .saturating_mul(streak_multiplier_bps as u64) / 10000;
+    let final_materials =
+        materials_with_mansion.saturating_mul(streak_multiplier_bps as u64) / 10000;
+    let final_novi = novi_with_mansion.saturating_mul(streak_multiplier_bps as u64) / 10000;
+    let final_xp = xp_with_mansion.saturating_mul(streak_multiplier_bps as u64) / 10000;
 
     // Apply permanent bonus from 180-day milestone
     let final_materials = if estate_data.permanent_bonus_bps > 0 {
-        apply_bp_bonus(final_materials, estate_data.permanent_bonus_bps)
-            .unwrap_or(final_materials)
+        apply_bp_bonus(final_materials, estate_data.permanent_bonus_bps).unwrap_or(final_materials)
     } else {
         final_materials
     };
     let final_novi = if estate_data.permanent_bonus_bps > 0 {
-        apply_bp_bonus(final_novi, estate_data.permanent_bonus_bps)
-            .unwrap_or(final_novi)
+        apply_bp_bonus(final_novi, estate_data.permanent_bonus_bps).unwrap_or(final_novi)
     } else {
         final_novi
     };
     let final_xp = if estate_data.permanent_bonus_bps > 0 {
-        apply_bp_bonus(final_xp, estate_data.permanent_bonus_bps)
-            .unwrap_or(final_xp)
+        apply_bp_bonus(final_xp, estate_data.permanent_bonus_bps).unwrap_or(final_xp)
     } else {
         final_xp
     };
 
     // 10. Grant rewards
-    player_data.set_common_materials(player_data.common_materials()
-        .saturating_add(final_materials));
-    player_data.locked_novi = player_data.locked_novi
-        .saturating_add(final_novi);
-    player_data.current_xp = player_data.current_xp
-        .saturating_add(final_xp);
+    player_data.set_common_materials(
+        player_data
+            .common_materials()
+            .saturating_add(final_materials),
+    );
+    player_data.locked_novi = player_data.locked_novi.saturating_add(final_novi);
+    player_data.current_xp = player_data.current_xp.saturating_add(final_xp);
 
     // 11. Check for milestone rewards (one-time)
     let streak = estate_data.login_streak;
@@ -208,7 +200,6 @@ pub fn process(
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
         let signer = pinocchio::cpi::Signer::from(&seeds);
-        drop(game_engine_data);
 
         mint_tokens(
             novi_mint,

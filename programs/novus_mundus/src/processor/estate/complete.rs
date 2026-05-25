@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus},
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::estate::BuildingCompleted,
+    state::{BuildingStatus, BuildingType, EstateAccount, PlayerAccount},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Complete Building Construction/Upgrade
@@ -50,8 +48,8 @@ pub fn process(
     if instruction_data.is_empty() {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let building_type = BuildingType::from_u8(instruction_data[0])
-        .ok_or(ProgramError::InvalidInstructionData)?;
+    let building_type =
+        BuildingType::from_u8(instruction_data[0]).ok_or(ProgramError::InvalidInstructionData)?;
 
     // 4. Load Accounts
     let player_data_ref = player_account.try_borrow()?;
@@ -74,7 +72,9 @@ pub fn process(
 
     // 7. Find the building slot index first
     let max_slots = estate_data.max_slots();
-    let slot_index = estate_data.buildings.iter()
+    let slot_index = estate_data
+        .buildings
+        .iter()
         .take(max_slots)
         .enumerate()
         .find(|(_, b)| b.building_type == building_type as u8 && !b.is_empty())

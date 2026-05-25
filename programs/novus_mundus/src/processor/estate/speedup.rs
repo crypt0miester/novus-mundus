@@ -1,20 +1,18 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     error::GameError,
-    state::{PlayerAccount, GameEngine, EstateAccount, BuildingStatus, BuildingType},
+    state::{BuildingStatus, BuildingType, EstateAccount, GameEngine, PlayerAccount},
     utils::read_u8,
 };
 
 /// Speed-up tiers for building construction
-pub const SPEEDUP_TIER_1: u8 = 1;  // 50% of time remains
-pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
+pub const SPEEDUP_TIER_1: u8 = 1; // 50% of time remains
+pub const SPEEDUP_TIER_2: u8 = 2; // 25% of time remains
 
 /// Speed up building construction/upgrade by spending gems
 ///
@@ -50,8 +48,8 @@ pub fn process(
     let building_type_u8 = read_u8(instruction_data, 0, "estate_speedup.building_type")?;
     let speedup_tier = read_u8(instruction_data, 1, "estate_speedup.speedup_tier")?;
 
-    let building_type = BuildingType::from_u8(building_type_u8)
-        .ok_or(ProgramError::InvalidInstructionData)?;
+    let building_type =
+        BuildingType::from_u8(building_type_u8).ok_or(ProgramError::InvalidInstructionData)?;
 
     if speedup_tier < SPEEDUP_TIER_1 || speedup_tier > SPEEDUP_TIER_2 {
         return Err(GameError::InvalidParameter.into());
@@ -64,11 +62,22 @@ pub fn process(
 
     // 4. Load Accounts
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
-    let mut estate_data = EstateAccount::load_checked_mut(estate_account, player_account.address(), owner.address(), program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
+    let estate_data = EstateAccount::load_checked_mut(
+        estate_account,
+        player_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 5. Find the building
-    let building = estate_data.find_building_mut(building_type)
+    let building = estate_data
+        .find_building_mut(building_type)
         .ok_or(GameError::BuildingRequired)?;
 
     // 6. Validate building is under construction or upgrading

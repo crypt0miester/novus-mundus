@@ -1,28 +1,22 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::Transfer;
 use crate::{
+    emit,
     error::GameError,
+    events::shop::FlashSalePurchased,
     helpers::{
         add_to_inventory,
-        estate::{market_discount_bps, load_estate_for_player, require_market},
-        is_inventory_item_type,
-        process_token_payment_flow,
+        estate::{load_estate_for_player, market_discount_bps, require_market},
+        is_inventory_item_type, process_token_payment_flow,
     },
     state::{
-        GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus,
-        ShopItemAccount, BundleAccount, PlayerAccount, MAX_BUNDLE_ITEMS,
-        unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
+        require_extension, unlock_extension_if_eligible, BundleAccount, FlashSaleAccount,
+        FlashSaleStatus, GameEngine, PlayerAccount, ShopConfigAccount, ShopItemAccount,
+        EXT_INVENTORY, EXT_RESEARCH, MAX_BUNDLE_ITEMS,
     },
-    validation::{require_signer, require_writable, require_key_match, require_owner},
     utils::{read_u16, read_u64},
-    emit,
-    events::shop::FlashSalePurchased,
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::Transfer;
 
 /// Purchase from a flash sale
 ///
@@ -66,18 +60,21 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    crate::extract_accounts!(accounts, [
-        buyer,
-        player_account,
-        game_engine_account,
-        shop_config_account,
-        flash_sale_account,
-        item_or_bundle_account,
-        treasury,
-        inventory_account,
-        system_program,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            buyer,
+            player_account,
+            game_engine_account,
+            shop_config_account,
+            flash_sale_account,
+            item_or_bundle_account,
+            treasury,
+            inventory_account,
+            system_program,
+            estate_account,
+        ]
+    );
 
     // 2. Validate Accounts
 
@@ -95,7 +92,11 @@ pub fn process(
     let quantity = read_u16(instruction_data, 8, "purchase_flash_sale.quantity")? as u64;
 
     // Optional payment_type (default 0 = SOL, 2+ = Token)
-    let payment_type = if instruction_data.len() >= 11 { instruction_data[10] } else { 0 };
+    let payment_type = if instruction_data.len() >= 11 {
+        instruction_data[10]
+    } else {
+        0
+    };
 
     // Payment type 1 (formerly Gems) is no longer supported
     if payment_type == 1 {
@@ -159,7 +160,12 @@ pub fn process(
     // 7. Read Player for Validation and Discount Calculation (kingdom-scoped)
 
     let (fib_discount_bps, sub_discount_bps, milestone_discount_bps, streak_discount_bps) = {
-        let player = PlayerAccount::load_checked(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+        let player = PlayerAccount::load_checked(
+            player_account,
+            game_engine_account.address(),
+            buyer.address(),
+            program_id,
+        )?;
 
         // PREREQUISITE: Require EXT_RESEARCH to be unlocked before shopping
         require_extension(&*player, EXT_RESEARCH)?;
@@ -179,10 +185,8 @@ pub fn process(
 
     let (base_price, item_type, items_per_purchase) = if flash_sale.is_bundle {
         // Load bundle
-        let (expected_bundle, _) = BundleAccount::derive_pda(
-            game_engine_account.address(),
-            flash_sale.item_id,
-        );
+        let (expected_bundle, _) =
+            BundleAccount::derive_pda(game_engine_account.address(), flash_sale.item_id);
         if item_or_bundle_account.address() != &expected_bundle {
             return Err(GameError::InvalidAccount.into());
         }
@@ -195,10 +199,8 @@ pub fn process(
         (bundle.price_sol_lamports, 0u16, 1u64) // Bundle handled separately
     } else {
         // Load shop item
-        let (expected_item, _) = ShopItemAccount::derive_pda(
-            game_engine_account.address(),
-            flash_sale.item_id,
-        );
+        let (expected_item, _) =
+            ShopItemAccount::derive_pda(game_engine_account.address(), flash_sale.item_id);
         if item_or_bundle_account.address() != &expected_item {
             return Err(GameError::InvalidAccount.into());
         }
@@ -211,7 +213,11 @@ pub fn process(
             return Err(GameError::ItemNotAvailable.into());
         }
 
-        (item.price_sol_lamports, item.item_type, item.quantity_per_purchase as u64)
+        (
+            item.price_sol_lamports,
+            item.item_type,
+            item.quantity_per_purchase as u64,
+        )
     };
 
     if base_price == 0 {
@@ -225,7 +231,12 @@ pub fn process(
 
     // HARD GATE: Require Market building to use shop
     // Need to load player again for estate ownership verification
-    let player_for_estate = PlayerAccount::load_checked(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+    let player_for_estate = PlayerAccount::load_checked(
+        player_account,
+        game_engine_account.address(),
+        buyer.address(),
+        program_id,
+    )?;
     let estate = load_estate_for_player(estate_account, &*player_for_estate, program_id)?;
     require_market(estate, 1)?;
 
@@ -233,12 +244,11 @@ pub fn process(
     let building_discount = market_discount_bps(estate);
     let daily_discount = estate.market_discount_bps;
     let market_bonus_bps = building_discount.saturating_add(daily_discount);
-    drop(player_for_estate);
 
     let final_price = calculate_final_price(
         total_base,
-        flash_discount_bps,  // base discount (flash sale discount)
-        0,                   // bundle discount (not applicable)
+        flash_discount_bps, // base discount (flash sale discount)
+        0,                  // bundle discount (not applicable)
         fib_discount_bps,
         sub_discount_bps,
         milestone_discount_bps,
@@ -255,7 +265,8 @@ pub fn process(
             from: buyer,
             to: treasury,
             lamports: final_price,
-        }.invoke()?;
+        }
+        .invoke()?;
     } else {
         // Token payment (payment_type >= 2)
         // Token accounts come after the base 10 accounts
@@ -295,7 +306,12 @@ pub fn process(
         // Two-pass fulfillment to avoid borrow conflicts:
         // Pass 1: Fulfill non-inventory items (needs mutable player)
         {
-            let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+            let player = PlayerAccount::load_checked_mut(
+                player_account,
+                game_engine_account.address(),
+                buyer.address(),
+                program_id,
+            )?;
             for i in 0..item_count {
                 let bundle_item = &bundle.items[i];
                 if bundle_item.quantity == 0 {
@@ -355,7 +371,12 @@ pub fn process(
         }
     } else {
         // Items that go directly to PlayerAccount fields
-        let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+        let player = PlayerAccount::load_checked_mut(
+            player_account,
+            game_engine_account.address(),
+            buyer.address(),
+            program_id,
+        )?;
         fulfill_item(&mut *player, item_type, total_items)?;
     }
 
@@ -363,7 +384,9 @@ pub fn process(
 
     flash_sale.remaining_stock = flash_sale.remaining_stock.saturating_sub(quantity);
     flash_sale.total_claims = flash_sale.total_claims.saturating_add(quantity);
-    flash_sale.total_revenue_lamports = flash_sale.total_revenue_lamports.saturating_add(final_price);
+    flash_sale.total_revenue_lamports = flash_sale
+        .total_revenue_lamports
+        .saturating_add(final_price);
 
     if flash_sale.remaining_stock == 0 {
         flash_sale.status = FlashSaleStatus::SoldOut as u8;
@@ -373,7 +396,12 @@ pub fn process(
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
     // 14. Update Player Shop State
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+    let player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        buyer.address(),
+        program_id,
+    )?;
 
     update_player_shop_state(&mut *player, final_price, now, shop_config);
 
@@ -394,7 +422,7 @@ pub fn process(
 // HELPER FUNCTIONS
 
 use super::common::{
-    calculate_final_price, calculate_fib_bonus, calculate_milestone_discount,
+    calculate_fib_bonus, calculate_final_price, calculate_milestone_discount,
     calculate_milestone_tier, calculate_streak_discount, calculate_subscription_discount,
     fulfill_item,
 };
@@ -407,7 +435,10 @@ fn update_player_shop_state(
     shop_config: &ShopConfigAccount,
 ) {
     player.set_total_shop_spent(player.total_shop_spent().saturating_add(final_price));
-    player.set_milestone_tier(calculate_milestone_tier(player.total_shop_spent(), shop_config));
+    player.set_milestone_tier(calculate_milestone_tier(
+        player.total_shop_spent(),
+        shop_config,
+    ));
     super::common::update_streak_and_daily(player, now);
     player.set_flash_claims_today(player.flash_claims_today().saturating_add(1));
 }

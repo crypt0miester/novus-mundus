@@ -1,47 +1,31 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, EncounterAccount, LootAccount, LootSourceType, LocationAccount, GameEngine},
-    constants::{LOOT_SEED, ENCOUNTER_ATTACK_RANGE_METERS, DAMAGE_PER_SIEGE_WEAPON},
-    types::{EncounterType, EventType},
-    logic::{
-        calculate_damage_output,
-        calculate_distance_meters,
-        calculate_networth,
-        regenerate_stamina,
-        consume_stamina,
-        grant_xp_with_time_bonus,
-        calculate_xp_reward,
-        XpAction,
-        calculate_encounter_loot_pool,
-        should_award_fragments,
-        should_award_gems,
-        calculate_fragment_amount,
-        calculate_gem_amount,
-        get_time_of_day,
-        get_time_multiplier,
-        apply_time_multiplier,
-        ActivityType,
-        safe_math::{apply_bp, apply_bp_bonus},
-    },
-    helpers::{close_account, event_scoring::update_event_score, estate::load_estate_for_player},
-    utils::read_u64,
-    validation::{
-        require_signer,
-        require_key_match,
-        require_writable,
-        require_owner,
-    },
+    constants::{DAMAGE_PER_SIEGE_WEAPON, ENCOUNTER_ATTACK_RANGE_METERS, LOOT_SEED},
     emit,
-    events::{EncounterAttacked, EncounterDefeated, XpGained, PlayerLeveledUp},
+    error::GameError,
+    events::{EncounterAttacked, EncounterDefeated, PlayerLeveledUp, XpGained},
+    helpers::{close_account, estate::load_estate_for_player, event_scoring::update_event_score},
+    logic::{
+        apply_time_multiplier, calculate_damage_output, calculate_distance_meters,
+        calculate_encounter_loot_pool, calculate_fragment_amount, calculate_gem_amount,
+        calculate_networth, calculate_xp_reward, consume_stamina, get_time_multiplier,
+        get_time_of_day, grant_xp_with_time_bonus, regenerate_stamina,
+        safe_math::{apply_bp, apply_bp_bonus},
+        should_award_fragments, should_award_gems, ActivityType, XpAction,
+    },
+    state::{
+        EncounterAccount, GameEngine, LocationAccount, LootAccount, LootSourceType, PlayerAccount,
+    },
+    types::{EncounterType, EventType},
+    utils::read_u64,
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// PvE combat - attack an encounter (NPC enemy)
@@ -93,25 +77,37 @@ pub fn process(
     // 8: base + event
     // 9: base + death (loot + encounter_location + location_creator_refund)
     // 11: base + event + death
-    crate::extract_accounts!(accounts, [
-        player,
-        encounter,
-        owner,
-        game_engine,
-        system_program,
-        estate_account,
-    ]);
-    let (event_participation, event, loot, encounter_location, location_creator_refund) = match accounts.len() {
-        11 => (Some(&accounts[6]), Some(&accounts[7]),
-              Some(&accounts[8]), Some(&accounts[9]), Some(&accounts[10])),
-        9 => (None, None,
-             Some(&accounts[6]), Some(&accounts[7]), Some(&accounts[8])),
-        8 => (Some(&accounts[6]), Some(&accounts[7]),
-             None, None, None),
-        6 => (None, None,
-             None, None, None),
-        _ => return Err(ProgramError::NotEnoughAccountKeys),
-    };
+    crate::extract_accounts!(
+        accounts,
+        [
+            player,
+            encounter,
+            owner,
+            game_engine,
+            system_program,
+            estate_account,
+        ]
+    );
+    let (event_participation, event, loot, encounter_location, location_creator_refund) =
+        match accounts.len() {
+            11 => (
+                Some(&accounts[6]),
+                Some(&accounts[7]),
+                Some(&accounts[8]),
+                Some(&accounts[9]),
+                Some(&accounts[10]),
+            ),
+            9 => (
+                None,
+                None,
+                Some(&accounts[6]),
+                Some(&accounts[7]),
+                Some(&accounts[8]),
+            ),
+            8 => (Some(&accounts[6]), Some(&accounts[7]), None, None, None),
+            6 => (None, None, None, None, None),
+            _ => return Err(ProgramError::NotEnoughAccountKeys),
+        };
 
     // 2. Validate signer
     require_signer(owner)?;
@@ -125,7 +121,12 @@ pub fn process(
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
     // 5. Load and verify player (kingdom-scoped)
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player,
+        game_engine.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 5a. Validate player not traveling (can't fight while moving)
     if player_data.is_traveling_any() {
@@ -139,7 +140,7 @@ pub fn process(
 
     // 6. Load encounter with standardized validation (kingdom-scoped)
     // Uses player's current_city - if encounter is in different city, PDA check fails
-    let mut encounter_data = EncounterAccount::load_checked_mut(
+    let encounter_data = EncounterAccount::load_checked_mut(
         encounter,
         game_engine.address(),
         player_data.current_city,
@@ -178,8 +179,8 @@ pub fn process(
     }
 
     // 11. Convert rarity to EncounterType and consume stamina
-    let encounter_type = EncounterType::from_rarity(encounter_data.rarity)
-        .ok_or(GameError::InvalidParameter)?;
+    let encounter_type =
+        EncounterType::from_rarity(encounter_data.rarity).ok_or(GameError::InvalidParameter)?;
 
     consume_stamina(&mut *player_data, encounter_type)?;
 
@@ -206,8 +207,11 @@ pub fn process(
 
     // Apply blessed hero bonus (+25% to hero attack if active)
     let boosted_hero_attack = if player_data.blessed_hero_bonus_bps() > 0 {
-        apply_bp_bonus(player_data.hero_attack_bps() as u64, player_data.blessed_hero_bonus_bps())
-            .unwrap_or(player_data.hero_attack_bps() as u64) as u16
+        apply_bp_bonus(
+            player_data.hero_attack_bps() as u64,
+            player_data.blessed_hero_bonus_bps(),
+        )
+        .unwrap_or(player_data.hero_attack_bps() as u64) as u16
     } else {
         player_data.hero_attack_bps()
     };
@@ -230,7 +234,9 @@ pub fn process(
             if matches!(stat, 1 | 7 | 14) {
                 match stat {
                     1 | 14 => hero_attack_bps_final = hero_attack_bps_final.saturating_add(bps),
-                    7      => hero_crit_chance_bps_final = hero_crit_chance_bps_final.saturating_add(bps),
+                    7 => {
+                        hero_crit_chance_bps_final = hero_crit_chance_bps_final.saturating_add(bps)
+                    }
                     _ => {}
                 }
                 player_data.clear_pending_effect();
@@ -266,8 +272,7 @@ pub fn process(
     // 13b. Apply Hero EncounterDamage bonus (PvE-specific multiplier, no u128!)
     // Formula: damage × (10000 + hero_encounter_damage_bps) / 10000
     let hero_damage = if player_data.hero_encounter_damage_bps() > 0 {
-        apply_bp_bonus(time_damage, player_data.hero_encounter_damage_bps())
-            .unwrap_or(time_damage)
+        apply_bp_bonus(time_damage, player_data.hero_encounter_damage_bps()).unwrap_or(time_damage)
     } else {
         time_damage
     };
@@ -276,8 +281,7 @@ pub fn process(
     // Barracks provides 5-15% unit effectiveness bonus
     let estate = load_estate_for_player(estate_account, &*player_data, program_id)?;
     let damage = if estate.unit_effectiveness_bps > 0 {
-        apply_bp_bonus(hero_damage, estate.unit_effectiveness_bps)
-            .unwrap_or(hero_damage)
+        apply_bp_bonus(hero_damage, estate.unit_effectiveness_bps).unwrap_or(hero_damage)
     } else {
         hero_damage
     };
@@ -324,19 +328,18 @@ pub fn process(
     // This prevents infinite siege use and creates strategic resource management
     if player_data.siege_weapons > 0 && actual_damage > 0 {
         // Calculate siege weapons consumed: damage / DAMAGE_PER_SIEGE_WEAPON (rounded up)
-        let siege_consumed = (actual_damage + DAMAGE_PER_SIEGE_WEAPON - 1) / DAMAGE_PER_SIEGE_WEAPON;
+        let siege_consumed =
+            (actual_damage + DAMAGE_PER_SIEGE_WEAPON - 1) / DAMAGE_PER_SIEGE_WEAPON;
         // Cap at available siege weapons
         let siege_consumed = siege_consumed.min(player_data.siege_weapons);
         player_data.siege_weapons = player_data.siege_weapons.saturating_sub(siege_consumed);
     }
 
     // 15. Calculate instant cash reward (deterministic: midpoint of 5-10 = 7.5, use 7)
-    let cash_per_damage = 7u64;  // Deterministic: midpoint of old 5-10 range
-    let instant_cash = actual_damage
-        .saturating_mul(cash_per_damage);
+    let cash_per_damage = 7u64; // Deterministic: midpoint of old 5-10 range
+    let instant_cash = actual_damage.saturating_mul(cash_per_damage);
 
-    player_data.cash_on_hand = player_data.cash_on_hand
-        .saturating_add(instant_cash);
+    player_data.cash_on_hand = player_data.cash_on_hand.saturating_add(instant_cash);
 
     // 16. Track attacker for ranking rewards (DYNAMIC REALLOC)
     // Add player to attackers list if not already present
@@ -345,7 +348,6 @@ pub fn process(
 
     // Drop encounter_data to release the RefMut before re-borrowing
     // The health mutation above is already persisted to account data
-    drop(encounter_data);
 
     // Check if player already attacked (now safe to borrow)
     let already_attacking = {
@@ -357,7 +359,9 @@ pub fn process(
     // Calculate if we need to realloc BEFORE doing it
     let needs_realloc = !already_attacking;
     let new_count = if needs_realloc {
-        old_attacker_count.checked_add(1).ok_or(GameError::EncounterFull)?
+        old_attacker_count
+            .checked_add(1)
+            .ok_or(GameError::EncounterFull)?
     } else {
         old_attacker_count
     };
@@ -390,7 +394,7 @@ pub fn process(
         // Add attacker pubkey to end of list and update count
         let mut encounter_data_full = encounter.try_borrow_mut()?;
         let offset = EncounterAccount::BASE_LEN + (old_attacker_count as usize * 32);
-        encounter_data_full[offset..offset+32].copy_from_slice(player_key.as_ref());
+        encounter_data_full[offset..offset + 32].copy_from_slice(player_key.as_ref());
 
         // Update count
         let encounter_data_mut = unsafe { EncounterAccount::load_mut(&mut encounter_data_full) };
@@ -408,19 +412,20 @@ pub fn process(
 
     // 17. Update player stats
     player_data.total_attacks = player_data.total_attacks.saturating_add(1);
-    player_data.total_attack_power = player_data.total_attack_power
-        .saturating_add(damage);
+    player_data.total_attack_power = player_data.total_attack_power.saturating_add(damage);
 
     // Count as encounter participation
-    player_data.total_encounter_attacks = player_data.total_encounter_attacks
-        .saturating_add(1);
+    player_data.total_encounter_attacks = player_data.total_encounter_attacks.saturating_add(1);
 
     // 18. Grant XP if encounter dies (with time-of-day bonus)
     // Golden hours (Dawn/Dusk) give φ² (2.618x) XP for enlightenment!
     let xp_gained = if encounter_data.health == 0 {
-        let base_xp = calculate_xp_reward(XpAction::DefeatEncounter { rarity: encounter_data.rarity });
+        let base_xp = calculate_xp_reward(XpAction::DefeatEncounter {
+            rarity: encounter_data.rarity,
+        });
         let old_level = player_data.level;
-        let (levels_gained, new_level, _) = grant_xp_with_time_bonus(&mut *player_data, base_xp, now)?;
+        let (levels_gained, new_level, _) =
+            grant_xp_with_time_bonus(&mut *player_data, base_xp, now)?;
 
         // Emit XP gained event
         emit!(XpGained {
@@ -514,7 +519,8 @@ pub fn process(
 
             // Get current loot_id and increment counter
             let loot_id = player_data.loot_counter;
-            player_data.loot_counter = player_data.loot_counter
+            player_data.loot_counter = player_data
+                .loot_counter
                 .checked_add(1)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -528,12 +534,8 @@ pub fn process(
             // Create loot account PDA with signer seeds
             let loot_bump_seed = [loot_bump];
             let loot_id_bytes = loot_id.to_le_bytes();
-            let loot_seeds = crate::seeds!(
-                LOOT_SEED,
-                player.address(),
-                &loot_id_bytes,
-                &loot_bump_seed
-            );
+            let loot_seeds =
+                crate::seeds!(LOOT_SEED, player.address(), &loot_id_bytes, &loot_bump_seed);
             let loot_signer = pinocchio::cpi::Signer::from(&loot_seeds);
 
             // CPI: Create loot account
@@ -543,7 +545,8 @@ pub fn process(
                 lamports: loot_lamports,
                 space: LootAccount::LEN as u64,
                 owner: program_id,
-            }.invoke_signed(&[loot_signer])?;
+            }
+            .invoke_signed(&[loot_signer])?;
 
             // Calculate fragments and gems based on player research
             let mut fragments = 0u64;
@@ -599,9 +602,7 @@ pub fn process(
 
             // Initialize loot data
             let mut loot_account_data_ref = loot_account.try_borrow_mut()?;
-            let loot_data = unsafe {
-                LootAccount::load_mut(&mut loot_account_data_ref)
-            };
+            let loot_data = unsafe { LootAccount::load_mut(&mut loot_account_data_ref) };
 
             // Split weapons by rarity: Melee 50%, Ranged 30%, Siege 20%
             // This reflects: melee=common, ranged=tactical, siege=rare+powerful
@@ -609,7 +610,7 @@ pub fn process(
             // Rounded shares (basis-points + half-step) so low counts don't bias siege.
             let melee_share = (total_weapons * 5000 + 5000) / 10000; // 50% rounded
             let ranged_share = (total_weapons * 3000 + 5000) / 10000; // 30% rounded
-            // Siege gets the remainder; clamp in case rounding pushed melee+ranged over total.
+                                                                      // Siege gets the remainder; clamp in case rounding pushed melee+ranged over total.
             let used = melee_share + ranged_share;
             let siege_share = total_weapons.saturating_sub(used);
 
@@ -706,7 +707,7 @@ pub fn process(
         }
 
         // Load event participation with ownership validation (kingdom-scoped)
-        let mut participation = crate::state::EventParticipation::load_checked_mut(
+        let participation = crate::state::EventParticipation::load_checked_mut(
             event_participation_acc,
             game_engine.address(),
             player_data.current_event,
@@ -715,7 +716,7 @@ pub fn process(
         )?;
 
         // Load event with ownership validation (kingdom-scoped)
-        let mut event_data = crate::state::EventAccount::load_checked_mut(
+        let event_data = crate::state::EventAccount::load_checked_mut(
             event_acc,
             game_engine.address(),
             player_data.current_event,

@@ -10,25 +10,22 @@
 //! - Fortress, Citadel: Mint to unlocked/reserved_novi (withdrawable)
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::{GAME_ENGINE_SEED, SECONDS_PER_DAY, TEAM_CASTLE_REWARD_SEED},
     emit,
     error::GameError,
     events::CastleRewardsClaimed,
-    state::{
-        CastleAccount, CastleTier, CourtPositionAccount, TeamCastleRewardAccount,
-        PlayerAccount, UserAccount, GameEngine,
-        calculate_reward, player::NULL_PUBKEY,
-    },
-    constants::{TEAM_CASTLE_REWARD_SEED, SECONDS_PER_DAY, GAME_ENGINE_SEED},
     helpers::{mint_tokens, validate_token_account_owner},
+    state::{
+        calculate_reward, player::NULL_PUBKEY, CastleAccount, CastleTier, CourtPositionAccount,
+        GameEngine, PlayerAccount, TeamCastleRewardAccount, UserAccount,
+    },
     validation::require_owner,
 };
 
@@ -67,13 +64,16 @@ pub fn process(
         return Err(ProgramError::NotEnoughAccountKeys);
     }
 
-    crate::extract_accounts!(accounts, [
-        player_wallet,
-        player_account,
-        castle_account,
-        reward_account,
-        _system_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_wallet,
+            player_account,
+            castle_account,
+            reward_account,
+            _system_program,
+        ]
+    );
     // accounts[5] is optional court position account
     let game_engine_account = &accounts[6];
     let novi_mint = &accounts[7];
@@ -109,44 +109,56 @@ pub fn process(
     }
 
     // Determine role and base rewards
-    let (role, base_novi, base_cash) = if tier.has_king() && castle.king == *player_account.address() {
-        // Player is the king (Citadel only)
-        (ROLE_KING, castle.king_novi_per_day, castle.king_cash_per_day)
-    } else if player.team_address() == castle.team && castle.team != NULL_PUBKEY {
-        // Check if court member (Citadel only)
-        let is_court = if tier.has_court() && accounts.len() > 5 {
-            let court_account = &accounts[5];
-            if unsafe { court_account.owner() } == program_id && court_account.data_len() > 0 {
-                let court_data = court_account.try_borrow()?;
-                let court = unsafe { CourtPositionAccount::load(&court_data) };
-                court.holder == *player_account.address() && court.castle == *castle_account.address()
+    let (role, base_novi, base_cash) =
+        if tier.has_king() && castle.king == *player_account.address() {
+            // Player is the king (Citadel only)
+            (
+                ROLE_KING,
+                castle.king_novi_per_day,
+                castle.king_cash_per_day,
+            )
+        } else if player.team_address() == castle.team && castle.team != NULL_PUBKEY {
+            // Check if court member (Citadel only)
+            let is_court = if tier.has_court() && accounts.len() > 5 {
+                let court_account = &accounts[5];
+                if unsafe { court_account.owner() } == program_id && court_account.data_len() > 0 {
+                    let court_data = court_account.try_borrow()?;
+                    let court = unsafe { CourtPositionAccount::load(&court_data) };
+                    court.holder == *player_account.address()
+                        && court.castle == *castle_account.address()
+                } else {
+                    false
+                }
             } else {
                 false
+            };
+
+            if is_court {
+                (
+                    ROLE_COURT,
+                    castle.court_novi_per_day,
+                    castle.court_cash_per_day,
+                )
+            } else {
+                // Regular team member
+                (
+                    ROLE_MEMBER,
+                    castle.member_novi_per_day,
+                    castle.member_cash_per_day,
+                )
             }
         } else {
-            false
+            // Not on castle's team
+            return Err(GameError::NotOnKingsTeam.into());
         };
-
-        if is_court {
-            (ROLE_COURT, castle.court_novi_per_day, castle.court_cash_per_day)
-        } else {
-            // Regular team member
-            (ROLE_MEMBER, castle.member_novi_per_day, castle.member_cash_per_day)
-        }
-    } else {
-        // Not on castle's team
-        return Err(GameError::NotOnKingsTeam.into());
-    };
 
     // Get current timestamp
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
     // Verify reward PDA
-    let (expected_reward_pda, reward_bump) = TeamCastleRewardAccount::derive_pda(
-        castle_account.address(),
-        player_account.address(),
-    );
+    let (expected_reward_pda, reward_bump) =
+        TeamCastleRewardAccount::derive_pda(castle_account.address(), player_account.address());
     if reward_account.address() != &expected_reward_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -171,7 +183,8 @@ pub fn process(
             lamports,
             space: TeamCastleRewardAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[signer])?;
+        }
+        .invoke_signed(&[signer])?;
 
         // Initialize reward account
         let mut reward_data = reward_account.try_borrow_mut()?;
@@ -296,7 +309,9 @@ pub fn process(
 
             // Update cached balance
             player.locked_novi = player.locked_novi.saturating_add(novi_reward);
-            player.total_locked_novi_acquired = player.total_locked_novi_acquired.saturating_add(novi_reward);
+            player.total_locked_novi_acquired = player
+                .total_locked_novi_acquired
+                .saturating_add(novi_reward);
         }
     }
 

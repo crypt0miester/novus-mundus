@@ -1,35 +1,34 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType, GameEngine},
     constants::{
+        DUNGEON_REST_HEAL_PERCENT, DUNGEON_TRAP_DAMAGE_PERCENT, DUNGEON_TRAP_XP_BONUS_BPS,
         DUNGEON_TREASURE_LOOT_MULTIPLIER_BPS,
-        DUNGEON_TRAP_XP_BONUS_BPS,
-        DUNGEON_TRAP_DAMAGE_PERCENT,
-        DUNGEON_REST_HEAL_PERCENT,
     },
+    emit,
+    error::GameError,
+    events::{DungeonFailed, DungeonFloorCompleted, DungeonRoomCleared},
     helpers::dungeon::{
-        calculate_room_xp, calculate_total_unit_hp, calculate_floor_novi, has_double_novi_relic,
-        // Time of day
-        TimePeriod,
-        calculate_treasure_gems_with_time,
-        calculate_xp_with_time,
         // Hero specialization
         apply_scout_loot_bonus,
+        calculate_floor_novi,
         // Loot system
         calculate_loot_with_bonuses,
+        calculate_room_xp,
+        calculate_total_unit_hp,
+        calculate_treasure_gems_with_time,
+        calculate_xp_with_time,
+        has_double_novi_relic,
         has_guaranteed_rare_drop_relic,
+        // Time of day
+        TimePeriod,
     },
     logic::safe_math::apply_bp,
+    state::{DungeonRun, DungeonStatus, DungeonTemplate, GameEngine, PlayerAccount, RoomType},
     validation::{require_signer, require_writable},
-    emit,
-    events::{DungeonRoomCleared, DungeonFloorCompleted, DungeonFailed},
 };
 
 /// Interact with a non-combat room (treasure, camp, rest, trap)
@@ -51,11 +50,7 @@ use crate::{
 /// # Instruction Data
 /// - camp_bonus_bps: u16 (only for camp rooms, validated by game_authority signature)
 /// - next_room_type: u8 (for auto-advance)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse accounts
     crate::extract_accounts!(accounts, exact [
         owner,
@@ -77,7 +72,6 @@ pub fn process(
     if game_authority.address() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
-    drop(game_engine);
 
     // 4. Parse instruction data
     // For camp: [camp_bonus_bps: u16][next_room_type: u8]
@@ -92,10 +86,16 @@ pub fn process(
     };
 
     // 5. Load player using load_checked (kingdom-scoped)
-    let player = PlayerAccount::load_checked(player_account, game_engine_account.address(), owner.address(), program_id)?;
+    let player = PlayerAccount::load_checked(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 6. Load dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
+    let run =
+        DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
     if &run.player != player_account.address() {
@@ -103,23 +103,22 @@ pub fn process(
     }
 
     // Validate run is active
-    let status = DungeonStatus::from_u8(run.status)
-        .ok_or(GameError::InvalidParameter)?;
+    let status = DungeonStatus::from_u8(run.status).ok_or(GameError::InvalidParameter)?;
 
     if !status.is_active() {
         return Err(GameError::DungeonNotActive.into());
     }
 
     // Validate room is NOT combat
-    let room_type = RoomType::from_u8(run.room_type)
-        .ok_or(GameError::InvalidParameter)?;
+    let room_type = RoomType::from_u8(run.room_type).ok_or(GameError::InvalidParameter)?;
 
     if room_type.is_combat() {
         return Err(GameError::InvalidRoomType.into());
     }
 
     // 7. Load dungeon template using load_checked
-    let template = DungeonTemplate::load_checked(dungeon_template_account, run.dungeon_id, program_id)?;
+    let template =
+        DungeonTemplate::load_checked(dungeon_template_account, run.dungeon_id, program_id)?;
 
     // Get timestamp
     let clock = Clock::get()?;
@@ -164,8 +163,9 @@ pub fn process(
             let base_gems = 50u64.saturating_mul(run.current_floor as u64);
 
             // Apply 2x treasure room multiplier
-            let treasure_bonus_gems = apply_bp(base_gems, DUNGEON_TREASURE_LOOT_MULTIPLIER_BPS as u64)
-                .unwrap_or(base_gems);
+            let treasure_bonus_gems =
+                apply_bp(base_gems, DUNGEON_TREASURE_LOOT_MULTIPLIER_BPS as u64)
+                    .unwrap_or(base_gems);
 
             // Apply relic + synergy loot bonuses (loot relic id 6 + LOOT synergy)
             let loot_bonus_gems = calculate_loot_with_bonuses(treasure_bonus_gems, &run, 0);
@@ -178,7 +178,8 @@ pub fn process(
 
             // Guaranteed-rare-drop relic (id 10): +50% gems
             _gems_gained = if has_guaranteed_rare_drop_relic(&run) {
-                apply_bp(scout_bonus_gems, 15000u64).unwrap_or(scout_bonus_gems) // +50%
+                apply_bp(scout_bonus_gems, 15000u64).unwrap_or(scout_bonus_gems)
+            // +50%
             } else {
                 scout_bonus_gems
             };
@@ -195,7 +196,8 @@ pub fn process(
 
             // Guaranteed-rare-drop relic also boosts materials
             let materials = if has_guaranteed_rare_drop_relic(&run) {
-                apply_bp(scout_bonus_materials, 15000u64).unwrap_or(scout_bonus_materials) // +50%
+                apply_bp(scout_bonus_materials, 15000u64).unwrap_or(scout_bonus_materials)
+            // +50%
             } else {
                 scout_bonus_materials
             } as u32;

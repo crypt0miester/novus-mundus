@@ -454,8 +454,7 @@ pub fn calculate_dungeon_damage(
 
         // Apply boss reduction as damage bonus (equivalent to reducing boss defense)
         if total_boss_reduction > 0 {
-            damage =
-                apply_bp(damage, 10000u64 + total_boss_reduction as u64).unwrap_or(damage);
+            damage = apply_bp(damage, 10000u64 + total_boss_reduction as u64).unwrap_or(damage);
         }
 
         // Additional boss damage from 3-piece BOSS synergy

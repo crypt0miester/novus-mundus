@@ -1,19 +1,17 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     error::ProgramError,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{AccountKey, CityAccount, EncounterAccount, GameEngine, LocationAccount},
     constants::ENCOUNTER_CLEANUP_GRACE,
-    helpers::close_account,
-    validation::{require_owner, require_writable},
     emit,
+    error::GameError,
     events::EncounterCleanedUp,
+    helpers::close_account,
+    state::{AccountKey, CityAccount, EncounterAccount, GameEngine, LocationAccount},
+    validation::{require_owner, require_writable},
 };
 
 /// Clean up a terminal encounter — close the account, reclaim rent, decrement
@@ -88,14 +86,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // 3. Load + validate the encounter, capturing everything we need before close.
-    let (
-        enc_city_id,
-        enc_despawn_at,
-        enc_health,
-        enc_rarity,
-        enc_grid_lat,
-        enc_grid_long,
-    ) = {
+    let (enc_city_id, enc_despawn_at, enc_health, enc_rarity, enc_grid_lat, enc_grid_long) = {
         let data = encounter_account.try_borrow()?;
         AccountKey::validate(&data, AccountKey::Encounter)?;
         let enc = unsafe { EncounterAccount::load(&data) };
@@ -107,12 +98,8 @@ pub fn process(
 
         // PDA integrity: re-derive from the account's own fields so a forged or
         // relabelled account cannot pose as an encounter.
-        let expected = EncounterAccount::create_pda(
-            &enc.game_engine,
-            enc.city_id,
-            enc.id,
-            enc.bump,
-        )?;
+        let expected =
+            EncounterAccount::create_pda(&enc.game_engine, enc.city_id, enc.id, enc.bump)?;
         if encounter_account.address() != &expected {
             return Err(GameError::InvalidPDA.into());
         }

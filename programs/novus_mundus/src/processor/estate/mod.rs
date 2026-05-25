@@ -1,3 +1,7 @@
+pub mod build;
+pub mod buy_plot;
+pub mod complete;
+pub mod convert_materials;
 /// Estate System Processors
 ///
 /// Handles all estate-related operations:
@@ -9,16 +13,11 @@
 /// - daily_claim: Claim login streak rewards (Mansion)
 /// - daily_activity: Complete building mini-games
 /// - convert_materials: Convert 100 lower tier → 20 higher tier (Workshop)
-
 pub mod create;
-pub mod build;
-pub mod upgrade;
-pub mod complete;
-pub mod buy_plot;
-pub mod daily_claim;
 pub mod daily_activity;
-pub mod convert_materials;
-pub mod speedup;
-pub mod recover_troops;
+pub mod daily_claim;
 pub mod initialize_building_template;
+pub mod recover_troops;
+pub mod speedup;
 pub mod update_building_template;
+pub mod upgrade;

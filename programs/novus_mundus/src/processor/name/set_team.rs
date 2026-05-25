@@ -1,10 +1,8 @@
 use pinocchio::{
-    AccountView,
     cpi::Signer,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use alt_name_service::instructions::Transfer;
@@ -12,13 +10,13 @@ use tld_house::instructions::SetMainDomain;
 
 use crate::{
     constants::TEAM_SEED,
+    emit,
     error::GameError,
+    events::TeamNameSet,
     helpers::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name},
     state::{PlayerAccount, TeamAccount},
     utils::read_bytes32,
     validation::{require_key_match, require_owner, require_signer, require_writable},
-    emit,
-    events::TeamNameSet,
     NULL_PUBKEY,
 };
 

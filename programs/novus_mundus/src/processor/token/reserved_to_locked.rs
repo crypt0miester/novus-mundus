@@ -1,19 +1,17 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{PLAYER_SEED, USER_SEED},
     emit,
     error::GameError,
     events::NoviReservedToLocked,
     state::{PlayerAccount, UserAccount},
-    constants::{PLAYER_SEED, USER_SEED},
     utils::read_u64,
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Transfer Reserved Novi → Locked Novi (ONE-WAY, PERMANENT)
@@ -46,11 +44,7 @@ use crate::{
 /// 2. Transfer tokens: UserAccount PDA → PlayerAccount PDA
 /// 3. Update cached balances in PlayerAccount and UserAccount
 /// 4. UserAccount PDA signs the transfer (uses PDA signer)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
 
     crate::extract_accounts!(accounts, exact [
@@ -72,7 +66,15 @@ pub fn process(
     require_owner(player, program_id)?;
     require_owner(user, program_id)?;
 
-    let player_bump = require_pda(player, &[PLAYER_SEED, _game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let player_bump = require_pda(
+        player,
+        &[
+            PLAYER_SEED,
+            _game_engine.address().as_ref(),
+            owner.address().as_ref(),
+        ],
+        program_id,
+    )?;
     let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Parse Instruction Data
@@ -125,11 +127,11 @@ pub fn process(
     let user_signer = pinocchio::cpi::Signer::from(&user_seeds);
 
     crate::helpers::transfer_tokens(
-        reserved_token_account,  // From: Token account owned by UserAccount PDA
-        locked_token_account,     // To: Token account owned by PlayerAccount PDA
-        user,                     // Authority: UserAccount PDA
+        reserved_token_account, // From: Token account owned by UserAccount PDA
+        locked_token_account,   // To: Token account owned by PlayerAccount PDA
+        user,                   // Authority: UserAccount PDA
         amount,
-        &[user_signer],          // UserAccount PDA signs
+        &[user_signer], // UserAccount PDA signs
     )?;
 
     // 6. Update Cached Balances (re-borrow after CPI)
@@ -137,7 +139,8 @@ pub fn process(
     let mut user_data_ref = user.try_borrow_mut()?;
     let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
-    user_data.reserved_novi = user_data.reserved_novi
+    user_data.reserved_novi = user_data
+        .reserved_novi
         .checked_sub(amount)
         .ok_or(GameError::MathOverflow)?;
 
@@ -147,11 +150,13 @@ pub fn process(
     let mut player_data_ref = player.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
-    player_data.locked_novi = player_data.locked_novi
+    player_data.locked_novi = player_data
+        .locked_novi
         .checked_add(amount)
         .ok_or(GameError::MathOverflow)?;
 
-    player_data.total_locked_novi_acquired = player_data.total_locked_novi_acquired
+    player_data.total_locked_novi_acquired = player_data
+        .total_locked_novi_acquired
         .checked_add(amount)
         .ok_or(GameError::MathOverflow)?;
 

@@ -1,21 +1,26 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::LOCATION_SEED,
     emit,
     error::GameError,
     events::PlayerTeleported,
-    state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, HeroTemplate, NULL_PUBKEY, require_extension, EXT_INVENTORY, is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost},
-    constants::LOCATION_SEED,
-    helpers::{close_account, clear_hero_buffs, parse_hero_nft, add_hero_buffs_to_player_with_location, estate::{load_estate_for_player, require_stables}},
+    helpers::{
+        add_hero_buffs_to_player_with_location, clear_hero_buffs, close_account,
+        estate::{load_estate_for_player, require_stables},
+        parse_hero_nft,
+    },
     logic::location::calculate_distance,
     logic::safe_math::apply_bp,
+    state::{
+        is_hero_at_home, location_bonus_for_tier, require_extension, tier_from_mint_cost,
+        CityAccount, HeroTemplate, LocationAccount, PlayerAccount, EXT_INVENTORY, NULL_PUBKEY,
+    },
     validation::require_owner,
 };
 
@@ -50,17 +55,20 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    crate::extract_accounts!(accounts, [
-        player_account,
-        owner,
-        origin_city_account,
-        destination_city_account,
-        game_engine_account,
-        origin_location_account,
-        destination_location_account,
-        _system_program,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_account,
+            owner,
+            origin_city_account,
+            destination_city_account,
+            game_engine_account,
+            origin_location_account,
+            destination_location_account,
+            _system_program,
+            estate_account,
+        ]
+    );
 
     // 2. Parse Instruction Data
 
@@ -74,12 +82,14 @@ pub fn process(
 
     // 4. Load Accounts (kingdom-scoped)
 
-    // Validate via load_checked then drop RefCell borrows for CPI compatibility
-    { let _ = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
-    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
-
-    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
-    let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
+    let game_engine_data =
+        crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;
@@ -156,16 +166,22 @@ pub fn process(
 
     // Calculate base cost: base + (segments * cost_per_100km)
     let segments = libm::ceil(distance_km / 100.0) as u64;
-    let base_cost = gameplay_config.teleport_base_cost
+    let base_cost = gameplay_config
+        .teleport_base_cost
         .checked_add(
-            gameplay_config.teleport_cost_per_100km.checked_mul(segments)
-                .ok_or(GameError::MathOverflow)?
+            gameplay_config
+                .teleport_cost_per_100km
+                .checked_mul(segments)
+                .ok_or(GameError::MathOverflow)?,
         )
         .ok_or(GameError::MathOverflow)?;
 
     // Apply DAO cost multiplier (basis points: 10000 = 1.0x, no u128!)
-    let adjusted_cost = apply_bp(base_cost, game_engine_data.economic_config.cost_multiplier as u64)
-        .ok_or(GameError::MathOverflow)?;
+    let adjusted_cost = apply_bp(
+        base_cost,
+        game_engine_data.economic_config.cost_multiplier as u64,
+    )
+    .ok_or(GameError::MathOverflow)?;
 
     // 10. Validate Sufficient Locked Novi
 
@@ -175,7 +191,8 @@ pub fn process(
 
     // 11. Deduct Cost
 
-    player_data.locked_novi = player_data.locked_novi
+    player_data.locked_novi = player_data
+        .locked_novi
         .checked_sub(adjusted_cost)
         .ok_or(GameError::MathOverflow)?;
 
@@ -221,7 +238,11 @@ pub fn process(
     let cell_center_long = LocationAccount::from_grid(dest_grid_long);
 
     // 14a. Terrain Passability Check (city center should always pass, but validate)
-    destination_city_data.require_passable_at(destination_city_account, cell_center_lat, cell_center_long)?;
+    destination_city_data.require_passable_at(
+        destination_city_account,
+        cell_center_lat,
+        cell_center_long,
+    )?;
 
     // 15. Validate Destination Location PDA
 
@@ -265,7 +286,8 @@ pub fn process(
             lamports,
             space: LocationAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[location_signer])?;
+        }
+        .invoke_signed(&[location_signer])?;
 
         let mut location_data = destination_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
@@ -316,16 +338,17 @@ pub fn process(
 
     // 18. Update City Player Counts
 
-    origin_city_data.players_present = origin_city_data.players_present
-        .saturating_sub(1);
+    origin_city_data.players_present = origin_city_data.players_present.saturating_sub(1);
 
-    destination_city_data.players_present = destination_city_data.players_present
-        .saturating_add(1);
+    destination_city_data.players_present = destination_city_data.players_present.saturating_add(1);
 
     // 19. Location Synergy: Recalculate hero buffs for new city
     // Only if player has locked heroes and hero accounts were provided
 
-    let has_locked_heroes = player_data.active_heroes_arr().iter().any(|h| *h != NULL_PUBKEY);
+    let has_locked_heroes = player_data
+        .active_heroes_arr()
+        .iter()
+        .any(|h| *h != NULL_PUBKEY);
 
     if has_locked_heroes && accounts.len() > 9 {
         // Clear all existing hero buffs before recalculating
@@ -363,7 +386,8 @@ pub fn process(
                             let tier = tier_from_mint_cost(template.mint_cost_sol);
 
                             // Check if hero is at home in the new city
-                            let is_at_home = is_hero_at_home(parsed_hero.origin_city, destination_city_id);
+                            let is_at_home =
+                                is_hero_at_home(parsed_hero.origin_city, destination_city_id);
                             let location_bonus_bps = if is_at_home {
                                 location_bonus_for_tier(tier)
                             } else {
@@ -371,7 +395,8 @@ pub fn process(
                             };
 
                             // Store location bonus for this slot
-                            player_data.set_slot_location_bonus_at(slot as usize, location_bonus_bps);
+                            player_data
+                                .set_slot_location_bonus_at(slot as usize, location_bonus_bps);
 
                             // Add buffs with location bonus
                             add_hero_buffs_to_player_with_location(

@@ -13,14 +13,14 @@
 //! - 259: claim_leaderboard_prize - Claim weekly leaderboard prize
 //! - 260: create_leaderboard - Create weekly leaderboard (permissionless crank)
 
-pub mod enter;
 pub mod attack;
 pub mod attack_multi;
-pub mod interact;
 pub mod choose_relic;
-pub mod flee;
 pub mod claim;
-pub mod resume;
-pub mod create_template;
 pub mod claim_leaderboard_prize;
 pub mod create_leaderboard;
+pub mod create_template;
+pub mod enter;
+pub mod flee;
+pub mod interact;
+pub mod resume;

@@ -29,10 +29,7 @@ pub struct OracleQuotePda;
 impl OracleQuotePda {
     /// Derive the oracle-quote PDA and bump (finds bump — use at creation).
     pub fn derive_pda(queue: &Address) -> (Address, u8) {
-        pinocchio::Address::find_program_address(
-            &[ORACLE_QUOTE_SEED, queue.as_ref()],
-            &crate::ID,
-        )
+        pinocchio::Address::find_program_address(&[ORACLE_QUOTE_SEED, queue.as_ref()], &crate::ID)
     }
 
     /// Recreate the oracle-quote PDA from a stored bump (fast validation).

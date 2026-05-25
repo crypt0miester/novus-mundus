@@ -1,14 +1,11 @@
-use pinocchio::{
-    Address,
-    ProgramResult,
-};
+use pinocchio::{Address, ProgramResult};
 
 use crate::{
+    emit,
     error::GameError,
+    events::EventScoreUpdated,
     state::{EventAccount, EventParticipation, LeaderboardEntry},
     types::EventType,
-    emit,
-    events::EventScoreUpdated,
 };
 
 /// Update event score from game actions
@@ -63,8 +60,7 @@ pub fn update_event_score(
 
     // 5. Update Score Based on Type
 
-    let event_type = EventType::from_u8(event.event_type)
-        .ok_or(GameError::InvalidParameter)?;
+    let event_type = EventType::from_u8(event.event_type).ok_or(GameError::InvalidParameter)?;
 
     let old_score = participation.score;
     let mut score_changed = false;
@@ -111,7 +107,8 @@ pub fn update_event_score(
 /// Ensure event is active, auto-activating if needed
 fn ensure_event_active(event: &mut EventAccount, now: i64) -> Result<(), GameError> {
     match event.status {
-        0 => { // pending
+        0 => {
+            // pending
             if now >= event.start_time && now < event.end_time && event.auto_activate {
                 event.status = 1; // activate
                 Ok(())
@@ -120,14 +117,15 @@ fn ensure_event_active(event: &mut EventAccount, now: i64) -> Result<(), GameErr
             } else {
                 Err(GameError::EventEnded)
             }
-        },
-        1 => { // active
+        }
+        1 => {
+            // active
             if now >= event.end_time {
                 Err(GameError::EventEnded)
             } else {
                 Ok(())
             }
-        },
+        }
         2 => Err(GameError::EventNotCompleted), // finalized, can't score
         3 => Err(GameError::EventCancelled),
         _ => Err(GameError::InvalidParameter),
@@ -217,7 +215,10 @@ mod tests {
 
     #[test]
     fn test_leaderboard_insert_empty() {
-        let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
+        let mut leaderboard = [LeaderboardEntry {
+            player: NULL_PUBKEY,
+            score: 0,
+        }; 10];
         let mut count = 0u8;
         let player1 = Address::from([1u8; 32]);
 
@@ -230,7 +231,10 @@ mod tests {
 
     #[test]
     fn test_leaderboard_maintains_order() {
-        let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
+        let mut leaderboard = [LeaderboardEntry {
+            player: NULL_PUBKEY,
+            score: 0,
+        }; 10];
         let mut count = 0u8;
         let player1 = Address::from([1u8; 32]);
         let player2 = Address::from([2u8; 32]);
@@ -248,7 +252,10 @@ mod tests {
 
     #[test]
     fn test_leaderboard_update_existing() {
-        let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
+        let mut leaderboard = [LeaderboardEntry {
+            player: NULL_PUBKEY,
+            score: 0,
+        }; 10];
         let mut count = 0u8;
         let player1 = Address::from([1u8; 32]);
 
@@ -261,7 +268,10 @@ mod tests {
 
     #[test]
     fn test_leaderboard_max_10() {
-        let mut leaderboard = [LeaderboardEntry { player: NULL_PUBKEY, score: 0 }; 10];
+        let mut leaderboard = [LeaderboardEntry {
+            player: NULL_PUBKEY,
+            score: 0,
+        }; 10];
         let mut count = 0u8;
 
         // Add 10 players

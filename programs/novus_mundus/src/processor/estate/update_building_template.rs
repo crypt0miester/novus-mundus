@@ -1,19 +1,10 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::{
     error::GameError,
-    state::{GameEngine, BuildingTemplate, AccountKey},
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-    },
-    utils::{read_u8, read_u16, read_u32, read_u64},
+    state::{AccountKey, BuildingTemplate, GameEngine},
+    utils::{read_u16, read_u32, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Update a building template (DAO only)
@@ -73,44 +64,62 @@ pub fn process(
             if instruction_data.len() != 5 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.base_time_seconds = read_u32(instruction_data, 1, "update_building_template.base_time_seconds")?;
-        },
+            template.base_time_seconds = read_u32(
+                instruction_data,
+                1,
+                "update_building_template.base_time_seconds",
+            )?;
+        }
         1 => {
             if instruction_data.len() != 9 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.base_novi_cost = read_u64(instruction_data, 1, "update_building_template.base_novi_cost")?;
-        },
+            template.base_novi_cost = read_u64(
+                instruction_data,
+                1,
+                "update_building_template.base_novi_cost",
+            )?;
+        }
         2 => {
             if instruction_data.len() != 3 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.cost_growth_bps = read_u16(instruction_data, 1, "update_building_template.cost_growth_bps")?;
-        },
+            template.cost_growth_bps = read_u16(
+                instruction_data,
+                1,
+                "update_building_template.cost_growth_bps",
+            )?;
+        }
         3 => {
             if instruction_data.len() != 3 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.time_growth_bps = read_u16(instruction_data, 1, "update_building_template.time_growth_bps")?;
-        },
+            template.time_growth_bps = read_u16(
+                instruction_data,
+                1,
+                "update_building_template.time_growth_bps",
+            )?;
+        }
         4 => {
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.is_active = read_u8(instruction_data, 1, "update_building_template.is_active")? != 0;
-        },
+            template.is_active =
+                read_u8(instruction_data, 1, "update_building_template.is_active")? != 0;
+        }
         5 => {
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.max_level = read_u8(instruction_data, 1, "update_building_template.max_level")?;
-        },
+            template.max_level =
+                read_u8(instruction_data, 1, "update_building_template.max_level")?;
+        }
         6 => {
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
             template.tier = read_u8(instruction_data, 1, "update_building_template.tier")?;
-        },
+        }
         _ => return Err(GameError::InvalidParameter.into()),
     }
 

@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::INTRACITY_WALKING_SPEED_KMH,
-    error::GameError,
-    state::{CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus},
-    logic::location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::RallyLeft,
+    logic::location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
+    state::{CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Leave a rally during Gathering phase
@@ -68,7 +66,6 @@ pub fn process(
     if &player.owner != player_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    drop(player);
 
     // 5. Load Rally and validate state
     require_owner(rally_account, program_id)?;
@@ -147,7 +144,8 @@ pub fn process(
         } else {
             // Different city - intercity travel at theme speed
             let current_theme = game_engine_data.theme_config.current_theme as usize;
-            let theme_speed = game_engine_data.gameplay_config.theme_travel_speeds_kmh[current_theme];
+            let theme_speed =
+                game_engine_data.gameplay_config.theme_travel_speeds_kmh[current_theme];
             calculate_intercity_travel_time(
                 rally_city_data.latitude,
                 rally_city_data.longitude,
@@ -176,9 +174,15 @@ pub fn process(
         rally.arrived_count = rally.arrived_count.saturating_sub(1);
     }
     rally.total_units = rally.total_units.saturating_sub(participant.total_units());
-    rally.total_melee_weapons = rally.total_melee_weapons.saturating_sub(participant.melee_weapons_committed);
-    rally.total_ranged_weapons = rally.total_ranged_weapons.saturating_sub(participant.ranged_weapons_committed);
-    rally.total_siege_weapons = rally.total_siege_weapons.saturating_sub(participant.siege_weapons_committed);
+    rally.total_melee_weapons = rally
+        .total_melee_weapons
+        .saturating_sub(participant.melee_weapons_committed);
+    rally.total_ranged_weapons = rally
+        .total_ranged_weapons
+        .saturating_sub(participant.ranged_weapons_committed);
+    rally.total_siege_weapons = rally
+        .total_siege_weapons
+        .saturating_sub(participant.siege_weapons_committed);
 
     // 11. Emit event
     // Note: team_name not available here - would need to pass team account

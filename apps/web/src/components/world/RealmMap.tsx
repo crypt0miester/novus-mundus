@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Map as MapIcon } from "lucide-react";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
 import {
@@ -208,6 +208,40 @@ export function RealmMap({
   // Zoom/pan transforms the inner SVG <g>. Compass, ornaments, and scale bar
   // live outside the SVG so they stay anchored to the sheet.
   const zoom = useZoomPan({ vbWidth: VB_W, vbHeight: VB_H });
+
+  /* Track sheet pixel size so we can compute the SVG-to-screen scale factor.
+   * The SVG paints at viewBox units (1000×720); at a mobile sheet width of
+   * ~360 px those units shrink to 0.36× their viewBox size, which made
+   * city-name text (fontSize=9.5 viewBox units) render at ~3 screen px —
+   * unreadable. We compute a `labelMultiplier` that scales each city group
+   * up enough that the on-screen font stays ≥ TARGET_FONT_SCREEN_PX, and
+   * fold that multiplier into the existing counter-zoom transform. */
+  const [sheetSize, setSheetSize] = useState({ w: VB_W, h: VB_H });
+  useEffect(() => {
+    const el = zoom.containerRef.current;
+    if (!el) return;
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      const w = rect.width || VB_W;
+      const h = rect.height || VB_H;
+      setSheetSize((prev) => (Math.abs(prev.w - w) > 2 || Math.abs(prev.h - h) > 2 ? { w, h } : prev));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [zoom.containerRef]);
+
+  const svgScale = Math.min(sheetSize.w / VB_W, sheetSize.h / VB_H);
+  /* Floor on-screen font size in CSS px. At 10 the labels read cleanly even
+   * on the smallest mobile sheet; on desktop sheets the multiplier naturally
+   * clamps to 1 (no upscale beyond the original 9.5-unit design). */
+  const TARGET_FONT_SCREEN_PX = 8;
+  const BASE_FONT_VB_UNITS = 11;
+  const labelMultiplier = Math.max(
+    1,
+    TARGET_FONT_SCREEN_PX / (BASE_FONT_VB_UNITS * Math.max(0.001, svgScale)),
+  );
 
   const engine = (engineData as { account?: unknown })?.account ?? engineData;
   const eng = engine as
@@ -461,7 +495,7 @@ export function RealmMap({
                 aria-label="Back to the realm map"
                 title="Back to the realm map (Esc)"
               >
-                ✕
+                <MapIcon className={styles.sheetBackIcon} aria-hidden />
               </button>
             </>
           )}
@@ -535,7 +569,7 @@ export function RealmMap({
                       // form more reliably under heavy SVG transforms.
                       vectorEffect="non-scaling-stroke"
                     />
-                    <g transform={`translate(${mx} ${my}) scale(${1 / zoom.scale})`}>
+                    <g transform={`translate(${mx} ${my}) scale(${labelMultiplier / zoom.scale})`}>
                       <circle className={styles.travelMarkerHalo} cx={0} cy={0} r={7} />
                       <circle className={styles.travelMarker} cx={0} cy={0} r={3.5} />
                       {markerCarriesFlag && (
@@ -553,7 +587,7 @@ export function RealmMap({
               })()}
 
               <g>
-                {renderOrder.map((n, i) => {
+                {renderOrder.map((n) => {
                   const meta = TYPE_META[typeIdx(n.city.cityType)];
                   const isSel = n.city.cityId === selectedId;
                   const isHome = n.city.cityId === homeCity;
@@ -584,14 +618,13 @@ export function RealmMap({
                     <g
                       key={n.key}
                       className={groupClass}
-                      style={{ animationDelay: `${0.1 + i * 0.04}s` }}
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedId(isSel ? null : n.city.cityId);
                       }}
                       role="button"
                       aria-label={`${n.city.name}, ${meta.label} city`}
-                      transform={`translate(${n.x} ${n.y}) scale(${1 / zoom.scale})`}
+                      transform={`translate(${n.x} ${n.y}) scale(${labelMultiplier / zoom.scale})`}
                     >
                       {isSel && (
                         <>

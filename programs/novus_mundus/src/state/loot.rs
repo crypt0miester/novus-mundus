@@ -1,7 +1,4 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
-};
+use pinocchio::{error::ProgramError, Address};
 
 /// Loot account - Physical rewards from encounters/PvP/rallies
 ///
@@ -24,36 +21,36 @@ pub struct LootAccount {
     pub account_key: u8,
 
     // Identity & Security (80 bytes)
-    pub owner: Address,                      // 32 - Who can claim this loot
-    pub creator: Address,                    // 32 - Who paid rent (gets refund on claim)
-    pub loot_id: u64,                       // 8  - Monotonic counter per player
-    pub bump: u8,                           // 1  - PDA bump
-    pub source_type: u8,                    // 1  - 0=Encounter, 1=PvP, 2=Rally
-    pub claimed: bool,                      // 1  - Prevent double-claim (CRITICAL!)
-    pub _padding1: [u8; 5],                 // 5  - Alignment
+    pub owner: Address,     // 32 - Who can claim this loot
+    pub creator: Address,   // 32 - Who paid rent (gets refund on claim)
+    pub loot_id: u64,       // 8  - Monotonic counter per player
+    pub bump: u8,           // 1  - PDA bump
+    pub source_type: u8,    // 1  - 0=Encounter, 1=PvP, 2=Rally
+    pub claimed: bool,      // 1  - Prevent double-claim (CRITICAL!)
+    pub _padding1: [u8; 5], // 5  - Alignment
 
     // Timestamps (16 bytes)
-    pub created_at: i64,                    // 8  - When loot was created
-    pub expires_at: i64,                    // 8  - Auto-expire after 30 days
+    pub created_at: i64, // 8  - When loot was created
+    pub expires_at: i64, // 8  - Auto-expire after 30 days
 
     // Source metadata (24 bytes)
-    pub source_id: u64,                     // 8  - encounter_id/defender_id/rally_id
-    pub contribution: u64,                  // 8  - Player's damage contribution
-    pub source_level: u8,                   // 1  - Level of encounter/player
-    pub source_rarity: u8,                  // 1  - Rarity (if encounter)
-    pub _padding2: [u8; 6],                 // 6  - Alignment
+    pub source_id: u64,     // 8  - encounter_id/defender_id/rally_id
+    pub contribution: u64,  // 8  - Player's damage contribution
+    pub source_level: u8,   // 1  - Level of encounter/player
+    pub source_rarity: u8,  // 1  - Rarity (if encounter)
+    pub _padding2: [u8; 6], // 6  - Alignment
 
     // Physical rewards (72 bytes)
     // NOTE: Not all fields will have values - determined by level thresholds (DETERMINISTIC)
-    pub cash: u64,                          // 8  - Cash (always awarded)
-    pub reserved_novi: u64,                 // 8  - Reserved NOVI (occasional, rare)
-    pub melee_weapons: u64,                 // 8  - Melee weapons (level 5+)
-    pub ranged_weapons: u64,                // 8  - Ranged weapons (level 5+)
-    pub siege_weapons: u64,                 // 8  - Siege weapons (level 10+)
-    pub produce: u64,                       // 8  - Produce (level 3+)
-    pub vehicles: u64,                      // 8  - Vehicles (level 20+)
-    pub fragments: u64,                     // 8  - Fragments (for heroes, research unlocked)
-    pub gems: u64,                          // 8  - Gems (speed-up currency, research unlocked)
+    pub cash: u64,           // 8  - Cash (always awarded)
+    pub reserved_novi: u64,  // 8  - Reserved NOVI (occasional, rare)
+    pub melee_weapons: u64,  // 8  - Melee weapons (level 5+)
+    pub ranged_weapons: u64, // 8  - Ranged weapons (level 5+)
+    pub siege_weapons: u64,  // 8  - Siege weapons (level 10+)
+    pub produce: u64,        // 8  - Produce (level 3+)
+    pub vehicles: u64,       // 8  - Vehicles (level 20+)
+    pub fragments: u64,      // 8  - Fragments (for heroes, research unlocked)
+    pub gems: u64,           // 8  - Gems (speed-up currency, research unlocked)
 }
 
 impl LootAccount {
@@ -77,7 +74,8 @@ impl LootAccount {
         pinocchio::Address::create_program_address(
             &[b"loot", player.as_ref(), &loot_id.to_le_bytes(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// UNSAFE: Load from raw account data
@@ -106,15 +104,33 @@ impl LootAccount {
     /// Count number of reward types (for UI display)
     pub fn reward_type_count(&self) -> u8 {
         let mut count = 0;
-        if self.cash > 0 { count += 1; }
-        if self.reserved_novi > 0 { count += 1; }
-        if self.melee_weapons > 0 { count += 1; }
-        if self.ranged_weapons > 0 { count += 1; }
-        if self.siege_weapons > 0 { count += 1; }
-        if self.produce > 0 { count += 1; }
-        if self.vehicles > 0 { count += 1; }
-        if self.fragments > 0 { count += 1; }
-        if self.gems > 0 { count += 1; }
+        if self.cash > 0 {
+            count += 1;
+        }
+        if self.reserved_novi > 0 {
+            count += 1;
+        }
+        if self.melee_weapons > 0 {
+            count += 1;
+        }
+        if self.ranged_weapons > 0 {
+            count += 1;
+        }
+        if self.siege_weapons > 0 {
+            count += 1;
+        }
+        if self.produce > 0 {
+            count += 1;
+        }
+        if self.vehicles > 0 {
+            count += 1;
+        }
+        if self.fragments > 0 {
+            count += 1;
+        }
+        if self.gems > 0 {
+            count += 1;
+        }
         count
     }
 

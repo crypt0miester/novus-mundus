@@ -1,20 +1,18 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{CityAccount, CityType, GameEngine},
     constants::CITY_SEED,
-    logic::location::{is_valid_latitude, is_valid_longitude},
-    utils::read_u16,
     emit,
+    error::GameError,
     events::CityInitialized,
+    logic::location::{is_valid_latitude, is_valid_longitude},
+    state::{CityAccount, CityType, GameEngine},
+    utils::read_u16,
 };
 
 /// Create a new city within a kingdom (DAO only)
@@ -61,17 +59,32 @@ pub fn process(
     name.copy_from_slice(&instruction_data[2..34]);
 
     let latitude = f64::from_le_bytes([
-        instruction_data[34], instruction_data[35], instruction_data[36], instruction_data[37],
-        instruction_data[38], instruction_data[39], instruction_data[40], instruction_data[41],
+        instruction_data[34],
+        instruction_data[35],
+        instruction_data[36],
+        instruction_data[37],
+        instruction_data[38],
+        instruction_data[39],
+        instruction_data[40],
+        instruction_data[41],
     ]);
 
     let longitude = f64::from_le_bytes([
-        instruction_data[42], instruction_data[43], instruction_data[44], instruction_data[45],
-        instruction_data[46], instruction_data[47], instruction_data[48], instruction_data[49],
+        instruction_data[42],
+        instruction_data[43],
+        instruction_data[44],
+        instruction_data[45],
+        instruction_data[46],
+        instruction_data[47],
+        instruction_data[48],
+        instruction_data[49],
     ]);
 
     let radius_km = f32::from_le_bytes([
-        instruction_data[50], instruction_data[51], instruction_data[52], instruction_data[53],
+        instruction_data[50],
+        instruction_data[51],
+        instruction_data[52],
+        instruction_data[53],
     ]);
 
     let city_type_u8 = instruction_data[54];
@@ -90,8 +103,7 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    let city_type = CityType::from_u8(city_type_u8)
-        .ok_or(GameError::InvalidParameter)?;
+    let city_type = CityType::from_u8(city_type_u8).ok_or(GameError::InvalidParameter)?;
 
     // 4. Validate GameEngine and DAO Authority
 
@@ -108,7 +120,8 @@ pub fn process(
     }
 
     // 5. Validate City PDA (kingdom-scoped)
-    let (expected_city_address, bump) = CityAccount::derive_pda(game_engine_account.address(), city_id);
+    let (expected_city_address, bump) =
+        CityAccount::derive_pda(game_engine_account.address(), city_id);
 
     if city_account.address() != &expected_city_address {
         return Err(ProgramError::InvalidSeeds);
@@ -118,7 +131,12 @@ pub fn process(
 
     let city_id_bytes = city_id.to_le_bytes();
     let bump_seed = [bump];
-    let seeds = crate::seeds!(CITY_SEED, game_engine_account.address(), &city_id_bytes, &bump_seed);
+    let seeds = crate::seeds!(
+        CITY_SEED,
+        game_engine_account.address(),
+        &city_id_bytes,
+        &bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     // Calculate rent for city account
@@ -131,7 +149,8 @@ pub fn process(
         lamports,
         space: CityAccount::SIZE as u64,
         owner: &crate::ID,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 7. Initialize City Account Data
 

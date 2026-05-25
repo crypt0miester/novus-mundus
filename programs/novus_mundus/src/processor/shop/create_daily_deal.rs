@@ -1,17 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::DAILY_DEAL_SEED,
     error::GameError,
-    state::{GameEngine, DailyDealAccount},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u16, read_u32},
+    state::{DailyDealAccount, GameEngine},
+    utils::{read_u16, read_u32, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a daily deal slot (DAO only)
 ///
@@ -89,7 +84,8 @@ pub fn process(
 
     // 6. Derive and Verify Daily Deal PDA
 
-    let (expected_pda, bump) = DailyDealAccount::derive_pda(game_engine_account.address(), slot_index);
+    let (expected_pda, bump) =
+        DailyDealAccount::derive_pda(game_engine_account.address(), slot_index);
 
     if daily_deal_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -115,7 +111,8 @@ pub fn process(
         lamports,
         space: DailyDealAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Daily Deal Data
 

@@ -1,26 +1,29 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::LOCATION_SEED,
     emit,
     error::GameError,
     events::IntracityTravelStarted,
-    state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, OCCUPANT_PLAYER},
-    constants::LOCATION_SEED,
-    helpers::{close_account, estate::{load_estate_for_player, require_stables, stables_travel_reduction_bps}},
+    helpers::{
+        close_account,
+        estate::{load_estate_for_player, require_stables, stables_travel_reduction_bps},
+    },
     logic::{
-        location::{is_within_city_bounds, calculate_intracity_travel_time, is_valid_latitude, is_valid_longitude, apply_travel_speed_bonuses},
-        get_time_of_day,
-        get_time_multiplier,
+        get_time_multiplier, get_time_of_day,
+        location::{
+            apply_travel_speed_bonuses, calculate_intracity_travel_time, is_valid_latitude,
+            is_valid_longitude, is_within_city_bounds,
+        },
         ActivityType,
     },
+    state::{CityAccount, GameEngine, LocationAccount, PlayerAccount, OCCUPANT_PLAYER},
     types::TravelType,
     validation::require_owner,
 };
@@ -54,17 +57,20 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required, 1 optional for stealing)
 
-    crate::extract_accounts!(accounts, [
-        player_account,
-        owner,
-        current_city_account,
-        game_engine_account,
-        origin_location_account,
-        destination_location_account,
-        _origin_creator_refund,
-        _system_program,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_account,
+            owner,
+            current_city_account,
+            game_engine_account,
+            origin_location_account,
+            destination_location_account,
+            _origin_creator_refund,
+            _system_program,
+            estate_account,
+        ]
+    );
 
     // Optional: bumped player account (required when stealing a reservation)
     let bumped_player_account = accounts.get(9);
@@ -76,13 +82,25 @@ pub fn process(
     }
 
     let destination_lat = f64::from_le_bytes([
-        instruction_data[0], instruction_data[1], instruction_data[2], instruction_data[3],
-        instruction_data[4], instruction_data[5], instruction_data[6], instruction_data[7],
+        instruction_data[0],
+        instruction_data[1],
+        instruction_data[2],
+        instruction_data[3],
+        instruction_data[4],
+        instruction_data[5],
+        instruction_data[6],
+        instruction_data[7],
     ]);
 
     let destination_long = f64::from_le_bytes([
-        instruction_data[8], instruction_data[9], instruction_data[10], instruction_data[11],
-        instruction_data[12], instruction_data[13], instruction_data[14], instruction_data[15],
+        instruction_data[8],
+        instruction_data[9],
+        instruction_data[10],
+        instruction_data[11],
+        instruction_data[12],
+        instruction_data[13],
+        instruction_data[14],
+        instruction_data[15],
     ]);
 
     // 3. Validate Coordinates
@@ -102,16 +120,13 @@ pub fn process(
     }
 
     // 5. Load Accounts (kingdom-scoped)
-    //
-    // Validate via load_checked (which borrows RefCell), then drop the borrow
-    // and use unsafe raw pointer access instead. This avoids holding RefCell
-    // borrows during CreateAccount CPI which would cause AccountBorrowFailed.
-
-    { let _ = GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
-    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
-
-    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
-    let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     require_owner(current_city_account, program_id)?;
     let city_data = unsafe { CityAccount::load_mut(current_city_account)? };
@@ -158,9 +173,8 @@ pub fn process(
 
     // Get subscription speed bonus
     let effective_tier = player_data.get_effective_tier(now);
-    let subscription_bonus_bps = game_engine_data
-        .subscription_tiers[effective_tier as usize]
-        .travel_speed_bonus_bps;
+    let subscription_bonus_bps =
+        game_engine_data.subscription_tiers[effective_tier as usize].travel_speed_bonus_bps;
 
     // Apply speed bonuses (subscription + research if available)
     // TODO: Add research bonus when research section is loaded
@@ -244,7 +258,8 @@ pub fn process(
             lamports,
             space: LocationAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[location_signer])?;
+        }
+        .invoke_signed(&[location_signer])?;
 
         let mut dest_location_data = destination_location_account.try_borrow_mut()?;
         let dest_location = unsafe { LocationAccount::load_mut(&mut dest_location_data) };
@@ -273,8 +288,7 @@ pub fn process(
             // Cell is occupied by someone else - check if we can steal it
             if dest_location.can_steal_reservation(arrival_time) {
                 // We can steal! Need bumped player account to reverse their travel
-                let bumped_player = bumped_player_account
-                    .ok_or(GameError::InvalidParameter)?;
+                let bumped_player = bumped_player_account.ok_or(GameError::InvalidParameter)?;
 
                 // Validate bumped player is the current occupant
                 if bumped_player.address() != &dest_location.occupant {
@@ -299,7 +313,9 @@ pub fn process(
                 let bumped_total_time = bumped.arrival_time - bumped.departure_time;
                 let bumped_elapsed = now - bumped.departure_time;
                 let progress = if bumped_total_time > 0 {
-                    (bumped_elapsed as f64 / bumped_total_time as f64).min(1.0).max(0.0)
+                    (bumped_elapsed as f64 / bumped_total_time as f64)
+                        .min(1.0)
+                        .max(0.0)
                 } else {
                     0.0
                 };

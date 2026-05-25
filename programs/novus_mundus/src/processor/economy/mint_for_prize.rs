@@ -1,12 +1,12 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-    ProgramResult,
-};
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError, helpers::validate_token_account_owner, logic::safe_math::apply_bp, state::{GameEngine, UserAccount}, utils::{read_u64, read_u8}, validation::require_owner
+    error::GameError,
+    helpers::validate_token_account_owner,
+    logic::safe_math::apply_bp,
+    state::{GameEngine, UserAccount},
+    utils::{read_u64, read_u8},
+    validation::require_owner,
 };
 
 /// Mint NOVI tokens for prizes (DAO only)
@@ -107,11 +107,9 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    {
-        let ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-        if dao_authority.address() != &ge.authority {
-            return Err(GameError::DaoRequired.into());
-        }
+    let game_engine_data = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;
+    if dao_authority.address() != &game_engine_data.authority {
+        return Err(GameError::DaoRequired.into());
     }
 
     // Recipient validation differs by flow.
@@ -120,27 +118,19 @@ pub fn process(
     }
     validate_token_account_owner(user_token_account, recipient_user.address())?;
 
-    let game_engine_data = unsafe { &mut *(game_engine_account.data_ptr() as *mut GameEngine) };
-
-    // 4. Load Recipient User Account (internal flows only; external skips it).
-    //
-    // Internal mints write to UserAccount fields via a raw pointer cast after
-    // the SPL Token MintTo CPI. Without a discriminator + PDA check, a
-    // caller who passes a different program-owned account (PlayerAccount,
-    // EstateAccount, …) by typo or malice would have UserAccount field
-    // offsets — `reserved_novi`, `total_reserved_earned`,
-    // `reserved_novi_earned_at` — written on top of unrelated bytes,
-    // corrupting that account. `load_checked_by_key` validates the
-    // discriminator AND that the account address matches the canonical
-    // PDA derived from the stored bump/owner. The Loaded borrow drops at
-    // the end of the scoped expression, freeing the underlying account
-    // data for the post-CPI raw-pointer write.
+    // Load Recipient User Account (internal flows only; external skips it).
+    // load_checked_by_key validates program ownership, AccountKey discriminator,
+    // and that the address matches the canonical PDA derived from stored fields —
+    // preventing a caller from spoofing a different program-owned account type
+    // and having UserAccount field offsets corrupt unrelated bytes.
 
     let user_data: Option<&mut UserAccount> = if is_external {
         None
     } else {
-        UserAccount::load_checked_by_key(recipient_user, program_id)?;
-        Some(unsafe { &mut *(recipient_user.data_ptr() as *mut UserAccount) })
+        Some(UserAccount::load_checked_mut_by_key(
+            recipient_user,
+            program_id,
+        )?)
     };
 
     // 5. Check Allocation Caps
@@ -148,7 +138,8 @@ pub fn process(
     let minting_config = &mut game_engine_data.minting_config;
 
     // Check total supply cap
-    let new_total = minting_config.total_minted
+    let new_total = minting_config
+        .total_minted
         .checked_add(amount)
         .ok_or(GameError::MathOverflow)?;
 
@@ -165,14 +156,15 @@ pub fn process(
     match purpose {
         0 | 1 => {
             // Prizes + Events
-            let new_prize_total = minting_config.minted_for_prizes
+            let new_prize_total = minting_config
+                .minted_for_prizes
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
 
             // Prize allocation cap: 5% of max supply (50M out of 1B, no u128!)
             // This ensures prizes remain sustainable long-term (500 bps = 5%)
-            let max_prize_allocation = apply_bp(minting_config.max_supply_cap, 500)
-                .ok_or(GameError::MathOverflow)?;
+            let max_prize_allocation =
+                apply_bp(minting_config.max_supply_cap, 500).ok_or(GameError::MathOverflow)?;
 
             if new_prize_total > max_prize_allocation {
                 return Err(GameError::ExceedsMaxCap.into());
@@ -180,7 +172,8 @@ pub fn process(
         }
         2 => {
             // Marketing
-            let new_marketing_total = minting_config.minted_for_marketing
+            let new_marketing_total = minting_config
+                .minted_for_marketing
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -190,7 +183,8 @@ pub fn process(
         }
         3 => {
             // Development
-            let new_dev_total = minting_config.minted_for_development
+            let new_dev_total = minting_config
+                .minted_for_development
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -200,7 +194,8 @@ pub fn process(
         }
         4 => {
             // Partnerships
-            let new_partnership_total = minting_config.minted_for_partnerships
+            let new_partnership_total = minting_config
+                .minted_for_partnerships
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -210,7 +205,8 @@ pub fn process(
         }
         5 => {
             // Treasury
-            let new_treasury_total = minting_config.minted_for_treasury
+            let new_treasury_total = minting_config
+                .minted_for_treasury
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -220,7 +216,8 @@ pub fn process(
         }
         6 => {
             // Liquidity
-            let new_liquidity_total = minting_config.minted_for_liquidity
+            let new_liquidity_total = minting_config
+                .minted_for_liquidity
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -236,7 +233,11 @@ pub fn process(
     // Create PDA signer for GameEngine (mint authority)
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
     let bump_seed = [game_engine_data.bump];
-    let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let seeds = crate::seeds!(
+        crate::constants::GAME_ENGINE_SEED,
+        &kingdom_id_bytes,
+        &bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     // Mint tokens to user's reserved token account (increases total supply)
@@ -256,45 +257,53 @@ pub fn process(
     // Update purpose-specific tracking
     match purpose {
         0 | 1 => {
-            minting_config.minted_for_prizes = minting_config.minted_for_prizes
+            minting_config.minted_for_prizes = minting_config
+                .minted_for_prizes
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
         }
         2 => {
-            minting_config.minted_for_marketing = minting_config.minted_for_marketing
+            minting_config.minted_for_marketing = minting_config
+                .minted_for_marketing
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
         }
         3 => {
-            minting_config.minted_for_development = minting_config.minted_for_development
+            minting_config.minted_for_development = minting_config
+                .minted_for_development
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
         }
         4 => {
-            minting_config.minted_for_partnerships = minting_config.minted_for_partnerships
+            minting_config.minted_for_partnerships = minting_config
+                .minted_for_partnerships
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
         }
         5 => {
-            minting_config.minted_for_treasury = minting_config.minted_for_treasury
+            minting_config.minted_for_treasury = minting_config
+                .minted_for_treasury
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
         }
         6 => {
-            minting_config.minted_for_liquidity = minting_config.minted_for_liquidity
+            minting_config.minted_for_liquidity = minting_config
+                .minted_for_liquidity
                 .checked_add(amount)
                 .ok_or(GameError::MathOverflow)?;
         }
         _ => {}
     }
 
-    // User-side state updates only run for internal flows. 
+    // User-side state updates only run for internal flows.
     if let Some(user_data) = user_data {
-        user_data.reserved_novi = user_data.reserved_novi
+        user_data.reserved_novi = user_data
+            .reserved_novi
             .checked_add(amount)
             .ok_or(GameError::MathOverflow)?;
 
-        user_data.total_reserved_earned = user_data.total_reserved_earned
+        user_data.total_reserved_earned = user_data
+            .total_reserved_earned
             .checked_add(amount)
             .ok_or(GameError::MathOverflow)?;
 

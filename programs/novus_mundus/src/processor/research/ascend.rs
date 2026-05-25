@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, ResearchProgress, ResearchTemplate, EstateAccount, BuildingType},
-    helpers::estate::ascension_mastery_cost,
-    validation::{require_signer, require_writable, require_owner},
-    utils::read_u8,
     emit,
+    error::GameError,
     events::ResearchAscended,
+    helpers::estate::ascension_mastery_cost,
+    state::{BuildingType, EstateAccount, PlayerAccount, ResearchProgress, ResearchTemplate},
+    utils::read_u8,
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Ascend a maxed research node
@@ -112,7 +110,8 @@ pub fn process(
     }
 
     // 9. Find Academy building and check mastery
-    let academy = estate.find_building_mut(BuildingType::Academy)
+    let academy = estate
+        .find_building_mut(BuildingType::Academy)
         .ok_or(GameError::AcademyRequired)?;
 
     if !academy.is_active() {

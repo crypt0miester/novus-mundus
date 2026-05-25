@@ -22,11 +22,19 @@ export async function initEngine(ctx: CLIContext): Promise<PhaseStats> {
     ctx,
     'GameEngine',
     ctx.gameEngine,
-    async () => await createInitGameEngineInstruction({
-      authority: ctx.daoAuthority.publicKey,
-      treasuryWallet: ctx.treasury.publicKey,
-      kingdomId: ctx.kingdomId,
-    }),
+    async () => await createInitGameEngineInstruction(
+      {
+        authority: ctx.daoAuthority.publicKey,
+        treasuryWallet: ctx.treasury.publicKey,
+        kingdomId: ctx.kingdomId,
+      },
+      {
+        kingdomName: ctx.kingdomName,
+        theme: ctx.theme,
+        kingdomStartTime: ctx.kingdomStartTime,
+        registrationClosesAt: ctx.registrationClosesAt,
+      }
+    ),
     stats
   );
 

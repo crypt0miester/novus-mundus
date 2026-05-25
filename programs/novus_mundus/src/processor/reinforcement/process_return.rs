@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{ReinforcementAccount, ReinforcementStatus, PlayerAccount},
-    helpers::estate::{load_estate_for_player_mut, has_infirmary},
-    validation::{require_writable, require_owner},
     emit,
+    error::GameError,
     events::reinforcement::ReinforcementReturned,
+    helpers::estate::{has_infirmary, load_estate_for_player_mut},
+    state::{PlayerAccount, ReinforcementAccount, ReinforcementStatus},
+    validation::{require_owner, require_writable},
 };
 
 /// Process reinforcement return (crank operation)
@@ -38,12 +36,15 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, [
-        reinforcement_account,
-        sender_player,
-        sender_owner,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            reinforcement_account,
+            sender_player,
+            sender_owner,
+            estate_account,
+        ]
+    );
 
     // 2. Validate Accounts
     require_writable(reinforcement_account)?;
@@ -162,9 +163,12 @@ pub fn process(
 
     // Transfer lamports to sender
     sender_owner.set_lamports(
-        sender_owner.lamports()
+        sender_owner
+            .lamports()
             .checked_add(lamports)
-            .ok_or::<pinocchio::error::ProgramError>(crate::error::GameError::MathOverflow.into())?,
+            .ok_or::<pinocchio::error::ProgramError>(
+                crate::error::GameError::MathOverflow.into(),
+            )?,
     );
     reinforcement_account.set_lamports(0);
 

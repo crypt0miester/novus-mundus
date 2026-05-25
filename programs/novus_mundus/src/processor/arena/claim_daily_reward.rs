@@ -14,22 +14,20 @@
 //! 7. `[]` token_program: Token program
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::{
-        SECONDS_PER_DAY, ARENA_MIN_BATTLES_FOR_DAILY_REWARD, ARENA_MAX_DAILY_BATTLES,
-        ARENA_DAILY_BASE_REWARD, GAME_ENGINE_SEED,
+        ARENA_DAILY_BASE_REWARD, ARENA_MAX_DAILY_BATTLES, ARENA_MIN_BATTLES_FOR_DAILY_REWARD,
+        GAME_ENGINE_SEED, SECONDS_PER_DAY,
     },
     error::GameError,
-    state::{ArenaSeasonAccount, ArenaParticipantAccount, ArenaStatus, PlayerAccount, GameEngine},
-    validation::{require_owner, require_writable, require_key_match, require_data_len},
     helpers::{mint_tokens, validate_token_account_owner},
+    state::{ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, GameEngine, PlayerAccount},
     utils::read_u32,
+    validation::{require_data_len, require_key_match, require_owner, require_writable},
 };
 
 /// Instruction data for claim_daily_reward
@@ -96,14 +94,15 @@ pub fn process(
     season.check_and_reset_daily(today);
 
     // Check if daily pool has remaining funds
-    let remaining_today = season.daily_distribution_cap
+    let remaining_today = season
+        .daily_distribution_cap
         .saturating_sub(season.distributed_today);
     if remaining_today == 0 {
         return Err(GameError::ArenaDailyPoolExhausted.into());
     }
 
     // 6. Load Participant using player_account PDA for derivation (kingdom-scoped)
-    let mut participant = ArenaParticipantAccount::load_checked_mut(
+    let participant = ArenaParticipantAccount::load_checked_mut(
         participant_account,
         game_engine.address(),
         season_id,
@@ -125,11 +124,7 @@ pub fn process(
     }
 
     // 7. Calculate daily reward using SEASON CUMULATIVE wins/losses
-    let base_reward = calculate_daily_reward(
-        battles_today,
-        participant.wins,
-        participant.losses,
-    );
+    let base_reward = calculate_daily_reward(battles_today, participant.wins, participant.losses);
 
     // Cap to remaining daily pool and overall daily pool
     let actual_reward = base_reward
@@ -138,8 +133,6 @@ pub fn process(
 
     // 8. Update participant
     participant.daily_reward_claimed_day = today;
-
-    drop(participant);
 
     // 9. Update season
     season.distributed_today = season.distributed_today.saturating_add(actual_reward);
@@ -153,7 +146,6 @@ pub fn process(
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
     let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::cpi::Signer::from(&seeds);
-    drop(game_engine_data);
 
     // 11. Mint NOVI tokens to player's token account
     mint_tokens(
@@ -165,7 +157,12 @@ pub fn process(
     )?;
 
     // 12. Update player's locked_novi balance (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.address(), player_owner.address(), program_id)?;
+    let player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine.address(),
+        player_owner.address(),
+        program_id,
+    )?;
     player.locked_novi = player.locked_novi.saturating_add(actual_reward);
 
     Ok(())

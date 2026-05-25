@@ -23,15 +23,17 @@
 //!   - anchors: [Anchor × N] (N × 8 bytes)
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, rent::Rent},
+    sysvars::{rent::Rent, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    emit, error::GameError, events, logic::terrain::{self, ANCHOR_SIZE, TERRAIN_HEADER_SIZE}, state::{CityAccount, GameEngine}
+    emit,
+    error::GameError,
+    events,
+    logic::terrain::{self, ANCHOR_SIZE, TERRAIN_HEADER_SIZE},
+    state::{CityAccount, GameEngine},
 };
 
 /// Maximum anchors per city to stay within transaction limits
@@ -78,11 +80,7 @@ const MAX_ANCHORS: u16 = 100;
 /// - `InvalidInstructionData` — data too short, city_id mismatch, or anchor_count > 100
 /// - `InvalidCityId` — city's stored game_engine doesn't match account 1
 /// - `InvalidSeeds` — city account address doesn't match derived PDA
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // ── Parse accounts ─────────────────────────────────────────
     crate::extract_accounts!(accounts, [dao_authority, game_engine_account, city_account]);
     // accounts[3] = system program (needed for Transfer CPI)
@@ -157,7 +155,8 @@ pub fn process(
     }
 
     // Verify PDA
-    let expected_pda = CityAccount::create_pda(game_engine_account.address(), city_id, stored_bump)?;
+    let expected_pda =
+        CityAccount::create_pda(game_engine_account.address(), city_id, stored_bump)?;
     if city_account.address() != &expected_pda {
         return Err(ProgramError::InvalidSeeds);
     }
@@ -179,7 +178,8 @@ pub fn process(
                     from: dao_authority,
                     to: city_account,
                     lamports: lamports_needed,
-                }.invoke()?;
+                }
+                .invoke()?;
             }
         }
         // Shrinking — excess lamports stay on account (no refund needed)
@@ -200,7 +200,8 @@ pub fn process(
 
         // Write anchor bytes to trailing data
         if anchor_count > 0 {
-            let anchor_src = &terrain_data[TERRAIN_HEADER_SIZE..TERRAIN_HEADER_SIZE + anchor_count as usize * ANCHOR_SIZE];
+            let anchor_src = &terrain_data
+                [TERRAIN_HEADER_SIZE..TERRAIN_HEADER_SIZE + anchor_count as usize * ANCHOR_SIZE];
             let dst_start = CityAccount::SIZE;
             let dst_end = dst_start + anchor_count as usize * ANCHOR_SIZE;
             city_data[dst_start..dst_end].copy_from_slice(anchor_src);

@@ -1,19 +1,22 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
     constants::TREASURY_REQUEST_SEED,
-    validation::{require_signer, require_writable, require_key_match, require_owner, require_empty},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::TreasuryWithdrawRequested,
+    state::{
+        require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, EXT_TEAM,
+        NULL_PUBKEY,
+    },
+    utils::{read_u16, read_u64},
+    validation::{
+        require_empty, require_key_match, require_owner, require_signer, require_writable,
+    },
 };
 
 /// Request a treasury withdrawal (for amounts exceeding instant limits)
@@ -132,7 +135,8 @@ pub fn process(
 
     // 9. Verify Request PDA and Check No Existing Request
 
-    let (expected_request, request_bump) = TreasuryRequest::derive_pda(team_account.address(), player_account.address());
+    let (expected_request, request_bump) =
+        TreasuryRequest::derive_pda(team_account.address(), player_account.address());
 
     if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
@@ -164,7 +168,8 @@ pub fn process(
         lamports: request_lamports,
         space: TreasuryRequest::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[request_signer])?;
+    }
+    .invoke_signed(&[request_signer])?;
 
     // 11. Initialize Request Data
 

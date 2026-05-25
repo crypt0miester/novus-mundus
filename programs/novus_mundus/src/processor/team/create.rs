@@ -1,22 +1,23 @@
 use pinocchio::{
-    ProgramResult, AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
+    error::ProgramError,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{
-        PlayerAccount, TeamAccount, TeamMemberSlot, GameEngine,
-        unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_TEAM,
-        NULL_PUBKEY,
-    },
-    constants::{PLAYER_SEED, TEAM_SEED, TEAM_SLOT_SEED, MAX_TEAM_MEMBERS_BY_TIER, TIER_ROOKIE},
-    helpers::burn_tokens,
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u64},
-    logic::safe_math::apply_bp,
+    constants::{MAX_TEAM_MEMBERS_BY_TIER, PLAYER_SEED, TEAM_SEED, TEAM_SLOT_SEED, TIER_ROOKIE},
     emit,
+    error::GameError,
     events::TeamCreated,
+    helpers::burn_tokens,
+    logic::safe_math::apply_bp,
+    state::{
+        require_extension, unlock_extension_if_eligible, GameEngine, PlayerAccount, TeamAccount,
+        TeamMemberSlot, EXT_INVENTORY, EXT_TEAM, NULL_PUBKEY,
+    },
+    utils::{read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Create a new team
@@ -90,8 +91,8 @@ pub fn process(
     let name_bytes = &instruction_data[9..9 + name_len];
 
     // Validate UTF-8
-    let _name_str = core::str::from_utf8(name_bytes)
-        .map_err(|_| ProgramError::InvalidInstructionData)?;
+    let _name_str =
+        core::str::from_utf8(name_bytes).map_err(|_| ProgramError::InvalidInstructionData)?;
 
     // 4. Load Accounts (kingdom-scoped)
 
@@ -107,7 +108,12 @@ pub fn process(
 
     // 5. Validate Player Can Create Team + calculate cost (scoped borrow - dropped before CPI)
     let (adjusted_creation_cost, player_bump) = {
-        let player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
+        let player = PlayerAccount::load_checked_mut(
+            player_account,
+            game_engine_account.address(),
+            owner.address(),
+            program_id,
+        )?;
 
         // Already in a team?
         if player.team_address() != NULL_PUBKEY {
@@ -115,8 +121,11 @@ pub fn process(
         }
 
         let base_creation_cost = game_engine.gameplay_config.team_creation_cost;
-        let adjusted_creation_cost = apply_bp(base_creation_cost, game_engine.economic_config.cost_multiplier as u64)
-            .ok_or(GameError::MathOverflow)?;
+        let adjusted_creation_cost = apply_bp(
+            base_creation_cost,
+            game_engine.economic_config.cost_multiplier as u64,
+        )
+        .ok_or(GameError::MathOverflow)?;
 
         (adjusted_creation_cost, player.bump)
     }; // player borrow dropped here
@@ -124,7 +133,12 @@ pub fn process(
     // 6. Burn Team Creation Cost (CPI - requires no active borrows on player_account)
     // Player PDA owns the token account, so player_account is the burn authority
     let bump_seed = [player_bump];
-    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine_account.address(), owner.address(), &bump_seed);
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine_account.address(),
+        owner.address(),
+        &bump_seed
+    );
     let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
@@ -144,7 +158,8 @@ pub fn process(
     // team_id is provided by the client in instruction data
 
     let team_id_bytes = team_id.to_le_bytes();
-    let (expected_team, team_bump) = TeamAccount::derive_pda(game_engine_account.address(), team_id);
+    let (expected_team, team_bump) =
+        TeamAccount::derive_pda(game_engine_account.address(), team_id);
 
     if team_account.address() != &expected_team {
         return Err(GameError::InvalidPDA.into());
@@ -165,7 +180,12 @@ pub fn process(
     let team_lamports = crate::utils::rent_exempt_const(TeamAccount::LEN);
 
     let team_bump_seed = [team_bump];
-    let team_seeds = crate::seeds!(TEAM_SEED, game_engine_account.address(), &team_id_bytes, &team_bump_seed);
+    let team_seeds = crate::seeds!(
+        TEAM_SEED,
+        game_engine_account.address(),
+        &team_id_bytes,
+        &team_bump_seed
+    );
     let team_signer = pinocchio::cpi::Signer::from(&team_seeds);
 
     CreateAccount {
@@ -174,7 +194,8 @@ pub fn process(
         lamports: team_lamports,
         space: TeamAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[team_signer])?;
+    }
+    .invoke_signed(&[team_signer])?;
 
     // 11. Initialize Team Data
 
@@ -203,7 +224,12 @@ pub fn process(
 
     let slot_bump_seed = [slot_bump];
     let slot_index_bytes = slot_index.to_le_bytes();
-    let slot_seeds = crate::seeds!(TEAM_SLOT_SEED, team_account.address(), &slot_index_bytes, &slot_bump_seed);
+    let slot_seeds = crate::seeds!(
+        TEAM_SLOT_SEED,
+        team_account.address(),
+        &slot_index_bytes,
+        &slot_bump_seed
+    );
     let slot_signer = pinocchio::cpi::Signer::from(&slot_seeds);
 
     CreateAccount {
@@ -212,7 +238,8 @@ pub fn process(
         lamports: slot_lamports,
         space: TeamMemberSlot::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[slot_signer])?;
+    }
+    .invoke_signed(&[slot_signer])?;
 
     // 13. Initialize Leader Slot Data
 
@@ -231,7 +258,12 @@ pub fn process(
     drop(slot_data);
 
     // 14. Update Player Account (re-load after CPIs)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
+    let player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     player.set_team_address(*team_account.address());
     player.set_team_slot_index(slot_index);

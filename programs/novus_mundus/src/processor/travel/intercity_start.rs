@@ -1,26 +1,26 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::LOCATION_SEED,
     emit,
     error::GameError,
     events::IntercityTravelStarted,
-    state::{PlayerAccount, CityAccount, GameEngine, LocationAccount, OCCUPANT_PLAYER},
-    constants::LOCATION_SEED,
-    helpers::{close_account, estate::{load_estate_for_player, require_stables, stables_travel_reduction_bps}},
+    helpers::{
+        close_account,
+        estate::{load_estate_for_player, require_stables, stables_travel_reduction_bps},
+    },
     logic::{
-        location::{calculate_distance, apply_travel_speed_bonuses, is_within_city_bounds},
-        get_time_of_day,
-        get_time_multiplier,
+        get_time_multiplier, get_time_of_day,
+        location::{apply_travel_speed_bonuses, calculate_distance, is_within_city_bounds},
         ActivityType,
     },
+    state::{CityAccount, GameEngine, LocationAccount, PlayerAccount, OCCUPANT_PLAYER},
     types::TravelType,
     validation::require_owner,
 };
@@ -56,18 +56,21 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (10 required, 1 optional for stealing)
 
-    crate::extract_accounts!(accounts, [
-        player_account,
-        owner,
-        origin_city_account,
-        destination_city_account,
-        game_engine_account,
-        origin_location_account,
-        destination_location_account,
-        _origin_creator_refund,
-        _system_program,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_account,
+            owner,
+            origin_city_account,
+            destination_city_account,
+            game_engine_account,
+            origin_location_account,
+            destination_location_account,
+            _origin_creator_refund,
+            _system_program,
+            estate_account,
+        ]
+    );
 
     // Optional: bumped player account (required when stealing a reservation)
     let bumped_player_account = accounts.get(10);
@@ -79,8 +82,18 @@ pub fn process(
     }
 
     let destination_city_id = crate::utils::read_u16(instruction_data, 0, "destination_city_id")?;
-    let dest_grid_lat = i32::from_le_bytes([instruction_data[2], instruction_data[3], instruction_data[4], instruction_data[5]]);
-    let dest_grid_long = i32::from_le_bytes([instruction_data[6], instruction_data[7], instruction_data[8], instruction_data[9]]);
+    let dest_grid_lat = i32::from_le_bytes([
+        instruction_data[2],
+        instruction_data[3],
+        instruction_data[4],
+        instruction_data[5],
+    ]);
+    let dest_grid_long = i32::from_le_bytes([
+        instruction_data[6],
+        instruction_data[7],
+        instruction_data[8],
+        instruction_data[9],
+    ]);
 
     // 3. Validate Signer
 
@@ -89,16 +102,14 @@ pub fn process(
     }
 
     // 4. Load Accounts (kingdom-scoped)
-    //
-    // Validate via load_checked (which borrows RefCell), then drop the borrow
-    // and use unsafe raw pointer access instead. This avoids holding RefCell
-    // borrows during CreateAccount CPI which would cause AccountBorrowFailed.
 
-    { let _ = GameEngine::load_checked_by_key(game_engine_account, program_id)?; }
-    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
-
-    { let _ = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?; }
-    let player_data = unsafe { &mut *(player_account.data_ptr() as *mut PlayerAccount) };
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     require_owner(origin_city_account, program_id)?;
     require_owner(destination_city_account, program_id)?;
@@ -153,9 +164,8 @@ pub fn process(
 
     // Get subscription speed bonus
     let effective_tier = player_data.get_effective_tier(now);
-    let subscription_bonus_bps = game_engine_data
-        .subscription_tiers[effective_tier as usize]
-        .travel_speed_bonus_bps;
+    let subscription_bonus_bps =
+        game_engine_data.subscription_tiers[effective_tier as usize].travel_speed_bonus_bps;
 
     // Apply speed bonuses (subscription + research if available)
     // TODO: Add research bonus when research section is loaded
@@ -199,7 +209,11 @@ pub fn process(
     }
 
     // 10a. Terrain Passability Check
-    destination_city_data.require_passable_at(destination_city_account, dest_lat_f64, dest_long_f64)?;
+    destination_city_data.require_passable_at(
+        destination_city_account,
+        dest_lat_f64,
+        dest_long_f64,
+    )?;
 
     let dest_city_bytes = destination_city_id.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();
@@ -239,10 +253,12 @@ pub fn process(
             lamports,
             space: LocationAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[location_signer])?;
+        }
+        .invoke_signed(&[location_signer])?;
 
         // Use unsafe raw pointer to avoid holding RefMut across close_account
-        let dest_location = unsafe { &mut *(destination_location_account.data_ptr() as *mut LocationAccount) };
+        let dest_location =
+            unsafe { &mut *(destination_location_account.data_ptr() as *mut LocationAccount) };
 
         dest_location.account_key = crate::state::AccountKey::Location as u8;
         dest_location.game_engine = *game_engine_account.address();
@@ -256,9 +272,17 @@ pub fn process(
         dest_location.location_creator = *owner.address();
         dest_location.reserved_arrival_time = arrival_time;
     } else {
-        // Destination exists - check if available or can be stolen
-        // Use unsafe raw pointer to avoid holding RefMut across close_account
-        let dest_location = unsafe { &mut *(destination_location_account.data_ptr() as *mut LocationAccount) };
+        // Destination exists - check if available or can be stolen.
+        // load_checked_mut validates program owner, discriminator, and the
+        // canonical PDA (game_engine, city_id, grid_lat, grid_long).
+        let dest_location = LocationAccount::load_checked_mut(
+            destination_location_account,
+            game_engine_account.address(),
+            destination_city_id,
+            dest_grid_lat,
+            dest_grid_long,
+            program_id,
+        )?;
 
         if dest_location.grid_lat != dest_grid_lat || dest_location.grid_long != dest_grid_long {
             return Err(GameError::InvalidPDA.into());
@@ -268,20 +292,18 @@ pub fn process(
             // Cell is occupied by someone else - check if we can steal it
             if dest_location.can_steal_reservation(arrival_time) {
                 // We can steal! Need bumped player account to reverse their travel
-                let bumped_player = bumped_player_account
-                    .ok_or(GameError::InvalidParameter)?;
+                let bumped_player = bumped_player_account.ok_or(GameError::InvalidParameter)?;
 
                 // Validate bumped player is the current occupant
                 if bumped_player.address() != &dest_location.occupant {
                     return Err(GameError::InvalidParameter.into());
                 }
 
-                // M-08: Verify bumped player account is owned by this program
-                // to prevent attacker-supplied account spoofing.
-                require_owner(bumped_player, program_id)?;
-
-                // Reverse the bumped player's travel (unsafe raw pointer)
-                let bumped = unsafe { &mut *(bumped_player.data_ptr() as *mut PlayerAccount) };
+                // M-08: load_checked_mut_by_key validates program owner,
+                // discriminator, and the canonical PDA derived from the
+                // account's own stored game_engine + owner — preventing
+                // attacker-supplied account spoofing.
+                let bumped = PlayerAccount::load_checked_mut_by_key(bumped_player, program_id)?;
 
                 // M-08: Verify bumped player is in the same kingdom (game_engine)
                 // before mutating their state.
@@ -293,7 +315,9 @@ pub fn process(
                 let bumped_total_time = bumped.arrival_time - bumped.departure_time;
                 let bumped_elapsed = now - bumped.departure_time;
                 let progress = if bumped_total_time > 0 {
-                    (bumped_elapsed as f64 / bumped_total_time as f64).min(1.0).max(0.0)
+                    (bumped_elapsed as f64 / bumped_total_time as f64)
+                        .min(1.0)
+                        .max(0.0)
                 } else {
                     0.0
                 };
@@ -366,17 +390,16 @@ pub fn process(
     player_data.departure_time = now;
     player_data.arrival_time = arrival_time;
     player_data.travel_speed_locked = effective_speed; // Lock effective speed for cancel calculations
-    // Persist the destination coordinates so intercity_cancel can re-derive
-    // the reserved-destination PDA. `intercity_start` lets the player pick
-    // any cell inside the destination city radius, so cancel must use the
-    // player's actual reservation rather than the city center.
+                                                       // Persist the destination coordinates so intercity_cancel can re-derive
+                                                       // the reserved-destination PDA. `intercity_start` lets the player pick
+                                                       // any cell inside the destination city radius, so cancel must use the
+                                                       // player's actual reservation rather than the city center.
     player_data.traveling_to_lat = LocationAccount::from_grid(dest_grid_lat);
     player_data.traveling_to_long = LocationAccount::from_grid(dest_grid_long);
 
     // 13. Decrement Origin City Player Count
 
-    origin_city_data.players_present = origin_city_data.players_present
-        .saturating_sub(1);
+    origin_city_data.players_present = origin_city_data.players_present.saturating_sub(1);
 
     // 14. Emit Event
 

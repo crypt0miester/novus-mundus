@@ -1,27 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, HeroTemplate, calculate_fragment_cost, require_extension, EXT_HEROES},
-    helpers::{
-        add_buff_delta_to_player,
-        HeroNftContext,
-        HeroNftBuffers,
-        build_hero_nft_attributes,
-        parse_hero_nft,
-        estate::{require_sanctuary, hero_level_cap, load_estate_for_player},
-    },
-    validation::{
-        require_signer,
-        require_writable,
-    },
     emit,
+    error::GameError,
     events::HeroLeveledUp,
+    helpers::{
+        add_buff_delta_to_player, build_hero_nft_attributes,
+        estate::{hero_level_cap, load_estate_for_player, require_sanctuary},
+        parse_hero_nft, HeroNftBuffers, HeroNftContext,
+    },
+    state::{calculate_fragment_cost, require_extension, HeroTemplate, PlayerAccount, EXT_HEROES},
+    validation::{require_signer, require_writable},
 };
 
 /// Level up a hero by consuming fragments (134) - Deterministic System
@@ -95,8 +87,7 @@ pub fn process(
     // 5. Parse hero data from NFT
     // NFT-Only System: All hero state is stored in NFT attributes
     let nft_data = hero_mint.try_borrow()?;
-    let parsed_hero = parse_hero_nft(&nft_data)
-        .ok_or(GameError::InvalidParameter)?;
+    let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // 6. Load template (read-only)
@@ -116,7 +107,10 @@ pub fn process(
 
     // 8. SAFETY: Verify hero ownership
     // Hero must be either in player's wallet or locked in player's active_heroes
-    let is_locked = player.active_heroes_arr().iter().any(|&mint| mint == *hero_mint.address());
+    let is_locked = player
+        .active_heroes_arr()
+        .iter()
+        .any(|&mint| mint == *hero_mint.address());
 
     // If not locked, verify NFT is owned by the signer
     if !is_locked {
@@ -156,7 +150,8 @@ pub fn process(
     }
 
     // 15. Capture context for NFT attributes with new level
-    let ctx = HeroNftContext::from_parsed(&parsed_hero, template).with_new_level(new_level, template);
+    let ctx =
+        HeroNftContext::from_parsed(&parsed_hero, template).with_new_level(new_level, template);
     let hero_name = template.name;
     let player_name = player.name;
 
@@ -178,7 +173,11 @@ pub fn process(
 
     // Derive game_engine PDA signer
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let game_engine_seeds = crate::seeds!(
+        crate::constants::GAME_ENGINE_SEED,
+        &kingdom_id_bytes,
+        &ge_bump_seed
+    );
     let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
 
     // Update all NFT attributes
@@ -192,7 +191,8 @@ pub fn process(
         update: p_core::instructions::PluginUpdateData::AttributesSet {
             attributes: &attributes[..attr_count],
         },
-    }.invoke_signed(&[ge_signer])?;
+    }
+    .invoke_signed(&[ge_signer])?;
 
     // 17. Emit HeroLeveledUp event
     let clock = Clock::get()?;

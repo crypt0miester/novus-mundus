@@ -1,36 +1,26 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    constants::{MIN_RALLY_PARTICIPANTS, CASTLE_STATUS_TRANSITIONING, CASTLE_CONTEST_DURATION},
+    constants::{CASTLE_CONTEST_DURATION, CASTLE_STATUS_TRANSITIONING, MIN_RALLY_PARTICIPANTS},
+    emit,
     error::GameError,
+    events::{CastleConquered, CastleDefended, RallyExecuted},
+    helpers::estate::citadel_rally_damage_bps,
     logic::{
-        calculate_damage_output,
+        calculate_damage_output, calculate_encounter_loot_pool, calculate_networth,
+        combat::{resolve_weapon_combat, WeaponSet},
         inflict_damage,
-        calculate_networth,
-        calculate_encounter_loot_pool,
         safe_math::{calculate_share, mul_div},
-        combat::{WeaponSet, resolve_weapon_combat},
     },
     state::{
-        PlayerAccount,
-        RallyAccount,
-        RallyParticipant,
-        RallyStatus,
-        EncounterAccount,
-        EstateAccount,
-        CastleAccount,
-        GarrisonContributionAccount,
+        CastleAccount, EncounterAccount, EstateAccount, GarrisonContributionAccount, PlayerAccount,
+        RallyAccount, RallyParticipant, RallyStatus,
     },
-    helpers::estate::citadel_rally_damage_bps,
-    validation::{require_writable, require_owner},
-    emit,
-    events::{RallyExecuted, CastleConquered, CastleDefended},
+    validation::{require_owner, require_writable},
 };
 
 /// Execute a rally
@@ -64,12 +54,15 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Fixed Accounts
 
-    crate::extract_accounts!(accounts, [
-        rally_account,
-        target_account,
-        game_engine_account,
-        leader_estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            rally_account,
+            target_account,
+            game_engine_account,
+            leader_estate_account,
+        ]
+    );
 
     // Load rally to get participant count
     // RallyAccount doesn't have load_checked - verify program ownership manually
@@ -115,15 +108,17 @@ pub fn process(
     require_owner(rally_account, program_id)?;
     let rally_data_check = rally_account.try_borrow()?;
     let rally_data = unsafe { RallyAccount::load(&rally_data_check) };
-    let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let game_engine_data =
+        crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     let gameplay_config = &game_engine_data.gameplay_config;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Validate Rally State
 
     // Rally must be in Gathering or Marching status
-    if rally_data.status != RallyStatus::Gathering as u8 &&
-       rally_data.status != RallyStatus::Marching as u8 {
+    if rally_data.status != RallyStatus::Gathering as u8
+        && rally_data.status != RallyStatus::Marching as u8
+    {
         return Err(GameError::RallyAlreadyExecuted.into());
     }
 
@@ -208,7 +203,9 @@ pub fn process(
         contributions[i] = contribution;
     }
 
-    let total_weapons = total_melee.saturating_add(total_ranged).saturating_add(total_siege);
+    let total_weapons = total_melee
+        .saturating_add(total_ranged)
+        .saturating_add(total_siege);
     let total_contribution: u64 = contributions[..participant_count].iter().sum();
 
     // Calculate contribution_bps for each participant
@@ -284,14 +281,17 @@ pub fn process(
             let target_player = unsafe { PlayerAccount::load_mut(&mut target_account_data) };
 
             // Get defender's garrison
-            let defender_troops = target_player.defensive_unit_1
+            let defender_troops = target_player
+                .defensive_unit_1
                 .saturating_add(target_player.defensive_unit_2)
                 .saturating_add(target_player.defensive_unit_3);
 
             // Check for fallback mode (no garrison)
-            let has_operatives = target_player.operative_unit_1
+            let has_operatives = target_player
+                .operative_unit_1
                 .saturating_add(target_player.operative_unit_2)
-                .saturating_add(target_player.operative_unit_3) > 0;
+                .saturating_add(target_player.operative_unit_3)
+                > 0;
 
             fallback_triggered = defender_troops == 0;
 
@@ -326,7 +326,8 @@ pub fn process(
                 )
             } else if has_operatives {
                 // Operatives defend at 50% effectiveness
-                let op_power = target_player.operative_unit_1
+                let op_power = target_player
+                    .operative_unit_1
                     .saturating_add(target_player.operative_unit_2.saturating_mul(2))
                     .saturating_add(target_player.operative_unit_3.saturating_mul(3));
                 op_power / 2
@@ -354,7 +355,8 @@ pub fn process(
                 target_player.equipped_armor_bonus_bps(),
             );
 
-            let defender_casualties = target_player.defensive_unit_1
+            let defender_casualties = target_player
+                .defensive_unit_1
                 .saturating_add(target_player.defensive_unit_2)
                 .saturating_add(target_player.defensive_unit_3)
                 .saturating_sub(new_def1.saturating_add(new_def2).saturating_add(new_def3));
@@ -386,12 +388,13 @@ pub fn process(
                 total_loot_siege = weapon_result.attacker_weapons_looted.siege;
 
                 // Deduct looted weapons from defender
-                target_player.melee_weapons = target_player.melee_weapons
-                    .saturating_sub(total_loot_melee);
-                target_player.ranged_weapons = target_player.ranged_weapons
+                target_player.melee_weapons =
+                    target_player.melee_weapons.saturating_sub(total_loot_melee);
+                target_player.ranged_weapons = target_player
+                    .ranged_weapons
                     .saturating_sub(total_loot_ranged);
-                target_player.siege_weapons = target_player.siege_weapons
-                    .saturating_sub(total_loot_siege);
+                target_player.siege_weapons =
+                    target_player.siege_weapons.saturating_sub(total_loot_siege);
 
                 // Loot other resources (25% of target's resources)
                 total_loot_cash = target_player.cash_on_hand / 4;
@@ -406,24 +409,29 @@ pub fn process(
                 }
 
                 // Deduct from target
-                target_player.cash_on_hand = target_player.cash_on_hand.saturating_sub(total_loot_cash);
+                target_player.cash_on_hand =
+                    target_player.cash_on_hand.saturating_sub(total_loot_cash);
                 target_player.produce = target_player.produce.saturating_sub(total_loot_produce);
                 target_player.vehicles = target_player.vehicles.saturating_sub(total_loot_vehicles);
-                target_player.fragments = target_player.fragments.saturating_sub(total_loot_fragments);
+                target_player.fragments =
+                    target_player.fragments.saturating_sub(total_loot_fragments);
                 target_player.gems = target_player.gems.saturating_sub(total_loot_gems);
             } else {
                 // Attacker lost - defender gets weapons from dead attackers
-                target_player.melee_weapons = target_player.melee_weapons
+                target_player.melee_weapons = target_player
+                    .melee_weapons
                     .saturating_add(weapon_result.defender_weapons_looted.melee);
-                target_player.ranged_weapons = target_player.ranged_weapons
+                target_player.ranged_weapons = target_player
+                    .ranged_weapons
                     .saturating_add(weapon_result.defender_weapons_looted.ranged);
-                target_player.siege_weapons = target_player.siege_weapons
+                target_player.siege_weapons = target_player
+                    .siege_weapons
                     .saturating_add(weapon_result.defender_weapons_looted.siege);
             }
 
             // Update target networth
             target_player.networth = calculate_networth(target_player, economic_config)?;
-        },
+        }
         1 => {
             // Encounter Rally Attack
             // EncounterAccount - verify program ownership
@@ -451,14 +459,16 @@ pub fn process(
                 let weapons = loot_pool.total_weapons;
                 total_loot_melee = weapons / 2;
                 total_loot_ranged = (weapons * 3) / 10;
-                total_loot_siege = weapons.saturating_sub(total_loot_melee).saturating_sub(total_loot_ranged);
+                total_loot_siege = weapons
+                    .saturating_sub(total_loot_melee)
+                    .saturating_sub(total_loot_ranged);
 
                 total_loot_produce = loot_pool.total_produce;
                 total_loot_vehicles = loot_pool.total_vehicles;
                 total_loot_fragments = loot_pool.total_fragments;
                 total_loot_gems = loot_pool.total_gems;
             }
-        },
+        }
         2 => {
             // Castle Rally Attack - Siege the garrison
             // Target CastleAccount - verify program ownership
@@ -491,7 +501,9 @@ pub fn process(
             let mut best_hero_weapon_eff_bps: u16 = 0;
 
             for garrison_account in garrison_accounts.iter() {
-                if unsafe { garrison_account.owner() } != program_id || garrison_account.data_len() == 0 {
+                if unsafe { garrison_account.owner() } != program_id
+                    || garrison_account.data_len() == 0
+                {
                     continue;
                 }
 
@@ -509,11 +521,13 @@ pub fn process(
                     .saturating_add(garrison.units_3);
 
                 total_garrison_melee = total_garrison_melee.saturating_add(garrison.melee_weapons);
-                total_garrison_ranged = total_garrison_ranged.saturating_add(garrison.ranged_weapons);
+                total_garrison_ranged =
+                    total_garrison_ranged.saturating_add(garrison.ranged_weapons);
                 total_garrison_siege = total_garrison_siege.saturating_add(garrison.siege_weapons);
 
                 best_hero_defense_bps = best_hero_defense_bps.max(garrison.hero_defense_bps);
-                best_hero_weapon_eff_bps = best_hero_weapon_eff_bps.max(garrison.hero_weapon_eff_bps);
+                best_hero_weapon_eff_bps =
+                    best_hero_weapon_eff_bps.max(garrison.hero_weapon_eff_bps);
             }
 
             let total_garrison_weapons = total_garrison_melee
@@ -574,8 +588,10 @@ pub fn process(
             // tankier than per-tier `DEFENSIVE_UNIT_HEALTH` (avg ~4–5) because
             // garrison fights from fortifications. See `attack_castle.rs` for the
             // matching comment.
-            let garrison_casualty_ratio = if total_garrison_units > 0 && effective_total_damage > 0 {
-                ((effective_total_damage as u128 * 10000) / (total_garrison_units as u128 * 10)).min(10000) as u64
+            let garrison_casualty_ratio = if total_garrison_units > 0 && effective_total_damage > 0
+            {
+                ((effective_total_damage as u128 * 10000) / (total_garrison_units as u128 * 10))
+                    .min(10000) as u64
             } else {
                 0
             };
@@ -667,7 +683,7 @@ pub fn process(
                     timestamp: now,
                 });
             }
-        },
+        }
         _ => return Err(GameError::InvalidParameter.into()),
     }
 
@@ -686,8 +702,9 @@ pub fn process(
             let contribution_bps = rp_data.contribution_bps as u64;
 
             // Distribute casualties proportionally
-            let participant_casualties = calculate_share(attacker_casualties, contributions[i], total_contribution)
-                .unwrap_or(0);
+            let participant_casualties =
+                calculate_share(attacker_casualties, contributions[i], total_contribution)
+                    .unwrap_or(0);
 
             // Distribute casualties by unit type (proportional to committed)
             let participant_total_units = rp_data.total_units();
@@ -696,32 +713,47 @@ pub fn process(
                     participant_casualties,
                     rp_data.units_committed_1,
                     participant_total_units,
-                ).unwrap_or(0).min(rp_data.units_committed_1);
+                )
+                .unwrap_or(0)
+                .min(rp_data.units_committed_1);
 
                 rp_data.casualties_2 = calculate_share(
                     participant_casualties,
                     rp_data.units_committed_2,
                     participant_total_units,
-                ).unwrap_or(0).min(rp_data.units_committed_2);
+                )
+                .unwrap_or(0)
+                .min(rp_data.units_committed_2);
 
                 rp_data.casualties_3 = calculate_share(
                     participant_casualties,
                     rp_data.units_committed_3,
                     participant_total_units,
-                ).unwrap_or(0).min(rp_data.units_committed_3);
+                )
+                .unwrap_or(0)
+                .min(rp_data.units_committed_3);
             }
 
             // Distribute loot shares (only if attacker won)
             if attacker_won {
-                rp_data.loot_cash = calculate_share(total_loot_cash, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_locked_novi = calculate_share(total_loot_locked_novi, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_melee = calculate_share(total_loot_melee, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_ranged = calculate_share(total_loot_ranged, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_siege = calculate_share(total_loot_siege, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_produce = calculate_share(total_loot_produce, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_vehicles = calculate_share(total_loot_vehicles, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_fragments = calculate_share(total_loot_fragments, contribution_bps, 10000).unwrap_or(0);
-                rp_data.loot_gems = calculate_share(total_loot_gems, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_cash =
+                    calculate_share(total_loot_cash, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_locked_novi =
+                    calculate_share(total_loot_locked_novi, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_melee =
+                    calculate_share(total_loot_melee, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_ranged =
+                    calculate_share(total_loot_ranged, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_siege =
+                    calculate_share(total_loot_siege, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_produce =
+                    calculate_share(total_loot_produce, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_vehicles =
+                    calculate_share(total_loot_vehicles, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_fragments =
+                    calculate_share(total_loot_fragments, contribution_bps, 10000).unwrap_or(0);
+                rp_data.loot_gems =
+                    calculate_share(total_loot_gems, contribution_bps, 10000).unwrap_or(0);
             }
 
             // Set return journey timing

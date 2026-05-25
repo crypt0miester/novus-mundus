@@ -1,17 +1,13 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TreasuryRequest, require_extension, EXT_TEAM},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
-    utils::read_u64,
     emit,
+    error::GameError,
     events::TreasuryRequestCancelled,
+    helpers::close_account,
+    state::{require_extension, PlayerAccount, TeamAccount, TreasuryRequest, EXT_TEAM},
+    utils::read_u64,
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Cancel a treasury withdrawal request (by requester)
@@ -63,7 +59,8 @@ pub fn process(
     }
 
     // Verify same kingdom (if player still in team)
-    if player.team_address() != crate::state::NULL_PUBKEY && player.game_engine != team.game_engine {
+    if player.team_address() != crate::state::NULL_PUBKEY && player.game_engine != team.game_engine
+    {
         return Err(GameError::KingdomMismatch.into());
     }
 
@@ -77,7 +74,8 @@ pub fn process(
 
     // 6. Verify and Load Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), player_account.address());
+    let (expected_request, _) =
+        TreasuryRequest::derive_pda(team_account.address(), player_account.address());
     if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
@@ -105,7 +103,7 @@ pub fn process(
 
     // 8. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TreasuryRequestCancelled {

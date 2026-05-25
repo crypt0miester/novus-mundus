@@ -114,10 +114,7 @@ pub const GAME_ENGINE_SEED: &[u8] = b"game_engine";
 pub const NOVI_MINT_SEED: &[u8] = b"novi_mint";
 
 const NOVI_MINT_PDA: ([u8; 32], u8) =
-    const_crypto::ed25519::derive_program_address(
-        &[NOVI_MINT_SEED],
-        &crate::ID.to_bytes(),
-    );
+    const_crypto::ed25519::derive_program_address(&[NOVI_MINT_SEED], &crate::ID.to_bytes());
 pub const NOVI_MINT_ADDRESS: [u8; 32] = NOVI_MINT_PDA.0;
 pub const NOVI_MINT_BUMP: u8 = NOVI_MINT_PDA.1;
 pub const PLAYER_SEED: &[u8] = b"player";
@@ -172,7 +169,6 @@ pub const ORACLE_QUOTE_SEED: &[u8] = b"oracle_quote";
 // Estate System
 pub const ESTATE_SEED: &[u8] = b"estate";
 
-
 // Event System
 
 /// Prize distribution for top 10 leaderboard (basis points, must sum to 10000)
@@ -180,16 +176,16 @@ pub const ESTATE_SEED: &[u8] = b"estate";
 /// - Ranks 4-5: Equal rewards for upper-mid tier
 /// - Ranks 6-10: Equal rewards for lower-mid tier
 pub const PRIZE_DISTRIBUTION: [u16; 10] = [
-    3500,  // Rank 1:  35%
-    2500,  // Rank 2:  25%
-    1500,  // Rank 3:  15%
-    750,   // Rank 4:  7.5%
-    750,   // Rank 5:  7.5%
-    200,   // Rank 6:  2%
-    200,   // Rank 7:  2%
-    200,   // Rank 8:  2%
-    200,   // Rank 9:  2%
-    200,   // Rank 10: 2%
+    3500, // Rank 1:  35%
+    2500, // Rank 2:  25%
+    1500, // Rank 3:  15%
+    750,  // Rank 4:  7.5%
+    750,  // Rank 5:  7.5%
+    200,  // Rank 6:  2%
+    200,  // Rank 7:  2%
+    200,  // Rank 8:  2%
+    200,  // Rank 9:  2%
+    200,  // Rank 10: 2%
 ];
 
 // Compile-time guarantee that the prize distribution sums to exactly 10000 bps.
@@ -200,7 +196,10 @@ const _: () = {
         sum += PRIZE_DISTRIBUTION[i] as u32;
         i += 1;
     }
-    assert!(sum == 10_000, "PRIZE_DISTRIBUTION must sum to 10000 basis points");
+    assert!(
+        sum == 10_000,
+        "PRIZE_DISTRIBUTION must sum to 10000 basis points"
+    );
 };
 
 // Validation Constants
@@ -226,12 +225,12 @@ pub const DEFENSIVE_UNIT_HEALTH: [u64; 3] = [2, 5, 12];
 /// Stamina cost to attack encounters (by rarity)
 /// Order: Common, Uncommon, Rare, Epic, Legendary, WorldEvent
 pub const ENCOUNTER_STAMINA_COSTS: [u64; 6] = [
-    10,     // Common: 10 stamina
-    25,     // Uncommon: 25 stamina
-    50,     // Rare: 50 stamina
-    100,    // Epic: 100 stamina
-    250,    // Legendary: 250 stamina
-    500,    // WorldEvent: 500 stamina
+    10,  // Common: 10 stamina
+    25,  // Uncommon: 25 stamina
+    50,  // Rare: 50 stamina
+    100, // Epic: 100 stamina
+    250, // Legendary: 250 stamina
+    500, // WorldEvent: 500 stamina
 ];
 
 /// Stamina regeneration rate (1 stamina per X seconds)
@@ -240,10 +239,10 @@ pub const STAMINA_REGEN_INTERVAL: i64 = 300; // 5 minutes per 1 stamina
 /// Max stamina by subscription tier
 /// Order: Rookie, Expert, Epic, Legendary
 pub const MAX_STAMINA_BY_TIER: [u64; 4] = [
-    100,    // Rookie: 100 max stamina
-    500,    // Expert: 500 max stamina
-    1000,   // Epic: 1000 max stamina
-    10000,  // Legendary: 10000 max stamina
+    100,   // Rookie: 100 max stamina
+    500,   // Expert: 500 max stamina
+    1000,  // Epic: 1000 max stamina
+    10000, // Legendary: 10000 max stamina
 ];
 
 /// Attack range for encounters (meters).
@@ -350,8 +349,8 @@ pub const ARENA_MIN_POINTS_FOR_LEADERBOARD: u64 = 500;
 
 /// Arena combat power constants (matching existing combat system)
 pub const ARENA_MELEE_WEAPON_POWER: u64 = 10;
-pub const ARENA_RANGED_WEAPON_POWER: u64 = 16;  // phi ratio
-pub const ARENA_SIEGE_WEAPON_POWER: u64 = 26;   // phi^2 ratio
+pub const ARENA_RANGED_WEAPON_POWER: u64 = 16; // phi ratio
+pub const ARENA_SIEGE_WEAPON_POWER: u64 = 26; // phi^2 ratio
 pub const ARENA_ARMOR_POWER: u64 = 5;
 
 /// Points calculation constants
@@ -368,16 +367,16 @@ pub const ARENA_UNDERDOG_BONUS_BPS: u64 = 500; // 5% per 10% disadvantage
 
 /// Prize distribution for top 10 leaderboard (basis points, must sum to 10000)
 pub const ARENA_PRIZE_DISTRIBUTION: [u16; 10] = [
-    3500,  // Rank 1:  35%
-    2500,  // Rank 2:  25%
-    1500,  // Rank 3:  15%
-    750,   // Rank 4:  7.5%
-    750,   // Rank 5:  7.5%
-    200,   // Rank 6:  2%
-    200,   // Rank 7:  2%
-    200,   // Rank 8:  2%
-    200,   // Rank 9:  2%
-    200,   // Rank 10: 2%
+    3500, // Rank 1:  35%
+    2500, // Rank 2:  25%
+    1500, // Rank 3:  15%
+    750,  // Rank 4:  7.5%
+    750,  // Rank 5:  7.5%
+    200,  // Rank 6:  2%
+    200,  // Rank 7:  2%
+    200,  // Rank 8:  2%
+    200,  // Rank 9:  2%
+    200,  // Rank 10: 2%
 ];
 
 // Compile-time guarantee that the arena prize distribution sums to 10000 bps.
@@ -388,7 +387,10 @@ const _: () = {
         sum += ARENA_PRIZE_DISTRIBUTION[i] as u32;
         i += 1;
     }
-    assert!(sum == 10_000, "ARENA_PRIZE_DISTRIBUTION must sum to 10000 basis points");
+    assert!(
+        sum == 10_000,
+        "ARENA_PRIZE_DISTRIBUTION must sum to 10000 basis points"
+    );
 };
 
 // Dungeon System Constants
@@ -489,15 +491,15 @@ pub const RELIC_EFFECTS: [u16; 20] = [
 /// 2-piece synergy bonuses (basis points)
 /// Index matches synergy tag
 pub const SYNERGY_2_BONUS_BPS: [u16; 9] = [
-    1000,  // OFFENSE: +10% attack
-    1500,  // DEFENSE: +15% defense
-    1500,  // CRIT: +15% crit damage
-    500,   // SUSTAIN: +5% lifesteal
-    2000,  // DARKNESS: -20% darkness
-    2000,  // LOOT: +20% loot
-    1000,  // BOSS: -10% boss power
-    1000,  // HERO: +10% hero effectiveness
-    0,     // META: no bonus
+    1000, // OFFENSE: +10% attack
+    1500, // DEFENSE: +15% defense
+    1500, // CRIT: +15% crit damage
+    500,  // SUSTAIN: +5% lifesteal
+    2000, // DARKNESS: -20% darkness
+    2000, // LOOT: +20% loot
+    1000, // BOSS: -10% boss power
+    1000, // HERO: +10% hero effectiveness
+    0,    // META: no bonus
 ];
 
 /// 3-piece synergy bonuses (basis points, additive to 2-piece)
@@ -550,9 +552,9 @@ pub const DUNGEON_FLOOR_MULTIPLIERS: [u32; 10] = [
 
 /// Unit power for dungeon combat (matches existing constants)
 pub const DUNGEON_UNIT_POWER: [u64; 3] = [
-    15,  // Tier 1: 15 power
-    35,  // Tier 2: 35 power
-    80,  // Tier 3: 80 power
+    15, // Tier 1: 15 power
+    35, // Tier 2: 35 power
+    80, // Tier 3: 80 power
 ];
 
 /// Unit health for dungeon combat
@@ -579,8 +581,8 @@ pub const CASTLE_STATUS_VULNERABLE: u8 = 3;
 pub const CASTLE_STATUS_TRANSITIONING: u8 = 4;
 
 /// Castle time constants
-pub const CASTLE_CONTEST_DURATION: i64 = 7_200;       // 2 hours
-pub const CASTLE_PROTECTION_DURATION: i64 = 864_000;  // 10 days
+pub const CASTLE_CONTEST_DURATION: i64 = 7_200; // 2 hours
+pub const CASTLE_PROTECTION_DURATION: i64 = 864_000; // 10 days
 
 /// Castle limits
 pub const MAX_CASTLES_PER_KING: u8 = 5;
@@ -597,7 +599,7 @@ pub const GARRISON_CAP_BY_TIER: [u8; 4] = [5, 10, 15, 25];
 pub const CASTLE_TIER_MULTIPLIER_BPS: [u16; 5] = [2500, 5000, 10000, 15000, 20000];
 
 /// Combat loot
-pub const KING_LOOT_CUT_BPS: u16 = 1500;              // 15% of combat loot
+pub const KING_LOOT_CUT_BPS: u16 = 1500; // 15% of combat loot
 
 /// Upgrade types
 pub const CASTLE_UPGRADE_FORTIFICATION: u8 = 1;
@@ -610,10 +612,10 @@ pub const CASTLE_UPGRADE_ARMORY: u8 = 5;
 /// Combat stats (Fortification, Armory) are uncapped - economics provide natural soft cap
 /// Utility stats have practical caps where diminishing returns kick in
 pub const MAX_FORTIFICATION_LEVEL: u8 = 255; // Uncapped - +5% defense/level
-pub const MAX_TREASURY_LEVEL: u8 = 20;       // Cap at 200% bonus rewards
-pub const MAX_CHAMBERS_LEVEL: u8 = 5;        // Cap at 5 court slots
-pub const MAX_WATCHTOWER_LEVEL: u8 = 15;     // Cap at 150% early warning
-pub const MAX_ARMORY_LEVEL: u8 = 255;        // Uncapped - +3% defense quality/level
+pub const MAX_TREASURY_LEVEL: u8 = 20; // Cap at 200% bonus rewards
+pub const MAX_CHAMBERS_LEVEL: u8 = 5; // Cap at 5 court slots
+pub const MAX_WATCHTOWER_LEVEL: u8 = 15; // Cap at 150% early warning
+pub const MAX_ARMORY_LEVEL: u8 = 255; // Uncapped - +3% defense quality/level
 
 /// Default daily rewards (at 1.0x tier multiplier)
 pub const KING_NOVI_PER_DAY: u64 = 500_000;

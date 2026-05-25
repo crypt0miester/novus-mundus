@@ -1,20 +1,14 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-    sysvars::Sysvar,
-};
 use crate::{
     error::GameError,
     helpers::close_account,
     state::{
-        GameEngine, FlashSaleAccount, WeeklySaleAccount, SeasonalSaleAccount,
-        DAOPromotionAccount, PlayerPurchaseAccount, ShopItemAccount,
+        DAOPromotionAccount, FlashSaleAccount, GameEngine, PlayerPurchaseAccount,
+        SeasonalSaleAccount, ShopItemAccount, WeeklySaleAccount,
     },
+    utils::{read_u64, read_u8},
     validation::{require_signer, require_writable},
-    utils::{read_u8, read_u64},
 };
+use pinocchio::{error::ProgramError, sysvars::Sysvar, AccountView, Address, ProgramResult};
 
 /// Sale account type for closing
 #[repr(u8)]
@@ -62,12 +56,10 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    crate::extract_accounts!(accounts, [
-        authority,
-        game_engine_account,
-        sale_account,
-        rent_recipient,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [authority, game_engine_account, sale_account, rent_recipient,]
+    );
 
     // 2. Validate Accounts
 
@@ -119,12 +111,7 @@ pub fn process(
         SaleType::SeasonalSale => {
             // For seasonal, sale_id is actually event pubkey bytes
             // Simplified: just use the account directly
-            close_seasonal_sale(
-                program_id,
-                sale_account,
-                rent_recipient,
-                is_dao,
-            )?;
+            close_seasonal_sale(program_id, sale_account, rent_recipient, is_dao)?;
         }
         SaleType::DAOPromotion => {
             close_dao_promotion(

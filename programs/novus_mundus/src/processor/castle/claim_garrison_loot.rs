@@ -6,21 +6,17 @@
 //! during successful castle defenses.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
     events::GarrisonLootClaimed,
-    state::{
-        CastleAccount, GarrisonContributionAccount, PlayerAccount,
-    },
-    validation::{require_owner, require_initialized},
+    state::{CastleAccount, GarrisonContributionAccount, PlayerAccount},
+    validation::{require_initialized, require_owner},
 };
 
 /// Claim Garrison Loot instruction data
@@ -39,12 +35,15 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        player_wallet,
-        player_account,
-        castle_account,
-        garrison_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_wallet,
+            player_account,
+            castle_account,
+            garrison_account,
+        ]
+    );
 
     // Verify signer
     if !player_wallet.is_signer() {
@@ -68,10 +67,8 @@ pub fn process(
     // Load garrison contribution
     require_owner(garrison_account, program_id)?;
 
-    let (expected_garrison_pda, _) = GarrisonContributionAccount::derive_pda(
-        castle_account.address(),
-        player_account.address(),
-    );
+    let (expected_garrison_pda, _) =
+        GarrisonContributionAccount::derive_pda(castle_account.address(), player_account.address());
     if garrison_account.address() != &expected_garrison_pda {
         return Err(GameError::InvalidPDA.into());
     }

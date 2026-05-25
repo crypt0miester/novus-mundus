@@ -11,20 +11,18 @@
 //! `gem_cost = remaining_minutes × gems_per_minute × tier_multiplier`
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::EXPEDITION_SEED,
-    error::GameError,
-    state::{PlayerAccount, ExpeditionAccount},
-    utils::read_u8,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
+    error::GameError,
     events::ExpeditionSpeedup,
+    state::{ExpeditionAccount, PlayerAccount},
+    utils::read_u8,
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Gems cost per minute of speedup (base rate)
@@ -52,11 +50,7 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, [
-        owner,
-        player_account,
-        expedition_account,
-    ]);
+    crate::extract_accounts!(accounts, [owner, player_account, expedition_account,]);
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -123,15 +117,13 @@ pub fn process(
 
     // 11. Calculate tier effects
     let (time_reduction_bps, cost_multiplier): (u64, u64) = match speedup_tier {
-        1 => (5000, 1),  // 50% reduction, 1x cost
-        2 => (7500, 2),  // 75% reduction, 2x cost
+        1 => (5000, 1), // 50% reduction, 1x cost
+        2 => (7500, 2), // 75% reduction, 2x cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
     // 12. Calculate gem cost (based on time being reduced, not remaining)
-    let seconds_to_reduce = (remaining_seconds as u64)
-        .saturating_mul(time_reduction_bps)
-        / 10000;
+    let seconds_to_reduce = (remaining_seconds as u64).saturating_mul(time_reduction_bps) / 10000;
     let minutes_to_reduce = (seconds_to_reduce / 60).max(1);
 
     let gem_cost = minutes_to_reduce
@@ -144,18 +136,16 @@ pub fn process(
     }
 
     // 14. Deduct gems
-    player_data.gems = player_data.gems
+    player_data.gems = player_data
+        .gems
         .checked_sub(gem_cost)
         .ok_or(GameError::MathOverflow)?;
 
     // 15. Apply speedup by adjusting start_time forward
     // This makes the expedition appear to have started earlier, thus ending sooner
-    let time_saved = (remaining_seconds as u64)
-        .saturating_mul(time_reduction_bps)
-        / 10000;
+    let time_saved = (remaining_seconds as u64).saturating_mul(time_reduction_bps) / 10000;
 
-    expedition.start_time = expedition.start_time
-        .saturating_sub(time_saved as i64);
+    expedition.start_time = expedition.start_time.saturating_sub(time_saved as i64);
 
     let new_end_time = expedition.end_time();
 

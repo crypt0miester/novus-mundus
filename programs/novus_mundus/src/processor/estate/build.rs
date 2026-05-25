@@ -1,19 +1,19 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingSlot, BuildingTemplate},
     constants::PLAYER_SEED,
-    helpers::burn_tokens,
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::estate::BuildingStarted,
+    helpers::burn_tokens,
+    state::{
+        BuildingSlot, BuildingStatus, BuildingTemplate, BuildingType, EstateAccount, PlayerAccount,
+    },
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Build Building
@@ -68,8 +68,8 @@ pub fn process(
     if instruction_data.is_empty() {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let building_type = BuildingType::from_u8(instruction_data[0])
-        .ok_or(ProgramError::InvalidInstructionData)?;
+    let building_type =
+        BuildingType::from_u8(instruction_data[0]).ok_or(ProgramError::InvalidInstructionData)?;
 
     // 4. Validate preconditions (scoped borrow - dropped before CPI)
     let (base_cost, construction_time, slot_index, player_ge, player_bump, player_name) = {
@@ -99,7 +99,8 @@ pub fn process(
         }
 
         // 8. Find empty slot
-        let slot_index = estate_data.find_empty_slot()
+        let slot_index = estate_data
+            .find_empty_slot()
             .ok_or(GameError::BuildingSlotFull)?;
 
         // 9. Cost & time come from the on-chain BuildingTemplate config.
@@ -111,7 +112,14 @@ pub fn process(
             return Err(GameError::InsufficientLockedNovi.into());
         }
 
-        (base_cost, construction_time, slot_index, player_data.game_engine, player_data.bump, player_data.name)
+        (
+            base_cost,
+            construction_time,
+            slot_index,
+            player_data.game_engine,
+            player_data.bump,
+            player_data.name,
+        )
     }; // borrows dropped here
 
     // 11. Burn NOVI tokens (CPI - requires no active borrows)

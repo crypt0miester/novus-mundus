@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Castle system events - King's Castle territorial control
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new castle is created by DAO
 pub struct CastleCreated {

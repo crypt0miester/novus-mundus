@@ -11,27 +11,25 @@
 //! 3. `[]` system_program: System program
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::{
-        ARENA_SEASON_SEED, ARENA_SEASON_DURATION, ARENA_CLAIM_DEADLINE,
-        ARENA_MIN_POINTS_FOR_LEADERBOARD,
+        ARENA_CLAIM_DEADLINE, ARENA_MIN_POINTS_FOR_LEADERBOARD, ARENA_SEASON_DURATION,
+        ARENA_SEASON_SEED,
     },
+    emit,
     error::GameError,
+    events::KingdomArenaSeasonStarted,
     state::{
-        ArenaSeasonAccount, ArenaLeaderboardEntry, ArenaStatus, GameEngine,
+        ArenaLeaderboardEntry, ArenaSeasonAccount, ArenaStatus, GameEngine,
         ARENA_SEASON_ACCOUNT_SIZE,
     },
-    validation::{require_signer, require_writable, require_key_match},
-    emit,
-    events::KingdomArenaSeasonStarted,
     utils::{read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Instruction data for create_season
@@ -66,7 +64,6 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
     let kingdom_id = game_engine_data.kingdom_id;
-    drop(game_engine_data);
 
     // 4. Parse Instruction Data (29 bytes minimum)
     let season_id = read_u32(instruction_data, 0, "create_season.season_id")?;
@@ -75,7 +72,8 @@ pub fn process(
 
     let daily_prize_pool = read_u64(instruction_data, 12, "create_season.daily_prize_pool")?;
 
-    let daily_distribution_cap = read_u64(instruction_data, 20, "create_season.daily_distribution_cap")?;
+    let daily_distribution_cap =
+        read_u64(instruction_data, 20, "create_season.daily_distribution_cap")?;
 
     let min_level_required = read_u8(instruction_data, 28, "create_season.min_level_required")?;
 
@@ -111,7 +109,8 @@ pub fn process(
         lamports,
         space: ARENA_SEASON_ACCOUNT_SIZE as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 7. Initialize ArenaSeasonAccount
     let mut data_ref = arena_season.try_borrow_mut()?;

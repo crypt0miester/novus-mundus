@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Economy events - resources, transfers, purchases
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player collects resources (cash/mining/fishing)
 pub struct ResourcesCollected {

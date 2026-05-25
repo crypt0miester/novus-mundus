@@ -1,17 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::SEASONAL_SALE_SEED,
     error::GameError,
     state::{GameEngine, SeasonalSaleAccount, SeasonalSaleStatus, MAX_FEATURED_ITEMS},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u16, read_u32, read_u64, read_i64, read_bytes32},
+    utils::{read_bytes32, read_i64, read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a seasonal sale tied to an event (DAO only)
 ///
@@ -102,10 +97,8 @@ pub fn process(
 
     // 6. Derive and Verify Seasonal Sale PDA
 
-    let (expected_pda, bump) = SeasonalSaleAccount::derive_pda(
-        game_engine_account.address(),
-        event_account.address(),
-    );
+    let (expected_pda, bump) =
+        SeasonalSaleAccount::derive_pda(game_engine_account.address(), event_account.address());
 
     if seasonal_sale_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -130,7 +123,8 @@ pub fn process(
         lamports,
         space: SeasonalSaleAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Seasonal Sale Data
 
@@ -148,7 +142,8 @@ pub fn process(
     for i in 0..featured_count {
         let offset = 63 + i * 6;
         featured_item_ids[i] = read_u32(instruction_data, offset, "featured_item_id")?;
-        featured_discounts_bps[i] = read_u16(instruction_data, offset + 4, "featured_discount_bps")?;
+        featured_discounts_bps[i] =
+            read_u16(instruction_data, offset + 4, "featured_discount_bps")?;
     }
 
     sale.featured_item_ids = featured_item_ids;

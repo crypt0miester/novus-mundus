@@ -1,19 +1,17 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{EstateAccount, PlayerAccount, BuildingType, BuildingStatus, BuildingTemplate},
     constants::PLAYER_SEED,
-    helpers::burn_tokens,
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::estate::BuildingUpgradeStarted,
+    helpers::burn_tokens,
+    state::{BuildingStatus, BuildingTemplate, BuildingType, EstateAccount, PlayerAccount},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Upgrade Building
@@ -68,8 +66,8 @@ pub fn process(
     if instruction_data.is_empty() {
         return Err(ProgramError::InvalidInstructionData);
     }
-    let building_type = BuildingType::from_u8(instruction_data[0])
-        .ok_or(ProgramError::InvalidInstructionData)?;
+    let building_type =
+        BuildingType::from_u8(instruction_data[0]).ok_or(ProgramError::InvalidInstructionData)?;
 
     // 4. Phase 1: Validate and capture values (scoped borrow, dropped before CPI)
     let (upgrade_cost, construction_time, player_ge, player_bump, player_name) = {
@@ -88,7 +86,8 @@ pub fn process(
         }
 
         // 6. Find the building
-        let building = estate_data.find_building(building_type)
+        let building = estate_data
+            .find_building(building_type)
             .ok_or(GameError::BuildingRequired)?;
 
         // 7. Check building is Active (not already upgrading or under construction)
@@ -110,7 +109,13 @@ pub fn process(
             return Err(GameError::InsufficientLockedNovi.into());
         }
 
-        (upgrade_cost, construction_time, player_data.game_engine, player_data.bump, player_data.name)
+        (
+            upgrade_cost,
+            construction_time,
+            player_data.game_engine,
+            player_data.bump,
+            player_data.name,
+        )
     }; // borrows dropped
 
     // 11. Burn NOVI tokens (CPI - no active borrows)
@@ -135,7 +140,8 @@ pub fn process(
     let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
     // 13. Find building again for mutable update
-    let building = estate_data.find_building_mut(building_type)
+    let building = estate_data
+        .find_building_mut(building_type)
         .ok_or(GameError::BuildingRequired)?;
 
     // 14. Get current time and calculate construction end

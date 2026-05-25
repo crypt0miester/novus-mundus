@@ -1,18 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::{INTRACITY_WALKING_SPEED_KMH, MIN_RALLY_PARTICIPANTS},
-    error::GameError,
-    state::{CityAccount, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus, require_extension, EXT_RALLY},
-    logic::location::calculate_intracity_travel_time,
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::RallyCancelled,
+    logic::location::calculate_intracity_travel_time,
+    state::{
+        require_extension, CityAccount, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus,
+        EXT_RALLY,
+    },
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Cancel a rally
@@ -70,8 +71,6 @@ pub fn process(
     // Require EXT_RALLY
     require_extension(&*creator, EXT_RALLY)?;
 
-    drop(creator);
-
     // 5. Load Rally and validate
     require_owner(rally_account, program_id)?;
     let mut rally_data_ref = rally_account.try_borrow_mut()?;
@@ -88,7 +87,7 @@ pub fn process(
     }
 
     // Past the gather deadline, a viable rally (>= MIN participants) is
-    // committed and must execute. 
+    // committed and must execute.
     if now >= rally.gather_at && rally.participant_count >= MIN_RALLY_PARTICIPANTS {
         return Err(GameError::RecruitingPeriodEnded.into());
     }
@@ -128,25 +127,25 @@ pub fn process(
     let creator_data = PlayerAccount::load_checked_by_key(creator_player, program_id)?;
     let home_lat = creator_data.current_lat;
     let home_long = creator_data.current_long;
-    drop(creator_data);
 
     // 9. Calculate leader's return journey
     // Leader traveled from home to rally point (city center), now returns
     // Check if they had arrived at rally point
-    let leader_return_duration = if participant.arrived_at_rally || now >= participant.arrives_at_rally {
-        // At rally point, travel back home (intracity walking)
-        calculate_intracity_travel_time(
-            rally_city_data.latitude,
-            rally_city_data.longitude,
-            home_lat,
-            home_long,
-            INTRACITY_WALKING_SPEED_KMH,
-        ) as i32
-    } else {
-        // Mid-travel to rally, turn around
-        let time_spent = (now - participant.travel_started_at) as i32;
-        time_spent.max(0)
-    };
+    let leader_return_duration =
+        if participant.arrived_at_rally || now >= participant.arrives_at_rally {
+            // At rally point, travel back home (intracity walking)
+            calculate_intracity_travel_time(
+                rally_city_data.latitude,
+                rally_city_data.longitude,
+                home_lat,
+                home_long,
+                INTRACITY_WALKING_SPEED_KMH,
+            ) as i32
+        } else {
+            // Mid-travel to rally, turn around
+            let time_spent = (now - participant.travel_started_at) as i32;
+            time_spent.max(0)
+        };
 
     // 10. Start creator's return journey
     participant.return_started_at = now;

@@ -1,21 +1,12 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{GameEngine, BuildingTemplate, BuildingType},
-    validation::{
-        require_signer,
-        require_writable,
-        require_key_match,
-    },
     constants::BUILDING_TEMPLATE_SEED,
-    utils::{read_u8, read_u16, read_u32, read_u64},
+    error::GameError,
+    state::{BuildingTemplate, BuildingType, GameEngine},
+    utils::{read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Initialize a building template (DAO only)
@@ -66,10 +57,22 @@ pub fn process(
     let building_type = read_u8(instruction_data, 0, "init_building_template.building_type")?;
     let tier = read_u8(instruction_data, 1, "init_building_template.tier")?;
     let max_level = read_u8(instruction_data, 2, "init_building_template.max_level")?;
-    let base_time_seconds = read_u32(instruction_data, 3, "init_building_template.base_time_seconds")?;
+    let base_time_seconds = read_u32(
+        instruction_data,
+        3,
+        "init_building_template.base_time_seconds",
+    )?;
     let base_novi_cost = read_u64(instruction_data, 7, "init_building_template.base_novi_cost")?;
-    let cost_growth_bps = read_u16(instruction_data, 15, "init_building_template.cost_growth_bps")?;
-    let time_growth_bps = read_u16(instruction_data, 17, "init_building_template.time_growth_bps")?;
+    let cost_growth_bps = read_u16(
+        instruction_data,
+        15,
+        "init_building_template.cost_growth_bps",
+    )?;
+    let time_growth_bps = read_u16(
+        instruction_data,
+        17,
+        "init_building_template.time_growth_bps",
+    )?;
 
     // 5. Validate building type
     if building_type as usize >= BuildingType::COUNT {
@@ -97,7 +100,8 @@ pub fn process(
         lamports,
         space: BuildingTemplate::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize template data
     let mut template_data = building_template.try_borrow_mut()?;

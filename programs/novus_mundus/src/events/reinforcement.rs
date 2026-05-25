@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Reinforcement events - sending troops to allies
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when reinforcements are sent
 pub struct ReinforcementSent {

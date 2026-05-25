@@ -10,17 +10,9 @@
 //! - Rolling 24-hour battle limits
 //! - Season cumulative win rate for daily rewards
 
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-};
+use pinocchio::{error::ProgramError, AccountView, Address};
 
-use crate::{
-    constants::{ARENA_SEASON_SEED, ARENA_PARTICIPANT_SEED, ARENA_LOADOUT_SEED},
-    error::GameError,
-    state::{Loaded, LoadedMut},
-};
+use crate::constants::{ARENA_LOADOUT_SEED, ARENA_PARTICIPANT_SEED, ARENA_SEASON_SEED};
 
 // Arena Season Account
 
@@ -55,9 +47,9 @@ impl TryFrom<u8> for ArenaStatus {
 #[repr(C)]
 #[derive(Clone, Copy, Debug)]
 pub struct ArenaLeaderboardEntry {
-    pub player: Address,          // 32 bytes
-    pub total_points: u64,       // 8 bytes
-}                                // Total: 40 bytes
+    pub player: Address,   // 32 bytes
+    pub total_points: u64, // 8 bytes
+} // Total: 40 bytes
 
 impl Default for ArenaLeaderboardEntry {
     fn default() -> Self {
@@ -79,38 +71,38 @@ pub struct ArenaSeasonAccount {
     pub account_key: u8,
 
     // Kingdom & Identity (70 bytes)
-    pub game_engine: Address,                     // 32 - Kingdom this season belongs to
-    pub season_id: u32,                          // 4 - Incrementing season number
-    pub city_id: u16,                            // 2 - City this arena belongs to (0 = kingdom-wide)
-    pub authority: Address,                       // 32 - Who can finalize/admin
+    pub game_engine: Address, // 32 - Kingdom this season belongs to
+    pub season_id: u32,       // 4 - Incrementing season number
+    pub city_id: u16,         // 2 - City this arena belongs to (0 = kingdom-wide)
+    pub authority: Address,   // 32 - Who can finalize/admin
 
     // Timing (25 bytes)
-    pub start_time: i64,                         // 8 - Unix timestamp
-    pub end_time: i64,                           // 8 - start_time + 7 days
-    pub claim_deadline: i64,                     // 8 - end_time + 30 days
-    pub status: u8,                              // 1 - ArenaStatus enum
+    pub start_time: i64,     // 8 - Unix timestamp
+    pub end_time: i64,       // 8 - start_time + 7 days
+    pub claim_deadline: i64, // 8 - end_time + 30 days
+    pub status: u8,          // 1 - ArenaStatus enum
 
     // Leaderboard - Top 10 Only (411 bytes)
     pub leaderboard: [ArenaLeaderboardEntry; 10], // 400 (10 x 40)
-    pub leaderboard_count: u8,                   // 1
-    pub leaderboard_claimed: [bool; 10],         // 10 - Track who claimed master reward
+    pub leaderboard_count: u8,                    // 1
+    pub leaderboard_claimed: [bool; 10],          // 10 - Track who claimed master reward
 
     // Prize Pool (52 bytes)
-    pub master_prize_pool: u64,                  // 8 - Total NOVI for top 10
-    pub daily_prize_pool: u64,                   // 8 - Total NOVI for daily rewards
-    pub daily_distribution_cap: u64,             // 8 - Max distributed per day
-    pub distributed_today: u64,                  // 8 - Tracks today's distributions
-    pub last_distribution_day: u32,              // 4 - Day number for reset
-    pub _padding1: [u8; 4],                      // 4 - Alignment padding
-    pub prize_remaining: u64,                    // 8 - Unclaimed prizes
+    pub master_prize_pool: u64,      // 8 - Total NOVI for top 10
+    pub daily_prize_pool: u64,       // 8 - Total NOVI for daily rewards
+    pub daily_distribution_cap: u64, // 8 - Max distributed per day
+    pub distributed_today: u64,      // 8 - Tracks today's distributions
+    pub last_distribution_day: u32,  // 4 - Day number for reset
+    pub _padding1: [u8; 4],          // 4 - Alignment padding
+    pub prize_remaining: u64,        // 8 - Unclaimed prizes
 
     // Thresholds (26 bytes)
-    pub min_level_required: u8,                  // 1 - Minimum player level to join
-    pub _padding2: [u8; 7],                      // 7 - Alignment padding
-    pub min_points_for_leaderboard: u64,         // 8 - Prevents sybil attacks (default: 500)
-    pub total_battles: u64,                      // 8 - Counter for stats
-    pub bump: u8,                                // 1 - PDA bump
-    pub _reserved: [u8; 7],                      // 7 - Future use
+    pub min_level_required: u8, // 1 - Minimum player level to join
+    pub _padding2: [u8; 7],     // 7 - Alignment padding
+    pub min_points_for_leaderboard: u64, // 8 - Prevents sybil attacks (default: 500)
+    pub total_battles: u64,     // 8 - Counter for stats
+    pub bump: u8,               // 1 - PDA bump
+    pub _reserved: [u8; 7],     // 7 - Future use
 }
 
 impl ArenaSeasonAccount {
@@ -132,34 +124,27 @@ impl ArenaSeasonAccount {
         game_engine: &Address,
         season_id: u32,
         program_id: &Address,
-    ) -> Result<Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, season_id);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaSeasonAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaSeason)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let loaded = data.as_ptr() as *const Self;
-        let account_ref = unsafe { &*loaded };
-
-        if account_ref.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &account_ref.game_engine != game_engine {
-            return Err(GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { Loaded::new(data, loaded) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::ArenaSeason,
+                "ArenaSeasonAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaSeasonAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "ArenaSeasonAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and validate arena season account (mutable)
@@ -168,34 +153,27 @@ impl ArenaSeasonAccount {
         game_engine: &Address,
         season_id: u32,
         program_id: &Address,
-    ) -> Result<LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, season_id);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaSeasonAccount")?;
 
-        let data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaSeason)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let loaded = data.as_ptr() as *mut Self;
-        let account_ref = unsafe { &*loaded };
-
-        if account_ref.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &account_ref.game_engine != game_engine {
-            return Err(GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { LoadedMut::new(data, loaded) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::ArenaSeason,
+                "ArenaSeasonAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaSeasonAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "ArenaSeasonAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Check if season belongs to a specific kingdom
@@ -252,7 +230,10 @@ impl ArenaSeasonAccount {
         if self.leaderboard_count < 10 {
             // Space available, add and sort
             let idx = self.leaderboard_count as usize;
-            self.leaderboard[idx] = ArenaLeaderboardEntry { player, total_points };
+            self.leaderboard[idx] = ArenaLeaderboardEntry {
+                player,
+                total_points,
+            };
             self.leaderboard_claimed[idx] = false;
             self.leaderboard_count += 1;
 
@@ -270,7 +251,10 @@ impl ArenaSeasonAccount {
         let lowest_idx = 9;
         if total_points > self.leaderboard[lowest_idx].total_points {
             // Replace lowest
-            self.leaderboard[lowest_idx] = ArenaLeaderboardEntry { player, total_points };
+            self.leaderboard[lowest_idx] = ArenaLeaderboardEntry {
+                player,
+                total_points,
+            };
             self.leaderboard_claimed[lowest_idx] = false;
 
             // Bubble up to correct position
@@ -321,30 +305,30 @@ pub struct ArenaParticipantAccount {
     pub account_key: u8,
 
     // Identity (68 bytes)
-    pub game_engine: Address,                     // 32 - Kingdom reference
-    pub player: Address,                          // 32
-    pub season_id: u32,                          // 4
+    pub game_engine: Address, // 32 - Kingdom reference
+    pub player: Address,      // 32
+    pub season_id: u32,       // 4
 
     // Daily Battle Tracking - Rolling Window (401 bytes)
-    pub battle_timestamps: [i64; 10],            // 80 - Circular buffer of last 10 battle times
-    pub battle_opponents: [Address; 10],          // 320 - Who we fought (for diversity + cooldown checks)
-    pub battle_index: u8,                        // 1 - Current index in circular buffer
+    pub battle_timestamps: [i64; 10], // 80 - Circular buffer of last 10 battle times
+    pub battle_opponents: [Address; 10], // 320 - Who we fought (for diversity + cooldown checks)
+    pub battle_index: u8,             // 1 - Current index in circular buffer
 
     // Matchmaking (12 bytes)
-    pub last_match_id: u64,                      // 8 - Prevents match replay attacks
-    pub daily_reward_claimed_day: u32,           // 4 - Which day was last claim
+    pub last_match_id: u64,            // 8 - Prevents match replay attacks
+    pub daily_reward_claimed_day: u32, // 4 - Which day was last claim
 
     // Skill Rating (4 bytes)
-    pub elo_rating: u32,                         // 4 - Starts at 1000
+    pub elo_rating: u32, // 4 - Starts at 1000
 
     // Season Statistics (16 bytes)
-    pub total_points: u64,                       // 8 - Can never go below 0
-    pub wins: u32,                               // 4 - Season cumulative wins
-    pub losses: u32,                             // 4 - Season cumulative losses
+    pub total_points: u64, // 8 - Can never go below 0
+    pub wins: u32,         // 4 - Season cumulative wins
+    pub losses: u32,       // 4 - Season cumulative losses
 
     // Claim Tracking (2 bytes)
-    pub master_reward_claimed: bool,             // 1
-    pub bump: u8,                                // 1 - PDA bump
+    pub master_reward_claimed: bool, // 1
+    pub bump: u8,                    // 1 - PDA bump
 
     // Reserved (17 bytes)
     pub _reserved: [u8; 17],
@@ -378,30 +362,21 @@ impl ArenaParticipantAccount {
         season_id: u32,
         player: &Address,
         program_id: &Address,
-    ) -> Result<Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, season_id, player);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaParticipantAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaParticipant)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let loaded = data.as_ptr() as *const Self;
-        let account_ref = unsafe { &*loaded };
-
-        if account_ref.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { Loaded::new(data, loaded) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::ArenaParticipant,
+                "ArenaParticipantAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaParticipantAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and validate arena participant account (mutable)
@@ -411,30 +386,21 @@ impl ArenaParticipantAccount {
         season_id: u32,
         player: &Address,
         program_id: &Address,
-    ) -> Result<LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, season_id, player);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaParticipantAccount")?;
 
-        let data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaParticipant)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let loaded = data.as_ptr() as *mut Self;
-        let account_ref = unsafe { &*loaded };
-
-        if account_ref.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { LoadedMut::new(data, loaded) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::ArenaParticipant,
+                "ArenaParticipantAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaParticipantAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load without full validation (for initialization)
@@ -462,7 +428,12 @@ impl ArenaParticipantAccount {
     }
 
     /// Count battles against a specific opponent within a time window
-    pub fn count_opponent_in_window(&self, opponent: &Address, now: i64, window_seconds: i64) -> u8 {
+    pub fn count_opponent_in_window(
+        &self,
+        opponent: &Address,
+        now: i64,
+        window_seconds: i64,
+    ) -> u8 {
         let cutoff = now - window_seconds;
         let mut count = 0u8;
         for i in 0..10 {
@@ -480,7 +451,8 @@ impl ArenaParticipantAccount {
         let mut unique_count: u8 = 0;
 
         for i in 0..10 {
-            if self.battle_timestamps[i] > cutoff && self.battle_opponents[i] != Address::default() {
+            if self.battle_timestamps[i] > cutoff && self.battle_opponents[i] != Address::default()
+            {
                 // Check if already in unique array
                 let mut found = false;
                 for j in 0..unique_count as usize {
@@ -516,21 +488,21 @@ pub struct ArenaLoadoutAccount {
     pub account_key: u8,
 
     // Identity (65 bytes)
-    pub game_engine: Address,                     // 32 - Kingdom reference
-    pub player: Address,                          // 32
-    pub bump: u8,                                // 1
+    pub game_engine: Address, // 32 - Kingdom reference
+    pub player: Address,      // 32
+    pub bump: u8,             // 1
 
     // Hero Selection (32 bytes)
-    pub arena_hero: Address,                      // 32 - Hero mint for arena (default = use active heroes)
+    pub arena_hero: Address, // 32 - Hero mint for arena (default = use active heroes)
 
     // Unit Loadout (24 bytes)
-    pub defensive_units: [u64; 3],               // 24 - Tier 1, 2, 3 defensive units
+    pub defensive_units: [u64; 3], // 24 - Tier 1, 2, 3 defensive units
 
     // Equipment Loadout (32 bytes)
-    pub melee_weapons: u64,                      // 8
-    pub ranged_weapons: u64,                     // 8
-    pub siege_weapons: u64,                      // 8
-    pub armor_pieces: u64,                       // 8
+    pub melee_weapons: u64,  // 8
+    pub ranged_weapons: u64, // 8
+    pub siege_weapons: u64,  // 8
+    pub armor_pieces: u64,   // 8
 
     // Reserved (7 bytes)
     pub _reserved: [u8; 7],
@@ -554,30 +526,21 @@ impl ArenaLoadoutAccount {
         game_engine: &Address,
         player: &Address,
         program_id: &Address,
-    ) -> Result<Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, player);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaLoadoutAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaLoadout)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let loaded = data.as_ptr() as *const Self;
-        let account_ref = unsafe { &*loaded };
-
-        if account_ref.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { Loaded::new(data, loaded) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::ArenaLoadout,
+                "ArenaLoadoutAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaLoadoutAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and validate arena loadout account (mutable)
@@ -586,30 +549,21 @@ impl ArenaLoadoutAccount {
         game_engine: &Address,
         player: &Address,
         program_id: &Address,
-    ) -> Result<LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, player);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaLoadoutAccount")?;
 
-        let data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaLoadout)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let loaded = data.as_ptr() as *mut Self;
-        let account_ref = unsafe { &*loaded };
-
-        if account_ref.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { LoadedMut::new(data, loaded) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::ArenaLoadout,
+                "ArenaLoadoutAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaLoadoutAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify by key immutably.
@@ -617,31 +571,20 @@ impl ArenaLoadoutAccount {
     pub fn load_checked_by_key<'a>(
         account: &'a AccountView,
         program_id: &Address,
-    ) -> Result<Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaLoadout)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        // Re-derive and validate PDA using stored values
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::ArenaLoadout,
+                "ArenaLoadoutAccount",
+            )?
+        };
         let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.player);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { Loaded::new(data, ptr) })
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaLoadoutAccount")?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaLoadoutAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify by key mutably.
@@ -649,31 +592,20 @@ impl ArenaLoadoutAccount {
     pub fn load_checked_mut_by_key<'a>(
         account: &'a AccountView,
         program_id: &Address,
-    ) -> Result<LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::ArenaLoadout)?;
-        if data.len() < Self::LEN {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        // Re-derive and validate PDA using stored values
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::ArenaLoadout,
+                "ArenaLoadoutAccount",
+            )?
+        };
         let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.player);
-        if account.address() != &expected_pda {
-            return Err(GameError::InvalidPDA.into());
-        }
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { LoadedMut::new(data, ptr) })
+        crate::validation::require_pda_eq(account, &expected_pda, "ArenaLoadoutAccount")?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "ArenaLoadoutAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load without full validation (for initialization)
@@ -697,6 +629,7 @@ impl ArenaLoadoutAccount {
 }
 
 // Compile-time size assertions
-const _: () = assert!(core::mem::size_of::<ArenaParticipantAccount>() == ARENA_PARTICIPANT_ACCOUNT_SIZE);
+const _: () =
+    assert!(core::mem::size_of::<ArenaParticipantAccount>() == ARENA_PARTICIPANT_ACCOUNT_SIZE);
 const _: () = assert!(core::mem::size_of::<ArenaLoadoutAccount>() == ARENA_LOADOUT_ACCOUNT_SIZE);
 const _: () = assert!(core::mem::size_of::<ArenaSeasonAccount>() == ARENA_SEASON_ACCOUNT_SIZE);

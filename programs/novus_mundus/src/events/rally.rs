@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Rally events - group combat coordination
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a rally is created
 pub struct RallyCreated {

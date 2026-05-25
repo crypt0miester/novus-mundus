@@ -1,14 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
 use crate::{
     error::GameError,
-    state::{GameEngine, AllowedTokenAccount},
-    validation::{require_signer, require_writable, require_owner},
+    state::{AllowedTokenAccount, GameEngine},
     utils::{read_bytes32, read_u16, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
 
 /// Update field types for AllowedTokenAccount
 #[repr(u8)]
@@ -63,12 +59,15 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (4 required + 0–1 optional feed-validation slot)
 
-    crate::extract_accounts!(accounts, [
-        authority,
-        game_engine_account,
-        allowed_token_account,
-        token_mint,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            authority,
+            game_engine_account,
+            allowed_token_account,
+            token_mint,
+        ]
+    );
 
     // 2. Validate Accounts
 
@@ -89,10 +88,8 @@ pub fn process(
     require_owner(allowed_token_account, program_id)?;
 
     // Verify PDA matches
-    let (expected_pda, _) = AllowedTokenAccount::derive_pda(
-        game_engine_account.address(),
-        token_mint.address(),
-    );
+    let (expected_pda, _) =
+        AllowedTokenAccount::derive_pda(game_engine_account.address(), token_mint.address());
 
     if allowed_token_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -100,9 +97,12 @@ pub fn process(
 
     // 5. Parse Instruction Data
 
-    let field = AllowedTokenUpdateField::from_u8(
-        read_u8(instruction_data, 0, "update_allowed_token.field")?
-    ).ok_or(GameError::InvalidParameter)?;
+    let field = AllowedTokenUpdateField::from_u8(read_u8(
+        instruction_data,
+        0,
+        "update_allowed_token.field",
+    )?)
+    .ok_or(GameError::InvalidParameter)?;
 
     // 6. Load and Update
 

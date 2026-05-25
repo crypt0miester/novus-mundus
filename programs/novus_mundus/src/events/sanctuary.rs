@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Sanctuary events - meditation and hero training
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a hero starts meditating
 pub struct MeditationStarted {

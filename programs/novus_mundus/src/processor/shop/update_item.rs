@@ -1,15 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-};
 use crate::{
     error::GameError,
     state::{GameEngine, ShopItemAccount},
+    utils::{read_i64, read_u32, read_u64, read_u8},
     validation::{require_signer, require_writable},
-    utils::{read_u8, read_u32, read_u64, read_i64},
 };
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 /// Update field flags - which fields to update
 #[repr(u8)]
@@ -140,7 +135,8 @@ pub fn process(
             return Err(ProgramError::InvalidInstructionData);
         }
         shop_item.max_global_stock = read_u64(instruction_data, offset, "max_global_stock")?;
-        shop_item.current_global_stock = read_u64(instruction_data, offset + 8, "current_global_stock")?;
+        shop_item.current_global_stock =
+            read_u64(instruction_data, offset + 8, "current_global_stock")?;
         // offset += 16;
     }
 

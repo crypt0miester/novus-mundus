@@ -1,14 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
 use crate::{
     error::GameError,
     helpers::close_account,
-    state::{GameEngine, AllowedTokenAccount},
-    validation::{require_signer, require_writable, require_owner},
+    state::{AllowedTokenAccount, GameEngine},
+    validation::{require_owner, require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
 
 /// Close an AllowedToken account (DAO only)
 ///
@@ -56,10 +52,8 @@ pub fn process(
     require_owner(allowed_token_account, program_id)?;
 
     // Verify PDA matches
-    let (expected_pda, _) = AllowedTokenAccount::derive_pda(
-        game_engine_account.address(),
-        token_mint.address(),
-    );
+    let (expected_pda, _) =
+        AllowedTokenAccount::derive_pda(game_engine_account.address(), token_mint.address());
 
     if allowed_token_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());

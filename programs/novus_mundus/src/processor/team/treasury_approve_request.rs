@@ -1,18 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::TreasuryRequestApproved,
+    helpers::close_account,
+    state::{
+        require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, EXT_TEAM,
+        NULL_PUBKEY,
+    },
+    utils::{read_u16, read_u64},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Approve a treasury withdrawal request (higher rank)
@@ -77,7 +78,7 @@ pub fn process(
     if &approver.owner != approver_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -97,13 +98,15 @@ pub fn process(
         return Err(GameError::TeamDisbanded.into());
     }
 
-    if approver.team_address() == NULL_PUBKEY || &approver.team_address() != team_account.address() {
+    if approver.team_address() == NULL_PUBKEY || &approver.team_address() != team_account.address()
+    {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify Approver Slot and Get Rank
 
-    let (expected_approver_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), approver_slot_index);
+    let (expected_approver_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), approver_slot_index);
     if approver_slot_account.address() != &expected_approver_slot {
         return Err(GameError::InvalidPDA.into());
     }
@@ -124,7 +127,8 @@ pub fn process(
 
     // 7. Load and Validate Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), requester_account.address());
+    let (expected_request, _) =
+        TreasuryRequest::derive_pda(team_account.address(), requester_account.address());
     if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
@@ -180,7 +184,8 @@ pub fn process(
     // Load requester's slot to get their CURRENT rank, then enforce
     // approver_rank < requester_rank STRICTLY. Equal ranks cannot approve each
     // other (closes the co-leader cross-approval drain).
-    let (expected_requester_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), requester_slot_index);
+    let (expected_requester_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), requester_slot_index);
     if requester_slot_account.address() != &expected_requester_slot {
         return Err(GameError::InvalidPDA.into());
     }

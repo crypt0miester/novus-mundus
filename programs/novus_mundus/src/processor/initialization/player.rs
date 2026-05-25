@@ -1,18 +1,20 @@
 use pinocchio::{
-    AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
+    error::ProgramError,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{PLAYER_SEED, GAME_ENGINE_SEED, LOCATION_SEED, STARTER_LOCKED_NOVI, USER_SEED},
-    error::GameError,
-    state::{PlayerAccount, GameEngine, CityAccount, LocationAccount},
-    validation::{require_signer, require_writable, require_key_match, require_owner, derive_pda},
-    token_helpers::create_associated_token_account,
-    helpers::{mint_tokens, validate_token_account_owner},
-    utils::read_u16,
+    constants::{GAME_ENGINE_SEED, LOCATION_SEED, PLAYER_SEED, STARTER_LOCKED_NOVI, USER_SEED},
     emit,
+    error::GameError,
     events::PlayerJoinedKingdom,
+    helpers::{mint_tokens, validate_token_account_owner},
+    state::{CityAccount, GameEngine, LocationAccount, PlayerAccount},
+    token_helpers::create_associated_token_account,
+    utils::read_u16,
+    validation::{derive_pda, require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// Initialize a new player account and NOVI token account
@@ -119,10 +121,8 @@ pub fn process(
     require_key_match(system_program, &pinocchio_system::ID)?;
 
     // Verify user account exists and matches expected PDA
-    let (expected_user, _user_bump) = derive_pda(
-        &[USER_SEED, owner.address().as_ref()],
-        program_id,
-    );
+    let (expected_user, _user_bump) =
+        derive_pda(&[USER_SEED, owner.address().as_ref()], program_id);
     if user.address() != &expected_user {
         return Err(ProgramError::InvalidSeeds);
     }
@@ -153,7 +153,9 @@ pub fn process(
     if !game_engine_data.registration_open {
         return Err(GameError::KingdomRegistrationClosed.into());
     }
-    if game_engine_data.registration_closes_at > 0 && created_at > game_engine_data.registration_closes_at {
+    if game_engine_data.registration_closes_at > 0
+        && created_at > game_engine_data.registration_closes_at
+    {
         return Err(GameError::KingdomRegistrationClosed.into());
     }
 
@@ -187,7 +189,8 @@ pub fn process(
         let dlat = spawn_lat - city_data.latitude;
         let dlong = spawn_long - city_data.longitude;
         // Approximate distance in km (1 degree ≈ 111 km)
-        let dist_km = libm::sqrt((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0));
+        let dist_km =
+            libm::sqrt((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0));
         if dist_km > city_data.radius_km as f64 {
             return Err(GameError::OutOfRange.into());
         }
@@ -203,7 +206,9 @@ pub fn process(
     }
 
     // Check max_players limit (0 = unlimited)
-    if game_engine_data.max_players > 0 && game_engine_data.total_players >= game_engine_data.max_players {
+    if game_engine_data.max_players > 0
+        && game_engine_data.total_players >= game_engine_data.max_players
+    {
         return Err(GameError::MaxPlayersReached.into());
     }
 
@@ -212,7 +217,9 @@ pub fn process(
     let player_number = game_engine_data.total_players;
 
     // Get new player protection duration from config
-    let protection_duration = game_engine_data.gameplay_config.new_player_protection_duration;
+    let protection_duration = game_engine_data
+        .gameplay_config
+        .new_player_protection_duration;
 
     // Read per-kingdom starter NOVI grant (raw units, 1 decimal). DAO-tunable.
     // Fall back to the compile-time constant when the config slot is 0 — the
@@ -222,7 +229,11 @@ pub fn process(
     // would reject `amount == 0` and brick new-player onboarding.
     let starter_locked_novi = {
         let configured = game_engine_data.economic_config.starter_locked_novi;
-        if configured == 0 { STARTER_LOCKED_NOVI } else { configured }
+        if configured == 0 {
+            STARTER_LOCKED_NOVI
+        } else {
+            configured
+        }
     };
 
     // Save every GameEngine value needed downstream and drop the borrow
@@ -239,7 +250,12 @@ pub fn process(
     let lamports = crate::utils::rent_exempt_const(PlayerAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), owner.address(), &bump_seed);
+    let seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine.address(),
+        owner.address(),
+        &bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
@@ -248,14 +264,13 @@ pub fn process(
         lamports,
         space: PlayerAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Player Data with Starting City and Resources
     {
         let mut player_data_ref = player.try_borrow_mut()?;
-        let player_data = unsafe {
-            PlayerAccount::load_mut(&mut player_data_ref)
-        };
+        let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
         // Initialize with starter resources and city (kingdom-scoped)
         *player_data = PlayerAccount::init_with_city(
@@ -284,9 +299,7 @@ pub fn process(
         player_data.current_long = cell_center_long;
 
         // Calculate initial networth from starter assets
-        player_data.networth = crate::logic::calculate_networth(
-            player_data, &economic_config
-        )?;
+        player_data.networth = crate::logic::calculate_networth(player_data, &economic_config)?;
     }
     // player_data_ref dropped here — required before CPIs that touch player account
 
@@ -318,7 +331,6 @@ pub fn process(
     // Create or occupy spawn location
     let spawn_location_len = spawn_location.data_len();
 
-
     if spawn_location_len == 0 {
         // Create new location account
         let location_lamports = crate::utils::rent_exempt_const(LocationAccount::LEN);
@@ -340,7 +352,8 @@ pub fn process(
             lamports: location_lamports,
             space: LocationAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[location_signer])?;
+        }
+        .invoke_signed(&[location_signer])?;
 
         let mut location_data = spawn_location.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
@@ -395,10 +408,10 @@ pub fn process(
     // 12. Create Player's NOVI Token Account (ATA)
 
     create_associated_token_account(
-        owner,                      // Payer
-        player_token_account,       // The ATA to create
-        player,                     // ATA owner
-        novi_mint,                  // Token mint (NOVI)
+        owner,                // Payer
+        player_token_account, // The ATA to create
+        player,               // ATA owner
+        novi_mint,            // Token mint (NOVI)
         system_program,
         token_program,
     )?;

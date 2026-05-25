@@ -143,34 +143,54 @@ fn skip_asset_base(data: &[u8]) -> Option<usize> {
 
     // Skip owner (32 bytes)
     offset += 32;
-    if offset >= data.len() { return None; }
+    if offset >= data.len() {
+        return None;
+    }
 
     // Skip UpdateAuthority (Borsh enum)
     // UpdateAuthority variants: None=0, Address=1, Collection=2
     let ua_disc = data.get(offset)?;
     offset += 1;
     match ua_disc {
-        0 => {}, // None - no additional data
-        1 | 2 => { offset += 32; }, // Address or Collection - has pubkey
+        0 => {} // None - no additional data
+        1 | 2 => {
+            offset += 32;
+        } // Address or Collection - has pubkey
         _ => return None,
     }
-    if offset >= data.len() { return None; }
+    if offset >= data.len() {
+        return None;
+    }
 
     // Skip name String (4 byte len + chars)
-    if offset + 4 > data.len() { return None; }
+    if offset + 4 > data.len() {
+        return None;
+    }
     let name_len = u32::from_le_bytes([
-        data[offset], data[offset+1], data[offset+2], data[offset+3]
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
     ]) as usize;
     offset += 4 + name_len;
-    if offset >= data.len() { return None; }
+    if offset >= data.len() {
+        return None;
+    }
 
     // Skip uri String (4 byte len + chars)
-    if offset + 4 > data.len() { return None; }
+    if offset + 4 > data.len() {
+        return None;
+    }
     let uri_len = u32::from_le_bytes([
-        data[offset], data[offset+1], data[offset+2], data[offset+3]
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
     ]) as usize;
     offset += 4 + uri_len;
-    if offset >= data.len() { return None; }
+    if offset >= data.len() {
+        return None;
+    }
 
     // Skip seq Option<u64> (Borsh Option: 0=None, 1=Some + 8 bytes)
     let seq_disc = data.get(offset)?;
@@ -187,35 +207,54 @@ fn find_attributes_in_registry(data: &[u8], registry_offset: usize) -> Option<us
     let mut offset = registry_offset + 1; // Skip Key
 
     // Read registry Vec length (4 bytes)
-    if offset + 4 > data.len() { return None; }
+    if offset + 4 > data.len() {
+        return None;
+    }
     let registry_len = u32::from_le_bytes([
-        data[offset], data[offset+1], data[offset+2], data[offset+3]
+        data[offset],
+        data[offset + 1],
+        data[offset + 2],
+        data[offset + 3],
     ]) as usize;
     offset += 4;
 
     // Iterate through registry records
     for _ in 0..registry_len {
-        if offset >= data.len() { return None; }
+        if offset >= data.len() {
+            return None;
+        }
 
         // Read plugin_type (1 byte)
         let plugin_type = data[offset];
         offset += 1;
 
         // Read authority (Borsh enum: None=0, Owner=1, UpdateAuthority=2, Address=3)
-        if offset >= data.len() { return None; }
+        if offset >= data.len() {
+            return None;
+        }
         let auth_disc = data[offset];
         offset += 1;
         if auth_disc == 3 {
             // Address variant has 32 byte pubkey
             offset += 32;
         }
-        if offset >= data.len() { return None; }
+        if offset >= data.len() {
+            return None;
+        }
 
         // Read offset (8 bytes as u64)
-        if offset + 8 > data.len() { return None; }
+        if offset + 8 > data.len() {
+            return None;
+        }
         let plugin_offset = u64::from_le_bytes([
-            data[offset], data[offset+1], data[offset+2], data[offset+3],
-            data[offset+4], data[offset+5], data[offset+6], data[offset+7],
+            data[offset],
+            data[offset + 1],
+            data[offset + 2],
+            data[offset + 3],
+            data[offset + 4],
+            data[offset + 5],
+            data[offset + 6],
+            data[offset + 7],
         ]) as usize;
         offset += 8;
 
@@ -234,20 +273,23 @@ fn parse_attributes_data(data: &[u8], offset: usize, buffs: &mut [ParsedBuff; 4]
     let mut buff_count = 0;
 
     // Read attribute_list Vec length (4 bytes)
-    if pos + 4 > data.len() { return 0; }
-    let attr_count = u32::from_le_bytes([
-        data[pos], data[pos+1], data[pos+2], data[pos+3]
-    ]) as usize;
+    if pos + 4 > data.len() {
+        return 0;
+    }
+    let attr_count =
+        u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
     pos += 4;
 
     // Parse each attribute
-    for _ in 0..attr_count.min(20) { // Sanity limit
-        if pos + 4 > data.len() { break; }
+    for _ in 0..attr_count.min(20) {
+        // Sanity limit
+        if pos + 4 > data.len() {
+            break;
+        }
 
         // Read key String
-        let key_len = u32::from_le_bytes([
-            data[pos], data[pos+1], data[pos+2], data[pos+3]
-        ]) as usize;
+        let key_len =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
 
         if key_len == 0 || key_len > 64 || pos + key_len > data.len() {
@@ -257,10 +299,11 @@ fn parse_attributes_data(data: &[u8], offset: usize, buffs: &mut [ParsedBuff; 4]
         pos += key_len;
 
         // Read value String
-        if pos + 4 > data.len() { break; }
-        let value_len = u32::from_le_bytes([
-            data[pos], data[pos+1], data[pos+2], data[pos+3]
-        ]) as usize;
+        if pos + 4 > data.len() {
+            break;
+        }
+        let value_len =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
 
         if value_len > 64 || pos + value_len > data.len() {
@@ -379,20 +422,22 @@ fn parse_hero_attributes_data(data: &[u8], offset: usize) -> Option<ParsedHeroNf
     let mut buff_idx: usize = 0;
 
     // Read attribute_list Vec length
-    if pos + 4 > data.len() { return None; }
-    let attr_count = u32::from_le_bytes([
-        data[pos], data[pos+1], data[pos+2], data[pos+3]
-    ]) as usize;
+    if pos + 4 > data.len() {
+        return None;
+    }
+    let attr_count =
+        u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
     pos += 4;
 
     // Parse each attribute
     for _ in 0..attr_count.min(20) {
-        if pos + 4 > data.len() { break; }
+        if pos + 4 > data.len() {
+            break;
+        }
 
         // Read key String
-        let key_len = u32::from_le_bytes([
-            data[pos], data[pos+1], data[pos+2], data[pos+3]
-        ]) as usize;
+        let key_len =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
 
         if key_len == 0 || key_len > 64 || pos + key_len > data.len() {
@@ -402,10 +447,11 @@ fn parse_hero_attributes_data(data: &[u8], offset: usize) -> Option<ParsedHeroNf
         pos += key_len;
 
         // Read value String
-        if pos + 4 > data.len() { break; }
-        let value_len = u32::from_le_bytes([
-            data[pos], data[pos+1], data[pos+2], data[pos+3]
-        ]) as usize;
+        if pos + 4 > data.len() {
+            break;
+        }
+        let value_len =
+            u32::from_le_bytes([data[pos], data[pos + 1], data[pos + 2], data[pos + 3]]) as usize;
         pos += 4;
 
         if value_len > 64 || pos + value_len > data.len() {

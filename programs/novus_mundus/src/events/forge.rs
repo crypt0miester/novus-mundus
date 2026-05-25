@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Forge events - crafting and equipment
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when crafting begins
 pub struct CraftStarted {

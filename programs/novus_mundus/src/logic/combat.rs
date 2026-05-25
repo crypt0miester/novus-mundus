@@ -1,10 +1,8 @@
-use crate::logic::safe_math::{apply_bp, apply_bp_bonus, chain_bp, mul_div};
 use crate::constants::{
-    WEAPON_LOOT_RATE_BPS,
-    ARMORY_RAID_WITH_OPERATIVES_BPS, ARMORY_RAID_UNDEFENDED_BPS,
-    DAMAGE_PER_SIEGE_WEAPON, SIEGE_CAPTURE_RATE_BPS,
-    DEFENSIVE_UNIT_HEALTH,
+    ARMORY_RAID_UNDEFENDED_BPS, ARMORY_RAID_WITH_OPERATIVES_BPS, DAMAGE_PER_SIEGE_WEAPON,
+    DEFENSIVE_UNIT_HEALTH, SIEGE_CAPTURE_RATE_BPS, WEAPON_LOOT_RATE_BPS,
 };
+use crate::logic::safe_math::{apply_bp, apply_bp_bonus, chain_bp, mul_div};
 
 // Weapon Set - Tracks melee, ranged, siege weapons
 
@@ -20,7 +18,11 @@ pub struct WeaponSet {
 impl WeaponSet {
     /// Create a new weapon set
     pub const fn new(melee: u64, ranged: u64, siege: u64) -> Self {
-        Self { melee, ranged, siege }
+        Self {
+            melee,
+            ranged,
+            siege,
+        }
     }
 
     /// Total weapons across all types
@@ -39,7 +41,6 @@ impl WeaponSet {
             siege: mul_div(self.siege, rate_bps as u64, 10000).unwrap_or(0),
         }
     }
-
 }
 
 // Combat Weapon Result - Outcome of weapon combat resolution
@@ -104,9 +105,11 @@ pub fn resolve_weapon_combat(
     // Attacker wins if:
     // 1. Defender is wiped out, OR
     // 2. Attacker not wiped AND took fewer casualties (proportionally)
-    let attacker_won = defender_wiped || (!attacker_wiped && !defender_wiped &&
-        mul_div(attacker_casualties, 10000, attacker_troops).unwrap_or(10000) <
-        mul_div(defender_casualties, 10000, defender_troops.max(1)).unwrap_or(0));
+    let attacker_won = defender_wiped
+        || (!attacker_wiped
+            && !defender_wiped
+            && mul_div(attacker_casualties, 10000, attacker_troops).unwrap_or(10000)
+                < mul_div(defender_casualties, 10000, defender_troops.max(1)).unwrap_or(0));
 
     // Calculate casualty ratios in basis points
     let attacker_casualty_ratio_bps = if attacker_troops > 0 {
@@ -122,17 +125,32 @@ pub fn resolve_weapon_combat(
     };
 
     // Calculate siege consumption (based on damage dealt, not casualties)
-    let siege_consumed = attacker_weapons.siege.min(
-        attacker_damage_dealt / DAMAGE_PER_SIEGE_WEAPON.max(1)
-    );
+    let siege_consumed = attacker_weapons
+        .siege
+        .min(attacker_damage_dealt / DAMAGE_PER_SIEGE_WEAPON.max(1));
     let attacker_siege_after_firing = attacker_weapons.siege.saturating_sub(siege_consumed);
 
     // Calculate weapon drops from attacker casualties
     // Note: siege drops are from remaining siege after firing
     let attacker_dropped = WeaponSet {
-        melee: mul_div(attacker_weapons.melee, attacker_casualty_ratio_bps as u64, 10000).unwrap_or(0),
-        ranged: mul_div(attacker_weapons.ranged, attacker_casualty_ratio_bps as u64, 10000).unwrap_or(0),
-        siege: mul_div(attacker_siege_after_firing, attacker_casualty_ratio_bps as u64, 10000).unwrap_or(0),
+        melee: mul_div(
+            attacker_weapons.melee,
+            attacker_casualty_ratio_bps as u64,
+            10000,
+        )
+        .unwrap_or(0),
+        ranged: mul_div(
+            attacker_weapons.ranged,
+            attacker_casualty_ratio_bps as u64,
+            10000,
+        )
+        .unwrap_or(0),
+        siege: mul_div(
+            attacker_siege_after_firing,
+            attacker_casualty_ratio_bps as u64,
+            10000,
+        )
+        .unwrap_or(0),
     };
 
     // Calculate weapon drops from defender casualties
@@ -161,15 +179,24 @@ pub fn resolve_weapon_combat(
 
         // Siege capture from storage if defender fully defeated
         let siege_captured = if defender_wiped {
-            mul_div(defender_stored_weapons.siege, SIEGE_CAPTURE_RATE_BPS as u64, 10000).unwrap_or(0)
+            mul_div(
+                defender_stored_weapons.siege,
+                SIEGE_CAPTURE_RATE_BPS as u64,
+                10000,
+            )
+            .unwrap_or(0)
         } else {
             0
         };
 
         // Attacker's surviving weapons (what they carry home)
         let attacker_surviving = WeaponSet {
-            melee: attacker_weapons.melee.saturating_sub(attacker_dropped.melee),
-            ranged: attacker_weapons.ranged.saturating_sub(attacker_dropped.ranged),
+            melee: attacker_weapons
+                .melee
+                .saturating_sub(attacker_dropped.melee),
+            ranged: attacker_weapons
+                .ranged
+                .saturating_sub(attacker_dropped.ranged),
             siege: attacker_siege_after_firing.saturating_sub(attacker_dropped.siege),
         };
 
@@ -197,8 +224,12 @@ pub fn resolve_weapon_combat(
             WeaponSet::default() // Total wipeout - nothing survives
         } else {
             WeaponSet {
-                melee: attacker_weapons.melee.saturating_sub(attacker_dropped.melee),
-                ranged: attacker_weapons.ranged.saturating_sub(attacker_dropped.ranged),
+                melee: attacker_weapons
+                    .melee
+                    .saturating_sub(attacker_dropped.melee),
+                ranged: attacker_weapons
+                    .ranged
+                    .saturating_sub(attacker_dropped.ranged),
                 siege: attacker_siege_after_firing.saturating_sub(attacker_dropped.siege),
             }
         };
@@ -250,12 +281,7 @@ pub fn calculate_abandonment(
 /// Armor improves morale - troops feel protected
 /// Armor bonus: +10% happiness per armor coverage point (armor/units)
 /// Example: 500 armor / 500 units = 1.0 coverage = +10% happiness boost
-pub fn update_happiness_defensive(
-    sum_of_units: u64,
-    weapon: u64,
-    produce: u64,
-    armor: u64,
-) -> f32 {
+pub fn update_happiness_defensive(sum_of_units: u64, weapon: u64, produce: u64, armor: u64) -> f32 {
     if sum_of_units == 0 {
         return 0.0;
     }
@@ -276,23 +302,21 @@ pub fn update_happiness_defensive(
 
 /// Update happiness for operative units
 /// Based on produce availability
-pub fn update_happiness_operative(
-    sum_of_units: u64,
-    produce: u64,
-) -> f32 {
+pub fn update_happiness_operative(sum_of_units: u64, produce: u64) -> f32 {
     if sum_of_units == 0 {
         return 0.0;
     }
 
-    if produce >= sum_of_units { 1.0 } else { 0.0 }
+    if produce >= sum_of_units {
+        1.0
+    } else {
+        0.0
+    }
 }
 
 /// Consume produce based on unit count
 /// Returns amount of produce consumed
-pub fn consume_produce(
-    sum_of_units: u64,
-    produce: u64,
-) -> u64 {
+pub fn consume_produce(sum_of_units: u64, produce: u64) -> u64 {
     if produce == 0 {
         return 0;
     }
@@ -375,22 +399,26 @@ pub fn calculate_damage_output(
     // Apply hero weapon efficiency buff (multiplicative - improves weapon damage)
     // Formula: coeff × (10000 + hero_weapon_efficiency_bps) / 10000
     if hero_weapon_efficiency_bps > 0 {
-        coeff = apply_bp_bonus(coeff as u64, hero_weapon_efficiency_bps).unwrap_or(coeff as u64) as u32;
+        coeff =
+            apply_bp_bonus(coeff as u64, hero_weapon_efficiency_bps).unwrap_or(coeff as u64) as u32;
     }
 
     // Apply equipped weapon bonus (multiplicative)
     // Formula: coeff × (10000 + equipped_weapon_bonus_bps) / 10000
     if equipped_weapon_bonus_bps > 0 {
-        coeff = apply_bp_bonus(coeff as u64, equipped_weapon_bonus_bps).unwrap_or(coeff as u64) as u32;
+        coeff =
+            apply_bp_bonus(coeff as u64, equipped_weapon_bonus_bps).unwrap_or(coeff as u64) as u32;
     }
 
     // Deterministic critical hit: if combined crit_chance >= 5000 bp (50%), always crit
     // This is SKILL-BASED (research + hero investment), not probabilistic!
     // Research crit + hero crit are additive
-    let total_crit_chance = (research_crit_chance_bps as u32).saturating_add(hero_crit_chance_bps as u32);
+    let total_crit_chance =
+        (research_crit_chance_bps as u32).saturating_add(hero_crit_chance_bps as u32);
     if total_crit_chance >= 5000 {
         // Critical hit! Apply critical damage multiplier (no u128!)
-        coeff = apply_bp_bonus(coeff as u64, research_crit_damage_bps).unwrap_or(coeff as u64) as u32;
+        coeff =
+            apply_bp_bonus(coeff as u64, research_crit_damage_bps).unwrap_or(coeff as u64) as u32;
     }
 
     // Calculate damage using interleaved multiply/divide (no u128!)
@@ -454,8 +482,11 @@ pub fn inflict_damage(
             armor_coverage_bp = apply_bp_bonus(armor_coverage_bp as u64, equipped_armor_bonus_bps)
                 .unwrap_or(armor_coverage_bp as u64) as u32;
         }
-        let reduction_bp = apply_bp(armor_coverage_bp as u64, gameplay_config.armor_damage_reduction_bps as u64)
-            .unwrap_or(0) as u32;
+        let reduction_bp = apply_bp(
+            armor_coverage_bp as u64,
+            gameplay_config.armor_damage_reduction_bps as u64,
+        )
+        .unwrap_or(0) as u32;
         let capped_reduction_bp = reduction_bp.min(gameplay_config.armor_damage_reduction_cap_bps);
         total_damage * (10000 - capped_reduction_bp) as f64 / 10000.0
     } else {
@@ -473,9 +504,21 @@ pub fn inflict_damage(
     let redis_u3_to_u1 = gameplay_config.damage_redistrib_unit3_to_unit1 as f64 / 10000.0;
     let redis_u3_to_u2 = gameplay_config.damage_redistrib_unit3_to_unit2 as f64 / 10000.0;
 
-    let mut damage_1 = if unit_1 > 0 { effective_damage * pct_1 } else { 0.0 };
-    let mut damage_2 = if unit_2 > 0 { effective_damage * pct_2 } else { 0.0 };
-    let mut damage_3 = if unit_3 > 0 { effective_damage * pct_3 } else { 0.0 };
+    let mut damage_1 = if unit_1 > 0 {
+        effective_damage * pct_1
+    } else {
+        0.0
+    };
+    let mut damage_2 = if unit_2 > 0 {
+        effective_damage * pct_2
+    } else {
+        0.0
+    };
+    let mut damage_3 = if unit_3 > 0 {
+        effective_damage * pct_3
+    } else {
+        0.0
+    };
 
     if unit_1 == 0 {
         damage_2 += effective_damage * pct_1 * redis_u1_to_u2;
@@ -519,14 +562,32 @@ pub fn inflict_damage(
 
     if overkill_dmg > 0.0 {
         let mut weight_sum = 0.0;
-        if rem_1 > 0 { weight_sum += pct_1; }
-        if rem_2 > 0 { weight_sum += pct_2; }
-        if rem_3 > 0 { weight_sum += pct_3; }
+        if rem_1 > 0 {
+            weight_sum += pct_1;
+        }
+        if rem_2 > 0 {
+            weight_sum += pct_2;
+        }
+        if rem_3 > 0 {
+            weight_sum += pct_3;
+        }
 
         if weight_sum > 0.0 {
-            let extra_1 = if rem_1 > 0 { ((overkill_dmg * pct_1 / weight_sum) / hp_1) as u64 } else { 0 };
-            let extra_2 = if rem_2 > 0 { ((overkill_dmg * pct_2 / weight_sum) / hp_2) as u64 } else { 0 };
-            let extra_3 = if rem_3 > 0 { ((overkill_dmg * pct_3 / weight_sum) / hp_3) as u64 } else { 0 };
+            let extra_1 = if rem_1 > 0 {
+                ((overkill_dmg * pct_1 / weight_sum) / hp_1) as u64
+            } else {
+                0
+            };
+            let extra_2 = if rem_2 > 0 {
+                ((overkill_dmg * pct_2 / weight_sum) / hp_2) as u64
+            } else {
+                0
+            };
+            let extra_3 = if rem_3 > 0 {
+                ((overkill_dmg * pct_3 / weight_sum) / hp_3) as u64
+            } else {
+                0
+            };
 
             rem_1 = rem_1.saturating_sub(extra_1);
             rem_2 = rem_2.saturating_sub(extra_2);
@@ -536,4 +597,3 @@ pub fn inflict_damage(
 
     (rem_1, rem_2, rem_3)
 }
-

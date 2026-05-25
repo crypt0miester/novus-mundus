@@ -1,28 +1,31 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 
 use crate::{
     constants::PLAYER_SEED,
+    emit,
     error::GameError,
+    events::UnitsHired,
+    helpers::{
+        estate::{
+            load_estate_for_player, require_building, required_building_for_unit,
+            required_level_for_unit,
+        },
+        event_scoring::update_event_score,
+    },
     logic::{
-        consume_novi_logic, calculate_synchrony, calculate_networth, update_happiness_defensive,
-        get_time_of_day, apply_time_multiplier, ActivityType,
+        apply_time_multiplier, calculate_networth, calculate_synchrony, consume_novi_logic,
+        get_time_of_day,
         safe_math::{apply_bp, mul_div},
+        update_happiness_defensive, ActivityType,
     },
     state::PlayerAccount,
-    types::{UnitType, EventType},
-    helpers::{
-        event_scoring::update_event_score,
-        estate::{required_building_for_unit, required_level_for_unit, load_estate_for_player, require_building},
-    },
-    utils::{read_u8, read_u64},
-    validation::{require_signer, require_writable, require_owner, require_pda},
-    emit,
-    events::UnitsHired,
+    types::{EventType, UnitType},
+    utils::{read_u64, read_u8},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Hire units by consuming locked NOVI
@@ -49,15 +52,18 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, [
-        player,
-        owner,
-        player_token_account,
-        novi_mint,
-        game_engine,
-        _token_program,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player,
+            owner,
+            player_token_account,
+            novi_mint,
+            game_engine,
+            _token_program,
+            estate_account,
+        ]
+    );
     let (event_participation, event) = if accounts.len() >= 9 {
         (Some(&accounts[7]), Some(&accounts[8]))
     } else {
@@ -70,7 +76,15 @@ pub fn process(
     require_owner(player, program_id)?;
 
     // Verify player PDA matches expected derivation
-    let bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let bump = require_pda(
+        player,
+        &[
+            PLAYER_SEED,
+            game_engine.address().as_ref(),
+            owner.address().as_ref(),
+        ],
+        program_id,
+    )?;
 
     crate::require_keys_eq!(
         novi_mint.address().as_array(),
@@ -90,9 +104,7 @@ pub fn process(
     // 4. PHASE 1: Validate and calculate (scoped player borrow - dropped before CPI)
     let (units_with_time_bonus, units_to_hire, time_bonus_bps, player_name, current_event, now) = {
         let mut player_data_ref = player.try_borrow_mut()?;
-        let player_data = unsafe {
-            PlayerAccount::load_mut(&mut player_data_ref)
-        };
+        let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
         // Verify owner matches
         if &player_data.owner != owner.address() {
@@ -106,7 +118,8 @@ pub fn process(
         require_building(estate, building, required_level)?;
 
         // Validate game_engine account (ownership + PDA + discriminator + bump)
-        let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
+        let game_engine_data =
+            crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
         let economic_config = &game_engine_data.economic_config;
 
         // Verify bump matches
@@ -158,14 +171,17 @@ pub fn process(
             adjusted_unit_cost.saturating_mul(cost_ratio) / 10000
         } else {
             adjusted_unit_cost
-        }.max(1);
+        }
+        .max(1);
 
-        let base_units = power.checked_div(power_cost).ok_or(GameError::MathOverflow)?;
+        let base_units = power
+            .checked_div(power_cost)
+            .ok_or(GameError::MathOverflow)?;
         let remainder = power % power_cost;
 
         let units_to_hire = if remainder > 0 {
-            let remainder_ratio_bp = mul_div(remainder, 10000, power_cost)
-                .ok_or(GameError::MathOverflow)?;
+            let remainder_ratio_bp =
+                mul_div(remainder, 10000, power_cost).ok_or(GameError::MathOverflow)?;
             if remainder_ratio_bp >= 5000 {
                 base_units.checked_add(1).ok_or(GameError::MathOverflow)?
             } else {
@@ -179,7 +195,8 @@ pub fn process(
             return Err(GameError::InsufficientPower.into());
         }
 
-        let units_with_time_bonus = apply_time_multiplier(units_to_hire, time_of_day, ActivityType::Hiring);
+        let units_with_time_bonus =
+            apply_time_multiplier(units_to_hire, time_of_day, ActivityType::Hiring);
 
         // Ensure final unit count is at least 1 (time penalty can zero out small hires)
         if units_with_time_bonus == 0 {
@@ -187,7 +204,8 @@ pub fn process(
         }
 
         // Deduct locked NOVI from state
-        player_data.locked_novi = player_data.locked_novi
+        player_data.locked_novi = player_data
+            .locked_novi
             .checked_sub(novi_amount)
             .ok_or(GameError::MathOverflow)?;
 
@@ -196,8 +214,8 @@ pub fn process(
             let diff = units_with_time_bonus
                 .checked_sub(units_to_hire)
                 .ok_or(GameError::MathOverflow)?;
-            let bonus_ratio = mul_div(diff, 10000, units_to_hire.max(1))
-                .ok_or(GameError::MathOverflow)?;
+            let bonus_ratio =
+                mul_div(diff, 10000, units_to_hire.max(1)).ok_or(GameError::MathOverflow)?;
             u16::try_from(bonus_ratio.min(u16::MAX as u64)).unwrap_or(u16::MAX)
         } else {
             0
@@ -207,13 +225,25 @@ pub fn process(
         let player_name = player_data.name;
         let current_event = player_data.current_event;
 
-        (units_with_time_bonus, units_to_hire, time_bonus_bps, player_name, current_event, now)
+        (
+            units_with_time_bonus,
+            units_to_hire,
+            time_bonus_bps,
+            player_name,
+            current_event,
+            now,
+        )
     }; // player_data_ref dropped here — required before CPI that touches player account
 
     // 5. PHASE 2: Burn NOVI tokens (CPI - requires no active borrows on player)
     // Player PDA owns the token account, so player is the burn authority
     let bump_seed = [bump];
-    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), owner.address(), &bump_seed);
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine.address(),
+        owner.address(),
+        &bump_seed
+    );
     let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     crate::helpers::burn_tokens(
@@ -227,46 +257,53 @@ pub fn process(
     // 6. PHASE 3: Re-borrow and update state (after CPI)
     {
         let mut player_data_ref = player.try_borrow_mut()?;
-        let player_data = unsafe {
-            PlayerAccount::load_mut(&mut player_data_ref)
-        };
+        let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
         // Add units based on type (with time-of-day bonus applied)
         match unit_type {
             UnitType::DefensiveUnit1 => {
-                player_data.defensive_unit_1 = player_data.defensive_unit_1
+                player_data.defensive_unit_1 = player_data
+                    .defensive_unit_1
                     .checked_add(units_with_time_bonus)
                     .ok_or(GameError::MathOverflow)?;
             }
             UnitType::DefensiveUnit2 => {
-                player_data.defensive_unit_2 = player_data.defensive_unit_2
+                player_data.defensive_unit_2 = player_data
+                    .defensive_unit_2
                     .checked_add(units_with_time_bonus)
                     .ok_or(GameError::MathOverflow)?;
             }
             UnitType::DefensiveUnit3 => {
-                player_data.defensive_unit_3 = player_data.defensive_unit_3
+                player_data.defensive_unit_3 = player_data
+                    .defensive_unit_3
                     .checked_add(units_with_time_bonus)
                     .ok_or(GameError::MathOverflow)?;
             }
             UnitType::OperativeUnit1 => {
-                player_data.operative_unit_1 = player_data.operative_unit_1
+                player_data.operative_unit_1 = player_data
+                    .operative_unit_1
                     .checked_add(units_with_time_bonus)
                     .ok_or(GameError::MathOverflow)?;
             }
             UnitType::OperativeUnit2 => {
-                player_data.operative_unit_2 = player_data.operative_unit_2
+                player_data.operative_unit_2 = player_data
+                    .operative_unit_2
                     .checked_add(units_with_time_bonus)
                     .ok_or(GameError::MathOverflow)?;
             }
             UnitType::OperativeUnit3 => {
-                player_data.operative_unit_3 = player_data.operative_unit_3
+                player_data.operative_unit_3 = player_data
+                    .operative_unit_3
                     .checked_add(units_with_time_bonus)
                     .ok_or(GameError::MathOverflow)?;
             }
         }
 
         // Update happiness for defensive units
-        if matches!(unit_type, UnitType::DefensiveUnit1 | UnitType::DefensiveUnit2 | UnitType::DefensiveUnit3) {
+        if matches!(
+            unit_type,
+            UnitType::DefensiveUnit1 | UnitType::DefensiveUnit2 | UnitType::DefensiveUnit3
+        ) {
             let total_defensive = player_data.total_defensive_units();
             player_data.happiness_defensive = update_happiness_defensive(
                 total_defensive,
@@ -277,13 +314,14 @@ pub fn process(
         }
 
         // Recalculate networth (re-borrow game_engine for economic_config)
-        let game_engine_data = crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
+        let game_engine_data =
+            crate::state::GameEngine::load_checked_by_key(game_engine, program_id)?;
         let economic_config = &game_engine_data.economic_config;
         player_data.networth = calculate_networth(player_data, economic_config)?;
 
         // Update Event Scores (if participating)
         if let (Some(event_participation), Some(event)) = (event_participation, event) {
-            let mut participation = crate::state::EventParticipation::load_checked_mut(
+            let participation = crate::state::EventParticipation::load_checked_mut(
                 event_participation,
                 game_engine.address(),
                 current_event,
@@ -291,7 +329,7 @@ pub fn process(
                 program_id,
             )?;
 
-            let mut event_data = crate::state::EventAccount::load_checked_mut(
+            let event_data = crate::state::EventAccount::load_checked_mut(
                 event,
                 game_engine.address(),
                 current_event,

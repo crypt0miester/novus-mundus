@@ -1,3 +1,7 @@
+pub mod ascend;
+pub mod cancel_research;
+pub mod complete_research;
+pub mod create_progress;
 /// Research System processors
 ///
 /// Manages the tech tree progression system with 30 research nodes
@@ -13,12 +17,7 @@
 /// - 126: update_template - DAO updates template
 /// - 127: ascend - Ascend a maxed research node (endgame)
 /// Note: claim_daily_reward at instruction 90 is updated to check research unlocks
-
 pub mod initialize_template;
-pub mod create_progress;
-pub mod start_research;
-pub mod complete_research;
 pub mod speed_up_research;
-pub mod cancel_research;
+pub mod start_research;
 pub mod update_template;
-pub mod ascend;

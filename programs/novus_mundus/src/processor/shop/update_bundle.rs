@@ -1,15 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-};
 use crate::{
     error::GameError,
-    state::{GameEngine, BundleAccount},
+    state::{BundleAccount, GameEngine},
+    utils::{read_i64, read_u16, read_u32, read_u64, read_u8},
     validation::{require_signer, require_writable},
-    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
 };
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 /// Update field flags
 pub const UPDATE_PRICE_SOL: u8 = 1;

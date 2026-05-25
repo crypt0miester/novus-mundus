@@ -1,17 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::DAO_PROMOTION_SEED,
     error::GameError,
-    state::{GameEngine, DAOPromotionAccount, DAOPromotionStatus},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u16, read_u64, read_i64, read_bytes32},
+    state::{DAOPromotionAccount, DAOPromotionStatus, GameEngine},
+    utils::{read_bytes32, read_i64, read_u16, read_u64},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a DAO promotion (DAO only, after governance vote)
 ///
@@ -76,7 +71,8 @@ pub fn process(
 
     let starts_at = read_i64(instruction_data, 52, "starts_at")?;
     let ends_at = read_i64(instruction_data, 60, "ends_at")?;
-    let max_discount_budget_lamports = read_u64(instruction_data, 68, "max_discount_budget_lamports")?;
+    let max_discount_budget_lamports =
+        read_u64(instruction_data, 68, "max_discount_budget_lamports")?;
 
     // 4. Validate Data
 
@@ -85,11 +81,12 @@ pub fn process(
     }
 
     // Cap individual discounts at 50%
-    if equipment_discount_bps > 5000 ||
-       consumable_discount_bps > 5000 ||
-       material_discount_bps > 5000 ||
-       cosmetic_discount_bps > 5000 ||
-       global_discount_bps > 5000 {
+    if equipment_discount_bps > 5000
+        || consumable_discount_bps > 5000
+        || material_discount_bps > 5000
+        || cosmetic_discount_bps > 5000
+        || global_discount_bps > 5000
+    {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -104,10 +101,8 @@ pub fn process(
 
     // 6. Derive and Verify DAO Promotion PDA
 
-    let (expected_pda, bump) = DAOPromotionAccount::derive_pda(
-        game_engine_account.address(),
-        proposal_id,
-    );
+    let (expected_pda, bump) =
+        DAOPromotionAccount::derive_pda(game_engine_account.address(), proposal_id);
 
     if dao_promotion_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -133,7 +128,8 @@ pub fn process(
         lamports,
         space: DAOPromotionAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize DAO Promotion Data
 

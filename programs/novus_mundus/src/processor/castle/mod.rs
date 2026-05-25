@@ -23,24 +23,24 @@
 //! - 289: update_castle_status - Permissionless time-based status transitions
 //! - 290: complete_upgrade - Complete upgrade when timer expires (permissionless)
 
-pub mod create_castle;
-pub mod claim_vacant_castle;
 pub mod appoint_court;
-pub mod dismiss_court;
-pub mod resign_court;
-pub mod initiate_upgrade;
+pub mod attack_castle;
 pub mod cancel_upgrade;
+pub mod claim_castle_rewards;
+pub mod claim_garrison_loot;
+pub mod claim_vacant_castle;
 pub mod complete_upgrade;
+pub mod court_cleanup;
+pub mod create_castle;
+pub mod dismiss_court;
+pub mod finalize_transition;
+pub mod force_remove_king;
+pub mod garrison_cleanup;
+pub mod initiate_upgrade;
 pub mod join_garrison;
 pub mod leave_garrison;
 pub mod relieve_garrison;
-pub mod claim_castle_rewards;
-pub mod claim_garrison_loot;
-pub mod garrison_cleanup;
-pub mod court_cleanup;
+pub mod resign_court;
 pub mod rewards_cleanup;
-pub mod finalize_transition;
 pub mod update_castle_config;
-pub mod force_remove_king;
-pub mod attack_castle;
 pub mod update_castle_status;

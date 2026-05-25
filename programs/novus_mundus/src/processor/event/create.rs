@@ -1,17 +1,15 @@
-use pinocchio::{
-    ProgramResult, AccountView, error::ProgramError, Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
-    constants::{EVENT_SEED, MIN_EVENT_NAME_LENGTH, MAX_EVENT_NAME_LENGTH},
-    error::GameError,
-    state::{EventAccount, GameEngine, LeaderboardEntry, player::NULL_PUBKEY},
-    types::{EventType, PrizeType},
-    validation::{require_signer, require_writable, require_key_match},
+    constants::{EVENT_SEED, MAX_EVENT_NAME_LENGTH, MIN_EVENT_NAME_LENGTH},
     emit,
+    error::GameError,
     events::KingdomEventCreated,
-    utils::{read_u8, read_u64, read_i64},
+    state::{player::NULL_PUBKEY, EventAccount, GameEngine, LeaderboardEntry},
+    types::{EventType, PrizeType},
+    utils::{read_i64, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a new event (DAO only)
 ///
@@ -87,7 +85,11 @@ pub fn process(
     let event_type = read_u8(instruction_data, offset + 16, "event_create.event_type")?;
     let min_level = read_u8(instruction_data, offset + 17, "event_create.min_level")?;
     let min_reputation = read_u64(instruction_data, offset + 18, "event_create.min_reputation")?;
-    let required_subscription_tier = read_u8(instruction_data, offset + 26, "event_create.required_subscription_tier")?;
+    let required_subscription_tier = read_u8(
+        instruction_data,
+        offset + 26,
+        "event_create.required_subscription_tier",
+    )?;
     let prize_type = read_u8(instruction_data, offset + 27, "event_create.prize_type")?;
     let prize_amount = read_u64(instruction_data, offset + 28, "event_create.prize_amount")?;
     let mut prize_token_mint_bytes = [0u8; 32];
@@ -111,7 +113,11 @@ pub fn process(
 
     let event_id_bytes = event_id.to_le_bytes();
     let (expected_event, bump) = Address::find_program_address(
-        &[EVENT_SEED, game_engine_account.address().as_ref(), &event_id_bytes],
+        &[
+            EVENT_SEED,
+            game_engine_account.address().as_ref(),
+            &event_id_bytes,
+        ],
         program_id,
     );
 
@@ -121,22 +127,22 @@ pub fn process(
 
     // 6. Verify DAO Authority
 
-    // Validate game_engine account (ownership + PDA + discriminator + bump), then
-    // use raw pointer access to avoid holding RefCell borrows across the CreateAccount CPI below.
-    {
-        let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-        if dao_authority.address() != &game_engine_data.authority {
-            return Err(GameError::DaoRequired.into());
-        }
+    let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    if dao_authority.address() != &game_engine_data.authority {
+        return Err(GameError::DaoRequired.into());
     }
-    let game_engine_data = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     // 7. Create Event Account
 
     let lamports = crate::utils::rent_exempt_const(EventAccount::LEN);
 
     let bump_seed = [bump];
-    let seeds = crate::seeds!(EVENT_SEED, game_engine_account.address(), &event_id_bytes, &bump_seed);
+    let seeds = crate::seeds!(
+        EVENT_SEED,
+        game_engine_account.address(),
+        &event_id_bytes,
+        &bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
@@ -145,7 +151,8 @@ pub fn process(
         lamports,
         space: EventAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Event Data
 

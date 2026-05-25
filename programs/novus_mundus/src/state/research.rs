@@ -1,9 +1,6 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
-};
 use crate::constants::{RESEARCH_SEED, RESEARCH_TEMPLATE_SEED};
 use crate::logic::safe_math::exp_growth;
+use pinocchio::{error::ProgramError, Address};
 
 /// Maximum number of research nodes
 pub const MAX_RESEARCH_NODES: usize = 31;
@@ -56,7 +53,7 @@ pub enum ResearchBuffType {
     FragmentDiscovery = 27,
     GemProspecting = 28,
     CollectionMastery = 29,
-    TravelSpeed = 30,           // Faster intercity and intracity travel
+    TravelSpeed = 30, // Faster intercity and intracity travel
 }
 
 /// Research Template - DAO controlled configuration for each research node
@@ -66,17 +63,17 @@ pub struct ResearchTemplate {
     /// Account discriminator (AccountKey::ResearchTemplate)
     pub account_key: u8,
 
-    pub research_type: u8,           // 0-29 (30 research nodes)
-    pub category: u8,                // ResearchCategory
-    pub max_level: u8,               // 5-25 depending on node
-    pub base_time_seconds: u32,      // Base research time for level 1
-    pub base_novi_cost: u64,         // NOVI cost for level 1
-    pub buff_type: u8,               // ResearchBuffType
-    pub buff_per_level_bps: u16,     // Basis points per level (e.g., 200 = 2%)
-    pub prerequisite_research: u8,   // 255 = no prereq, else research_type
-    pub prerequisite_level: u8,      // Required level of prerequisite
-    pub gem_cost_per_minute: u16,    // Gems per minute for speed-up
-    pub is_active: bool,             // DAO can disable nodes
+    pub research_type: u8,         // 0-29 (30 research nodes)
+    pub category: u8,              // ResearchCategory
+    pub max_level: u8,             // 5-25 depending on node
+    pub base_time_seconds: u32,    // Base research time for level 1
+    pub base_novi_cost: u64,       // NOVI cost for level 1
+    pub buff_type: u8,             // ResearchBuffType
+    pub buff_per_level_bps: u16,   // Basis points per level (e.g., 200 = 2%)
+    pub prerequisite_research: u8, // 255 = no prereq, else research_type
+    pub prerequisite_level: u8,    // Required level of prerequisite
+    pub gem_cost_per_minute: u16,  // Gems per minute for speed-up
+    pub is_active: bool,           // DAO can disable nodes
     pub _padding: [u8; 5],
 }
 
@@ -107,7 +104,8 @@ impl ResearchTemplate {
         pinocchio::Address::create_program_address(
             &[RESEARCH_TEMPLATE_SEED, &[research_type], &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Calculate NOVI cost for a specific level (no u128!)
@@ -152,15 +150,15 @@ pub struct ResearchProgress {
     /// Account discriminator (AccountKey::ResearchProgress)
     pub account_key: u8,
 
-    pub player: Address,                    // Owner
-    pub current_research: u8,              // Active research type (255 = none)
-    pub current_level: u8,                 // Current level being researched
-    pub started_at: i64,                   // Unix timestamp research started
-    pub completes_at: i64,                 // Unix timestamp research completes
-    pub completed_levels: [u8; 30],        // Current level of each research node (0-25)
-    pub total_gems_spent: u64,             // Total gems spent on speed-ups
-    pub total_novi_spent: u64,             // Total NOVI spent on research
-    pub buff_cache_version: u32,           // Increments on research completion
+    pub player: Address,            // Owner
+    pub current_research: u8,       // Active research type (255 = none)
+    pub current_level: u8,          // Current level being researched
+    pub started_at: i64,            // Unix timestamp research started
+    pub completes_at: i64,          // Unix timestamp research completes
+    pub completed_levels: [u8; 30], // Current level of each research node (0-25)
+    pub total_gems_spent: u64,      // Total gems spent on speed-ups
+    pub total_novi_spent: u64,      // Total NOVI spent on research
+    pub buff_cache_version: u32,    // Increments on research completion
 
     // Economy Research Buffs (stored in PDA, not PlayerAccount)
     pub production_efficiency_bps: u16,
@@ -183,7 +181,7 @@ pub struct ResearchProgress {
     // Bitfield: bit N = research node N is ascended (max 30 nodes)
     // Ascended nodes get +25% buff effectiveness
     pub ascended_nodes: u32,
-    pub total_ascensions: u8,              // Count of ascended nodes
+    pub total_ascensions: u8, // Count of ascended nodes
 
     pub bump: u8,
     pub _padding: [u8; 1],
@@ -369,10 +367,7 @@ impl ResearchProgress {
 
     /// Derive the PDA for a research progress account
     pub fn derive_pda(player: &Address) -> (Address, u8) {
-        pinocchio::Address::find_program_address(
-            &[RESEARCH_SEED, player.as_ref()],
-            &crate::ID,
-        )
+        pinocchio::Address::find_program_address(&[RESEARCH_SEED, player.as_ref()], &crate::ID)
     }
 
     /// Create PDA from known bump
@@ -381,6 +376,7 @@ impl ResearchProgress {
         pinocchio::Address::create_program_address(
             &[RESEARCH_SEED, player.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }

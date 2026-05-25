@@ -1,18 +1,17 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
     constants::TEAM_INVITE_SEED,
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::InviteCancelled,
+    helpers::close_account,
+    state::{
+        require_extension, PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, EXT_TEAM,
+        NULL_PUBKEY,
+    },
+    utils::{read_u16, read_u64},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Cancel a pending team invite
@@ -109,7 +108,11 @@ pub fn process(
     // 6. Verify Invite PDA
 
     let (expected_invite, _) = Address::find_program_address(
-        &[TEAM_INVITE_SEED, team_account.address().as_ref(), invitee_account.address().as_ref()],
+        &[
+            TEAM_INVITE_SEED,
+            team_account.address().as_ref(),
+            invitee_account.address().as_ref(),
+        ],
         program_id,
     );
 
@@ -140,7 +143,7 @@ pub fn process(
 
     // 8. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(InviteCancelled {

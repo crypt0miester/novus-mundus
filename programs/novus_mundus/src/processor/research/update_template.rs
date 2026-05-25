@@ -1,18 +1,10 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::{
     error::GameError,
     state::{GameEngine, ResearchTemplate},
-    validation::{
-        require_signer,
-        require_writable,
-    },
-    utils::{read_u8, read_u16, read_u32, read_u64},
+    utils::{read_u16, read_u32, read_u64, read_u8},
+    validation::{require_signer, require_writable},
 };
 
 /// Update research template (DAO only)
@@ -69,57 +61,63 @@ pub fn process(
             if instruction_data.len() != 5 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.base_time_seconds = read_u32(instruction_data, 1, "update_template.base_time_seconds")?;
-        },
+            template.base_time_seconds =
+                read_u32(instruction_data, 1, "update_template.base_time_seconds")?;
+        }
         1 => {
             // Update base_novi_cost (u64)
             if instruction_data.len() != 9 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.base_novi_cost = read_u64(instruction_data, 1, "update_template.base_novi_cost")?;
-        },
+            template.base_novi_cost =
+                read_u64(instruction_data, 1, "update_template.base_novi_cost")?;
+        }
         2 => {
             // Update buff_per_level_bps (u16)
             if instruction_data.len() != 3 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.buff_per_level_bps = read_u16(instruction_data, 1, "update_template.buff_per_level_bps")?;
-        },
+            template.buff_per_level_bps =
+                read_u16(instruction_data, 1, "update_template.buff_per_level_bps")?;
+        }
         3 => {
             // Update gem_cost_per_minute (u16)
             if instruction_data.len() != 3 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.gem_cost_per_minute = read_u16(instruction_data, 1, "update_template.gem_cost_per_minute")?;
-        },
+            template.gem_cost_per_minute =
+                read_u16(instruction_data, 1, "update_template.gem_cost_per_minute")?;
+        }
         4 => {
             // Update is_active (bool)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
             template.is_active = read_u8(instruction_data, 1, "update_template.is_active")? != 0;
-        },
+        }
         5 => {
             // Update max_level (u8)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
             template.max_level = read_u8(instruction_data, 1, "update_template.max_level")?;
-        },
+        }
         6 => {
             // Update prerequisite_research (u8)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.prerequisite_research = read_u8(instruction_data, 1, "update_template.prerequisite_research")?;
-        },
+            template.prerequisite_research =
+                read_u8(instruction_data, 1, "update_template.prerequisite_research")?;
+        }
         7 => {
             // Update prerequisite_level (u8)
             if instruction_data.len() != 2 {
                 return Err(ProgramError::InvalidInstructionData);
             }
-            template.prerequisite_level = read_u8(instruction_data, 1, "update_template.prerequisite_level")?;
-        },
+            template.prerequisite_level =
+                read_u8(instruction_data, 1, "update_template.prerequisite_level")?;
+        }
         _ => return Err(GameError::InvalidParameter.into()),
     }
 

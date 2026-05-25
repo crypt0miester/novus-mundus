@@ -15,20 +15,18 @@
 //! Phase 1 expeditions work without strikes (time-based yield only).
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::EXPEDITION_SEED,
-    error::GameError,
-    state::{PlayerAccount, ExpeditionAccount, GameEngine},
-    utils::read_u8,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
+    error::GameError,
     events::ExpeditionStrike,
+    state::{ExpeditionAccount, GameEngine, PlayerAccount},
+    utils::read_u8,
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Perform a Strike/Cast during an active expedition
@@ -51,13 +49,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, [
-        owner,
-        game_authority,
-        player_account,
-        expedition_account,
-        game_engine_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            game_authority,
+            player_account,
+            expedition_account,
+            game_engine_account,
+        ]
+    );
 
     // 2. Validate Accounts
     require_signer(owner)?;

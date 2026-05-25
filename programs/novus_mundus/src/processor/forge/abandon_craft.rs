@@ -1,21 +1,14 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
     emit,
     error::GameError,
     events::CraftAbandoned,
-    state::{
-        PlayerAccount,
-        estate::CraftedEquipmentAccount,
-    },
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    state::{estate::CraftedEquipmentAccount, PlayerAccount},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
-use pinocchio::sysvars::{Sysvar, clock::Clock};
+use pinocchio::sysvars::{clock::Clock, Sysvar};
 
 /// Abandon an in-progress staged craft
 ///

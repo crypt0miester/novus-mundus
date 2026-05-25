@@ -12,8 +12,7 @@
 /// - (√φ)² = φ — Every 2 levels equals one golden ratio multiplier
 /// - φ × (1/φ) = 1 — Inverse relationships for diminishing returns
 /// - φ² = φ + 1 — Self-similar scaling for legendary tiers
-
-use crate::constants::{PHI, GOLDEN_ROOT};
+use crate::constants::{GOLDEN_ROOT, PHI};
 
 /// Calculate √φ raised to power n (golden root power)
 ///

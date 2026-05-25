@@ -1,18 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::TreasuryRequestExecuted,
+    helpers::close_account,
+    state::{
+        require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, EXT_TEAM,
+        NULL_PUBKEY,
+    },
+    utils::{read_u16, read_u64},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Execute a treasury withdrawal request after cooldown
@@ -61,11 +62,11 @@ pub fn process(
 
     // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -121,7 +122,8 @@ pub fn process(
 
     // 8. Verify and Load Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), player_account.address());
+    let (expected_request, _) =
+        TreasuryRequest::derive_pda(team_account.address(), player_account.address());
     if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
@@ -191,8 +193,6 @@ pub fn process(
     // 11. Close Request Account (rent to owner)
 
     // Need to drop the mutable borrows first
-    drop(player);
-    drop(team);
 
     close_account(request_account, owner)?;
 

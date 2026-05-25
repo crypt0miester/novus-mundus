@@ -1,8 +1,4 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, ProgramResult};
 
 use crate::error::GameError;
 
@@ -11,10 +7,7 @@ use crate::error::GameError;
 /// pinocchio 0.10 pattern: move lamports out first, then call `close()` which
 /// zeros data length / lamports / owner. The runtime zero-fills the data buffer
 /// at instruction end.
-pub fn close_account(
-    account: &AccountView,
-    recipient: &AccountView,
-) -> ProgramResult {
+pub fn close_account(account: &AccountView, recipient: &AccountView) -> ProgramResult {
     recipient.set_lamports(
         recipient
             .lamports()

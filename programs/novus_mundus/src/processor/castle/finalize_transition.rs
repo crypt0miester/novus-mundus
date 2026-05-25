@@ -9,23 +9,16 @@
 //! Sets the new king and grants protection period.
 
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{CASTLE_STATUS_PROTECTED, CASTLE_STATUS_TRANSITIONING, CASTLE_STATUS_VACANT},
     emit,
     error::GameError,
     events::CastleClaimed,
-    state::{
-        CastleAccount, KingRegistryAccount, PlayerAccount,
-        player::NULL_PUBKEY,
-    },
-    constants::{
-        CASTLE_STATUS_TRANSITIONING, CASTLE_STATUS_PROTECTED, CASTLE_STATUS_VACANT,
-    },
+    state::{player::NULL_PUBKEY, CastleAccount, KingRegistryAccount, PlayerAccount},
     utils::read_u16,
     validation::require_owner,
 };
@@ -47,12 +40,10 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        _caller,
-        castle_account,
-        new_king_account,
-        new_king_registry,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [_caller, castle_account, new_king_account, new_king_registry,]
+    );
 
     // Parse instruction data
     let city_id = read_u16(instruction_data, 0, "city_id")?;
@@ -63,7 +54,7 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle is in transitioning state
     if castle.status != CASTLE_STATUS_TRANSITIONING {
@@ -139,7 +130,7 @@ pub fn process(
     let old_king = castle.king;
 
     // Update new king registry using load_checked_mut
-    let mut new_registry = KingRegistryAccount::load_checked_mut(
+    let new_registry = KingRegistryAccount::load_checked_mut(
         new_king_registry,
         new_king_account.address(),
         program_id,
@@ -160,7 +151,9 @@ pub fn process(
         // Verify old king registry PDA matches the previous king
         let (expected_old_pda, _) = KingRegistryAccount::derive_pda(&old_king);
         if old_king_registry.address() == &expected_old_pda {
-            if unsafe { old_king_registry.owner() } == program_id && old_king_registry.data_len() > 0 {
+            if unsafe { old_king_registry.owner() } == program_id
+                && old_king_registry.data_len() > 0
+            {
                 let mut old_registry_data = old_king_registry.try_borrow_mut()?;
                 let old_registry = unsafe { KingRegistryAccount::load_mut(&mut old_registry_data) };
                 old_registry.remove_castle(city_id, castle_id);

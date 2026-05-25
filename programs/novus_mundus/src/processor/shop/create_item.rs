@@ -1,16 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::SHOP_ITEM_SEED,
     error::GameError,
-    state::{GameEngine, ShopItemAccount, ShopCategory},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
+    state::{GameEngine, ShopCategory, ShopItemAccount},
+    utils::{read_i64, read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a shop item (DAO only)
 ///
@@ -76,31 +72,45 @@ pub fn process(
     // Optional fields with defaults
     let available_from = if instruction_data.len() >= 28 {
         read_i64(instruction_data, 20, "available_from")?
-    } else { 0 };
+    } else {
+        0
+    };
 
     let available_until = if instruction_data.len() >= 36 {
         read_i64(instruction_data, 28, "available_until")?
-    } else { 0 };
+    } else {
+        0
+    };
 
     let max_global_stock = if instruction_data.len() >= 44 {
         read_u64(instruction_data, 36, "max_global_stock")?
-    } else { 0 };
+    } else {
+        0
+    };
 
     let max_per_player = if instruction_data.len() >= 48 {
         read_u32(instruction_data, 44, "max_per_player")?
-    } else { 0 };
+    } else {
+        0
+    };
 
     let max_per_day = if instruction_data.len() >= 50 {
         read_u16(instruction_data, 48, "max_per_day")?
-    } else { 0 };
+    } else {
+        0
+    };
 
     let is_active = if instruction_data.len() >= 51 {
         read_u8(instruction_data, 50, "is_active")? != 0
-    } else { true };
+    } else {
+        true
+    };
 
     let is_featured = if instruction_data.len() >= 52 {
         read_u8(instruction_data, 51, "is_featured")? != 0
-    } else { false };
+    } else {
+        false
+    };
 
     // 4. Validate Data
 
@@ -159,7 +169,8 @@ pub fn process(
         lamports,
         space: ShopItemAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Shop Item Data
 

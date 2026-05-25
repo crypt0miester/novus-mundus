@@ -1,17 +1,13 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamInviteAccount, require_extension, EXT_INVENTORY},
     constants::TEAM_INVITE_SEED,
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
+    error::GameError,
     events::InviteDeclined,
+    helpers::close_account,
+    state::{require_extension, PlayerAccount, TeamInviteAccount, EXT_INVENTORY},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Decline a pending team invite
@@ -62,7 +58,11 @@ pub fn process(
     // 4. Verify Invite PDA
 
     let (expected_invite, _) = Address::find_program_address(
-        &[TEAM_INVITE_SEED, team_account.address().as_ref(), player_account.address().as_ref()],
+        &[
+            TEAM_INVITE_SEED,
+            team_account.address().as_ref(),
+            player_account.address().as_ref(),
+        ],
         program_id,
     );
 
@@ -105,7 +105,7 @@ pub fn process(
 
     // 6. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(InviteDeclined {

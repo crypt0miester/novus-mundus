@@ -7,20 +7,18 @@
 //! Must be called multiple times to initialize all cities (due to account limits).
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{CityAccount, GameEngine},
     constants::CITY_SEED,
     emit,
+    error::GameError,
     events::KingdomCitiesInitialized,
+    state::{CityAccount, GameEngine},
 };
 
 /// Maximum cities to initialize per batch (limited by account count in transaction)
@@ -81,15 +79,10 @@ pub fn process(
     }
 
     // 4. Load and validate GameEngine
-    // Validate GameEngine fully (ownership + PDA + discriminator + bump), then
-    // use raw pointer access to avoid holding RefCell borrows across the CreateAccount CPIs below.
-    {
-        let ge = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-        if dao_authority.address() != &ge.authority {
-            return Err(GameError::DaoRequired.into());
-        }
+    let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    if dao_authority.address() != &game_engine.authority {
+        return Err(GameError::DaoRequired.into());
     }
-    let game_engine = unsafe { &*(game_engine_account.data_ptr() as *const GameEngine) };
 
     // 5. Get rent for city accounts
     let lamports = crate::utils::rent_exempt_const(CityAccount::SIZE);
@@ -121,26 +114,23 @@ pub fn process(
             return Err(ProgramError::InvalidInstructionData);
         }
 
-        let latitude = f64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
+        let latitude = f64::from_le_bytes(instruction_data[offset..offset + 8].try_into().unwrap());
         offset += 8;
 
-        let longitude = f64::from_le_bytes(
-            instruction_data[offset..offset + 8].try_into().unwrap()
-        );
+        let longitude =
+            f64::from_le_bytes(instruction_data[offset..offset + 8].try_into().unwrap());
         offset += 8;
 
-        let radius_km = f32::from_le_bytes(
-            instruction_data[offset..offset + 4].try_into().unwrap()
-        );
+        let radius_km =
+            f32::from_le_bytes(instruction_data[offset..offset + 4].try_into().unwrap());
         offset += 4;
 
         let city_type = instruction_data[offset];
         offset += 1;
 
         // Derive and validate city PDA
-        let (expected_city_pda, bump) = CityAccount::derive_pda(game_engine_account.address(), city_id);
+        let (expected_city_pda, bump) =
+            CityAccount::derive_pda(game_engine_account.address(), city_id);
         if city_account.address() != &expected_city_pda {
             return Err(ProgramError::InvalidSeeds);
         }
@@ -148,7 +138,12 @@ pub fn process(
         // Create city account
         let city_id_bytes = city_id.to_le_bytes();
         let bump_seed = [bump];
-        let seeds = crate::seeds!(CITY_SEED, game_engine_account.address(), &city_id_bytes, &bump_seed);
+        let seeds = crate::seeds!(
+            CITY_SEED,
+            game_engine_account.address(),
+            &city_id_bytes,
+            &bump_seed
+        );
         let signer = pinocchio::cpi::Signer::from(&seeds);
 
         CreateAccount {
@@ -157,7 +152,8 @@ pub fn process(
             lamports,
             space: CityAccount::SIZE as u64,
             owner: &crate::ID,
-        }.invoke_signed(&[signer])?;
+        }
+        .invoke_signed(&[signer])?;
 
         // Initialize city data
         let city_data = unsafe { CityAccount::load_mut(city_account)? };

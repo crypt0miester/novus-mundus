@@ -1,23 +1,22 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
-    events::{IntercityTravelCompleted, XpGained, PlayerLeveledUp},
-    state::{PlayerAccount, CityAccount, LocationAccount, HeroTemplate, NULL_PUBKEY, is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost},
-    types::TravelType,
+    events::{IntercityTravelCompleted, PlayerLeveledUp, XpGained},
+    helpers::{add_hero_buffs_to_player_with_location, clear_hero_buffs, parse_hero_nft},
     logic::{
-        location::calculate_distance_meters,
-        grant_xp_with_time_bonus,
-        calculate_xp_reward,
+        calculate_xp_reward, grant_xp_with_time_bonus, location::calculate_distance_meters,
         XpAction,
     },
-    helpers::{clear_hero_buffs, parse_hero_nft, add_hero_buffs_to_player_with_location},
+    state::{
+        is_hero_at_home, location_bonus_for_tier, tier_from_mint_cost, CityAccount, HeroTemplate,
+        LocationAccount, PlayerAccount, NULL_PUBKEY,
+    },
+    types::TravelType,
     validation::require_owner,
 };
 
@@ -49,13 +48,16 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (base accounts required)
 
-    crate::extract_accounts!(accounts, [
-        player_account,
-        owner,
-        origin_city_account,
-        destination_city_account,
-        destination_location_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_account,
+            owner,
+            origin_city_account,
+            destination_city_account,
+            destination_location_account,
+        ]
+    );
 
     // Hero accounts are optional (accounts[5..] in pairs of NFT, HeroTemplate)
 
@@ -67,7 +69,7 @@ pub fn process(
 
     // 3. Load Player Data
 
-    let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     // Verify owner matches
     if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
@@ -110,7 +112,8 @@ pub fn process(
 
     let xp_amount = calculate_xp_reward(XpAction::CompleteTravel { distance_km });
     let old_level = player_data.level;
-    let (levels_gained, new_level, _) = grant_xp_with_time_bonus(&mut *player_data, xp_amount, now)?;
+    let (levels_gained, new_level, _) =
+        grant_xp_with_time_bonus(&mut *player_data, xp_amount, now)?;
 
     // Emit XP gained event
     emit!(XpGained {
@@ -187,13 +190,15 @@ pub fn process(
 
     // 12. Increment Destination City Player Count
 
-    destination_city_data.players_present = destination_city_data.players_present
-        .saturating_add(1);
+    destination_city_data.players_present = destination_city_data.players_present.saturating_add(1);
 
     // 13. Location Synergy: Recalculate hero buffs for new city
     // Only if player has locked heroes and hero accounts were provided
 
-    let has_locked_heroes = player_data.active_heroes_arr().iter().any(|h| *h != NULL_PUBKEY);
+    let has_locked_heroes = player_data
+        .active_heroes_arr()
+        .iter()
+        .any(|h| *h != NULL_PUBKEY);
 
     if has_locked_heroes && accounts.len() > 5 {
         // Clear all existing hero buffs before recalculating
@@ -239,7 +244,8 @@ pub fn process(
                             };
 
                             // Store location bonus for this slot
-                            player_data.set_slot_location_bonus_at(slot as usize, location_bonus_bps);
+                            player_data
+                                .set_slot_location_bonus_at(slot as usize, location_bonus_bps);
 
                             // Add buffs with location bonus
                             add_hero_buffs_to_player_with_location(

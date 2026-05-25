@@ -1,3 +1,5 @@
+pub mod accept_invite;
+pub mod cancel_invite;
 /// Team management processors
 ///
 /// Complete team system:
@@ -23,26 +25,23 @@
 /// - disband: Leader dissolves team
 /// - set_motd: Set message of the day (requires PERM_MOTD)
 /// - update_settings: Update team settings (requires PERM_SETTINGS)
-
 pub mod create;
-pub mod join;
-pub mod leave;
-pub mod deposit_treasury;
-pub mod withdraw_treasury;
-pub mod treasury_request_withdraw;
-pub mod treasury_approve_request;
-pub mod treasury_reject_request;
-pub mod treasury_execute_request;
-pub mod treasury_cancel_request;
-pub mod update_treasury_settings;
-pub mod invite;
-pub mod accept_invite;
-pub mod cancel_invite;
 pub mod decline_invite;
-pub mod transfer_leadership;
-pub mod kick_member;
-pub mod promote_member;
 pub mod demote_member;
+pub mod deposit_treasury;
 pub mod disband;
+pub mod invite;
+pub mod join;
+pub mod kick_member;
+pub mod leave;
+pub mod promote_member;
 pub mod set_motd;
+pub mod transfer_leadership;
+pub mod treasury_approve_request;
+pub mod treasury_cancel_request;
+pub mod treasury_execute_request;
+pub mod treasury_reject_request;
+pub mod treasury_request_withdraw;
 pub mod update_settings;
+pub mod update_treasury_settings;
+pub mod withdraw_treasury;

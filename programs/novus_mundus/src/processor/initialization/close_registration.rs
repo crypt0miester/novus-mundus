@@ -7,17 +7,12 @@
 //! Can also be triggered automatically when registration_closes_at timestamp is reached.
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::GameEngine,
-    emit,
-    events::kingdom::KingdomRegistrationClosed,
+    emit, error::GameError, events::kingdom::KingdomRegistrationClosed, state::GameEngine,
 };
 
 /// Close Kingdom Registration
@@ -37,7 +32,7 @@ pub fn process(
     crate::extract_accounts!(accounts, exact [caller, game_engine_account]);
 
     // 2. Load game engine mutably
-    let mut game_engine = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;
+    let game_engine = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;
 
     // 3. Check if registration is already closed
     if !game_engine.registration_open {
@@ -53,8 +48,8 @@ pub fn process(
     // a) Caller is DAO authority and signs
     // b) registration_closes_at has passed (anyone can trigger)
     let is_dao_authority = caller.address() == &game_engine.authority && caller.is_signer();
-    let registration_expired = game_engine.registration_closes_at > 0
-        && now >= game_engine.registration_closes_at;
+    let registration_expired =
+        game_engine.registration_closes_at > 0 && now >= game_engine.registration_closes_at;
 
     if !is_dao_authority && !registration_expired {
         return Err(GameError::Unauthorized.into());

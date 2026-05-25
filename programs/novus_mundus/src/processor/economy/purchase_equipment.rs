@@ -1,30 +1,25 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, GameEngine},
-    types::EventType,
-    logic::{
-        update_happiness_defensive,
-        calculate_networth,
-        get_time_of_day,
-        get_time_multiplier,
-        ActivityType,
-        safe_math::apply_bp,
-    },
-    helpers::{
-        event_scoring::update_event_score,
-        estate::{market_discount_bps, load_estate_for_player, require_market},
-    },
-    utils::{read_u8, read_u64},
-    validation::require_signer,
     emit,
+    error::GameError,
     events::EquipmentPurchased,
+    helpers::{
+        estate::{load_estate_for_player, market_discount_bps, require_market},
+        event_scoring::update_event_score,
+    },
+    logic::{
+        calculate_networth, get_time_multiplier, get_time_of_day, safe_math::apply_bp,
+        update_happiness_defensive, ActivityType,
+    },
+    state::{GameEngine, PlayerAccount},
+    types::EventType,
+    utils::{read_u64, read_u8},
+    validation::require_signer,
 };
 
 /// Equipment type for purchases
@@ -87,12 +82,7 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
     // estate_account is required, event accounts are optional
-    crate::extract_accounts!(accounts, [
-        player,
-        owner,
-        game_engine,
-        estate_account,
-    ]);
+    crate::extract_accounts!(accounts, [player, owner, game_engine, estate_account,]);
     let (event_participation, event) = if accounts.len() >= 6 {
         (Some(&accounts[4]), Some(&accounts[5]))
     } else {
@@ -118,7 +108,12 @@ pub fn process(
 
     // 4. Load and verify accounts (kingdom-scoped)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player,
+        game_engine.address(),
+        owner.address(),
+        program_id,
+    )?;
     let economic_config = &game_engine_data.economic_config;
 
     // 5. Calculate total cost with DAO multiplier
@@ -172,14 +167,16 @@ pub fn process(
         if player_data.cash_on_hand < total_cost {
             return Err(GameError::InsufficientCash.into());
         }
-        player_data.cash_on_hand = player_data.cash_on_hand
+        player_data.cash_on_hand = player_data
+            .cash_on_hand
             .checked_sub(total_cost)
             .ok_or(GameError::MathOverflow)?;
     } else {
         if player_data.locked_novi < total_cost {
             return Err(GameError::InsufficientLockedNovi.into());
         }
-        player_data.locked_novi = player_data.locked_novi
+        player_data.locked_novi = player_data
+            .locked_novi
             .checked_sub(total_cost)
             .ok_or(GameError::MathOverflow)?;
     }
@@ -187,39 +184,52 @@ pub fn process(
     // 7. Add equipment to inventory
     match equipment_type {
         EquipmentType::MeleeWeapons => {
-            player_data.melee_weapons = player_data.melee_weapons
+            player_data.melee_weapons = player_data
+                .melee_weapons
                 .checked_add(quantity)
                 .ok_or(GameError::MathOverflow)?;
         }
         EquipmentType::RangedWeapons => {
-            player_data.ranged_weapons = player_data.ranged_weapons
+            player_data.ranged_weapons = player_data
+                .ranged_weapons
                 .checked_add(quantity)
                 .ok_or(GameError::MathOverflow)?;
         }
         EquipmentType::SiegeWeapons => {
-            player_data.siege_weapons = player_data.siege_weapons
+            player_data.siege_weapons = player_data
+                .siege_weapons
                 .checked_add(quantity)
                 .ok_or(GameError::MathOverflow)?;
         }
         EquipmentType::Armor => {
-            player_data.armor_pieces = player_data.armor_pieces
+            player_data.armor_pieces = player_data
+                .armor_pieces
                 .checked_add(quantity)
                 .ok_or(GameError::MathOverflow)?;
         }
         EquipmentType::Produce => {
-            player_data.produce = player_data.produce
+            player_data.produce = player_data
+                .produce
                 .checked_add(quantity)
                 .ok_or(GameError::MathOverflow)?;
         }
         EquipmentType::Vehicles => {
-            player_data.vehicles = player_data.vehicles
+            player_data.vehicles = player_data
+                .vehicles
                 .checked_add(quantity)
                 .ok_or(GameError::MathOverflow)?;
         }
     }
 
     // 8. Update happiness (weapons, produce, and armor affect defensive happiness)
-    if matches!(equipment_type, EquipmentType::MeleeWeapons | EquipmentType::RangedWeapons | EquipmentType::SiegeWeapons | EquipmentType::Armor | EquipmentType::Produce) {
+    if matches!(
+        equipment_type,
+        EquipmentType::MeleeWeapons
+            | EquipmentType::RangedWeapons
+            | EquipmentType::SiegeWeapons
+            | EquipmentType::Armor
+            | EquipmentType::Produce
+    ) {
         let total_defensive = player_data.total_defensive_units();
         player_data.happiness_defensive = update_happiness_defensive(
             total_defensive,
@@ -236,7 +246,7 @@ pub fn process(
     if !pay_with_cash {
         if let (Some(event_participation), Some(event)) = (event_participation, event) {
             // Load event participation with ownership validation (kingdom-scoped)
-            let mut participation = crate::state::EventParticipation::load_checked_mut(
+            let participation = crate::state::EventParticipation::load_checked_mut(
                 event_participation,
                 game_engine.address(),
                 player_data.current_event,
@@ -245,7 +255,7 @@ pub fn process(
             )?;
 
             // Load event with ownership validation (kingdom-scoped)
-            let mut event_data = crate::state::EventAccount::load_checked_mut(
+            let event_data = crate::state::EventAccount::load_checked_mut(
                 event,
                 game_engine.address(),
                 player_data.current_event,

@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Hero events - NFT hero operations
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new hero NFT is minted
 pub struct HeroMinted {

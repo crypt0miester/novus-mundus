@@ -13,11 +13,9 @@
 //! 3. `[]` System program
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, rent::Rent},
+    sysvars::{rent::Rent, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
@@ -62,11 +60,7 @@ const MAX_TOTAL_ANCHORS: u16 = 500;
 /// - `InvalidInstructionData` — data too short, not aligned to 8 bytes, city_id mismatch, or total exceeds 500
 /// - `InvalidCityId` — city's stored game_engine doesn't match account 1
 /// - `InvalidSeeds` — city account address doesn't match derived PDA
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // Parse accounts
     crate::extract_accounts!(accounts, [dao_authority, game_engine_account, city_account]);
 
@@ -131,13 +125,15 @@ pub fn process(
         return Err(ProgramError::InvalidInstructionData);
     }
 
-    let expected_pda = CityAccount::create_pda(game_engine_account.address(), city_id, stored_bump)?;
+    let expected_pda =
+        CityAccount::create_pda(game_engine_account.address(), city_id, stored_bump)?;
     if city_account.address() != &expected_pda {
         return Err(ProgramError::InvalidSeeds);
     }
 
     // Validate total won't exceed cap
-    let total_anchors = existing_anchor_count.checked_add(new_anchor_count)
+    let total_anchors = existing_anchor_count
+        .checked_add(new_anchor_count)
         .ok_or(ProgramError::InvalidInstructionData)?;
     if total_anchors > MAX_TOTAL_ANCHORS {
         msg!("Total anchors would exceed max");
@@ -159,7 +155,8 @@ pub fn process(
                 from: dao_authority,
                 to: city_account,
                 lamports: lamports_needed,
-            }.invoke()?;
+            }
+            .invoke()?;
         }
 
         city_account.resize(new_size)?;

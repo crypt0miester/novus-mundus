@@ -14,8 +14,9 @@
 /// - Defending is strongest at Midday (full alertness)
 /// - Golden Hours (Dawn/Dusk) give φ² spawn weight to rare encounters
 /// - Rare encounters spawn at golden hours, Legendary at midnight
-
-use crate::constants::{PHI, GOLDEN_ROOT, PHI_SQUARED, PHI_INVERSE, PHI_SQUARED_INVERSE, PHI_CUBED_INVERSE};
+use crate::constants::{
+    GOLDEN_ROOT, PHI, PHI_CUBED_INVERSE, PHI_INVERSE, PHI_SQUARED, PHI_SQUARED_INVERSE,
+};
 
 /// Full day/night cycle in seconds (24 real hours)
 pub const CYCLE_LENGTH: i64 = 86_400;
@@ -40,13 +41,13 @@ const TIME_PRECISION: i64 = 1000;
 #[repr(u8)]
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum TimeOfDay {
-    DeepNight = 0,  // 00:00-03:00 local (0-125 in 0-1000 scale)
-    Dawn = 1,       // 03:00-06:00 local (125-250) - GOLDEN HOUR
-    Morning = 2,    // 06:00-09:00 local (250-375)
-    Midday = 3,     // 09:00-15:00 local (375-625) - Peak day (longest period)
-    Afternoon = 4,  // 15:00-18:00 local (625-750)
-    Dusk = 5,       // 18:00-21:00 local (750-875) - GOLDEN HOUR
-    Evening = 6,    // 21:00-00:00 local (875-1000)
+    DeepNight = 0, // 00:00-03:00 local (0-125 in 0-1000 scale)
+    Dawn = 1,      // 03:00-06:00 local (125-250) - GOLDEN HOUR
+    Morning = 2,   // 06:00-09:00 local (250-375)
+    Midday = 3,    // 09:00-15:00 local (375-625) - Peak day (longest period)
+    Afternoon = 4, // 15:00-18:00 local (625-750)
+    Dusk = 5,      // 18:00-21:00 local (750-875) - GOLDEN HOUR
+    Evening = 6,   // 21:00-00:00 local (875-1000)
 }
 
 impl TimeOfDay {
@@ -63,7 +64,10 @@ impl TimeOfDay {
     #[inline]
     #[allow(dead_code)]
     pub fn is_night(&self) -> bool {
-        matches!(self, TimeOfDay::Evening | TimeOfDay::DeepNight | TimeOfDay::Dawn)
+        matches!(
+            self,
+            TimeOfDay::Evening | TimeOfDay::DeepNight | TimeOfDay::Dawn
+        )
     }
 
     /// Check if this is day time (morning, midday, afternoon)
@@ -71,7 +75,10 @@ impl TimeOfDay {
     #[inline]
     #[allow(dead_code)]
     pub fn is_day(&self) -> bool {
-        matches!(self, TimeOfDay::Morning | TimeOfDay::Midday | TimeOfDay::Afternoon)
+        matches!(
+            self,
+            TimeOfDay::Morning | TimeOfDay::Midday | TimeOfDay::Afternoon
+        )
     }
 
     /// Check if this is peak day (midday only)
@@ -98,31 +105,31 @@ impl TimeOfDay {
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum ActivityType {
     // Economic Activities
-    Hiring = 0,        // Hiring units (best during day - workers available)
-    Purchasing = 1,    // Buying equipment
-    Collecting = 2,    // Cash collection
-    Mining = 3,        // Gem mining (better at night - cooler, less distraction)
-    Fishing = 4,       // Fishing (best at dawn/dusk - feeding times)
+    Hiring = 0,     // Hiring units (best during day - workers available)
+    Purchasing = 1, // Buying equipment
+    Collecting = 2, // Cash collection
+    Mining = 3,     // Gem mining (better at night - cooler, less distraction)
+    Fishing = 4,    // Fishing (best at dawn/dusk - feeding times)
 
     // Combat Activities
-    Attacking = 5,     // Offensive combat (stealth advantage at night)
-    Defending = 6,     // Defensive combat (alertness advantage during day)
+    Attacking = 5, // Offensive combat (stealth advantage at night)
+    Defending = 6, // Defensive combat (alertness advantage during day)
 
     // Movement
-    Traveling = 7,     // Intercity/intracity travel (faster at night - empty roads)
+    Traveling = 7, // Intercity/intracity travel (faster at night - empty roads)
 
     // Consumption & Production
-    Consuming = 11,    // NOVI → Power conversion (best during day - peak efficiency)
+    Consuming = 11, // NOVI → Power conversion (best during day - peak efficiency)
 
     // Research & Learning
-    Researching = 12,  // Research speed (best at night - quiet study time)
-    XPGain = 13,       // XP earning multiplier (best at golden hours - enlightenment)
+    Researching = 12, // Research speed (best at night - quiet study time)
+    XPGain = 13,      // XP earning multiplier (best at golden hours - enlightenment)
 
     // Recovery
     StaminaRegen = 14, // Stamina regeneration rate (best at night - rest/sleep)
 
     // Loot & Fortune
-    LootDrop = 15,     // Loot quality/quantity multiplier (best at golden hours)
+    LootDrop = 15, // Loot quality/quantity multiplier (best at golden hours)
 }
 
 // Core Time Calculation Functions
@@ -168,13 +175,13 @@ pub fn get_time_of_day(timestamp: i64, longitude: f64) -> TimeOfDay {
     let local_time = calculate_local_time(timestamp, longitude);
 
     match local_time {
-        0..=124 => TimeOfDay::DeepNight,    // 00:00-03:00
-        125..=249 => TimeOfDay::Dawn,        // 03:00-06:00 (Golden Hour)
-        250..=374 => TimeOfDay::Morning,     // 06:00-09:00
-        375..=624 => TimeOfDay::Midday,      // 09:00-15:00 (Peak, longest)
-        625..=749 => TimeOfDay::Afternoon,   // 15:00-18:00
-        750..=874 => TimeOfDay::Dusk,        // 18:00-21:00 (Golden Hour)
-        _ => TimeOfDay::Evening,             // 21:00-00:00
+        0..=124 => TimeOfDay::DeepNight,   // 00:00-03:00
+        125..=249 => TimeOfDay::Dawn,      // 03:00-06:00 (Golden Hour)
+        250..=374 => TimeOfDay::Morning,   // 06:00-09:00
+        375..=624 => TimeOfDay::Midday,    // 09:00-15:00 (Peak, longest)
+        625..=749 => TimeOfDay::Afternoon, // 15:00-18:00
+        750..=874 => TimeOfDay::Dusk,      // 18:00-21:00 (Golden Hour)
+        _ => TimeOfDay::Evening,           // 21:00-00:00
     }
 }
 
@@ -199,99 +206,99 @@ pub fn get_time_multiplier(time: TimeOfDay, activity: ActivityType) -> f64 {
     match activity {
         // ECONOMIC ACTIVITIES - Peak at Midday, worst at DeepNight
         ActivityType::Hiring | ActivityType::Purchasing => match time {
-            TimeOfDay::DeepNight => PHI_INVERSE,  // 0.618x - Workers asleep
-            TimeOfDay::Dawn => 1.0,               // 1.0x - Starting to wake
-            TimeOfDay::Morning => GOLDEN_ROOT,    // 1.272x - Work begins
-            TimeOfDay::Midday => PHI,             // 1.618x - Peak productivity
-            TimeOfDay::Afternoon => GOLDEN_ROOT,  // 1.272x - Work continues
-            TimeOfDay::Dusk => 1.0,               // 1.0x - Winding down
-            TimeOfDay::Evening => PHI_INVERSE,    // 0.618x - Shops closing
+            TimeOfDay::DeepNight => PHI_INVERSE, // 0.618x - Workers asleep
+            TimeOfDay::Dawn => 1.0,              // 1.0x - Starting to wake
+            TimeOfDay::Morning => GOLDEN_ROOT,   // 1.272x - Work begins
+            TimeOfDay::Midday => PHI,            // 1.618x - Peak productivity
+            TimeOfDay::Afternoon => GOLDEN_ROOT, // 1.272x - Work continues
+            TimeOfDay::Dusk => 1.0,              // 1.0x - Winding down
+            TimeOfDay::Evening => PHI_INVERSE,   // 0.618x - Shops closing
         },
 
         ActivityType::Collecting => match time {
-            TimeOfDay::DeepNight => PHI_INVERSE,  // 0.618x - Dangerous, no visibility
-            TimeOfDay::Evening => PHI_INVERSE,    // 0.618x - Getting dark
+            TimeOfDay::DeepNight => PHI_INVERSE, // 0.618x - Dangerous, no visibility
+            TimeOfDay::Evening => PHI_INVERSE,   // 0.618x - Getting dark
             _ => 1.0,
         },
 
         ActivityType::Mining => match time {
-            TimeOfDay::DeepNight => PHI,          // 1.618x - Optimal mining conditions
+            TimeOfDay::DeepNight => PHI, // 1.618x - Optimal mining conditions
             _ => 1.0,
         },
 
         ActivityType::Fishing => match time {
-            TimeOfDay::Dawn => PHI,               // 1.618x - Morning feeding frenzy
+            TimeOfDay::Dawn => PHI, // 1.618x - Morning feeding frenzy
             _ => 1.0,
         },
 
         // COMBAT - Attacking best at night, Defending best at day
         ActivityType::Attacking => match time {
-            TimeOfDay::DeepNight => PHI,          // 1.618x - Maximum stealth advantage
-            TimeOfDay::Dawn => GOLDEN_ROOT,       // 1.272x - Low visibility surprise
+            TimeOfDay::DeepNight => PHI,    // 1.618x - Maximum stealth advantage
+            TimeOfDay::Dawn => GOLDEN_ROOT, // 1.272x - Low visibility surprise
             _ => 1.0,
         },
 
         ActivityType::Defending => match time {
-            TimeOfDay::DeepNight => PHI_INVERSE,  // 0.618x - Guards tired, low visibility
-            TimeOfDay::Dawn => 1.0,               // 1.0x - Waking up
-            TimeOfDay::Morning => GOLDEN_ROOT,    // 1.272x - Alert
-            TimeOfDay::Midday => PHI,             // 1.618x - Maximum alertness
-            TimeOfDay::Afternoon => GOLDEN_ROOT,  // 1.272x - Still alert
-            TimeOfDay::Dusk => 1.0,               // 1.0x - Guard change
-            TimeOfDay::Evening => 1.0,            // 1.0x - Fatigue setting in
+            TimeOfDay::DeepNight => PHI_INVERSE, // 0.618x - Guards tired, low visibility
+            TimeOfDay::Dawn => 1.0,              // 1.0x - Waking up
+            TimeOfDay::Morning => GOLDEN_ROOT,   // 1.272x - Alert
+            TimeOfDay::Midday => PHI,            // 1.618x - Maximum alertness
+            TimeOfDay::Afternoon => GOLDEN_ROOT, // 1.272x - Still alert
+            TimeOfDay::Dusk => 1.0,              // 1.0x - Guard change
+            TimeOfDay::Evening => 1.0,           // 1.0x - Fatigue setting in
         },
 
         // TRAVEL - Faster at night (empty roads), slower during day (traffic)
         ActivityType::Traveling => match time {
-            TimeOfDay::DeepNight => PHI,          // 1.618x - Empty roads, fast travel!
-            TimeOfDay::Dawn => GOLDEN_ROOT,       // 1.272x - Light traffic
-            TimeOfDay::Morning => PHI_INVERSE,    // 0.618x - Rush hour traffic
-            TimeOfDay::Afternoon => PHI_INVERSE,  // 0.618x - Rush hour traffic
+            TimeOfDay::DeepNight => PHI,       // 1.618x - Empty roads, fast travel!
+            TimeOfDay::Dawn => GOLDEN_ROOT,    // 1.272x - Light traffic
+            TimeOfDay::Morning => PHI_INVERSE, // 0.618x - Rush hour traffic
+            TimeOfDay::Afternoon => PHI_INVERSE, // 0.618x - Rush hour traffic
             _ => 1.0,
         },
 
         // CONSUMPTION - NOVI → Power conversion (best during day - peak efficiency)
         ActivityType::Consuming => match time {
-            TimeOfDay::DeepNight => PHI_INVERSE,  // 0.618x - Underground operations less efficient
-            TimeOfDay::Dawn => GOLDEN_ROOT,       // 1.272x - Early morning productivity
-            TimeOfDay::Evening => PHI_INVERSE,    // 0.618x - Night operations less efficient
-            _ => 1.0,            
+            TimeOfDay::DeepNight => PHI_INVERSE, // 0.618x - Underground operations less efficient
+            TimeOfDay::Dawn => GOLDEN_ROOT,      // 1.272x - Early morning productivity
+            TimeOfDay::Evening => PHI_INVERSE,   // 0.618x - Night operations less efficient
+            _ => 1.0,
         },
 
         // RESEARCH - Study/learning speed (best at night - quiet focus time)
         ActivityType::Researching => match time {
-            TimeOfDay::DeepNight => PHI,          // 1.618x - Deep focus, no distractions
-            TimeOfDay::Dawn => GOLDEN_ROOT,       // 1.272x - Early morning clarity
-            TimeOfDay::Morning => GOLDEN_ROOT,    // 1.0x - Normal study
-            TimeOfDay::Midday => PHI_INVERSE,     // 0.618x - Too busy, interruptions
-            TimeOfDay::Afternoon => PHI_INVERSE,  // 0.618x - Energy slump
+            TimeOfDay::DeepNight => PHI,    // 1.618x - Deep focus, no distractions
+            TimeOfDay::Dawn => GOLDEN_ROOT, // 1.272x - Early morning clarity
+            TimeOfDay::Morning => GOLDEN_ROOT, // 1.0x - Normal study
+            TimeOfDay::Midday => PHI_INVERSE, // 0.618x - Too busy, interruptions
+            TimeOfDay::Afternoon => PHI_INVERSE, // 0.618x - Energy slump
             _ => 1.0,
         },
 
         // XP GAIN - Learning/enlightenment (best at golden hours)
         ActivityType::XPGain => match time {
-            TimeOfDay::DeepNight => GOLDEN_ROOT,  // 1.272x - Night wisdom
-            TimeOfDay::Morning => 1.0,            // 1.0x - Normal learning
-            TimeOfDay::Midday => 1.0,             // 1.0x - Normal learning
-            TimeOfDay::Afternoon => 1.0,          // 1.0x - Normal learning
-            TimeOfDay::Evening => GOLDEN_ROOT,    // 1.272x - Night wisdom
+            TimeOfDay::DeepNight => GOLDEN_ROOT, // 1.272x - Night wisdom
+            TimeOfDay::Morning => 1.0,           // 1.0x - Normal learning
+            TimeOfDay::Midday => 1.0,            // 1.0x - Normal learning
+            TimeOfDay::Afternoon => 1.0,         // 1.0x - Normal learning
+            TimeOfDay::Evening => GOLDEN_ROOT,   // 1.272x - Night wisdom
             _ => 1.0,
         },
 
         // STAMINA REGEN - Rest/recovery (best at night - sleep time)
         ActivityType::StaminaRegen => match time {
-            TimeOfDay::DeepNight => PHI,          // 1.618x - Deep sleep, fast recovery
-            TimeOfDay::Dawn => GOLDEN_ROOT,       // 1.272x - Waking rested
-            TimeOfDay::Midday => PHI_INVERSE,     // 0.618x - Active time, slow recovery
-            TimeOfDay::Afternoon => PHI_INVERSE,  // 0.618x - Active time, slow recovery
+            TimeOfDay::DeepNight => PHI,      // 1.618x - Deep sleep, fast recovery
+            TimeOfDay::Dawn => GOLDEN_ROOT,   // 1.272x - Waking rested
+            TimeOfDay::Midday => PHI_INVERSE, // 0.618x - Active time, slow recovery
+            TimeOfDay::Afternoon => PHI_INVERSE, // 0.618x - Active time, slow recovery
             _ => 1.0,
         },
 
         // LOOT DROP - Fortune/quality (best at golden hours)
         ActivityType::LootDrop => match time {
-            TimeOfDay::DeepNight => GOLDEN_ROOT,  // 1.272x - Night treasures
-            TimeOfDay::Morning => PHI,            // 1.0x - Normal drops
-            TimeOfDay::Evening => GOLDEN_ROOT,    // 1.272x - Night treasures
+            TimeOfDay::DeepNight => GOLDEN_ROOT, // 1.272x - Night treasures
+            TimeOfDay::Morning => PHI,           // 1.0x - Normal drops
+            TimeOfDay::Evening => GOLDEN_ROOT,   // 1.272x - Night treasures
             _ => 1.0,
         },
     }
@@ -404,35 +411,40 @@ pub fn apply_time_multiplier(base: u64, time: TimeOfDay, activity: ActivityType)
 /// - Legendary: DeepNight only - the midnight hunt
 pub fn get_rarity_spawn_weight(time: TimeOfDay, rarity: u8) -> f64 {
     match rarity {
-        0 => match time { // Common - available anytime
-            TimeOfDay::Midday => GOLDEN_ROOT,     // 1.272x during safe times
-            TimeOfDay::DeepNight => PHI_INVERSE,  // 0.618x at night
+        0 => match time {
+            // Common - available anytime
+            TimeOfDay::Midday => GOLDEN_ROOT, // 1.272x during safe times
+            TimeOfDay::DeepNight => PHI_INVERSE, // 0.618x at night
             _ => 1.0,
         },
-        1 => match time { // Uncommon - daytime preferred
+        1 => match time {
+            // Uncommon - daytime preferred
             TimeOfDay::Morning | TimeOfDay::Afternoon => PHI,
             TimeOfDay::Midday => GOLDEN_ROOT,
             TimeOfDay::DeepNight | TimeOfDay::Evening => PHI_INVERSE,
             _ => 1.0,
         },
-        2 => match time { // Rare - GOLDEN HOURS!
+        2 => match time {
+            // Rare - GOLDEN HOURS!
             TimeOfDay::Dawn | TimeOfDay::Dusk => PHI_SQUARED, // 2.618x at golden hours!
             TimeOfDay::Midday => PHI_INVERSE,
             TimeOfDay::DeepNight => GOLDEN_ROOT,
             _ => 1.0,
         },
-        3 => match time { // Epic - night encounters
-            TimeOfDay::DeepNight => PHI,          // 1.618x
-            TimeOfDay::Evening => GOLDEN_ROOT,    // 1.272x
-            TimeOfDay::Dawn => GOLDEN_ROOT,       // Early risers catch epics too
+        3 => match time {
+            // Epic - night encounters
+            TimeOfDay::DeepNight => PHI,              // 1.618x
+            TimeOfDay::Evening => GOLDEN_ROOT,        // 1.272x
+            TimeOfDay::Dawn => GOLDEN_ROOT,           // Early risers catch epics too
             TimeOfDay::Midday => PHI_SQUARED_INVERSE, // 0.382x - Very rare during day (1/φ²)
             _ => PHI_INVERSE,
         },
-        4 => match time { // Legendary - THE MIDNIGHT HUNT
-            TimeOfDay::DeepNight => PHI_SQUARED,  // 2.618x - Only serious hunters find these
-            TimeOfDay::Dawn => PHI_INVERSE,       // 0.618x - Possible but rare
-            TimeOfDay::Evening => PHI_INVERSE,    // 0.618x - Possible but rare
-            _ => PHI_CUBED_INVERSE,               // 0.236x - Almost never during day (1/φ³)
+        4 => match time {
+            // Legendary - THE MIDNIGHT HUNT
+            TimeOfDay::DeepNight => PHI_SQUARED, // 2.618x - Only serious hunters find these
+            TimeOfDay::Dawn => PHI_INVERSE,      // 0.618x - Possible but rare
+            TimeOfDay::Evening => PHI_INVERSE,   // 0.618x - Possible but rare
+            _ => PHI_CUBED_INVERSE,              // 0.236x - Almost never during day (1/φ³)
         },
         _ => 1.0, // WorldEvent and others - special timing
     }
@@ -444,8 +456,14 @@ pub fn get_rarity_spawn_weight(time: TimeOfDay, rarity: u8) -> f64 {
 /// Returns true if spawn is allowed, false if time restriction blocks it.
 pub fn can_spawn_rarity_at_time(time: TimeOfDay, rarity: u8) -> bool {
     match rarity {
-        4 => matches!(time, TimeOfDay::DeepNight | TimeOfDay::Dawn | TimeOfDay::Evening),
-        3 => matches!(time, TimeOfDay::DeepNight | TimeOfDay::Evening | TimeOfDay::Dawn | TimeOfDay::Dusk),
+        4 => matches!(
+            time,
+            TimeOfDay::DeepNight | TimeOfDay::Dawn | TimeOfDay::Evening
+        ),
+        3 => matches!(
+            time,
+            TimeOfDay::DeepNight | TimeOfDay::Evening | TimeOfDay::Dawn | TimeOfDay::Dusk
+        ),
         _ => true, // Common, Uncommon, Rare can spawn anytime
     }
 }

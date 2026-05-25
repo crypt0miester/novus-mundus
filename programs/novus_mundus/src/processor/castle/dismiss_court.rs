@@ -6,24 +6,22 @@
 //! and closing the CourtPositionAccount PDA.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
     events::CourtDismissed,
-    state::{
-        CastleAccount, CourtPositionAccount, PlayerAccount,
-        player::{EXT_COURT, COURT_OFFSET, CourtSection},
-    },
     helpers::close_account,
+    state::{
+        player::{CourtSection, COURT_OFFSET, EXT_COURT},
+        CastleAccount, CourtPositionAccount, PlayerAccount,
+    },
     utils::read_u8,
-    validation::{require_owner, require_initialized},
+    validation::{require_initialized, require_owner},
 };
 
 /// Dismiss Court instruction data
@@ -45,14 +43,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        king_wallet,
-        king_account,
-        castle_account,
-        dismissed_account,
-        court_position_account,
-        rent_recipient,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            king_wallet,
+            king_account,
+            castle_account,
+            dismissed_account,
+            court_position_account,
+            rent_recipient,
+        ]
+    );
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -72,7 +73,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
     if castle.king != *king_account.address() {
@@ -82,7 +83,8 @@ pub fn process(
     // Load court position
     require_owner(court_position_account, program_id)?;
 
-    let (expected_court_pda, _court_bump) = CourtPositionAccount::derive_pda(castle_account.address(), position_type);
+    let (expected_court_pda, _court_bump) =
+        CourtPositionAccount::derive_pda(castle_account.address(), position_type);
     if court_position_account.address() != &expected_court_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -124,7 +126,9 @@ pub fn process(
     let castle_name = castle.name;
 
     // Clear dismissed player's court section (if extension exists)
-    if dismissed_extensions & EXT_COURT != 0 && dismissed_data_len >= COURT_OFFSET + CourtSection::LEN {
+    if dismissed_extensions & EXT_COURT != 0
+        && dismissed_data_len >= COURT_OFFSET + CourtSection::LEN
+    {
         let court_ptr = dismissed_data[COURT_OFFSET..].as_mut_ptr() as *mut CourtSection;
         let court_section = unsafe { &mut *court_ptr };
         court_section.clear();

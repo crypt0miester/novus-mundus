@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, require_extension, EXT_TEAM, NULL_PUBKEY},
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u8, read_u16, read_u64},
     emit,
+    error::GameError,
     events::TreasurySettingsUpdated,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Update team treasury security settings (leader only)
@@ -60,7 +58,9 @@ pub fn process(
     let cooldown_hours = read_u8(instruction_data, 74, "cooldown_hours")?;
 
     // Validate cooldown hours
-    if cooldown_hours < TeamAccount::MIN_COOLDOWN_HOURS || cooldown_hours > TeamAccount::MAX_COOLDOWN_HOURS {
+    if cooldown_hours < TeamAccount::MIN_COOLDOWN_HOURS
+        || cooldown_hours > TeamAccount::MAX_COOLDOWN_HOURS
+    {
         return Err(GameError::InvalidCooldownHours.into());
     }
 
@@ -84,7 +84,7 @@ pub fn process(
     if &leader.owner != leader_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }

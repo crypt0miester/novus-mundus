@@ -1,19 +1,15 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::ALLOWED_TOKEN_SEED,
     error::GameError,
-    state::{GameEngine, AllowedTokenAccount},
-    validation::{require_signer, require_writable, require_key_match},
-    helpers::ZERO_PUBKEY,
-    token_helpers::create_associated_token_account,
     helpers::read_token_decimals,
-    utils::{read_bytes32, read_u8, read_u16},
+    helpers::ZERO_PUBKEY,
+    state::{AllowedTokenAccount, GameEngine},
+    token_helpers::create_associated_token_account,
+    utils::{read_bytes32, read_u16, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create an AllowedToken account (DAO only)
 ///
@@ -51,17 +47,20 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required + 0–2 optional feed-validation slots)
 
-    crate::extract_accounts!(accounts, [
-        authority,
-        game_engine_account,
-        allowed_token_account,
-        token_mint,
-        system_program,
-        treasury_wallet,
-        treasury_token_account,
-        token_program,
-        _associated_token_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            authority,
+            game_engine_account,
+            allowed_token_account,
+            token_mint,
+            system_program,
+            treasury_wallet,
+            treasury_token_account,
+            token_program,
+            _associated_token_program,
+        ]
+    );
 
     // 2. Validate Accounts
 
@@ -98,10 +97,8 @@ pub fn process(
 
     // 5. Derive and Verify AllowedToken PDA
 
-    let (expected_pda, bump) = AllowedTokenAccount::derive_pda(
-        game_engine_account.address(),
-        token_mint.address(),
-    );
+    let (expected_pda, bump) =
+        AllowedTokenAccount::derive_pda(game_engine_account.address(), token_mint.address());
 
     if allowed_token_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -159,10 +156,10 @@ pub fn process(
     // settled in this token can succeed.
     if treasury_token_account.data_len() == 0 {
         create_associated_token_account(
-            authority,                 // Payer (DAO authority; signer + writable)
-            treasury_token_account,    // ATA to create
-            treasury_wallet,           // Wallet that owns the ATA
-            token_mint,                // SPL token mint
+            authority,              // Payer (DAO authority; signer + writable)
+            treasury_token_account, // ATA to create
+            treasury_wallet,        // Wallet that owns the ATA
+            token_mint,             // SPL token mint
             system_program,
             token_program,
         )?;
@@ -187,7 +184,8 @@ pub fn process(
         lamports,
         space: AllowedTokenAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize AllowedToken Data
 

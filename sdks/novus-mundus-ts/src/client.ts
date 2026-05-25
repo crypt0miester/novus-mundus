@@ -43,6 +43,7 @@ import {
   deriveFlashSalePda,
   deriveDailyDealPda,
   derivePlayerPurchaseIndex,
+  deriveEventParticipationPda,
 } from './pda';
 import { parseGameEngine } from './state/game-engine';
 import type { GameEngine } from './state/game-engine';
@@ -84,6 +85,10 @@ import { ARENA_PARTICIPANT_ACCOUNT_SIZE } from './state/arena';
 import { REINFORCEMENT_ACCOUNT_SIZE } from './state/reinforcement';
 import { parseHeroTemplate, HERO_TEMPLATE_SIZE } from './state/hero';
 import type { HeroTemplateAccount } from './state/hero';
+import { parseLocation, LOCATION_ACCOUNT_SIZE } from './state/location';
+import type { LocationAccount } from './state/location';
+import { parseEvent, parseEventParticipation, EVENT_ACCOUNT_SIZE } from './state/event';
+import type { EventAccount, EventParticipation } from './state/event';
 import bs58 from 'bs58';
 import { AccountKey } from './types/enums';
 
@@ -171,6 +176,12 @@ export interface FetchLootOptions {
 export interface FetchEncountersOptions {
   /** Only return encounters with health > 0 */
   aliveOnly?: boolean;
+}
+
+/** Options for fetching locations */
+export interface FetchLocationsOptions {
+  /** Only return cells with a non-zero occupantType */
+  occupiedOnly?: boolean;
 }
 
 /** Options for fetching rallies */
@@ -762,6 +773,111 @@ export class NovusMundusClient {
     }
 
     return results;
+  }
+
+  /**
+   * Fetch all LocationAccounts for a city (occupancy grid).
+   *
+   * Memcmp offsets mirror LocationAccount layout in state/location.ts:
+   *   account_key (1) + game_engine (32) + 3 pad + grid_lat (4) + grid_long (4)
+   *   = city_id u16 @ offset 44.
+   *
+   * @param cityId - The city ID
+   * @param options - Fetch options
+   * @returns Array of locations
+   */
+  async fetchLocationsInCity(
+    cityId: number,
+    options?: FetchLocationsOptions
+  ): Promise<BulkFetchResult<LocationAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Location]));
+    const cityIdBuffer = Buffer.alloc(2);
+    cityIdBuffer.writeUInt16LE(cityId, 0);
+
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+        { memcmp: { offset: 44, bytes: bs58.encode(cityIdBuffer) } },
+      ],
+    });
+
+    let results = accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseLocation(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<LocationAccount> => r !== null);
+
+    if (options?.occupiedOnly) {
+      results = results.filter(r => r.account.occupantType !== 0);
+    }
+
+    return results;
+  }
+
+  /**
+   * Fetch every EventAccount in this kingdom (any status).
+   *
+   * game_engine pubkey sits at offset 1 (right after the 1-byte account_key
+   * discriminator), so a single memcmp + a dataSize filter is enough to scope
+   * the result to one kingdom.
+   *
+   * @returns Array of events
+   */
+  async fetchKingdomEvents(): Promise<BulkFetchResult<EventAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Event]));
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { dataSize: EVENT_ACCOUNT_SIZE },
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+      ],
+    });
+
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseEvent(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<EventAccount> => r !== null);
+  }
+
+  /**
+   * Fetch the given player's EventParticipation for a set of event IDs.
+   *
+   * Derives one PDA per event id, then batches them through
+   * getMultipleAccountsInfo so the whole roster is one RPC.
+   *
+   * @param eventIds - Event IDs to check
+   * @param playerOwner - Wallet owner whose participations we want
+   * @returns Array of present participations (missing PDAs are dropped)
+   */
+  async fetchPlayerEventParticipations(
+    eventIds: ReadonlyArray<BN | bigint | number>,
+    playerOwner: PublicKey,
+  ): Promise<BulkFetchResult<EventParticipation>[]> {
+    if (eventIds.length === 0) return [];
+
+    const pdas = eventIds.map((id) => {
+      const asBigInt = typeof id === 'object' && 'toString' in id
+        ? BigInt(id.toString())
+        : BigInt(id as bigint | number);
+      return deriveEventParticipationPda(this.gameEngine, asBigInt, playerOwner)[0];
+    });
+
+    const infos = await this.connection.getMultipleAccountsInfo(pdas, this.commitment);
+
+    const out: BulkFetchResult<EventParticipation>[] = [];
+    for (let i = 0; i < infos.length; i++) {
+      const info = infos[i];
+      if (!info) continue;
+      const parsed = parseEventParticipation(info);
+      if (parsed) out.push({ pubkey: pdas[i]!, account: parsed });
+    }
+    return out;
   }
 
   /**

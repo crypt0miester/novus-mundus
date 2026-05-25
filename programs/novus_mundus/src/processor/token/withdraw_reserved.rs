@@ -1,20 +1,18 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{RESERVED_NOVI_VESTING_PERIOD, USER_SEED},
     emit,
     error::GameError,
     events::NoviWithdrawn,
     state::UserAccount,
-    constants::{USER_SEED, RESERVED_NOVI_VESTING_PERIOD},
     token_helpers::create_associated_token_account,
     utils::read_u64,
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Withdraw Reserved Novi to wallet (after 7-day vesting)
@@ -56,11 +54,7 @@ use crate::{
 /// 4. Transfer tokens: UserAccount PDA → User wallet
 /// 5. Update cached balance in UserAccount
 /// 6. Update last_withdrawal timestamp
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
 
     crate::extract_accounts!(accounts, exact [
@@ -135,10 +129,10 @@ pub fn process(
     // 7. Ensure the destination wallet ATA exists (create if missing).
     if user_wallet_token_account.data_len() == 0 {
         create_associated_token_account(
-            owner,                       // Payer (pays rent; must sign + be writable)
-            user_wallet_token_account,   // ATA to create
-            owner,                       // Wallet that owns the ATA
-            novi_mint,                   // NOVI mint
+            owner,                     // Payer (pays rent; must sign + be writable)
+            user_wallet_token_account, // ATA to create
+            owner,                     // Wallet that owns the ATA
+            novi_mint,                 // NOVI mint
             system_program,
             token_program,
         )?;
@@ -153,11 +147,11 @@ pub fn process(
     let user_signer = pinocchio::cpi::Signer::from(&user_seeds);
 
     crate::helpers::transfer_tokens(
-        reserved_token_account,       // From: Token account owned by UserAccount PDA
-        user_wallet_token_account,    // To: User's wallet token account (ATA)
-        user,                         // Authority: UserAccount PDA
+        reserved_token_account,    // From: Token account owned by UserAccount PDA
+        user_wallet_token_account, // To: User's wallet token account (ATA)
+        user,                      // Authority: UserAccount PDA
         amount,
-        &[user_signer],              // UserAccount PDA signs
+        &[user_signer], // UserAccount PDA signs
     )?;
 
     // 9. Update Cached Balance and Timestamp (re-borrow after CPI)
@@ -165,7 +159,8 @@ pub fn process(
     let mut user_data_ref = user.try_borrow_mut()?;
     let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
-    user_data.reserved_novi = user_data.reserved_novi
+    user_data.reserved_novi = user_data
+        .reserved_novi
         .checked_sub(amount)
         .ok_or(GameError::MathOverflow)?;
 
@@ -175,7 +170,7 @@ pub fn process(
     // Note: This is a user-level operation, player account not passed in
     emit!(NoviWithdrawn {
         player: *user.address(), // Using UserAccount PDA instead
-        player_name: [0u8; 48], // User account doesn't have name, lookup via owner
+        player_name: [0u8; 48],  // User account doesn't have name, lookup via owner
         amount,
         remaining_reserved: user_data.reserved_novi,
         timestamp: now,

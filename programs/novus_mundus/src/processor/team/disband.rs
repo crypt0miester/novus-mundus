@@ -1,16 +1,12 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, NULL_PUBKEY, require_extension, EXT_TEAM},
-    validation::{require_signer, require_writable},
-    utils::read_u64,
     emit,
+    error::GameError,
     events::TeamDisbanded,
+    state::{require_extension, PlayerAccount, TeamAccount, EXT_TEAM, NULL_PUBKEY},
+    utils::read_u64,
+    validation::{require_signer, require_writable},
 };
 
 /// Disband team
@@ -55,11 +51,11 @@ pub fn process(
 
     // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let mut leader = PlayerAccount::load_checked_mut_by_key(leader_account, program_id)?;
+    let leader = PlayerAccount::load_checked_mut_by_key(leader_account, program_id)?;
     if &leader.owner != leader_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -93,8 +89,7 @@ pub fn process(
 
     let treasury_distributed = team.treasury;
     if team.treasury > 0 {
-        leader.cash_on_hand = leader.cash_on_hand
-            .saturating_add(team.treasury);
+        leader.cash_on_hand = leader.cash_on_hand.saturating_add(team.treasury);
         team.treasury = 0;
     }
 
@@ -119,7 +114,7 @@ pub fn process(
 
     // 9. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TeamDisbanded {

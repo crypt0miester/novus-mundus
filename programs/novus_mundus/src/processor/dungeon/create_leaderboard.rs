@@ -17,22 +17,20 @@
 //! - prize_pool: u64 (8 bytes) - initial prize pool (optional, can be 0)
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::DUNGEON_LEADERBOARD_SEED,
-    error::GameError,
-    state::{DungeonTemplate, DungeonLeaderboard, GameEngine},
-    validation::{require_signer, require_writable},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::KingdomDungeonLeaderboardCreated,
+    state::{DungeonLeaderboard, DungeonTemplate, GameEngine},
+    utils::{read_u16, read_u64},
+    validation::{require_signer, require_writable},
 };
 
 /// Seconds per week (7 days)
@@ -68,7 +66,8 @@ pub fn process(
     let prize_pool = read_u64(instruction_data, 4, "create_leaderboard.prize_pool")?;
 
     // 4. Validate dungeon exists
-    let _template = DungeonTemplate::load_checked(dungeon_template_account, dungeon_id, program_id)?;
+    let _template =
+        DungeonTemplate::load_checked(dungeon_template_account, dungeon_id, program_id)?;
 
     // 4b. Load GameEngine for kingdom_id
     // Validate game_engine account (ownership + PDA + discriminator + bump)
@@ -91,7 +90,8 @@ pub fn process(
     }
 
     // 7. Verify PDA (kingdom-scoped)
-    let (expected_pda, bump) = DungeonLeaderboard::derive_pda(game_engine.address(), dungeon_id, week_number);
+    let (expected_pda, bump) =
+        DungeonLeaderboard::derive_pda(game_engine.address(), dungeon_id, week_number);
     if leaderboard_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -117,7 +117,8 @@ pub fn process(
         lamports,
         space: DungeonLeaderboard::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 9. Initialize leaderboard
     let mut lb_data = leaderboard_account.try_borrow_mut()?;

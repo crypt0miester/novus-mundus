@@ -12,6 +12,12 @@
   width: 100%;
   height: 100%;
   min-height: 0;
+  /* The map is heavily interactive — drag-pan, double-click-zoom, and
+   * pinch-zoom all trigger the browser's default word-selection behavior,
+   * which latches onto the nearest text (label, readout, legend) instead.
+   * These strings are UI chrome, not content meant to be copied. */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .label {
@@ -43,19 +49,22 @@
   }
 }
 
+/* The disc is a chain-level truth, but visually we render it onto the full
+ * map page so it reads like the realm-map sheet (parchment + foxing + grain
+ * provided by the enclosing .sheet) rather than a medallion. The canvas
+ * stretches to fill the available area; the renderer paints isotropically
+ * so the disc stays round, then feathers alpha past the city radius so the
+ * inked area melts into the surrounding parchment. */
 .canvasWrap {
   position: relative;
   flex: 1 1 auto;
-  aspect-ratio: 1;
+  width: 100%;
   min-height: 0;
   max-width: 100%;
   max-height: 100%;
-  margin: 0 auto;
-  border: 1px solid var(--ink-faint, #b89a72);
   cursor: grab;
   overflow: hidden;
-  background: var(--panel-tint, rgba(255, 255, 255, 0.05));
-  border-radius: 50%;
+  background: transparent;
 }
 .canvasWrap:active {
   cursor: grabbing;
@@ -152,15 +161,21 @@
   border-radius: 999px;
   display: inline-block;
 }
+/* Swatch colors mirror the canvas glyphs — same hex values as the antique
+ * palette in CityTerrainMap.tsx so the legend reads as a true legend. */
 .swCtr {
-  background: rgba(46, 31, 16, 0.95);
-  box-shadow: 0 0 0 1px rgba(255, 250, 235, 0.9);
+  background: rgba(70, 50, 28, 0.95);
+  box-shadow: 0 0 0 1px rgba(252, 244, 220, 0.9);
 }
 .swPlayer {
-  background: rgba(180, 83, 9, 0.9);
+  background: rgba(160, 100, 45, 1);
 }
 .swEnc {
-  background: rgba(160, 30, 30, 0.85);
+  background: rgba(115, 55, 30, 1);
+  /* Diamond-ish hint via 45° rotation — disambiguates from .swPlayer at a
+   * glance even though both are warm browns. */
+  border-radius: 2px;
+  transform: rotate(45deg);
 }
 .swSel {
   background: transparent;

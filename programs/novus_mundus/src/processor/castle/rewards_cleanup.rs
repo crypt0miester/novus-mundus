@@ -7,22 +7,18 @@
 //! accounts and returns rent to original members.
 
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::CASTLE_STATUS_TRANSITIONING,
     emit,
     error::GameError,
     events::CastleTransitionProgress,
-    state::{
-        CastleAccount, PlayerAccount, TeamCastleRewardAccount,
-    },
-    constants::CASTLE_STATUS_TRANSITIONING,
     helpers::close_account,
-    validation::{require_owner, require_initialized},
+    state::{CastleAccount, PlayerAccount, TeamCastleRewardAccount},
+    validation::{require_initialized, require_owner},
 };
 
 /// Phase constant for event
@@ -45,16 +41,19 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        _crank,
-        castle_account,
-        member_account,
-        reward_account,
-        rent_recipient,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            _crank,
+            castle_account,
+            member_account,
+            reward_account,
+            rent_recipient,
+        ]
+    );
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle is in transitioning state
     if castle.status != CASTLE_STATUS_TRANSITIONING {
@@ -64,10 +63,8 @@ pub fn process(
     // Verify reward account PDA
     require_owner(reward_account, program_id)?;
 
-    let (expected_reward_pda, _) = TeamCastleRewardAccount::derive_pda(
-        castle_account.address(),
-        member_account.address(),
-    );
+    let (expected_reward_pda, _) =
+        TeamCastleRewardAccount::derive_pda(castle_account.address(), member_account.address());
     if reward_account.address() != &expected_reward_pda {
         return Err(GameError::InvalidPDA.into());
     }

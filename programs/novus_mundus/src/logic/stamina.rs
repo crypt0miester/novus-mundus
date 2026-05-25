@@ -6,13 +6,12 @@
 /// - Adding stamina (from purchases/rewards)
 ///
 /// All functions are pure - no AccountView dependencies
-
 use crate::{
-    state::PlayerAccount,
     constants::*,
     error::GameError,
+    logic::{get_time_multiplier, get_time_of_day, ActivityType},
+    state::PlayerAccount,
     types::EncounterType,
-    logic::{get_time_of_day, get_time_multiplier, ActivityType},
 };
 
 /// Regenerate player's stamina based on time elapsed with time-of-day bonus
@@ -37,10 +36,7 @@ use crate::{
 /// let gained = regenerate_stamina(&mut player, Clock::get()?.unix_timestamp)?;
 /// // If 15 minutes passed at DeepNight, gained = ~5 stamina (3 * 1.618)
 /// ```
-pub fn regenerate_stamina(
-    player: &mut PlayerAccount,
-    now: i64,
-) -> Result<u64, GameError> {
+pub fn regenerate_stamina(player: &mut PlayerAccount, now: i64) -> Result<u64, GameError> {
     let elapsed = now.saturating_sub(player.last_stamina_update);
 
     // Not enough time passed
@@ -68,7 +64,8 @@ pub fn regenerate_stamina(
     };
 
     // Apply max cap
-    let new_stamina = player.encounter_stamina
+    let new_stamina = player
+        .encounter_stamina
         .saturating_add(stamina_to_gain)
         .min(player.max_encounter_stamina);
 
@@ -130,11 +127,9 @@ pub fn consume_stamina(
 /// let added = add_stamina(&mut player, 50);
 /// // If player had 80/100 stamina, added = 20 (capped)
 /// ```
-pub fn add_stamina(
-    player: &mut PlayerAccount,
-    amount: u64,
-) -> u64 {
-    let new_stamina = player.encounter_stamina
+pub fn add_stamina(player: &mut PlayerAccount, amount: u64) -> u64 {
+    let new_stamina = player
+        .encounter_stamina
         .saturating_add(amount)
         .min(player.max_encounter_stamina);
 

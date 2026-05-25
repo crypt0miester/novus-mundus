@@ -1,25 +1,20 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, UserAccount, GameEngine, ShopConfigAccount, require_extension, EXT_RESEARCH},
-    constants::{PLAYER_SEED, USER_SEED, SHOP_CONFIG_SEED},
-    logic::{grant_xp_with_time_bonus, calculate_networth, safe_math::mul_div},
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
-        require_key_match,
-    },
-    helpers::process_token_payment_flow,
+    constants::{PLAYER_SEED, SHOP_CONFIG_SEED, USER_SEED},
     emit,
-    events::{SubscriptionPurchased, SubscriptionTierUpdated, XpGained, PlayerLeveledUp},
+    error::GameError,
+    events::{PlayerLeveledUp, SubscriptionPurchased, SubscriptionTierUpdated, XpGained},
+    helpers::process_token_payment_flow,
+    logic::{calculate_networth, grant_xp_with_time_bonus, safe_math::mul_div},
+    state::{
+        require_extension, GameEngine, PlayerAccount, ShopConfigAccount, UserAccount, EXT_RESEARCH,
+    },
+    validation::{require_key_match, require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Purchase or renew a subscription tier
@@ -82,18 +77,21 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
-    crate::extract_accounts!(accounts, [
-        player,
-        user,
-        owner,
-        payment_authority,
-        treasury_wallet,
-        user_novi_ata,
-        novi_mint,
-        game_engine,
-        token_program,
-        system_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player,
+            user,
+            owner,
+            payment_authority,
+            treasury_wallet,
+            user_novi_ata,
+            novi_mint,
+            game_engine,
+            token_program,
+            system_program,
+        ]
+    );
 
     // 2. Validate basic accounts
     require_signer(owner)?;
@@ -115,7 +113,15 @@ pub fn process(
     // Verify token account belongs to the UserAccount PDA
     crate::helpers::validate_token_account_owner(user_novi_ata, user.address())?;
 
-    let player_bump = require_pda(player, &[PLAYER_SEED, game_engine.address().as_ref(), owner.address().as_ref()], program_id)?;
+    let player_bump = require_pda(
+        player,
+        &[
+            PLAYER_SEED,
+            game_engine.address().as_ref(),
+            owner.address().as_ref(),
+        ],
+        program_id,
+    )?;
     let user_bump = require_pda(user, &[USER_SEED, owner.address().as_ref()], program_id)?;
 
     // 3. Parse instruction data
@@ -138,9 +144,7 @@ pub fn process(
 
     // 6. Load game engine
     let game_engine_data_ref = game_engine.try_borrow()?;
-    let game_engine_data = unsafe {
-        GameEngine::load(&game_engine_data_ref)
-    };
+    let game_engine_data = unsafe { GameEngine::load(&game_engine_data_ref) };
 
     // 7. Payment type validation
     let is_onchain_sol = payment_type == 0;
@@ -184,14 +188,10 @@ pub fn process(
 
     // 8. Load player and user data
     let mut player_data_ref = player.try_borrow_mut()?;
-    let player_data = unsafe {
-        PlayerAccount::load_mut(&mut player_data_ref)
-    };
+    let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     let mut user_data_ref = user.try_borrow_mut()?;
-    let user_data = unsafe {
-        UserAccount::load_mut(&mut user_data_ref)
-    };
+    let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
     // Verify ownership and bumps
     if &player_data.owner != owner.address() {
@@ -240,16 +240,15 @@ pub fn process(
     let tier = &game_engine_data.subscription_tiers[new_tier_index as usize];
 
     // 11. Calculate expiration timestamp
-    let expiration_base = if player_data.subscription_end > now
-        && new_tier_index == player_data.subscription_tier
-    {
-        // Same-tier renewal while active: extend from current expiration.
-        player_data.subscription_end
-    } else {
-        // Upgrade (higher tier) or fresh purchase: start from now.
-        // For upgrades while active, the cheaper-tier remainder is forfeited.
-        now
-    };
+    let expiration_base =
+        if player_data.subscription_end > now && new_tier_index == player_data.subscription_tier {
+            // Same-tier renewal while active: extend from current expiration.
+            player_data.subscription_end
+        } else {
+            // Upgrade (higher tier) or fresh purchase: start from now.
+            // For upgrades while active, the cheaper-tier remainder is forfeited.
+            now
+        };
 
     let duration_seconds = tier.duration_days as i64 * 86400; // days to seconds
     let new_expiration = expiration_base
@@ -276,8 +275,8 @@ pub fn process(
     // div-by-zero, or wildly out of range) can't silently overcharge or
     // undercharge buyers. Bounds: $1/SOL .. $1,000,000/SOL — far wider than
     // any realistic market move but tight enough to catch typos / corruption.
-    const MIN_USD_PRICE_CENTS: u64 = 100;            // $1.00 per SOL
-    const MAX_USD_PRICE_CENTS: u64 = 100_000_000;    // $1,000,000 per SOL
+    const MIN_USD_PRICE_CENTS: u64 = 100; // $1.00 per SOL
+    const MAX_USD_PRICE_CENTS: u64 = 100_000_000; // $1,000,000 per SOL
     if (is_onchain_sol || is_token)
         && (usd_price < MIN_USD_PRICE_CENTS || usd_price > MAX_USD_PRICE_CENTS)
     {
@@ -291,8 +290,7 @@ pub fn process(
     }
 
     let sol_cost_lamports = if is_onchain_sol || is_token {
-        mul_div(cost_usd_cents, 1_000_000_000, usd_price)
-            .ok_or(GameError::MathOverflow)?
+        mul_div(cost_usd_cents, 1_000_000_000, usd_price).ok_or(GameError::MathOverflow)?
     } else {
         0
     };
@@ -313,7 +311,11 @@ pub fn process(
         let shop_config_account = &accounts[10];
 
         // Validate shop_config PDA
-        require_pda(shop_config_account, &[SHOP_CONFIG_SEED, game_engine.address().as_ref()], program_id)?;
+        require_pda(
+            shop_config_account,
+            &[SHOP_CONFIG_SEED, game_engine.address().as_ref()],
+            program_id,
+        )?;
         require_owner(shop_config_account, program_id)?;
 
         // Load shop config for SOL oracle settings
@@ -347,20 +349,19 @@ pub fn process(
         // Create PDA signer for GameEngine (mint authority)
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let bump_seed = [game_engine_data.bump];
-        let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+        let seeds = crate::seeds!(
+            crate::constants::GAME_ENGINE_SEED,
+            &kingdom_id_bytes,
+            &bump_seed
+        );
         let signer = pinocchio::cpi::Signer::from(&seeds);
 
         // Mint NOVI tokens directly to user's token account
-        crate::helpers::mint_tokens(
-            novi_mint,
-            user_novi_ata,
-            game_engine,
-            tier.novi,
-            &[signer],
-        )?;
+        crate::helpers::mint_tokens(novi_mint, user_novi_ata, game_engine, tier.novi, &[signer])?;
 
         // Update user reserved NOVI balance and timestamp
-        user_data.reserved_novi = user_data.reserved_novi
+        user_data.reserved_novi = user_data
+            .reserved_novi
             .checked_add(tier.novi)
             .ok_or(GameError::MathOverflow)?;
         user_data.reserved_novi_earned_at = now;
@@ -368,56 +369,70 @@ pub fn process(
 
     // 13b. Add cash on hand
     if tier.cash > 0 {
-        player_data.cash_on_hand = player_data.cash_on_hand
+        player_data.cash_on_hand = player_data
+            .cash_on_hand
             .checked_add(tier.cash)
             .ok_or(GameError::MathOverflow)?;
     }
 
     // 13c. Add defensive units
-    player_data.defensive_unit_1 = player_data.defensive_unit_1
+    player_data.defensive_unit_1 = player_data
+        .defensive_unit_1
         .checked_add(tier.du_1)
         .ok_or(GameError::MathOverflow)?;
-    player_data.defensive_unit_2 = player_data.defensive_unit_2
+    player_data.defensive_unit_2 = player_data
+        .defensive_unit_2
         .checked_add(tier.du_2)
         .ok_or(GameError::MathOverflow)?;
-    player_data.defensive_unit_3 = player_data.defensive_unit_3
+    player_data.defensive_unit_3 = player_data
+        .defensive_unit_3
         .checked_add(tier.du_3)
         .ok_or(GameError::MathOverflow)?;
 
     // 13d. Add operative units
-    player_data.operative_unit_1 = player_data.operative_unit_1
+    player_data.operative_unit_1 = player_data
+        .operative_unit_1
         .checked_add(tier.op_1)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_2 = player_data.operative_unit_2
+    player_data.operative_unit_2 = player_data
+        .operative_unit_2
         .checked_add(tier.op_2)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_3 = player_data.operative_unit_3
+    player_data.operative_unit_3 = player_data
+        .operative_unit_3
         .checked_add(tier.op_3)
         .ok_or(GameError::MathOverflow)?;
 
     // 13e. Add equipment (now directly from tier config)
-    player_data.melee_weapons = player_data.melee_weapons
+    player_data.melee_weapons = player_data
+        .melee_weapons
         .checked_add(tier.melee_weapons)
         .ok_or(GameError::MathOverflow)?;
-    player_data.ranged_weapons = player_data.ranged_weapons
+    player_data.ranged_weapons = player_data
+        .ranged_weapons
         .checked_add(tier.ranged_weapons)
         .ok_or(GameError::MathOverflow)?;
-    player_data.siege_weapons = player_data.siege_weapons
+    player_data.siege_weapons = player_data
+        .siege_weapons
         .checked_add(tier.siege_weapons)
         .ok_or(GameError::MathOverflow)?;
-    player_data.armor_pieces = player_data.armor_pieces
+    player_data.armor_pieces = player_data
+        .armor_pieces
         .checked_add(tier.armor)
         .ok_or(GameError::MathOverflow)?;
-    player_data.produce = player_data.produce
+    player_data.produce = player_data
+        .produce
         .checked_add(tier.produce)
         .ok_or(GameError::MathOverflow)?;
-    player_data.vehicles = player_data.vehicles
+    player_data.vehicles = player_data
+        .vehicles
         .checked_add(tier.vehicles)
         .ok_or(GameError::MathOverflow)?;
 
     // 13f. Add reputation
     if tier.reputation > 0 {
-        player_data.reputation = player_data.reputation
+        player_data.reputation = player_data
+            .reputation
             .checked_add(tier.reputation)
             .ok_or(GameError::MathOverflow)?;
     }

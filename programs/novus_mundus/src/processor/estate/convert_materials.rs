@@ -1,15 +1,11 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
     error::GameError,
-    state::PlayerAccount,
     helpers::estate::{load_estate_for_player, require_workshop},
-    validation::{require_signer, require_writable, require_owner},
+    state::PlayerAccount,
     utils::read_u8,
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Material Tier Conversion
@@ -77,18 +73,18 @@ pub fn process(
 
     // Workshop level requirements based on tier
     let required_workshop_level = match from_tier {
-        0 => 1,   // Common → Uncommon: Lv 1
-        1 => 5,   // Uncommon → Rare: Lv 5
-        2 => 10,  // Rare → Epic: Lv 10
-        3 => 15,  // Epic → Legendary: Lv 15
+        0 => 1,  // Common → Uncommon: Lv 1
+        1 => 5,  // Uncommon → Rare: Lv 5
+        2 => 10, // Rare → Epic: Lv 10
+        3 => 15, // Epic → Legendary: Lv 15
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
     require_workshop(estate, required_workshop_level)?;
 
     // 6. Calculate material amounts
-    let input_amount = conversions.saturating_mul(100);  // 100 per conversion
-    let output_amount = conversions.saturating_mul(20);  // 20 per conversion
+    let input_amount = conversions.saturating_mul(100); // 100 per conversion
+    let output_amount = conversions.saturating_mul(20); // 20 per conversion
 
     // 7. Check and deduct input materials, add output materials
     match from_tier {
@@ -98,7 +94,8 @@ pub fn process(
                 return Err(GameError::InsufficientMaterials.into());
             }
             player.set_common_materials(player.common_materials().saturating_sub(input_amount));
-            player.set_uncommon_materials(player.uncommon_materials().saturating_add(output_amount));
+            player
+                .set_uncommon_materials(player.uncommon_materials().saturating_add(output_amount));
         }
         1 => {
             // Uncommon → Rare
@@ -122,7 +119,9 @@ pub fn process(
                 return Err(GameError::InsufficientMaterials.into());
             }
             player.set_epic_materials(player.epic_materials().saturating_sub(input_amount));
-            player.set_legendary_materials(player.legendary_materials().saturating_add(output_amount));
+            player.set_legendary_materials(
+                player.legendary_materials().saturating_add(output_amount),
+            );
         }
         _ => return Err(GameError::InvalidParameter.into()),
     }

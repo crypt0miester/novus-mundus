@@ -1,28 +1,23 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{
-        REINFORCEMENT_SEED, MAX_REINFORCEMENT_RECEIVE,
-    },
-    error::GameError,
-    state::{
-        PlayerAccount, GameEngine, CityAccount, ReinforcementAccount,
-        ReinforcementStatus, ReinforcementTarget, BuffStat, NULL_PUBKEY,
-        TeamAccount,
-    },
-    logic::location::calculate_intercity_travel_time,
-    utils::{read_u8, read_u64},
-    validation::{require_signer, require_writable, require_owner},
-    helpers::nft_parser::{parse_nft_buffs, ParsedBuff},
+    constants::{MAX_REINFORCEMENT_RECEIVE, REINFORCEMENT_SEED},
     emit,
+    error::GameError,
     events::reinforcement::ReinforcementSent,
+    helpers::nft_parser::{parse_nft_buffs, ParsedBuff},
+    logic::location::calculate_intercity_travel_time,
+    state::{
+        BuffStat, CityAccount, GameEngine, PlayerAccount, ReinforcementAccount,
+        ReinforcementStatus, ReinforcementTarget, TeamAccount, NULL_PUBKEY,
+    },
+    utils::{read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Send defensive units, weapons, and optionally a hero to reinforce a teammate
@@ -63,17 +58,20 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (9 required, 1 optional for hero)
-    crate::extract_accounts!(accounts, [
-        sender_owner,
-        sender_player,
-        destination_player,
-        reinforcement_account,
-        sender_city,
-        destination_city,
-        game_engine,
-        system_program,
-        team_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            sender_owner,
+            sender_player,
+            destination_player,
+            reinforcement_account,
+            sender_city,
+            destination_city,
+            game_engine,
+            system_program,
+            team_account,
+        ]
+    );
     let hero_nft = accounts.get(9); // Optional 10th account
 
     // 2. Validate Accounts
@@ -200,53 +198,53 @@ pub fn process(
     }
 
     // 11. Handle Hero (if provided)
-    let (hero_pubkey, hero_defense_bps, hero_weapon_eff_bps, hero_armor_eff_bps) =
-        if hero_slot < 3 {
-            let hero_slot_idx = hero_slot as usize;
-            let hero_key = sender.active_hero_at(hero_slot_idx as usize);
+    let (hero_pubkey, hero_defense_bps, hero_weapon_eff_bps, hero_armor_eff_bps) = if hero_slot < 3
+    {
+        let hero_slot_idx = hero_slot as usize;
+        let hero_key = sender.active_hero_at(hero_slot_idx as usize);
 
-            // Verify hero is assigned
-            if hero_key == Address::default() {
-                return Err(GameError::HeroNotInSlot.into());
+        // Verify hero is assigned
+        if hero_key == Address::default() {
+            return Err(GameError::HeroNotInSlot.into());
+        }
+
+        // Verify hero is not already in meditation
+        if sender.meditating_hero_slot() == hero_slot {
+            return Err(GameError::HeroAlreadyMeditating.into());
+        }
+
+        // Require hero_nft account when sending a hero
+        let nft_account = hero_nft.ok_or(ProgramError::NotEnoughAccountKeys)?;
+
+        // Verify NFT account matches the hero key in active_heroes
+        if nft_account.address() != &hero_key {
+            return Err(GameError::HeroMismatch.into());
+        }
+
+        // Parse buffs directly from the NFT
+        let nft_data = nft_account.try_borrow()?;
+        let mut buffs = [ParsedBuff::default(); 4];
+        let buff_count = parse_nft_buffs(&nft_data, &mut buffs);
+
+        // Extract the specific buffs we need for reinforcement
+        let mut defense_bps: u16 = 0;
+        let mut weapon_eff_bps: u16 = 0;
+        let mut armor_eff_bps: u16 = 0;
+
+        for i in 0..buff_count {
+            match BuffStat::from_u8(buffs[i].stat) {
+                BuffStat::DefensePower => defense_bps = buffs[i].value,
+                BuffStat::WeaponEfficiency => weapon_eff_bps = buffs[i].value,
+                BuffStat::ArmorEfficiency => armor_eff_bps = buffs[i].value,
+                _ => {}
             }
+        }
 
-            // Verify hero is not already in meditation
-            if sender.meditating_hero_slot() == hero_slot {
-                return Err(GameError::HeroAlreadyMeditating.into());
-            }
-
-            // Require hero_nft account when sending a hero
-            let nft_account = hero_nft.ok_or(ProgramError::NotEnoughAccountKeys)?;
-
-            // Verify NFT account matches the hero key in active_heroes
-            if nft_account.address() != &hero_key {
-                return Err(GameError::HeroMismatch.into());
-            }
-
-            // Parse buffs directly from the NFT
-            let nft_data = nft_account.try_borrow()?;
-            let mut buffs = [ParsedBuff::default(); 4];
-            let buff_count = parse_nft_buffs(&nft_data, &mut buffs);
-
-            // Extract the specific buffs we need for reinforcement
-            let mut defense_bps: u16 = 0;
-            let mut weapon_eff_bps: u16 = 0;
-            let mut armor_eff_bps: u16 = 0;
-
-            for i in 0..buff_count {
-                match BuffStat::from_u8(buffs[i].stat) {
-                    BuffStat::DefensePower => defense_bps = buffs[i].value,
-                    BuffStat::WeaponEfficiency => weapon_eff_bps = buffs[i].value,
-                    BuffStat::ArmorEfficiency => armor_eff_bps = buffs[i].value,
-                    _ => {}
-                }
-            }
-
-            (hero_key, defense_bps, weapon_eff_bps, armor_eff_bps)
-        } else {
-            // No hero
-            (Address::default(), 0, 0, 0)
-        };
+        (hero_key, defense_bps, weapon_eff_bps, armor_eff_bps)
+    } else {
+        // No hero
+        (Address::default(), 0, 0, 0)
+    };
 
     // 12. Load City Data for Travel Calculation
     // H-03: Verify city accounts are owned by this program and match expected PDAs.
@@ -355,7 +353,8 @@ pub fn process(
         lamports,
         space: ReinforcementAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 17. Initialize Reinforcement Account
     let mut reinf_data_ref = reinforcement_account.try_borrow_mut()?;

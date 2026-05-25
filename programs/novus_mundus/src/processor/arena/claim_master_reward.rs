@@ -15,19 +15,17 @@
 //! 7. `[]` token_program: Token program
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::{ARENA_PRIZE_DISTRIBUTION, GAME_ENGINE_SEED},
     error::GameError,
-    state::{ArenaSeasonAccount, ArenaParticipantAccount, ArenaStatus, PlayerAccount, GameEngine},
-    validation::{require_owner, require_writable, require_key_match, require_data_len},
     helpers::{mint_tokens, validate_token_account_owner},
+    state::{ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, GameEngine, PlayerAccount},
     utils::read_u32,
+    validation::{require_data_len, require_key_match, require_owner, require_writable},
 };
 
 /// Instruction data for claim_master_reward
@@ -102,7 +100,7 @@ pub fn process(
     let _season_authority = season.authority;
 
     // 6. Load Participant using player_account PDA for derivation (kingdom-scoped)
-    let mut participant = ArenaParticipantAccount::load_checked_mut(
+    let participant = ArenaParticipantAccount::load_checked_mut(
         participant_account,
         game_engine.address(),
         season_id,
@@ -139,15 +137,14 @@ pub fn process(
 
     // 8. Calculate reward based on rank (safe math)
     let prize_bps = ARENA_PRIZE_DISTRIBUTION[rank_idx] as u64;
-    let reward = season.master_prize_pool
+    let reward = season
+        .master_prize_pool
         .saturating_mul(prize_bps)
         .checked_div(10_000)
         .unwrap_or(0);
 
     // 9. Update participant
     participant.master_reward_claimed = true;
-
-    drop(participant);
 
     // 10. Update season
     season.leaderboard_claimed[rank_idx] = true;
@@ -161,19 +158,17 @@ pub fn process(
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
     let seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
     let signer = pinocchio::cpi::Signer::from(&seeds);
-    drop(game_engine_data);
 
     // 12. Mint NOVI tokens to player's token account
-    mint_tokens(
-        novi_mint,
-        player_novi_ata,
-        game_engine,
-        reward,
-        &[signer],
-    )?;
+    mint_tokens(novi_mint, player_novi_ata, game_engine, reward, &[signer])?;
 
     // 13. Update player's locked_novi balance (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.address(), player_owner.address(), program_id)?;
+    let player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine.address(),
+        player_owner.address(),
+        program_id,
+    )?;
     player.locked_novi = player.locked_novi.saturating_add(reward);
 
     Ok(())

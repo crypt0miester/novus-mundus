@@ -13,18 +13,16 @@
 //! 2. `[WRITE]` season_authority: Must match season.authority, receives the rent
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     error::GameError,
-    state::{ArenaSeasonAccount, CityAccount},
-    validation::{require_owner, require_writable, require_data_len},
     helpers::close_account,
-    utils::{read_u32, read_u16},
+    state::{ArenaSeasonAccount, CityAccount},
+    utils::{read_u16, read_u32},
+    validation::{require_data_len, require_owner, require_writable},
 };
 
 /// Minimum seasons behind before auto-close is allowed

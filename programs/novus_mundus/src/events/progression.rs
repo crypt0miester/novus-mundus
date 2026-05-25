@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Progression events - daily rewards, subscriptions, achievements
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when daily reward is claimed
 pub struct DailyRewardClaimed {

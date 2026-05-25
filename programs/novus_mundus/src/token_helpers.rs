@@ -2,11 +2,7 @@
 ///
 /// This module provides utilities for creating associated token accounts
 /// using the pinocchio-associated-token-account crate.
-
-use pinocchio::{
-    AccountView,
-    ProgramResult,
-};
+use pinocchio::{AccountView, ProgramResult};
 use pinocchio_associated_token_account::instructions::Create;
 
 /// Create an associated token account

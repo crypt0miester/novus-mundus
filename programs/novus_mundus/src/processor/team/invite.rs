@@ -1,19 +1,22 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM, EXT_INVENTORY},
-    constants::{TEAM_INVITE_SEED, TEAM_INVITE_EXPIRY},
-    validation::{require_signer, require_writable, require_key_match, require_owner, require_empty},
-    utils::{read_i64, read_u16, read_u64},
+    constants::{TEAM_INVITE_EXPIRY, TEAM_INVITE_SEED},
     emit,
+    error::GameError,
     events::InviteSent,
+    state::{
+        require_extension, PlayerAccount, TeamAccount, TeamInviteAccount, TeamMemberSlot,
+        EXT_INVENTORY, EXT_TEAM, NULL_PUBKEY,
+    },
+    utils::{read_i64, read_u16, read_u64},
+    validation::{
+        require_empty, require_key_match, require_owner, require_signer, require_writable,
+    },
 };
 
 /// Invite a player to join team
@@ -157,7 +160,11 @@ pub fn process(
     // 7. Verify Invite PDA
 
     let (expected_invite, invite_bump) = Address::find_program_address(
-        &[TEAM_INVITE_SEED, team_account.address().as_ref(), invitee_player_account.address().as_ref()],
+        &[
+            TEAM_INVITE_SEED,
+            team_account.address().as_ref(),
+            invitee_player_account.address().as_ref(),
+        ],
         program_id,
     );
 
@@ -196,7 +203,8 @@ pub fn process(
         lamports: invite_lamports,
         space: TeamInviteAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[invite_signer])?;
+    }
+    .invoke_signed(&[invite_signer])?;
 
     // 9. Initialize Invite Data
 

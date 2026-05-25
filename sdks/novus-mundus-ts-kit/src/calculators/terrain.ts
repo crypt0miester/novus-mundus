@@ -225,7 +225,18 @@ export function serializeTerrain(terrain: CityTerrain): Uint8Array {
 
 // Rendering
 
-/** Map elevation to [R, G, B]. Optionally biome-aware via moisture (0=arid, 255=lush). */
+/**
+ * Map elevation to [R, G, B] in an ANTIQUE-MAP palette. Optionally biome-aware
+ * via moisture (0=arid, 255=lush).
+ *
+ * The palette sits inside the realm-map vocabulary — parchment cream
+ * (#efe2c4), sepia ink (#2e1f10), wax-seal orange — so the city terrain reads
+ * as the same hand-drawn page rather than a satellite tile dropped onto it.
+ * Specifically: no cyan-bright water, no saturated forest green, no neutral-
+ * grey snow caps. Everything stays in the warm sepia gamut except water,
+ * which is a desaturated slate (the kind of pale wash old hand-painted maps
+ * aged into).
+ */
 export function elevationToColor(
   elev: number,
   waterLine: number,
@@ -233,40 +244,52 @@ export function elevationToColor(
   moisture?: number,
 ): [number, number, number] {
   if (elev <= waterLine) {
+    /* Water — desaturated slate. Deep = dusty indigo-grey, shallow = pale
+     * grey-blue. Replaces the original bright cyan that screamed "modern UI". */
     const depth = waterLine > 0 ? (waterLine - elev) / waterLine : 0;
     return [
-      Math.round(20 + 40 * (1 - depth)),
-      Math.round(60 + 80 * (1 - depth)),
-      Math.round(120 + 100 * (1 - depth)),
+      Math.round(95 + 65 * (1 - depth)),
+      Math.round(110 + 60 * (1 - depth)),
+      Math.round(130 + 45 * (1 - depth)),
     ];
   }
 
   if (elev >= peakLine) {
+    /* Peaks — DARK base → CREAM cap. Each mountain reads as a dark inked
+     * silhouette at its shoulder (sharp jump from olive highland) then
+     * lightens toward the summit like a snow cap. This is the clearest
+     * way to make peaks visually distinct from lush highland (which can
+     * also go dark olive) — the inversion at the peakLine boundary IS
+     * the cue that says "this is a peak, not a hill". */
     const range = 255 - peakLine || 1;
     const height = (elev - peakLine) / range;
-    const v = Math.round(160 + 80 * height);
-    return [v, v, v];
+    return [
+      Math.round(85 + 145 * height),
+      Math.round(60 + 155 * height),
+      Math.round(35 + 155 * height),
+    ];
   }
 
   const range = (peakLine - waterLine) || 1;
   const t = (elev - waterLine) / range;
 
   if (t < 0.1) {
-    return [210, 200, 160]; // Beach
+    return [218, 200, 160]; /* Beach — warm pale sand, near parchment. */
   }
 
   const f = (moisture ?? 128) / 255;
 
   if (t < 0.5) {
     const h = 1 - (t - 0.1) / 0.4;
-    // Arid: tan/sand tones
-    const ar = 210 - 35 * h;
-    const ag = 190 - 45 * h;
-    const ab = 140 - 40 * h;
-    // Lush: green tones
-    const lr = 100 - 40 * h;
-    const lg = 180 - 60 * h;
-    const lb = 60 - 20 * h;
+    /* Arid lowland: tan/sand — already sepia-adjacent, nudged warmer. */
+    const ar = 215 - 35 * h;
+    const ag = 195 - 45 * h;
+    const ab = 145 - 40 * h;
+    /* Lush lowland: muted olive — replaces the original saturated grass
+     * green so the disc doesn't look like a satellite minimap. */
+    const lr = 135 - 45 * h;
+    const lg = 145 - 35 * h;
+    const lb = 100 - 25 * h;
     return [
       Math.round(ar + (lr - ar) * f),
       Math.round(ag + (lg - ag) * f),
@@ -274,14 +297,14 @@ export function elevationToColor(
     ];
   } else {
     const h = (t - 0.5) / 0.5;
-    // Arid: dry highland
+    /* Arid highland: dry sepia tan. */
     const ar = 175 + 20 * h;
     const ag = 150 + 15 * h;
     const ab = 105 + 20 * h;
-    // Lush: forested highland
-    const lr = 100 + 50 * h;
-    const lg = 80 + 30 * h;
-    const lb = 40 + 30 * h;
+    /* Lush highland: muted dark olive — replaces saturated forest green. */
+    const lr = 95 + 40 * h;
+    const lg = 85 + 30 * h;
+    const lb = 55 + 25 * h;
     return [
       Math.round(ar + (lr - ar) * f),
       Math.round(ag + (lg - ag) * f),

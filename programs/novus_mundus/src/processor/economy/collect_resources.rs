@@ -1,38 +1,32 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 
 use crate::{
     constants::PLAYER_SEED,
-    error::GameError,
-    state::{PlayerAccount, UserAccount, GameEngine, CityAccount},
-    types::{EventType, CollectionType},
-    logic::{
-        consume_novi_logic,
-        calculate_synchrony,
-        consume_produce,
-        update_happiness_operative,
-        calculate_networth,
-        grant_xp_with_time_bonus,
-        calculate_xp_reward,
-        XpAction,
-        get_time_of_day,
-        apply_time_multiplier,
-        ActivityType,
-        safe_math::{sqrt_product, pow_three_quarters},
-        terrain,
-    },
-    helpers::{
-        event_scoring::update_event_score,
-        estate::{observatory_loot_bonus_bps, load_estate_for_player, require_mine, require_dock, require_farm, mine_mining_bonus_bps, dock_fishing_bonus_bps, farm_produce_bonus_bps},
-    },
-    utils::{read_u8, read_u64},
-    validation::require_signer,
     emit,
-    events::{ResourcesCollected, XpGained, PlayerLeveledUp},
+    error::GameError,
+    events::{PlayerLeveledUp, ResourcesCollected, XpGained},
+    helpers::{
+        estate::{
+            dock_fishing_bonus_bps, farm_produce_bonus_bps, load_estate_for_player,
+            mine_mining_bonus_bps, observatory_loot_bonus_bps, require_dock, require_farm,
+            require_mine,
+        },
+        event_scoring::update_event_score,
+    },
+    logic::{
+        apply_time_multiplier, calculate_networth, calculate_synchrony, calculate_xp_reward,
+        consume_novi_logic, consume_produce, get_time_of_day, grant_xp_with_time_bonus,
+        safe_math::{pow_three_quarters, sqrt_product},
+        terrain, update_happiness_operative, ActivityType, XpAction,
+    },
+    state::{CityAccount, GameEngine, PlayerAccount, UserAccount},
+    types::{CollectionType, EventType},
+    utils::{read_u64, read_u8},
+    validation::require_signer,
 };
 
 // Tuning for `saturating_yield` — `output = M·raw/(raw+K) + raw^0.75/D`.
@@ -113,16 +107,19 @@ pub fn process(
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
     // estate_account is required, event accounts are optional
-    crate::extract_accounts!(accounts, [
-        player,
-        user,
-        owner,
-        player_token_account,
-        novi_mint,
-        game_engine,
-        _token_program,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player,
+            user,
+            owner,
+            player_token_account,
+            novi_mint,
+            game_engine,
+            _token_program,
+            estate_account,
+        ]
+    );
     let (event_participation, event) = if accounts.len() >= 10 {
         (Some(&accounts[8]), Some(&accounts[9]))
     } else {
@@ -152,7 +149,12 @@ pub fn process(
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
     // 5. Load and verify player/user accounts (PDA + ownership + bump in one call)
-    let mut player_data = PlayerAccount::load_checked_mut(player, game_engine.address(), owner.address(), program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player,
+        game_engine.address(),
+        owner.address(),
+        program_id,
+    )?;
     let _user_data = UserAccount::load_checked_mut(user, owner.address(), program_id)?;
 
     // Validate player not traveling (can't collect while traveling)
@@ -184,19 +186,19 @@ pub fn process(
             }
             // Mining requires Mine building (split from Workshop)
             require_mine(estate, 1)?;
-        },
+        }
         CollectionType::Fishing => {
             if !player_data.has_fishing() {
                 return Err(GameError::FeatureLocked.into());
             }
             // Fishing requires Dock building (minimum level 1)
             require_dock(estate, 1)?;
-        },
+        }
         CollectionType::Farming => {
             // Farming requires Farm building
             require_farm(estate, 1)?;
-        },
-        CollectionType::Cash => {}, // Always unlocked
+        }
+        CollectionType::Cash => {} // Always unlocked
     }
 
     // 7. Get current timestamp (needed for subscription expiration check and time bonuses)
@@ -226,35 +228,44 @@ pub fn process(
     let base_output = match collection_type {
         CollectionType::Cash => {
             // Cash from operative units, weighted by tier: 10x / 8x / 5x.
-            let unit_factor = player_data.operative_unit_1
+            let unit_factor = player_data
+                .operative_unit_1
                 .saturating_mul(10)
                 .saturating_add(player_data.operative_unit_2.saturating_mul(8))
                 .saturating_add(player_data.operative_unit_3.saturating_mul(5));
             let raw = unit_factor.saturating_mul(power);
-            saturating_yield(raw, CASH_YIELD_CEILING, CASH_YIELD_HALF, CASH_YIELD_TAIL_DIVISOR)
-        },
+            saturating_yield(
+                raw,
+                CASH_YIELD_CEILING,
+                CASH_YIELD_HALF,
+                CASH_YIELD_TAIL_DIVISOR,
+            )
+        }
         CollectionType::Mining => {
             // Gems from operative units, weighted by tier: 3x / 2x / 1x.
-            let unit_factor = player_data.operative_unit_1
+            let unit_factor = player_data
+                .operative_unit_1
                 .saturating_mul(3)
                 .saturating_add(player_data.operative_unit_2.saturating_mul(2))
                 .saturating_add(player_data.operative_unit_3);
             let raw = unit_factor.saturating_mul(power);
-            saturating_yield(raw, GEM_YIELD_CEILING, GEM_YIELD_HALF, GEM_YIELD_TAIL_DIVISOR)
-        },
+            saturating_yield(
+                raw,
+                GEM_YIELD_CEILING,
+                GEM_YIELD_HALF,
+                GEM_YIELD_TAIL_DIVISOR,
+            )
+        }
         CollectionType::Fishing => {
             // Fishing generates produce based on power and unit count
             // operative_unit_1: 5x (skilled fishers)
             // operative_unit_2: 4x
             // operative_unit_3: 3x
-            let produce_from_unit_1 = player_data.operative_unit_1
-                .saturating_mul(5);
+            let produce_from_unit_1 = player_data.operative_unit_1.saturating_mul(5);
 
-            let produce_from_unit_2 = player_data.operative_unit_2
-                .saturating_mul(4);
+            let produce_from_unit_2 = player_data.operative_unit_2.saturating_mul(4);
 
-            let produce_from_unit_3 = player_data.operative_unit_3
-                .saturating_mul(3);
+            let produce_from_unit_3 = player_data.operative_unit_3.saturating_mul(3);
 
             let unit_factor = produce_from_unit_1
                 .saturating_add(produce_from_unit_2)
@@ -274,20 +285,17 @@ pub fn process(
             // Scale back up and ensure reasonable output
             // Produce is 3x more common than gems
             base_output.saturating_mul(3)
-        },
+        }
         CollectionType::Farming => {
             // Farming generates produce using operative units
             // operative_unit_1: 5x
             // operative_unit_2: 4x
             // operative_unit_3: 3x
-            let produce_from_unit_1 = player_data.operative_unit_1
-                .saturating_mul(5);
+            let produce_from_unit_1 = player_data.operative_unit_1.saturating_mul(5);
 
-            let produce_from_unit_2 = player_data.operative_unit_2
-                .saturating_mul(4);
+            let produce_from_unit_2 = player_data.operative_unit_2.saturating_mul(4);
 
-            let produce_from_unit_3 = player_data.operative_unit_3
-                .saturating_mul(3);
+            let produce_from_unit_3 = player_data.operative_unit_3.saturating_mul(3);
 
             let unit_factor = produce_from_unit_1
                 .saturating_add(produce_from_unit_2)
@@ -317,7 +325,8 @@ pub fn process(
         };
         if let Some(idx) = city_idx {
             let city_acc = &accounts[idx];
-            if unsafe { city_acc.owner() } == program_id && city_acc.data_len() >= CityAccount::SIZE {
+            if unsafe { city_acc.owner() } == program_id && city_acc.data_len() >= CityAccount::SIZE
+            {
                 let city_data = unsafe { CityAccount::load(city_acc)? };
                 // Validate city matches player's current city
                 if city_data.city_id == player_data.current_city && city_data.anchor_count > 0 {
@@ -381,14 +390,11 @@ pub fn process(
     // 9. Consume produce (1 per operative unit)
     let produce_consumed = consume_produce(total_operative, player_data.produce);
 
-    player_data.produce = player_data.produce
-        .saturating_sub(produce_consumed);
+    player_data.produce = player_data.produce.saturating_sub(produce_consumed);
 
     // 10. Update operative happiness based on produce availability (PURE LOGIC)
-    player_data.happiness_operative = update_happiness_operative(
-        total_operative,
-        player_data.produce,
-    );
+    player_data.happiness_operative =
+        update_happiness_operative(total_operative, player_data.produce);
 
     // 10a. Calculate abandonment based on happiness (PURE LOGIC)
     let gameplay_config = &game_engine_data.gameplay_config;
@@ -415,7 +421,8 @@ pub fn process(
     }
 
     // 11. Consume locked Novi from state
-    player_data.locked_novi = player_data.locked_novi
+    player_data.locked_novi = player_data
+        .locked_novi
         .checked_sub(novi_amount)
         .ok_or(GameError::MathOverflow)?;
 
@@ -423,10 +430,14 @@ pub fn process(
     // Player PDA owns the token account, so player is the burn authority
     // Must drop player_data (LoadedMut) before CPI to release RefMut on player
     let player_bump = player_data.bump;
-    drop(player_data); // Release RefMut so player can be passed to CPI
 
     let bump_seed = [player_bump];
-    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), owner.address(), &bump_seed);
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine.address(),
+        owner.address(),
+        &bump_seed
+    );
     let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     crate::helpers::burn_tokens(
@@ -439,7 +450,7 @@ pub fn process(
 
     // Re-load player data after CPI (mutations from before drop are preserved in
     // the buffer). Identity was verified pre-CPI — skip PDA re-derivation.
-    let mut player_data = PlayerAccount::load_mut_unchecked(player, program_id)?;
+    let player_data = PlayerAccount::load_mut_unchecked(player, program_id)?;
 
     // 12. Transfer resources based on collection type
     // (clock already obtained above for time-of-day calculation)
@@ -462,11 +473,12 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
-            player_data.cash_on_hand = player_data.cash_on_hand
+            player_data.cash_on_hand = player_data
+                .cash_on_hand
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
             buffed_output
-        },
+        }
         CollectionType::Mining => {
             // Apply research buff for mining output
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
@@ -489,7 +501,8 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(mine_multiplier) / 10000;
             }
 
-            player_data.gems = player_data.gems
+            player_data.gems = player_data
+                .gems
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -500,13 +513,14 @@ pub fn process(
                     let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
-                player_data.fragments = player_data.fragments
+                player_data.fragments = player_data
+                    .fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
                 fragments_earned = fragments;
             }
             buffed_output
-        },
+        }
         CollectionType::Fishing => {
             // Apply research buff for fishing output
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
@@ -529,7 +543,8 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(dock_multiplier) / 10000;
             }
 
-            player_data.produce = player_data.produce
+            player_data.produce = player_data
+                .produce
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -540,13 +555,14 @@ pub fn process(
                     let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
-                player_data.fragments = player_data.fragments
+                player_data.fragments = player_data
+                    .fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
                 fragments_earned = fragments;
             }
             buffed_output
-        },
+        }
         CollectionType::Farming => {
             // Apply research buff for farming output
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
@@ -569,7 +585,8 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(farm_multiplier) / 10000;
             }
 
-            player_data.produce = player_data.produce
+            player_data.produce = player_data
+                .produce
                 .checked_add(buffed_output)
                 .ok_or(GameError::MathOverflow)?;
 
@@ -580,7 +597,8 @@ pub fn process(
                     let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
-                player_data.fragments = player_data.fragments
+                player_data.fragments = player_data
+                    .fragments
                     .checked_add(fragments)
                     .ok_or(GameError::MathOverflow)?;
                 fragments_earned = fragments;
@@ -591,9 +609,12 @@ pub fn process(
 
     // 13. Grant XP (1 XP per 1000 resources collected) - with time-of-day bonus!
     // Golden hours (Dawn/Dusk) grant φ² bonus, night grants √φ bonus
-    let xp_amount = calculate_xp_reward(XpAction::CollectResources { amount: total_resources_collected });
+    let xp_amount = calculate_xp_reward(XpAction::CollectResources {
+        amount: total_resources_collected,
+    });
     let old_level = player_data.level;
-    let (levels_gained, new_level, _) = grant_xp_with_time_bonus(&mut *player_data, xp_amount, now)?;
+    let (levels_gained, new_level, _) =
+        grant_xp_with_time_bonus(&mut *player_data, xp_amount, now)?;
 
     // Emit XP gained event
     emit!(XpGained {
@@ -622,7 +643,7 @@ pub fn process(
     // 14. Update event scores if player is participating in an event
     if let (Some(event_participation), Some(event)) = (event_participation, event) {
         // Load event participation with ownership validation (kingdom-scoped)
-        let mut participation = crate::state::EventParticipation::load_checked_mut(
+        let participation = crate::state::EventParticipation::load_checked_mut(
             event_participation,
             game_engine.address(),
             player_data.current_event,
@@ -631,7 +652,7 @@ pub fn process(
         )?;
 
         // Load event with ownership validation (kingdom-scoped)
-        let mut event_data = crate::state::EventAccount::load_checked_mut(
+        let event_data = crate::state::EventAccount::load_checked_mut(
             event,
             game_engine.address(),
             player_data.current_event,

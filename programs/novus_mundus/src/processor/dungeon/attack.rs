@@ -1,50 +1,48 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    emit,
     error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
+    events::{DungeonFailed, DungeonFloorCompleted, DungeonRoomCleared},
     helpers::dungeon::{
-        calculate_unit_power,
+        apply_guardian_survival,
+        apply_healing_modifier,
+        // Hero specialization
+        apply_warrior_attack_bonus,
+        calculate_boss_wrath,
+        calculate_damage_taken,
+        calculate_darkness_crit_penalty,
         calculate_dungeon_damage,
         calculate_enemy_damage,
-        calculate_damage_taken,
-        calculate_room_xp,
-        has_one_shot_immunity_relic,
-        has_resurrection_relic,
-        calculate_relic_lifesteal,
-        calculate_synergy_bonuses,
-        double_attack_chance,
         // Crit system
         calculate_relic_crit_chance,
         calculate_relic_crit_damage,
-        calculate_darkness_crit_penalty,
-        has_darkness_crit_immunity_relic,
-        // Time of day
-        TimePeriod,
-        calculate_xp_with_time,
-        // Boss wrath
-        DungeonTheme,
-        calculate_boss_wrath,
-        get_boss_wrath_damage,
-        get_boss_wrath_defense,
-        should_trigger_boss_ability,
-        get_boss_ability,
-        // Hero specialization
-        apply_warrior_attack_bonus,
-        apply_guardian_survival,
-        apply_healing_modifier,
         // Hero effectiveness
         calculate_relic_hero_bonus,
+        calculate_relic_lifesteal,
+        calculate_room_xp,
+        calculate_synergy_bonuses,
+        calculate_unit_power,
+        calculate_xp_with_time,
+        double_attack_chance,
+        get_boss_ability,
+        get_boss_wrath_damage,
+        get_boss_wrath_defense,
+        has_darkness_crit_immunity_relic,
+        has_one_shot_immunity_relic,
+        has_resurrection_relic,
+        should_trigger_boss_ability,
+        // Boss wrath
+        DungeonTheme,
+        // Time of day
+        TimePeriod,
     },
     logic::safe_math::apply_bp,
-    validation::{require_signer, require_writable, require_game_authority},
-    emit,
-    events::{DungeonRoomCleared, DungeonFloorCompleted, DungeonFailed},
+    state::{DungeonRun, DungeonStatus, DungeonTemplate, PlayerAccount, RoomType},
+    validation::{require_game_authority, require_signer, require_writable},
 };
 
 /// Attack the current room enemy (single attack)
@@ -64,11 +62,7 @@ use crate::{
 /// - next_room_type: u8 (provided by backend for auto-advance; signature-bound)
 /// - double_strike: u8 (1 = double strike triggered, validated by game_authority signature)
 /// - crit: u8 (1 = critical hit triggered, validated by game_authority signature)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     process_attacks(program_id, accounts, data, 1)
 }
 
@@ -111,10 +105,16 @@ pub fn process_attacks(
     }
 
     // 4a. Validate game_authority against the player's kingdom GameEngine
-    require_game_authority(game_engine_account, game_authority, &player.game_engine, program_id)?;
+    require_game_authority(
+        game_engine_account,
+        game_authority,
+        &player.game_engine,
+        program_id,
+    )?;
 
     // 5. Load and validate dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
+    let run =
+        DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
     if &run.player != player_account.address() {
@@ -122,16 +122,14 @@ pub fn process_attacks(
     }
 
     // Validate run is active
-    let status = DungeonStatus::from_u8(run.status)
-        .ok_or(GameError::InvalidParameter)?;
+    let status = DungeonStatus::from_u8(run.status).ok_or(GameError::InvalidParameter)?;
 
     if !status.is_active() {
         return Err(GameError::DungeonNotActive.into());
     }
 
     // Validate room is combat
-    let room_type = RoomType::from_u8(run.room_type)
-        .ok_or(GameError::InvalidParameter)?;
+    let room_type = RoomType::from_u8(run.room_type).ok_or(GameError::InvalidParameter)?;
 
     if !room_type.is_combat() {
         return Err(GameError::NotCombatRoom.into());
@@ -143,7 +141,8 @@ pub fn process_attacks(
     }
 
     // 6. Load dungeon template using load_checked
-    let template = DungeonTemplate::load_checked(dungeon_template_account, run.dungeon_id, program_id)?;
+    let template =
+        DungeonTemplate::load_checked(dungeon_template_account, run.dungeon_id, program_id)?;
 
     // Get timestamp
     let clock = Clock::get()?;
@@ -184,7 +183,8 @@ pub fn process_attacks(
 
     // Calculate crit chance and damage (verified by backend RNG)
     // Crit chance = relic bonus + synergy bonus - darkness penalty
-    let base_crit_chance = calculate_relic_crit_chance(&run).saturating_add(synergies.crit_chance_bps);
+    let base_crit_chance =
+        calculate_relic_crit_chance(&run).saturating_add(synergies.crit_chance_bps);
     let crit_immune = has_darkness_crit_immunity_relic(&run);
     let darkness_crit_penalty = calculate_darkness_crit_penalty(
         run.current_floor,
@@ -199,14 +199,17 @@ pub fn process_attacks(
     let crit_damage_mult = if apply_crit {
         let relic_crit_dmg = calculate_relic_crit_damage(&run) as u64;
         let synergy_crit_dmg = synergies.crit_damage_bps as u64;
-        15000u64.saturating_add(relic_crit_dmg).saturating_add(synergy_crit_dmg) // 150% + bonuses
+        15000u64
+            .saturating_add(relic_crit_dmg)
+            .saturating_add(synergy_crit_dmg) // 150% + bonuses
     } else {
         10000u64 // 100% (no crit)
     };
 
     // Get time period and theme for modifiers
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
-    let dungeon_theme = DungeonTheme::from_u8(run.dungeon_theme).unwrap_or(DungeonTheme::RadiantWeakness);
+    let dungeon_theme =
+        DungeonTheme::from_u8(run.dungeon_theme).unwrap_or(DungeonTheme::RadiantWeakness);
     let is_first_light = TimePeriod::is_first_light(now);
 
     // Get hero specialization for bonuses
@@ -253,7 +256,8 @@ pub fn process_attacks(
         };
 
         // Apply crit damage multiplier (150% base + relic bonus on crit)
-        let mut player_damage = apply_bp(hero_boosted_damage, crit_damage_mult).unwrap_or(hero_boosted_damage);
+        let mut player_damage =
+            apply_bp(hero_boosted_damage, crit_damage_mult).unwrap_or(hero_boosted_damage);
 
         // BOSS WRATH: Apply wrath defense reduction (boss takes more damage at high wrath)
         if run.is_boss && run.boss_wrath > 0 {
@@ -282,7 +286,8 @@ pub fn process_attacks(
                 damage_to_deal = damage_to_deal.saturating_sub(shield_damage);
                 // OFFENSE synergy: Shield takes 2x damage
                 if synergies.attack_bps >= 2500 {
-                    run.boss_shield = run.boss_shield.saturating_sub(shield_damage); // Extra damage
+                    run.boss_shield = run.boss_shield.saturating_sub(shield_damage);
+                    // Extra damage
                 }
             }
 
@@ -297,7 +302,9 @@ pub fn process_attacks(
                 run.boss_wrath = calculate_boss_wrath(total_damage_to_boss, run.enemy_max_health);
 
                 // Check for ability trigger at 50 wrath
-                if should_trigger_boss_ability(old_wrath, run.boss_wrath) && !run.boss_ability_active {
+                if should_trigger_boss_ability(old_wrath, run.boss_wrath)
+                    && !run.boss_ability_active
+                {
                     run.boss_ability_active = true;
                     // Initialize ability based on theme
                     let ability = get_boss_ability(dungeon_theme, run.enemy_max_health, &run);
@@ -309,11 +316,18 @@ pub fn process_attacks(
             }
 
             // RadiantWeakness boss: Boss heals from damage dealt (lifesteal ability)
-            if run.is_boss && run.boss_ability_active && dungeon_theme == DungeonTheme::RadiantWeakness {
+            if run.is_boss
+                && run.boss_ability_active
+                && dungeon_theme == DungeonTheme::RadiantWeakness
+            {
                 // Check if player has SUSTAIN 3-piece (reverses lifesteal)
-                if synergies.lifesteal_bps < 1000 { // No strong sustain counter
+                if synergies.lifesteal_bps < 1000 {
+                    // No strong sustain counter
                     let boss_heal = apply_bp(actual_damage, 2000u64).unwrap_or(0); // 20% lifesteal
-                    run.enemy_health = run.enemy_health.saturating_add(boss_heal).min(run.enemy_max_health);
+                    run.enemy_health = run
+                        .enemy_health
+                        .saturating_add(boss_heal)
+                        .min(run.enemy_max_health);
                 }
             }
 
@@ -330,19 +344,17 @@ pub fn process_attacks(
 
         // Enemy counterattack (if still alive)
         if run.enemy_health > 0 {
-            let mut enemy_damage = calculate_enemy_damage(
-                &run,
-                run.enemy_power,
-                run.is_boss,
-            );
+            let mut enemy_damage = calculate_enemy_damage(&run, run.enemy_power, run.is_boss);
 
             // BOSS WRATH: Apply wrath damage multiplier
             if run.is_boss {
-                let (wrath_damage_mult, wrath_attacks) = get_boss_wrath_damage(run.boss_wrath, &run);
+                let (wrath_damage_mult, wrath_attacks) =
+                    get_boss_wrath_damage(run.boss_wrath, &run);
 
                 // Apply wrath damage multiplier
                 if wrath_damage_mult > 10000 {
-                    enemy_damage = apply_bp(enemy_damage, wrath_damage_mult as u64).unwrap_or(enemy_damage);
+                    enemy_damage =
+                        apply_bp(enemy_damage, wrath_damage_mult as u64).unwrap_or(enemy_damage);
                 }
 
                 // DarknessVulnerable boss: x3 darkness effects when ability active
@@ -373,17 +385,15 @@ pub fn process_attacks(
                         player_research_defense_bps
                     };
 
-                    let base_damage_taken = calculate_damage_taken(
-                        &run,
-                        enemy_damage,
-                        effective_defense,
-                    );
+                    let base_damage_taken =
+                        calculate_damage_taken(&run, enemy_damage, effective_defense);
                     // Apply Guardian survival bonus (+25% damage reduction)
                     let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);
 
                     // Apply one-shot immunity relic (min 1 unit survives per hit)
                     let protected_damage = if has_one_shot_immunity_relic(&run) {
-                        let total_hp = crate::helpers::dungeon::calculate_total_unit_hp(&run.remaining_units);
+                        let total_hp =
+                            crate::helpers::dungeon::calculate_total_unit_hp(&run.remaining_units);
                         damage_taken.min(total_hp.saturating_sub(1))
                     } else {
                         damage_taken
@@ -391,21 +401,20 @@ pub fn process_attacks(
 
                     // Apply damage to units
                     run.apply_unit_damage(protected_damage);
-                    run.total_damage_taken = run.total_damage_taken.saturating_add(protected_damage);
+                    run.total_damage_taken =
+                        run.total_damage_taken.saturating_add(protected_damage);
                 }
             } else {
                 // Regular enemy (non-boss) - single attack
-                let base_damage_taken = calculate_damage_taken(
-                    &run,
-                    enemy_damage,
-                    player_research_defense_bps,
-                );
+                let base_damage_taken =
+                    calculate_damage_taken(&run, enemy_damage, player_research_defense_bps);
                 // Apply Guardian survival bonus (+25% damage reduction)
                 let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);
 
                 // Apply one-shot immunity relic (min 1 unit survives per hit)
                 let protected_damage = if has_one_shot_immunity_relic(&run) {
-                    let total_hp = crate::helpers::dungeon::calculate_total_unit_hp(&run.remaining_units);
+                    let total_hp =
+                        crate::helpers::dungeon::calculate_total_unit_hp(&run.remaining_units);
                     damage_taken.min(total_hp.saturating_sub(1))
                 } else {
                     damage_taken

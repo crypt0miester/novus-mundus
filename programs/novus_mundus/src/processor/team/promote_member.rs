@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, require_extension, EXT_TEAM, NULL_PUBKEY},
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u8, read_u16, read_u64},
     emit,
+    error::GameError,
     events::MemberRankChanged,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Promote a team member to a higher rank
@@ -71,7 +69,7 @@ pub fn process(
     if &promoter.owner != promoter_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -86,7 +84,8 @@ pub fn process(
 
     // 5. Validate Promoter is in Team
 
-    if promoter.team_address() == NULL_PUBKEY || &promoter.team_address() != team_account.address() {
+    if promoter.team_address() == NULL_PUBKEY || &promoter.team_address() != team_account.address()
+    {
         return Err(GameError::NotTeamMember.into());
     }
 
@@ -97,7 +96,8 @@ pub fn process(
 
     // 6. Verify Promoter Slot and Get Rank
 
-    let (expected_promoter_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), promoter_slot_index);
+    let (expected_promoter_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), promoter_slot_index);
     if promoter_slot_account.address() != &expected_promoter_slot {
         return Err(GameError::InvalidPDA.into());
     }
@@ -124,7 +124,8 @@ pub fn process(
 
     // 8. Verify Target Slot
 
-    let (expected_target_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), target_slot_index);
+    let (expected_target_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), target_slot_index);
     if target_slot_account.address() != &expected_target_slot {
         return Err(GameError::InvalidPDA.into());
     }

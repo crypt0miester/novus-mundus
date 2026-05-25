@@ -1,6 +1,6 @@
-use crate::state::{PlayerAccount, EconomicConfig};
 use crate::error::GameError;
-use crate::logic::safe_math::{safe_mul, safe_add};
+use crate::logic::safe_math::{safe_add, safe_mul};
+use crate::state::{EconomicConfig, PlayerAccount};
 
 /// Calculate player's total networth (no u128!)
 ///
@@ -13,21 +13,42 @@ use crate::logic::safe_math::{safe_mul, safe_add};
 /// All calculations use u64 with checked arithmetic.
 ///
 /// Max networth analysis: ~10^13 (fits in u64 with 1M× headroom)
-pub fn calculate_networth(player: &PlayerAccount, economic_config: &EconomicConfig) -> Result<u64, GameError> {
+pub fn calculate_networth(
+    player: &PlayerAccount,
+    economic_config: &EconomicConfig,
+) -> Result<u64, GameError> {
     // Calculate unit values with checked u64 arithmetic (no u128!)
-    let defensive_1_value = safe_mul(player.defensive_unit_1, economic_config.defensive_unit_1_value)
-        .ok_or(GameError::MathOverflow)?;
-    let defensive_2_value = safe_mul(player.defensive_unit_2, economic_config.defensive_unit_2_value)
-        .ok_or(GameError::MathOverflow)?;
-    let defensive_3_value = safe_mul(player.defensive_unit_3, economic_config.defensive_unit_3_value)
-        .ok_or(GameError::MathOverflow)?;
+    let defensive_1_value = safe_mul(
+        player.defensive_unit_1,
+        economic_config.defensive_unit_1_value,
+    )
+    .ok_or(GameError::MathOverflow)?;
+    let defensive_2_value = safe_mul(
+        player.defensive_unit_2,
+        economic_config.defensive_unit_2_value,
+    )
+    .ok_or(GameError::MathOverflow)?;
+    let defensive_3_value = safe_mul(
+        player.defensive_unit_3,
+        economic_config.defensive_unit_3_value,
+    )
+    .ok_or(GameError::MathOverflow)?;
 
-    let operative_1_value = safe_mul(player.operative_unit_1, economic_config.operative_unit_1_value)
-        .ok_or(GameError::MathOverflow)?;
-    let operative_2_value = safe_mul(player.operative_unit_2, economic_config.operative_unit_2_value)
-        .ok_or(GameError::MathOverflow)?;
-    let operative_3_value = safe_mul(player.operative_unit_3, economic_config.operative_unit_3_value)
-        .ok_or(GameError::MathOverflow)?;
+    let operative_1_value = safe_mul(
+        player.operative_unit_1,
+        economic_config.operative_unit_1_value,
+    )
+    .ok_or(GameError::MathOverflow)?;
+    let operative_2_value = safe_mul(
+        player.operative_unit_2,
+        economic_config.operative_unit_2_value,
+    )
+    .ok_or(GameError::MathOverflow)?;
+    let operative_3_value = safe_mul(
+        player.operative_unit_3,
+        economic_config.operative_unit_3_value,
+    )
+    .ok_or(GameError::MathOverflow)?;
 
     // Weapon values
     let melee_weapons_value = safe_mul(player.melee_weapons, economic_config.melee_weapon_value)
@@ -40,10 +61,10 @@ pub fn calculate_networth(player: &PlayerAccount, economic_config: &EconomicConf
     // Equipment values
     let armor_value = safe_mul(player.armor_pieces, economic_config.armor_value)
         .ok_or(GameError::MathOverflow)?;
-    let produce_value = safe_mul(player.produce, economic_config.produce_value)
-        .ok_or(GameError::MathOverflow)?;
-    let vehicles_value = safe_mul(player.vehicles, economic_config.vehicle_value)
-        .ok_or(GameError::MathOverflow)?;
+    let produce_value =
+        safe_mul(player.produce, economic_config.produce_value).ok_or(GameError::MathOverflow)?;
+    let vehicles_value =
+        safe_mul(player.vehicles, economic_config.vehicle_value).ok_or(GameError::MathOverflow)?;
 
     // Sum all values using checked arithmetic
     let mut total = 0u64;

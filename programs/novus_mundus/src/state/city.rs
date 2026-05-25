@@ -1,9 +1,4 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::constants::CITY_SEED;
 use crate::logic::terrain::{self, Anchor, CityTerrain};
@@ -21,83 +16,82 @@ use crate::logic::terrain::{self, Anchor, CityTerrain};
 #[derive(Copy, Clone)]
 pub struct CityAccount {
     /// Account discriminator (AccountKey::City)
-    pub account_key: u8,                    // 1 byte
+    pub account_key: u8, // 1 byte
 
     /// Reference to the game engine (kingdom) this city belongs to
-    pub game_engine: Address,                // 32 bytes
+    pub game_engine: Address, // 32 bytes
 
     /// Unique city identifier within this kingdom (0-65535 cities possible)
-    pub city_id: u16,                       // 2 bytes
+    pub city_id: u16, // 2 bytes
 
     /// City name (UTF-8 encoded, padded with zeros)
     /// Names are theme-specific: "King's Landing" (Medieval), "Neo Tokyo" (Cyberpunk)
-    pub name: [u8; 32],                     // 32 bytes
+    pub name: [u8; 32], // 32 bytes
 
     /// Geographic center point (latitude in degrees)
     /// Range: -90.0 to 90.0
-    pub latitude: f64,                      // 8 bytes
+    pub latitude: f64, // 8 bytes
 
     /// Geographic center point (longitude in degrees)
     /// Range: -180.0 to 180.0
-    pub longitude: f64,                     // 8 bytes
+    pub longitude: f64, // 8 bytes
 
     /// City radius in kilometers for boundary validation
     /// Players claiming to be in this city must have coordinates within this radius
-    pub radius_km: f32,                     // 4 bytes
+    pub radius_km: f32, // 4 bytes
 
     /// Type of city (Capital, Resource, Combat, etc.)
     /// Affects available bonuses and modifiers
-    pub city_type: u8,                      // 1 byte
+    pub city_type: u8, // 1 byte
 
     /// Current number of players present in this city
     /// Incremented on arrival, decremented on departure
-    pub players_present: u32,               // 4 bytes
+    pub players_present: u32, // 4 bytes
 
     /// Total PvE attacks initiated in this city (all-time)
-    pub active_encounters: u64,            // 8 bytes
+    pub active_encounters: u64, // 8 bytes
 
     /// Total PvE encounters spawned in this city (all-time)
-    pub total_encounters_spawned: u64,      // 8 bytes
+    pub total_encounters_spawned: u64, // 8 bytes
 
     /// Unix timestamp when city was founded
-    pub founded_at: i64,                    // 8 bytes
+    pub founded_at: i64, // 8 bytes
 
     /// Encounter level range for this city
     /// Beginner cities: 1-20, Mid-level: 21-60, End-game: 61-100
-    pub min_encounter_level: u8,            // 1 byte
-    pub max_encounter_level: u8,            // 1 byte
+    pub min_encounter_level: u8, // 1 byte
+    pub max_encounter_level: u8, // 1 byte
 
     /// PDA bump seed
-    pub bump: u8,                           // 1 byte
+    pub bump: u8, // 1 byte
 
     /// Padding for alignment
-    pub _padding1: [u8; 1],                 // 1 byte
+    pub _padding1: [u8; 1], // 1 byte
 
     /// Arena PvP - current season ID for this city (incremented on create_season)
     /// Seasons 4+ behind this can be auto-finalized
-    pub arena_season_id: u32,               // 4 bytes
+    pub arena_season_id: u32, // 4 bytes
 
     // ─── Terrain System ──────────────────────────────────────────
     // Variable-length anchor data follows the fixed struct in account data.
     // Total account size = CityAccount::SIZE + anchor_count * ANCHOR_SIZE
-
     /// Deterministic seed for terrain noise
-    pub terrain_seed: u32,                  // 4 bytes
+    pub terrain_seed: u32, // 4 bytes
 
     /// Elevation at or below this value is water (impassable)
-    pub water_line: u8,                     // 1 byte
+    pub water_line: u8, // 1 byte
 
     /// Elevation at or above this value is mountain (impassable)
-    pub peak_line: u8,                      // 1 byte
+    pub peak_line: u8, // 1 byte
 
     /// Number of terrain anchors stored after the fixed struct
-    pub anchor_count: u16,                  // 2 bytes
+    pub anchor_count: u16, // 2 bytes
 
     /// Terrain data format version (currently 1)
-    pub terrain_version: u8,                // 1 byte
+    pub terrain_version: u8, // 1 byte
 
     /// Reserved for future terrain features
-    pub _terrain_reserved: [u8; 7],         // 7 bytes
+    pub _terrain_reserved: [u8; 7], // 7 bytes
 }
 
 /// Compile-time assertion: ensure SIZE matches actual struct layout
@@ -142,21 +136,24 @@ impl CityAccount {
 
     /// Create PDA from known bump (fast validation)
     /// Use this for validation when bump is already stored
-    pub fn create_pda(game_engine: &Address, city_id: u16, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        city_id: u16,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
             &[CITY_SEED, game_engine.as_ref(), &city_id_bytes, &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Validate city account PDA using stored bump (fast)
-    pub fn validate_pda(
-        account: &AccountView,
-        city_data: &CityAccount,
-    ) -> ProgramResult {
-        let expected_address = Self::create_pda(&city_data.game_engine, city_data.city_id, city_data.bump)?;
+    pub fn validate_pda(account: &AccountView, city_data: &CityAccount) -> ProgramResult {
+        let expected_address =
+            Self::create_pda(&city_data.game_engine, city_data.city_id, city_data.bump)?;
         if account.address() != &expected_address {
             return Err(ProgramError::InvalidSeeds);
         }
@@ -238,7 +235,13 @@ impl CityAccount {
         }
 
         let mut anchors_buf: [Anchor; MAX_ANCHORS] = [Anchor {
-            x: 0, y: 0, mass: 0, lift: 0, push_x: 0, push_y: 0, moisture: 0,
+            x: 0,
+            y: 0,
+            mass: 0,
+            lift: 0,
+            push_x: 0,
+            push_y: 0,
+            moisture: 0,
         }; MAX_ANCHORS];
         for i in 0..count {
             let off = Self::SIZE

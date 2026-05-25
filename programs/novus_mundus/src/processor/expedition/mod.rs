@@ -46,8 +46,8 @@
 //! | 3    | DeepSea  | 8h       | 60            | 15      |
 //! | 4    | Abyss    | 16h      | 100           | 20      |
 
+pub mod abort;
+pub mod claim;
+pub mod speedup;
 pub mod start;
 pub mod strike;
-pub mod claim;
-pub mod abort;
-pub mod speedup;

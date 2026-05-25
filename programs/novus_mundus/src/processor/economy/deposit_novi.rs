@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::DEPOSIT_FEE_BPS,
     emit,
     error::GameError,
     events::NoviDeposited,
-    state::UserAccount,
-    constants::DEPOSIT_FEE_BPS,
     logic::safe_math::apply_bp,
+    state::UserAccount,
     utils::read_u64,
     validation::{require_signer, require_writable},
 };
@@ -49,11 +47,7 @@ use crate::{
 ///
 /// # Instruction Data
 /// - amount: u64 (8 bytes) — gross NOVI to deposit (fee + credited)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
     crate::extract_accounts!(accounts, exact [
         user,
@@ -77,8 +71,16 @@ pub fn process(
     );
 
     // 3. Validate token account ownership.
-    validate_owner(source_token_account, owner.address(), GameError::DepositSourceNotWalletOwned)?;
-    validate_owner(reserved_token_account, user.address(), GameError::DepositReservedAtaMismatch)?;
+    validate_owner(
+        source_token_account,
+        owner.address(),
+        GameError::DepositSourceNotWalletOwned,
+    )?;
+    validate_owner(
+        reserved_token_account,
+        user.address(),
+        GameError::DepositReservedAtaMismatch,
+    )?;
 
     // 4. Parse Instruction Data
     if data.len() != 8 {
@@ -100,11 +102,8 @@ pub fn process(
         let clock = Clock::get()?;
         now = clock.unix_timestamp;
 
-        fee = apply_bp(amount, DEPOSIT_FEE_BPS as u64)
-            .ok_or(GameError::MathOverflow)?;
-        credited = amount
-            .checked_sub(fee)
-            .ok_or(GameError::MathOverflow)?;
+        fee = apply_bp(amount, DEPOSIT_FEE_BPS as u64).ok_or(GameError::MathOverflow)?;
+        credited = amount.checked_sub(fee).ok_or(GameError::MathOverflow)?;
         if credited == 0 {
             return Err(GameError::DepositAmountZero.into());
         }
@@ -112,13 +111,7 @@ pub fn process(
 
     // 6. Burn the fee (wallet → ∅). Wallet signs.
     if fee > 0 {
-        crate::helpers::burn_tokens(
-            source_token_account,
-            novi_mint,
-            owner,
-            fee,
-            &[],
-        )?;
+        crate::helpers::burn_tokens(source_token_account, novi_mint, owner, fee, &[])?;
     }
 
     // 7. Transfer the credited amount (wallet to reserved). Wallet signs.
@@ -133,11 +126,13 @@ pub fn process(
     // 8. Credit user state. Re-borrow after CPIs.
     let new_reserved;
     {
-        let mut user_data = UserAccount::load_checked_mut(user, owner.address(), program_id)?;
-        user_data.reserved_novi = user_data.reserved_novi
+        let user_data = UserAccount::load_checked_mut(user, owner.address(), program_id)?;
+        user_data.reserved_novi = user_data
+            .reserved_novi
             .checked_add(credited)
             .ok_or(GameError::MathOverflow)?;
-        user_data.total_reserved_earned = user_data.total_reserved_earned
+        user_data.total_reserved_earned = user_data
+            .total_reserved_earned
             .checked_add(credited)
             .ok_or(GameError::MathOverflow)?;
         new_reserved = user_data.reserved_novi;

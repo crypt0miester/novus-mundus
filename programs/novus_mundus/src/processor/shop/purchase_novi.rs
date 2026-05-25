@@ -1,22 +1,19 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::Transfer;
 use crate::{
-    error::GameError,
-    state::{GameEngine, PlayerAccount, UserAccount, ShopConfigAccount},
-    validation::{require_signer, require_writable, require_key_match, require_owner},
     emit,
+    error::GameError,
     events::shop::NoviPurchased,
-    helpers::{validate_token_account_owner, detect_oracle_type, read_pyth_price, verify_switchboard_quote, sb_feed_value, require_pyth_feed_configured, scale_ratio, OracleType},
+    helpers::{
+        detect_oracle_type, read_pyth_price, require_pyth_feed_configured, sb_feed_value,
+        scale_ratio, validate_token_account_owner, verify_switchboard_quote, OracleType,
+    },
     logic::safe_math::apply_bp_penalty,
+    state::{GameEngine, PlayerAccount, ShopConfigAccount, UserAccount},
     utils::{read_u64, read_u8, unlikely},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 use p_pyth::Price;
+use pinocchio::{error::ProgramError, sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::Transfer;
 
 /// Purchase NOVI tokens from the shop
 ///
@@ -56,17 +53,20 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, [
-        buyer,
-        user_account,
-        player_account,
-        game_engine_account,
-        treasury,
-        novi_mint,
-        reserved_token_account,
-        token_program,
-        system_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            buyer,
+            user_account,
+            player_account,
+            game_engine_account,
+            treasury,
+            novi_mint,
+            reserved_token_account,
+            token_program,
+            system_program,
+        ]
+    );
 
     // 2. Validate Accounts
     require_signer(buyer)?;
@@ -83,7 +83,10 @@ pub fn process(
     let max_lamports = read_u64(instruction_data, 1, "purchase_novi.max_lamports")?;
 
     if unlikely(package_index > 4) {
-        pinocchio_log::log!("purchase_novi: package_index out of range: {}", package_index);
+        pinocchio_log::log!(
+            "purchase_novi: package_index out of range: {}",
+            package_index
+        );
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -105,13 +108,18 @@ pub fn process(
     );
 
     // 5. Load Player Account (for subscription tier, kingdom-scoped)
-    let player = PlayerAccount::load_checked(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+    let player = PlayerAccount::load_checked(
+        player_account,
+        game_engine_account.address(),
+        buyer.address(),
+        program_id,
+    )?;
     let clock = pinocchio::sysvars::clock::Clock::get()?;
     let now = clock.unix_timestamp;
     let subscription_tier = player.get_effective_tier(now);
 
     // 6. Load and Update User Account
-    let mut user = UserAccount::load_checked_mut(user_account, buyer.address(), program_id)?;
+    let user = UserAccount::load_checked_mut(user_account, buyer.address(), program_id)?;
 
     // 7. Get current day
     let current_day = (now / 86400) as u32;
@@ -135,7 +143,8 @@ pub fn process(
 
     // 10. Get purchase amount from config
     let novi_config = &game_engine.novi_purchase_config;
-    let base_amount = novi_config.get_purchase_amount(package_index)
+    let base_amount = novi_config
+        .get_purchase_amount(package_index)
         .ok_or(GameError::InvalidParameter)?;
 
     // 11. Check daily cap
@@ -146,11 +155,8 @@ pub fn process(
     }
 
     // 12. Calculate bonuses
-    let total_bonus_bps = novi_config.calculate_total_bonus_bps(
-        package_index,
-        subscription_tier,
-        streak_day,
-    );
+    let total_bonus_bps =
+        novi_config.calculate_total_bonus_bps(package_index, subscription_tier, streak_day);
 
     let bonus_amount = (base_amount as u128)
         .checked_mul(total_bonus_bps as u128)
@@ -164,7 +170,7 @@ pub fn process(
     let cost_lamports = calculate_cost_lamports(
         base_amount,
         novi_config,
-        &accounts[9..],  // Optional oracle accounts
+        &accounts[9..], // Optional oracle accounts
         game_engine_account.address(),
         program_id,
         clock.slot,
@@ -184,14 +190,19 @@ pub fn process(
         from: buyer,
         to: treasury,
         lamports: cost_lamports,
-    }.invoke()?;
+    }
+    .invoke()?;
 
     // 17. Mint NOVI to reserved token account
     // Game engine is the mint authority
     let kingdom_id_bytes = game_engine.kingdom_id.to_le_bytes();
     let game_engine_bump = game_engine.bump;
     let bump_seed = [game_engine_bump];
-    let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+    let seeds = crate::seeds!(
+        crate::constants::GAME_ENGINE_SEED,
+        &kingdom_id_bytes,
+        &bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     crate::helpers::mint_tokens(
@@ -208,7 +219,8 @@ pub fn process(
     user.novi_purchased_today = new_total;
 
     // 19. Update user's reserved_novi balance
-    user.reserved_novi = user.reserved_novi
+    user.reserved_novi = user
+        .reserved_novi
         .checked_add(total_novi)
         .ok_or(GameError::MathOverflow)?;
 
@@ -337,8 +349,7 @@ fn try_oracle_price(
 
     // undercut means user pays LESS, so we reduce the price.
     let undercut_bps = novi_config.novi_market_undercut_bps;
-    apply_bp_penalty(price_lamports, undercut_bps)
-        .ok_or(GameError::MathOverflow.into())
+    apply_bp_penalty(price_lamports, undercut_bps).ok_or(GameError::MathOverflow.into())
 }
 
 fn get_pyth_prices(

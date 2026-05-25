@@ -1,23 +1,20 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, DungeonRun, DungeonStatus, GameEngine},
     constants::{DUNGEON_RUN_SEED, GAME_ENGINE_SEED},
+    emit,
+    error::GameError,
+    events::DungeonFled,
     helpers::{
         close_account,
-        mint_tokens,
-        validate_token_account_owner,
-        dungeon::{get_flee_penalty_bps, apply_reward_penalty},
+        dungeon::{apply_reward_penalty, get_flee_penalty_bps},
+        mint_tokens, validate_token_account_owner,
     },
-    validation::{require_signer, require_writable, require_key_match},
-    emit,
-    events::DungeonFled,
+    state::{DungeonRun, DungeonStatus, GameEngine, PlayerAccount},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Flee from a dungeon run early
@@ -43,25 +40,24 @@ use crate::{
 /// - [writable] novi_mint: NOVI mint
 /// - [] game_engine: GameEngine PDA (mint authority)
 /// - [] token_program: SPL Token program
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    _data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> ProgramResult {
     // 1. Parse accounts
-    crate::extract_accounts!(accounts, [
-        owner,
-        player_account,
-        dungeon_run_account,
-        hero_mint,
-        hero_collection,
-        system_program,
-        p_core_program,
-        player_novi_ata,
-        novi_mint,
-        game_engine,
-        token_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            player_account,
+            dungeon_run_account,
+            hero_mint,
+            hero_collection,
+            system_program,
+            p_core_program,
+            player_novi_ata,
+            novi_mint,
+            game_engine,
+            token_program,
+        ]
+    );
 
     // 2. Validate signer
     require_signer(owner)?;
@@ -81,7 +77,7 @@ pub fn process(
     validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Load player using load_checked_mut_by_key (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
@@ -96,8 +92,7 @@ pub fn process(
     }
 
     // Validate run is active (can flee from any active state)
-    let status = DungeonStatus::from_u8(run.status)
-        .ok_or(GameError::InvalidParameter)?;
+    let status = DungeonStatus::from_u8(run.status).ok_or(GameError::InvalidParameter)?;
 
     if status.is_ended() {
         return Err(GameError::DungeonAlreadyEnded.into());
@@ -129,8 +124,6 @@ pub fn process(
     }
 
     // Drop borrows before CPI
-    drop(run);
-    drop(player);
 
     // 7a. Mint NOVI to the player's ATA so the wallet balance tracks the
     //     locked_novi accounting bumped above. Without this CPI the two
@@ -141,18 +134,13 @@ pub fn process(
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
         let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
-        drop(game_engine_data);
 
         mint_tokens(novi_mint, player_novi_ata, game_engine, novi, &[ge_signer])?;
     }
 
     // 7. Transfer hero back from DungeonRun PDA to owner using MPL Core
     let run_bump_seed = [run_bump];
-    let run_seeds = crate::seeds!(
-        DUNGEON_RUN_SEED,
-        player_account.address(),
-        &run_bump_seed
-    );
+    let run_seeds = crate::seeds!(DUNGEON_RUN_SEED, player_account.address(), &run_bump_seed);
     let run_signer = pinocchio::cpi::Signer::from(&run_seeds);
 
     p_core::instructions::TransferV1 {
@@ -163,7 +151,8 @@ pub fn process(
         authority: dungeon_run_account,
         system_program,
         log_wrapper: p_core_program,
-    }.invoke_signed(&[run_signer])?;
+    }
+    .invoke_signed(&[run_signer])?;
 
     // 8. Close dungeon run account (refund rent to owner)
     close_account(dungeon_run_account, owner)?;

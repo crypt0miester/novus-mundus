@@ -2,19 +2,11 @@
 ///
 /// Provides building requirement validation and estate operations.
 /// Hard gates ensure players must build specific buildings to access features.
-
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-};
+use pinocchio::{error::ProgramError, AccountView, Address};
 
 use crate::{
     error::GameError,
-    state::{
-        EstateAccount, BuildingType, BuildingSlot,
-        PlayerAccount,
-    },
+    state::{BuildingSlot, BuildingType, EstateAccount, PlayerAccount},
 };
 
 // Building Requirement Validation
@@ -36,26 +28,28 @@ pub fn require_building<'a>(
 
     match building {
         None => Err(building_type_to_error(building_type).into()),
-        Some(b) if !b.is_active() => {
-            Err(GameError::BuildingNotActive.into())
-        }
-        Some(b) if b.level < min_level => {
-            Err(GameError::BuildingLevelInsufficient.into())
-        }
+        Some(b) if !b.is_active() => Err(GameError::BuildingNotActive.into()),
+        Some(b) if b.level < min_level => Err(GameError::BuildingLevelInsufficient.into()),
         Some(b) => Ok(b),
     }
 }
 
 /// Check if building exists (any level, must be active)
 pub fn has_building(estate: &EstateAccount, building_type: BuildingType) -> bool {
-    estate.find_building(building_type)
+    estate
+        .find_building(building_type)
         .map(|b| b.is_active())
         .unwrap_or(false)
 }
 
 /// Check if building meets minimum level
-pub fn has_building_at_level(estate: &EstateAccount, building_type: BuildingType, min_level: u8) -> bool {
-    estate.find_building(building_type)
+pub fn has_building_at_level(
+    estate: &EstateAccount,
+    building_type: BuildingType,
+    min_level: u8,
+) -> bool {
+    estate
+        .find_building(building_type)
         .map(|b| b.is_active() && b.level >= min_level)
         .unwrap_or(false)
 }
@@ -89,20 +83,29 @@ fn building_type_to_error(building_type: BuildingType) -> GameError {
 
 /// Require Mansion at minimum level
 #[inline]
-pub fn require_mansion(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_mansion(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Mansion, min_level)
 }
 
 /// Require Barracks at minimum level
 #[inline]
 #[allow(dead_code)]
-pub fn require_barracks(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_barracks(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Barracks, min_level)
 }
 
 /// Require Workshop at minimum level
 #[inline]
-pub fn require_workshop(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_workshop(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Workshop, min_level)
 }
 
@@ -126,25 +129,37 @@ pub fn require_forge(estate: &EstateAccount, min_level: u8) -> Result<&BuildingS
 
 /// Require Market at minimum level
 #[inline]
-pub fn require_market(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_market(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Market, min_level)
 }
 
 /// Require Academy at minimum level
 #[inline]
-pub fn require_academy(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_academy(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Academy, min_level)
 }
 
 /// Require MeditationChamber at minimum level
 #[inline]
-pub fn require_sanctuary(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_sanctuary(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::MeditationChamber, min_level)
 }
 
 /// Require Citadel at minimum level
 #[inline]
-pub fn require_citadel(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_citadel(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Citadel, min_level)
 }
 
@@ -164,7 +179,10 @@ pub fn require_mine(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSl
 /// Require DungeonEntry at minimum level (dungeon access)
 #[inline]
 #[allow(dead_code)]
-pub fn require_catacombs(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_catacombs(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::DungeonEntry, min_level)
 }
 
@@ -176,13 +194,19 @@ pub fn require_farm(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSl
 
 /// Require TransportBay at minimum level (travel gating)
 #[inline]
-pub fn require_stables(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_stables(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::TransportBay, min_level)
 }
 
 /// Require Infirmary at minimum level (unit recovery)
 #[inline]
-pub fn require_infirmary(estate: &EstateAccount, min_level: u8) -> Result<&BuildingSlot, ProgramError> {
+pub fn require_infirmary(
+    estate: &EstateAccount,
+    min_level: u8,
+) -> Result<&BuildingSlot, ProgramError> {
     require_building(estate, BuildingType::Infirmary, min_level)
 }
 
@@ -194,8 +218,12 @@ use crate::types::UnitType;
 /// Defensive units (0-2) → Barracks, Operative units (3-5) → Camp
 pub const fn required_building_for_unit(unit_type: UnitType) -> BuildingType {
     match unit_type {
-        UnitType::DefensiveUnit1 | UnitType::DefensiveUnit2 | UnitType::DefensiveUnit3 => BuildingType::Barracks,
-        UnitType::OperativeUnit1 | UnitType::OperativeUnit2 | UnitType::OperativeUnit3 => BuildingType::Camp,
+        UnitType::DefensiveUnit1 | UnitType::DefensiveUnit2 | UnitType::DefensiveUnit3 => {
+            BuildingType::Barracks
+        }
+        UnitType::OperativeUnit1 | UnitType::OperativeUnit2 | UnitType::OperativeUnit3 => {
+            BuildingType::Camp
+        }
     }
 }
 
@@ -217,7 +245,6 @@ pub const fn required_barracks_level_for_unit(unit_type: UnitType) -> u8 {
     required_level_for_unit(unit_type)
 }
 
-
 // Research Category Requirements (Academy levels)
 
 use crate::state::research::ResearchCategory;
@@ -230,7 +257,6 @@ pub const fn required_academy_level_for_research(category: ResearchCategory) -> 
         ResearchCategory::Growth => 3,
     }
 }
-
 
 // Hero Management Requirements (Sanctuary levels)
 
@@ -351,7 +377,11 @@ pub const fn sanctuary_meditation_max_hours(sanctuary_level: u8) -> u8 {
         return 0;
     }
     let hours = 24u16 + (sanctuary_level.saturating_sub(1) as u16) * 3;
-    if hours > 48 { 48 } else { hours as u8 }
+    if hours > 48 {
+        48
+    } else {
+        hours as u8
+    }
 }
 
 /// Maximum meditation duration in seconds
@@ -481,7 +511,7 @@ pub fn vault_novi_cap_bonus_bps(estate: &EstateAccount) -> u16 {
             return match vault.level {
                 0 => 0,
                 1..=4 => 0,
-                5..=9 => 5000,   // +50%
+                5..=9 => 5000,    // +50%
                 10..=14 => 10000, // +100%
                 15..=19 => 15000, // +150%
                 _ => 20000,       // +200%
@@ -609,7 +639,6 @@ pub fn dock_fishing_bonus_bps(estate: &EstateAccount) -> u16 {
     }
     0
 }
-
 
 // Mine Mining Bonus
 
@@ -910,8 +939,8 @@ pub fn load_estate_for_player_mut<'a>(
 
 /// Check if estate has an Infirmary building (any level)
 pub fn has_infirmary(estate: &EstateAccount) -> bool {
-    estate.find_building(BuildingType::Infirmary)
+    estate
+        .find_building(BuildingType::Infirmary)
         .map(|slot| slot.level > 0)
         .unwrap_or(false)
 }
-

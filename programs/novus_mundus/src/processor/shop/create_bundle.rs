@@ -1,17 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::BUNDLE_SEED,
     error::GameError,
-    state::{GameEngine, BundleAccount, BundleItem, BundleTier, ShopCategory, MAX_BUNDLE_ITEMS},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
+    state::{BundleAccount, BundleItem, BundleTier, GameEngine, ShopCategory, MAX_BUNDLE_ITEMS},
+    utils::{read_i64, read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a bundle (DAO only)
 ///
@@ -116,7 +111,8 @@ pub fn process(
 
     // 6. Derive and Verify Bundle PDA
 
-    let (expected_bundle, bump) = BundleAccount::derive_pda(game_engine_account.address(), bundle_id);
+    let (expected_bundle, bump) =
+        BundleAccount::derive_pda(game_engine_account.address(), bundle_id);
 
     if bundle_account.address() != &expected_bundle {
         return Err(GameError::InvalidPDA.into());
@@ -142,7 +138,8 @@ pub fn process(
         lamports,
         space: BundleAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Bundle Data
 

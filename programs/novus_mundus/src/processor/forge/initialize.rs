@@ -1,19 +1,14 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, rent::Rent},
-    ProgramResult,
+    sysvars::{rent::Rent, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{
-        PlayerAccount,
-        estate::CraftedEquipmentAccount,
-    },
     helpers::estate::{load_estate_for_player, require_forge},
-    validation::{require_signer, require_writable, require_owner},
+    state::{estate::CraftedEquipmentAccount, PlayerAccount},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Initialize CraftedEquipmentAccount for a player
@@ -79,11 +74,7 @@ pub fn process(
 
     // 8. Create the account
     let bump_seed = [bump];
-    let signer_seeds = crate::seeds!(
-        b"crafted_equipment",
-        owner.address(),
-        &bump_seed
-    );
+    let signer_seeds = crate::seeds!(b"crafted_equipment", owner.address(), &bump_seed);
     let signer = pinocchio::cpi::Signer::from(&signer_seeds);
 
     CreateAccount {
@@ -92,7 +83,8 @@ pub fn process(
         lamports,
         space: space as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 9. Initialize account data
     let mut crafted_data_ref = crafted_equipment.try_borrow_mut()?;

@@ -1,7 +1,7 @@
-use crate::state::{EconomicConfig, GameplayConfig, EncounterAccount};
 use crate::constants::GOLDEN_ROOT;
-use crate::logic::{get_time_of_day, get_time_multiplier, ActivityType};
 use crate::logic::safe_math::{apply_bp, chain_bp};
+use crate::logic::{get_time_multiplier, get_time_of_day, ActivityType};
+use crate::state::{EconomicConfig, EncounterAccount, GameplayConfig};
 
 /// Calculate oscillating multiplier for encounter rewards
 ///
@@ -53,11 +53,7 @@ pub fn calculate_oscillation_multiplier(
 ///
 /// # Returns
 /// Multiplier in basis points (10000 = 1.0x)
-pub fn calculate_level_multiplier(
-    level: u8,
-    scaling_exp: f32,
-    scaling_divisor: u32,
-) -> u64 {
+pub fn calculate_level_multiplier(level: u8, scaling_exp: f32, scaling_divisor: u32) -> u64 {
     if level == 0 || scaling_divisor == 0 {
         return 10000; // 1.0x fallback
     }
@@ -158,7 +154,6 @@ pub fn determine_reward_types(
     (award_produce, award_weapons, award_vehicles, award_novi)
 }
 
-
 /// Determine if fragments should be awarded (Deterministic System)
 ///
 /// Uses level + rarity thresholds with no randomness.
@@ -168,7 +163,12 @@ pub fn determine_reward_types(
 /// - Level >= 31 AND rarity >= 2 (Rare): Always fragments
 /// - Level >= 16 AND rarity >= 1 (Uncommon): Always fragments
 /// - Level >= 1 AND has_fragment_drops: Always fragments (research unlock)
-pub fn should_award_fragments(level: u8, rarity: u8, has_fragment_drops: bool, _drop_rate_bonus_bps: u16) -> bool {
+pub fn should_award_fragments(
+    level: u8,
+    rarity: u8,
+    has_fragment_drops: bool,
+    _drop_rate_bonus_bps: u16,
+) -> bool {
     // Must have unlocked fragment drops via research
     if !has_fragment_drops {
         return false;
@@ -201,7 +201,12 @@ pub fn should_award_fragments(level: u8, rarity: u8, has_fragment_drops: bool, _
 /// - Level >= 71 AND rarity >= 3 (Epic): Always gems
 /// - Level >= 41 AND rarity >= 2 (Rare): Always gems
 /// - Level >= 21 AND rarity >= 1 (Uncommon) AND has_gem_drops: Gems awarded
-pub fn should_award_gems(level: u8, rarity: u8, has_gem_drops: bool, _drop_rate_bonus_bps: u16) -> bool {
+pub fn should_award_gems(
+    level: u8,
+    rarity: u8,
+    has_gem_drops: bool,
+    _drop_rate_bonus_bps: u16,
+) -> bool {
     // Must have unlocked gem drops via research
     if !has_gem_drops {
         return false;
@@ -271,8 +276,7 @@ pub fn calculate_encounter_loot_pool(
 
     // 4. Combined multiplier using interleaved multiply/divide (no u128!)
     // Chain: osc × level / 10000 × time / 10000
-    let combined_mult = chain_bp(osc_mult as u64, &[level_mult, time_mult_bp])
-        .unwrap_or(10000); // Fallback to 1.0x
+    let combined_mult = chain_bp(osc_mult as u64, &[level_mult, time_mult_bp]).unwrap_or(10000); // Fallback to 1.0x
 
     // 4. Determine if Novi should be awarded
     let award_novi = should_award_novi(encounter.level, encounter.rarity);
@@ -345,15 +349,20 @@ pub fn calculate_encounter_loot_pool(
 /// # Time-of-Day Bonus
 /// Golden hours (Dawn/Dusk) and DeepNight give better fragment drops.
 /// Uses LootDrop ActivityType multiplier.
-pub fn calculate_fragment_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16, time_mult: f64) -> u64 {
+pub fn calculate_fragment_amount(
+    level: u8,
+    rarity: u8,
+    synchrony_bonus_bps: u16,
+    time_mult: f64,
+) -> u64 {
     // Base amounts using golden ratio family (deterministic)
     // These are close to Fibonacci sequence: 2, 3, 5, 8, 13
     let base = match rarity {
-        0 => 2,   // Common: ~3 × 1/φ
-        1 => 3,   // Uncommon: baseline
-        2 => 5,   // Rare: ~3 × √φ (Fibonacci!)
-        3 => 8,   // Epic: ~3 × φ² (Fibonacci!)
-        4 => 13,  // Legendary: ~3 × φ³ (Fibonacci!)
+        0 => 2,  // Common: ~3 × 1/φ
+        1 => 3,  // Uncommon: baseline
+        2 => 5,  // Rare: ~3 × √φ (Fibonacci!)
+        3 => 8,  // Epic: ~3 × φ² (Fibonacci!)
+        4 => 13, // Legendary: ~3 × φ³ (Fibonacci!)
         _ => 2,
     };
 
@@ -372,8 +381,7 @@ pub fn calculate_fragment_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16
     let time_mult_bp = (time_mult * 10000.0) as u64;
 
     // Calculate final amount using interleaved multiply/divide (no u128!)
-    chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp])
-        .unwrap_or(base as u64)
+    chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp]).unwrap_or(base as u64)
 }
 
 /// Calculate gem amount for loot (Deterministic System)
@@ -393,14 +401,19 @@ pub fn calculate_fragment_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16
 /// # Time-of-Day Bonus
 /// Golden hours (Dawn/Dusk) and DeepNight give better gem drops.
 /// Uses LootDrop ActivityType multiplier.
-pub fn calculate_gem_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16, time_mult: f64) -> u64 {
+pub fn calculate_gem_amount(
+    level: u8,
+    rarity: u8,
+    synchrony_bonus_bps: u16,
+    time_mult: f64,
+) -> u64 {
     // Base amounts using Fibonacci sequence (deterministic)
     let base = match rarity {
-        0 => 1,   // Common: Fibonacci 1
-        1 => 2,   // Uncommon: Fibonacci 2
-        2 => 3,   // Rare: Fibonacci 3
-        3 => 5,   // Epic: Fibonacci 5
-        4 => 8,   // Legendary: Fibonacci 8
+        0 => 1, // Common: Fibonacci 1
+        1 => 2, // Uncommon: Fibonacci 2
+        2 => 3, // Rare: Fibonacci 3
+        3 => 5, // Epic: Fibonacci 5
+        4 => 8, // Legendary: Fibonacci 8
         _ => 1,
     };
 
@@ -419,8 +432,7 @@ pub fn calculate_gem_amount(level: u8, rarity: u8, synchrony_bonus_bps: u16, tim
     let time_mult_bp = (time_mult * 10000.0) as u64;
 
     // Calculate final amount using interleaved multiply/divide (no u128!)
-    chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp])
-        .unwrap_or(base as u64)
+    chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp]).unwrap_or(base as u64)
 }
 
 #[inline]

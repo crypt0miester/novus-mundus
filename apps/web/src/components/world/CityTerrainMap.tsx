@@ -1,10 +1,7 @@
 "use client";
 
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import bs58 from "bs58";
 import {
-  LOCATION_ACCOUNT_SIZE,
-  PROGRAM_ID as NOVUS_PROGRAM_ID,
   cityTerrain,
   radiusToGridUnits,
   toGrid,
@@ -13,28 +10,26 @@ import {
   terrainElevation,
   terrainMoisture,
   elevationToColor,
-  parseLocation,
   OCCUPANT_PLAYER,
   OCCUPANT_ENCOUNTER,
   type CityAccount,
   type CityTerrain,
-  AccountKey,
 } from "novus-mundus-sdk";
-import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useCityOccupied } from "@/lib/hooks/useCityOccupied";
 import styles from "./CityTerrainMap.module.css";
-
-// LocationAccount memcmp offsets — mirrors deserializeLocation in
-// sdks/novus-mundus-ts/src/state/location.ts. Don't shift these without
-// updating that layout in lockstep.
-const LOC_OFFSET_GAME_ENGINE = 1;
-const LOC_OFFSET_CITY_ID = 44;
 
 // 0.0001° ≈ 11 m at the equator — used for the "X m from centre" readouts.
 const METERS_PER_GRID_UNIT = 11;
 
-// Lower bound for the canvas's logical pixel size.
-const MIN_LOGICAL_SIZE = 320;
-const REFRESH_INTERVAL_MS = 8000;
+/* Lower bound for the canvas's logical pixel size — purely defensive
+ * against zero/degenerate measurements. Do NOT raise this above what the
+ * smallest real container can reach: the canvas buffer is dimensioned in
+ * device px from this number, but the CSS still shows the canvas at the
+ * actual container size. If buffer > display in either axis, the browser
+ * stretch-fits and the grid renders as rectangles instead of squares.
+ * The value below comfortably accommodates a single mobile pixel without
+ * forcing a synthetic floor on any realistic layout. */
+const MIN_LOGICAL_SIZE = 1;
 
 // Zoom bounds. With viewport-based rendering each zoom level re-renders the
 // terrain crisply, so we can push the max much higher than CSS-scale would
@@ -44,19 +39,17 @@ const MIN_VIEW_SCALE = 1;
 const MAX_VIEW_SCALE = 200;
 const PAN_THRESHOLD_PX = 4;
 
-// At this many CSS pixels per grid cell, the proximity grid overlay (faint
-// graph-paper lines + tile-rendered occupants) turns on. Anything tighter
-// looks like moiré — especially on Retina where a 1-device-px line is only
-// 0.5 CSS px. Threshold is in CSS px so it stays visually consistent across
-// DPRs.
-const GRID_OVERLAY_MIN_CSS_PX_PER_CELL = 8;
-
-interface OccupiedCell {
-  gridLat: number;
-  gridLong: number;
-  occupantType: number;
-  occupant: string; // base58 pubkey of the player/encounter PDA
-}
+/* At this many CSS pixels per grid cell, the proximity grid overlay (faint
+ * graph-paper lines + tile-rendered occupants) turns on. Anything tighter
+ * starts to look like moiré — especially on Retina where a 1-device-px line
+ * is only 0.5 CSS px. Threshold is in CSS px so it stays visually consistent
+ * across DPRs.
+ *
+ * Tuned to 5 so the grid is reachable inside the 200× zoom ceiling on small
+ * mobile viewports (~280px logicalMin) too — at 5 CSS px / cell, a 1-device-
+ * px line takes 10–15% of the cell width on common DPRs, still clearly
+ * inked but not yet smudgy. Higher values (8) excluded mobile entirely. */
+const GRID_OVERLAY_MIN_CSS_PX_PER_CELL = 5;
 
 export interface CityTerrainEntity {
   pubkey: string; // base58 pubkey of the LocationAccount's occupant
@@ -123,35 +116,51 @@ interface Props {
  *  - CANVAS PIXEL (px, py): integer 0..sizeDev in each axis. py is flipped so
  *    +py = south on screen.
  *
- * The pan clamp keeps the viewport centre inside a disc of radius
- * `radiusGridUnits × (1 − 1/scale)` so the visible circle is always covered
- * by valid terrain (no parchment bleeding through the canvas's transparent
- * outside-disc region).
+ * Disc handling — the playable area is a disc of radius `cityRadius` grid
+ * units, but the renderer paints the whole square so the canvas reads as a
+ * rectangular map page rather than a circular medallion. Pixels INSIDE the
+ * disc are opaque; pixels in a thin band PAST the edge fade linearly to fully
+ * transparent so the inked terrain feathers into the surrounding parchment;
+ * pixels well outside that band are skipped (alpha 0, parchment shows through).
  */
 function renderTerrainViewport(
   terrain: CityTerrain,
-  sizeDev: number,
+  sizeDevW: number,
+  sizeDevH: number,
   panOx: number,
   panOy: number,
   viewportRadius: number,
   cityRadius: number,
 ): Uint8ClampedArray {
-  const pixels = new Uint8ClampedArray(sizeDev * sizeDev * 4);
-  const center = sizeDev / 2;
-  const gridPerPx = viewportRadius / center;
+  const pixels = new Uint8ClampedArray(sizeDevW * sizeDevH * 4);
+  const centerX = sizeDevW / 2;
+  const centerY = sizeDevH / 2;
+  /* Isotropic scale anchored to the shorter dim — disc stays round, longer
+   * dim shows extra terrain past the disc boundary (feathered to parchment). */
+  const minCenter = Math.min(centerX, centerY);
+  const gridPerPx = viewportRadius / minCenter;
   const r2 = cityRadius * cityRadius;
+  /* Width (in grid units) of the soft alpha ramp past the disc edge. Tuned
+   * by eye: too narrow and the boundary looks like a hard circle again; too
+   * wide and the playable area becomes ambiguous. ~8% of radius reads as an
+   * inked, feathered shoreline. */
+  const fadeBand = Math.max(1, cityRadius * 0.08);
+  const outerR = cityRadius + fadeBand;
+  const outerR2 = outerR * outerR;
 
-  for (let py = 0; py < sizeDev; py++) {
-    for (let px = 0; px < sizeDev; px++) {
-      const dpx = px - center;
-      const dpy = py - center;
-      // Flip y so +oy is north.
+  for (let py = 0; py < sizeDevH; py++) {
+    for (let px = 0; px < sizeDevW; px++) {
+      const dpx = px - centerX;
+      const dpy = py - centerY;
+      /* Flip y so +oy is north. */
       const ox = Math.round(dpx * gridPerPx + panOx);
       const oy = Math.round(-dpy * gridPerPx + panOy);
-      const i = (py * sizeDev + px) * 4;
+      const i = (py * sizeDevW + px) * 4;
 
-      // Outside the city's playable disc → transparent.
-      if (ox * ox + oy * oy > r2) {
+      const dist2 = ox * ox + oy * oy;
+      /* Well past the feather band → leave fully transparent and skip the
+       * (cheap-but-not-free) terrain sampling. */
+      if (dist2 > outerR2) {
         pixels[i + 3] = 0;
         continue;
       }
@@ -161,7 +170,12 @@ function renderTerrainViewport(
       pixels[i] = r;
       pixels[i + 1] = g;
       pixels[i + 2] = b;
-      pixels[i + 3] = 255;
+      if (dist2 <= r2) {
+        pixels[i + 3] = 255;
+      } else {
+        const dist = Math.sqrt(dist2);
+        pixels[i + 3] = Math.round(255 * (1 - (dist - cityRadius) / fadeBand));
+      }
     }
   }
   return pixels;
@@ -176,7 +190,6 @@ export function CityTerrainMap({
   travel,
   otherWalks,
 }: Props) {
-  const client = useNovusMundusClient();
   const wrapRef = useRef<HTMLDivElement | null>(null);
   const terrainCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlayCanvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -189,16 +202,24 @@ export function CityTerrainMap({
   );
   const terrain = useMemo(() => cityTerrain(cityAccount), [cityAccount]);
 
-  // ── Canvas size tracking ────────────────────────────────────────────────
-  const [logicalSize, setLogicalSize] = useState(MIN_LOGICAL_SIZE);
+  /* Canvas size tracking — track width and height separately so the canvas
+   * can be a rectangle that fills the parchment sheet. The renderer keeps
+   * `gridPerPx` isotropic against the SHORTER dim, so the disc stays round
+   * even on a wide canvas; the extra space on the long axis just shows the
+   * surrounding terrain feathered into parchment (or parchment past the
+   * feather band). */
+  const [size, setSize] = useState({ w: MIN_LOGICAL_SIZE, h: MIN_LOGICAL_SIZE });
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
     let timeoutId: ReturnType<typeof setTimeout> | null = null;
     const measure = () => {
       const rect = el.getBoundingClientRect();
-      const next = Math.max(MIN_LOGICAL_SIZE, Math.round(Math.min(rect.width, rect.height)));
-      setLogicalSize((prev) => (Math.abs(prev - next) > 4 ? next : prev));
+      const w = Math.max(MIN_LOGICAL_SIZE, Math.round(rect.width));
+      const h = Math.max(MIN_LOGICAL_SIZE, Math.round(rect.height));
+      setSize((prev) =>
+        Math.abs(prev.w - w) > 4 || Math.abs(prev.h - h) > 4 ? { w, h } : prev,
+      );
     };
     const scheduleMeasure = () => {
       if (timeoutId !== null) clearTimeout(timeoutId);
@@ -221,9 +242,21 @@ export function CityTerrainMap({
   // transparent corners exposed at the wrap edge. We now re-render the
   // viewport on every drag move (rAF-batched), so no CSS preview is needed.)
 
+  /* Mirror `view` into a ref so the animation helper can read the latest
+   * value synchronously (without waiting for the render cycle). Used as the
+   * start state for tween captures and as a cheap "current view" reader for
+   * one-shot interactions like double-click. */
+  const viewRef = useRef(view);
+  useEffect(() => {
+    viewRef.current = view;
+  }, [view]);
+
   const viewportRadius = radiusGridUnits / view.scale;
-  // Grid units per CSS pixel at the current view (smaller = more zoomed in).
-  const gridPerLogicalPx = (viewportRadius * 2) / logicalSize;
+  /* Grid units per CSS pixel — isotropic, anchored to the SHORTER dim so the
+   * disc fills the canvas's smaller axis and the longer axis shows extra
+   * world past the disc edge (feathered to parchment). Smaller = zoomed in. */
+  const logicalMin = Math.min(size.w, size.h);
+  const gridPerLogicalPx = (viewportRadius * 2) / logicalMin;
 
   // Clamp the viewport CENTRE so the whole visible circle is covered by the
   // city's disc — sqrt(panOx² + panOy²) + viewportRadius ≤ cityRadius.
@@ -240,146 +273,145 @@ export function CityTerrainMap({
     return { panOx: panOx * f, panOy: panOy * f };
   };
 
-  const resetView = () => setView({ scale: 1, panOx: 0, panOy: 0 });
+  /* Animation infrastructure — `animateView` tweens (scale, panOx, panOy)
+   * over a duration with a cubic ease-out, firing setView per rAF. Wheel
+   * and pinch zooms stay instant (their per-event delta is small enough to
+   * feel smooth on its own); the discrete gestures — double-click and
+   * reset — go through this so a single big delta doesn't snap the view.
+   * Any in-flight tween is cancelable so a wheel/drag mid-animation wins. */
+  const animRef = useRef<number | null>(null);
+  const cancelAnim = () => {
+    if (animRef.current !== null) {
+      cancelAnimationFrame(animRef.current);
+      animRef.current = null;
+    }
+  };
+  useEffect(() => {
+    return () => cancelAnim();
+  }, []);
+
+  const animateView = (
+    target: { scale: number; panOx: number; panOy: number },
+    durationMs = 220,
+  ) => {
+    cancelAnim();
+    const start = { ...viewRef.current };
+    const t0 = performance.now();
+    const step = (now: number) => {
+      const t = Math.min(1, (now - t0) / durationMs);
+      /* Cubic ease-out — fast departure, gentle settle. Matches the feel
+       * of Google/Apple Maps' zoom snap. */
+      const e = 1 - Math.pow(1 - t, 3);
+      setView({
+        scale: start.scale + (target.scale - start.scale) * e,
+        panOx: start.panOx + (target.panOx - start.panOx) * e,
+        panOy: start.panOy + (target.panOy - start.panOy) * e,
+      });
+      if (t < 1) {
+        animRef.current = requestAnimationFrame(step);
+      } else {
+        animRef.current = null;
+      }
+    };
+    animRef.current = requestAnimationFrame(step);
+  };
+
+  /* Compute the target view for a zoom anchored at a client point — pulled
+   * out of zoomAt so both the instant path (wheel) and the animated path
+   * (double-click) can share the math. Returns null if the wrap element is
+   * not mounted yet. */
+  const computeZoomedView = (
+    clientX: number,
+    clientY: number,
+    factor: number,
+    base: { scale: number; panOx: number; panOy: number },
+  ): { scale: number; panOx: number; panOy: number } | null => {
+    const el = wrapRef.current;
+    if (!el) return null;
+    const r = el.getBoundingClientRect();
+    const wx = clientX - r.left;
+    const wy = clientY - r.top;
+    const dxFromCenter = (wx - r.width / 2) / r.width;
+    const dyFromCenter = (wy - r.height / 2) / r.height;
+    const newScale = Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, base.scale * factor));
+    const prevViewportRadius = radiusGridUnits / base.scale;
+    const cursorOx = base.panOx + dxFromCenter * prevViewportRadius * 2;
+    const cursorOy = base.panOy - dyFromCenter * prevViewportRadius * 2;
+    const newViewportRadius = radiusGridUnits / newScale;
+    const nextPan = clampPan(
+      cursorOx - dxFromCenter * newViewportRadius * 2,
+      cursorOy + dyFromCenter * newViewportRadius * 2,
+      newScale,
+    );
+    return { scale: newScale, panOx: nextPan.panOx, panOy: nextPan.panOy };
+  };
+
+  const resetView = () => animateView({ scale: 1, panOx: 0, panOy: 0 });
 
   // ── Terrain layer (re-renders on view change) ───────────────────────────
   useEffect(() => {
     const canvas = terrainCanvasRef.current;
     if (!canvas) return;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const sizeDev = Math.round(logicalSize * dpr);
-    canvas.width = sizeDev;
-    canvas.height = sizeDev;
+    const sizeDevW = Math.round(size.w * dpr);
+    const sizeDevH = Math.round(size.h * dpr);
+    canvas.width = sizeDevW;
+    canvas.height = sizeDevH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const pixels = renderTerrainViewport(
       terrain,
-      sizeDev,
+      sizeDevW,
+      sizeDevH,
       view.panOx,
       view.panOy,
       viewportRadius,
       radiusGridUnits,
     );
-    const img = ctx.createImageData(sizeDev, sizeDev);
+    const img = ctx.createImageData(sizeDevW, sizeDevH);
     img.data.set(pixels);
     ctx.putImageData(img, 0, 0);
-  }, [terrain, radiusGridUnits, logicalSize, view.scale, view.panOx, view.panOy, viewportRadius]);
+  }, [terrain, radiusGridUnits, size.w, size.h, view.scale, view.panOx, view.panOy, viewportRadius]);
 
-  // ── Occupancy fetch ─────────────────────────────────────────────────────
-  const [occupied, setOccupied] = useState<OccupiedCell[]>([]);
-  const [occupancyLoaded, setOccupancyLoaded] = useState(false);
-  const [occupancyError, setOccupancyError] = useState<string | null>(null);
+  /* Occupancy: zustand-backed (lib/store/subscriptions.ts streams every
+   * LocationAccount over WS). Hook seeds the store on cityId change. */
+  const {
+    data: occupied,
+    isLoading: occupancyLoading,
+    error: occupancyError,
+  } = useCityOccupied(cityAccount.cityId);
 
-  useEffect(() => {
-    let cancelled = false;
-    let interval: ReturnType<typeof setInterval> | null = null;
-    const ge = client.gameEngine;
-    const cityIdBytes = Buffer.alloc(2);
-    cityIdBytes.writeUInt16LE(cityAccount.cityId, 0);
-    const cityIdB58 = bs58.encode(cityIdBytes);
+  /* Coordinate helpers — all isotropic against the shorter canvas dim so the
+   * disc geometry stays round regardless of the canvas aspect ratio. */
 
-    setOccupancyLoaded(false);
-    setOccupancyError(null);
-
-    const fetchOccupied = async () => {
-      try {
-        const keyByte = bs58.encode(Buffer.from([AccountKey.Location]));
-        const accounts = await client.connection.getProgramAccounts(NOVUS_PROGRAM_ID, {
-          filters: [
-            { dataSize: LOCATION_ACCOUNT_SIZE },
-            { memcmp: { offset: 0, bytes: keyByte } },
-            { memcmp: { offset: LOC_OFFSET_GAME_ENGINE, bytes: ge.toBase58() } },
-            { memcmp: { offset: LOC_OFFSET_CITY_ID, bytes: cityIdB58 } },
-          ],
-        });
-        if (cancelled) return;
-
-        const cells: OccupiedCell[] = [];
-        for (const { account } of accounts) {
-          const loc = parseLocation(account);
-          if (!loc || loc.occupantType === 0) continue;
-          cells.push({
-            gridLat: loc.gridLat,
-            gridLong: loc.gridLong,
-            occupantType: loc.occupantType,
-            occupant: loc.occupant.toBase58(),
-          });
-        }
-        setOccupied(cells);
-        setOccupancyLoaded(true);
-        setOccupancyError(null);
-      } catch (e) {
-        if (cancelled) return;
-        const msg = e instanceof Error ? e.message : "fetch failed";
-        setOccupancyError(msg);
-        setOccupancyLoaded(true);
-        // eslint-disable-next-line no-console
-        console.warn("[CityTerrainMap] occupancy fetch failed:", e);
-      }
-    };
-
-    const startInterval = () => {
-      if (interval !== null) return;
-      interval = setInterval(fetchOccupied, REFRESH_INTERVAL_MS);
-    };
-    const stopInterval = () => {
-      if (interval !== null) {
-        clearInterval(interval);
-        interval = null;
-      }
-    };
-    const onVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetchOccupied();
-        startInterval();
-      } else {
-        stopInterval();
-      }
-    };
-
-    fetchOccupied();
-    if (typeof document === "undefined" || document.visibilityState === "visible") {
-      startInterval();
-    }
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibility);
-    }
-    return () => {
-      cancelled = true;
-      stopInterval();
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibility);
-      }
-    };
-  }, [cityAccount.cityId, client]);
-
-  // ── Coordinate helpers ──────────────────────────────────────────────────
-
-  // Canvas px (CSS, 0..logicalSize) → grid offset (relative to city centre).
+  /* Canvas px (CSS, 0..size.w/size.h) → grid offset (relative to city centre). */
   const pxToGrid = (px: number, py: number) => {
-    const center = logicalSize / 2;
-    const ox = Math.round((px - center) * gridPerLogicalPx + view.panOx);
-    const oy = Math.round(-(py - center) * gridPerLogicalPx + view.panOy);
+    const centerX = size.w / 2;
+    const centerY = size.h / 2;
+    const ox = Math.round((px - centerX) * gridPerLogicalPx + view.panOx);
+    const oy = Math.round(-(py - centerY) * gridPerLogicalPx + view.panOy);
     return { ox, oy };
   };
 
-  // Grid offset (relative to city centre) → device px on the canvas.
+  /* Grid offset (relative to city centre) → device px on the canvas. */
   const gridToDevPx = (ox: number, oy: number, dpr: number) => {
-    const sizeDev = Math.round(logicalSize * dpr);
-    const center = sizeDev / 2;
-    const gridPerDevPx = (viewportRadius * 2) / sizeDev;
+    const sizeDevW = Math.round(size.w * dpr);
+    const sizeDevH = Math.round(size.h * dpr);
+    const centerX = sizeDevW / 2;
+    const centerY = sizeDevH / 2;
+    const gridPerDevPx = viewportRadius / Math.min(centerX, centerY);
     return {
-      px: (ox - view.panOx) / gridPerDevPx + center,
-      py: -(oy - view.panOy) / gridPerDevPx + center,
+      px: (ox - view.panOx) / gridPerDevPx + centerX,
+      py: -(oy - view.panOy) / gridPerDevPx + centerY,
     };
   };
 
-  // Client coord → canvas px (CSS units). The canvas is always in sync with
-  // `view` (no CSS preview), so this is a straight rect-to-canvas mapping.
+  /* Client coord → canvas px (CSS units). The canvas is always in sync with
+   * `view` (no CSS preview), so this is a straight rect-to-canvas mapping. */
   const clientToCanvasPx = (clientX: number, clientY: number, wrap: DOMRect) => {
     return {
-      px: ((clientX - wrap.left) / wrap.width) * logicalSize,
-      py: ((clientY - wrap.top) / wrap.height) * logicalSize,
+      px: ((clientX - wrap.left) / wrap.width) * size.w,
+      py: ((clientY - wrap.top) / wrap.height) * size.h,
     };
   };
 
@@ -388,27 +420,35 @@ export function CityTerrainMap({
     const canvas = overlayCanvasRef.current;
     if (!canvas) return;
     const dpr = Math.max(1, window.devicePixelRatio || 1);
-    const sizeDev = Math.round(logicalSize * dpr);
-    canvas.width = sizeDev;
-    canvas.height = sizeDev;
+    const sizeDevW = Math.round(size.w * dpr);
+    const sizeDevH = Math.round(size.h * dpr);
+    const sizeDevMin = Math.min(sizeDevW, sizeDevH);
+    canvas.width = sizeDevW;
+    canvas.height = sizeDevH;
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
-    ctx.clearRect(0, 0, sizeDev, sizeDev);
+    ctx.clearRect(0, 0, sizeDevW, sizeDevH);
 
     // CSS px per grid cell drives the visibility threshold; device px drives
     // the actual draw position. Computing both up front:
     const cssPxPerCell = 1 / gridPerLogicalPx;
     const pxPerCell = cssPxPerCell * dpr; // device px per 1 grid cell
-    const center = sizeDev / 2;
 
-    // ── Outer disc ring (only visible when the city edge is within view). ─
+    /* Outer disc ring — drawn as a faint dashed line so the boundary reads
+     * as an inked shoreline on a map page, not a precise mathematical circle.
+     * The terrain alpha already feathers across the edge in the terrain layer;
+     * this ring just gives the player a precise "where the chain says no" cue
+     * without screaming geometry. Only visible when the edge is in view. */
     const cityCenterPx = gridToDevPx(0, 0, dpr);
-    const cityRadiusDevPx = radiusGridUnits / ((viewportRadius * 2) / sizeDev);
-    ctx.strokeStyle = "rgba(46, 31, 16, 0.55)";
-    ctx.lineWidth = 1 * dpr;
+    const cityRadiusDevPx = (radiusGridUnits / viewportRadius) * (sizeDevMin / 2);
+    ctx.save();
+    ctx.strokeStyle = "rgba(46, 31, 16, 0.35)";
+    ctx.lineWidth = 0.75 * dpr;
+    ctx.setLineDash([3 * dpr, 3 * dpr]);
     ctx.beginPath();
     ctx.arc(cityCenterPx.px, cityCenterPx.py, cityRadiusDevPx, 0, Math.PI * 2);
     ctx.stroke();
+    ctx.restore();
 
     // ── Proximity grid (graph paper) ──────────────────────────────────────
     // Lines drawn with `lineWidth = 1` device px and positions rounded to
@@ -421,27 +461,37 @@ export function CityTerrainMap({
         1,
         2 ** Math.max(0, Math.ceil(Math.log2(GRID_OVERLAY_MIN_CSS_PX_PER_CELL / cssPxPerCell))),
       );
-      const halfGrid = viewportRadius;
-      const minOx = Math.floor(view.panOx - halfGrid) - stride;
-      const maxOx = Math.ceil(view.panOx + halfGrid) + stride;
-      const minOy = Math.floor(view.panOy - halfGrid) - stride;
-      const maxOy = Math.ceil(view.panOy + halfGrid) + stride;
+      /* Grid-line range is computed per-axis — the canvas may be wider than
+       * it is tall (or vice versa), so the visible grid extent is the
+       * viewport radius scaled by the axis's device-pixel ratio against the
+       * shorter dim. Without this, the wide-axis ends of the canvas would
+       * show no grid lines. */
+      const halfGridX = (sizeDevW / sizeDevMin) * viewportRadius;
+      const halfGridY = (sizeDevH / sizeDevMin) * viewportRadius;
+      const minOx = Math.floor(view.panOx - halfGridX) - stride;
+      const maxOx = Math.ceil(view.panOx + halfGridX) + stride;
+      const minOy = Math.floor(view.panOy - halfGridY) - stride;
+      const maxOy = Math.ceil(view.panOy + halfGridY) + stride;
 
       ctx.strokeStyle = "rgba(46, 31, 16, 0.22)";
       ctx.lineWidth = 1;
       ctx.beginPath();
       const startOx = Math.ceil(minOx / stride) * stride;
       const startOy = Math.ceil(minOy / stride) * stride;
+      /* Grid lines are drawn at HALF-INTEGER grid coords so they bound cells
+       * instead of bisecting them — the chess-board model players expect.
+       * A line at (ox − 0.5) sits between cells (ox − 1) and (ox), so the
+       * selection square + occupant tiles (which fill the cell centred on
+       * its integer coord) align cleanly with the grid. */
       for (let ox = startOx; ox <= maxOx; ox += stride) {
-        // Round to a half-pixel offset for a crisp 1-device-px line.
-        const x = Math.round(gridToDevPx(ox, 0, dpr).px) + 0.5;
+        const x = Math.round(gridToDevPx(ox - 0.5, 0, dpr).px) + 0.5;
         ctx.moveTo(x, 0);
-        ctx.lineTo(x, sizeDev);
+        ctx.lineTo(x, sizeDevH);
       }
       for (let oy = startOy; oy <= maxOy; oy += stride) {
-        const y = Math.round(gridToDevPx(0, oy, dpr).py) + 0.5;
+        const y = Math.round(gridToDevPx(0, oy - 0.5, dpr).py) + 0.5;
         ctx.moveTo(0, y);
-        ctx.lineTo(sizeDev, y);
+        ctx.lineTo(sizeDevW, y);
       }
       ctx.stroke();
     }
@@ -530,28 +580,60 @@ export function CityTerrainMap({
       ctx.stroke();
     }
 
-    // ── Centre marker ─────────────────────────────────────────────────────
+    /* Centre marker — antique cartographer's town glyph: an 8-rayed star
+     * (4 cardinal + 4 diagonal rays) around a small inked nucleus with a
+     * cream halo. Replaces the previous solid black dot, which read as a
+     * modern UI pin against the parchment. */
     {
       const c = gridToDevPx(0, 0, dpr);
-      ctx.fillStyle = "rgba(46, 31, 16, 0.95)";
-      ctx.strokeStyle = "rgba(255, 250, 235, 0.95)";
-      ctx.lineWidth = 1.5 * dpr;
-      const r = Math.max(5 * dpr, Math.min(pxPerCell * 0.6, 14 * dpr));
+      const r = Math.max(6 * dpr, Math.min(pxPerCell * 0.55, 14 * dpr));
+      ctx.save();
+      ctx.translate(c.px, c.py);
+      /* Star rays — cardinal arms first (longer), then diagonal (shorter). */
+      ctx.strokeStyle = "rgba(70, 50, 28, 0.85)";
+      ctx.lineWidth = Math.max(1, 1.25 * dpr);
+      ctx.lineCap = "round";
       ctx.beginPath();
-      ctx.arc(c.px, c.py, r, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(0, -r);
+      ctx.lineTo(0, r);
+      ctx.moveTo(-r, 0);
+      ctx.lineTo(r, 0);
+      const d = r * 0.65;
+      ctx.moveTo(-d, -d);
+      ctx.lineTo(d, d);
+      ctx.moveTo(-d, d);
+      ctx.lineTo(d, -d);
       ctx.stroke();
+      /* Inked nucleus with cream halo — the "seat" of the city. */
+      const nucleusR = Math.max(2 * dpr, r * 0.3);
+      ctx.fillStyle = "rgba(252, 244, 220, 0.95)";
+      ctx.beginPath();
+      ctx.arc(0, 0, nucleusR + 1.2 * dpr, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = "rgba(70, 50, 28, 0.95)";
+      ctx.beginPath();
+      ctx.arc(0, 0, nucleusR, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
     }
 
-    // ── Occupancy ─────────────────────────────────────────────────────────
-    // At low zoom: dots. At high zoom (one cell ≥ overlay threshold): filled
-    // tiles so the cell footprint is obvious.
+    /* Occupancy — muted antique-palette glyphs, shape-distinguished:
+     *   Player  → filled circle, tobacco amber
+     *   Wild    → filled diamond, dark oxblood
+     * Shape (not just hue) is the primary distinguisher so they read clearly
+     * even at the smallest dot size and on a monochrome paper background.
+     * At tile-mode zoom each cell still fills solid so the cell footprint is
+     * obvious — the shape only takes over in dot mode. */
     const renderAsTiles = cssPxPerCell >= GRID_OVERLAY_MIN_CSS_PX_PER_CELL;
+    const PLAYER_FILL = "rgba(160, 100, 45, 1)";
+    const WILD_FILL = "rgba(115, 55, 30, 1)";
+    const SELECTED_STROKE = "rgba(220, 175, 60, 1)";
+    const CREAM_STROKE = "rgba(252, 244, 220, 0.95)";
     for (const cell of occupied) {
       const ox = cell.gridLong - cityLongGrid;
       const oy = cell.gridLat - cityLatGrid;
       const { px, py } = gridToDevPx(ox, oy, dpr);
-      if (px < -20 || px > sizeDev + 20 || py < -20 || py > sizeDev + 20) continue;
+      if (px < -20 || px > sizeDevW + 20 || py < -20 || py > sizeDevH + 20) continue;
       const isPlayer = cell.occupantType === OCCUPANT_PLAYER;
       const isEncounter = cell.occupantType === OCCUPANT_ENCOUNTER;
       if (!isPlayer && !isEncounter) continue;
@@ -560,13 +642,13 @@ export function CityTerrainMap({
         selectedEntity.gridLat === cell.gridLat &&
         selectedEntity.gridLong === cell.gridLong;
 
-      const fill = isPlayer ? "rgba(180, 83, 9, 1)" : "rgba(160, 30, 30, 1)";
-      const stroke = isSelectedEntity ? "rgba(255, 220, 80, 1)" : "rgba(255, 250, 235, 0.95)";
+      const fill = isPlayer ? PLAYER_FILL : WILD_FILL;
+      const stroke = isSelectedEntity ? SELECTED_STROKE : CREAM_STROKE;
 
       if (renderAsTiles) {
-        // Snap rectangle to integer device pixels — otherwise adjacent tiles
-        // can show sub-pixel gaps or 2-px-wide seams that look like grid
-        // misalignment, especially on mobile DPR.
+        /* Snap rectangle to integer device pixels — otherwise adjacent tiles
+         * can show sub-pixel gaps or 2-px-wide seams that look like grid
+         * misalignment, especially on mobile DPR. */
         const half = pxPerCell / 2;
         const x0 = Math.round(px - half);
         const y0 = Math.round(py - half);
@@ -582,15 +664,21 @@ export function CityTerrainMap({
         ctx.fillStyle = fill;
         ctx.strokeStyle = stroke;
         ctx.lineWidth = (isSelectedEntity ? 2 : 1.5) * dpr;
-        ctx.beginPath();
-        ctx.arc(px, py, r, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-        if (isEncounter) {
-          ctx.strokeStyle = "rgba(255, 220, 80, 0.9)";
-          ctx.lineWidth = 1 * dpr;
+        if (isPlayer) {
           ctx.beginPath();
-          ctx.arc(px, py, r * 0.55, 0, Math.PI * 2);
+          ctx.arc(px, py, r, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        } else {
+          /* Wild — filled diamond. Saves a save/restore by drawing the
+           * rotated-square path explicitly around (px, py). */
+          ctx.beginPath();
+          ctx.moveTo(px, py - r);
+          ctx.lineTo(px + r, py);
+          ctx.lineTo(px, py + r);
+          ctx.lineTo(px - r, py);
+          ctx.closePath();
+          ctx.fill();
           ctx.stroke();
         }
       }
@@ -629,7 +717,8 @@ export function CityTerrainMap({
     cityLatGrid,
     cityLongGrid,
     radiusGridUnits,
-    logicalSize,
+    size.w,
+    size.h,
     view.scale,
     view.panOx,
     view.panOy,
@@ -655,27 +744,25 @@ export function CityTerrainMap({
   const pinchDistRef = useRef<number | null>(null);
   const suppressClickRef = useRef(false);
 
+  /* Instant zoom anchored at a client point. Used by wheel + pinch where
+   * each per-event delta is small enough that the natural cadence reads as
+   * smooth without explicit tweening. Cancels any in-flight animated tween
+   * so the user's wheel always wins. */
   const zoomAt = (clientX: number, clientY: number, factor: number) => {
-    const el = wrapRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const wx = clientX - r.left;
-    const wy = clientY - r.top;
-    const dxFromCenter = (wx - r.width / 2) / r.width; // -0.5..0.5
-    const dyFromCenter = (wy - r.height / 2) / r.height;
+    cancelAnim();
     setView((prev) => {
-      const newScale = Math.max(MIN_VIEW_SCALE, Math.min(MAX_VIEW_SCALE, prev.scale * factor));
-      const prevViewportRadius = radiusGridUnits / prev.scale;
-      const cursorOx = prev.panOx + dxFromCenter * prevViewportRadius * 2;
-      const cursorOy = prev.panOy - dyFromCenter * prevViewportRadius * 2;
-      const newViewportRadius = radiusGridUnits / newScale;
-      const nextPan = clampPan(
-        cursorOx - dxFromCenter * newViewportRadius * 2,
-        cursorOy + dyFromCenter * newViewportRadius * 2,
-        newScale,
-      );
-      return { scale: newScale, panOx: nextPan.panOx, panOy: nextPan.panOy };
+      const target = computeZoomedView(clientX, clientY, factor, prev);
+      return target ?? prev;
     });
+  };
+
+  /* Animated counterpart for discrete gestures (double-click). Reads from
+   * viewRef rather than the setView updater so the start of the tween is
+   * captured cleanly even if React hasn't committed the latest view yet. */
+  const zoomAtAnimated = (clientX: number, clientY: number, factor: number) => {
+    const target = computeZoomedView(clientX, clientY, factor, viewRef.current);
+    if (!target) return;
+    animateView(target);
   };
 
   useEffect(() => {
@@ -723,6 +810,10 @@ export function CityTerrainMap({
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      /* If a zoom tween is in flight, the user's drag intent wins —
+       * otherwise the view would keep snapping toward the old target while
+       * being dragged. */
+      cancelAnim();
       dragStartRef.current = { x: e.clientX, y: e.clientY };
       dragLastRef.current = { x: e.clientX, y: e.clientY };
       draggedRef.current = false;
@@ -763,11 +854,18 @@ export function CityTerrainMap({
 
     const onDblClick = (e: MouseEvent) => {
       e.preventDefault();
-      resetView();
+      /* Google-Maps convention: double-click zooms IN at the cursor with a
+       * smooth ease-out so the eye can follow the transformation. Full
+       * reset is available via the top-right ↻ chip (visible when scale
+       * > 1) — keeps both gestures intentional. */
+      zoomAtAnimated(e.clientX, e.clientY, 2);
     };
 
     const onTouchStart = (e: TouchEvent) => {
       const ts = e.touches;
+      /* Any new touch (drag or pinch) cancels an in-flight tween so the
+       * user's gesture always wins over a lingering snap. */
+      cancelAnim();
       if (ts.length === 1) {
         dragStartRef.current = { x: ts[0]!.clientX, y: ts[0]!.clientY };
         dragLastRef.current = { x: ts[0]!.clientX, y: ts[0]!.clientY };
@@ -895,14 +993,32 @@ export function CityTerrainMap({
     const { ox, oy } = pxToGrid(hover.px, hover.py);
     if (ox * ox + oy * oy > radiusGridUnits * radiusGridUnits) return null;
     const s = sampleTerrain(terrain, ox, oy);
+    /* Land labels are bucketed by elevation fraction `t` so they line up
+     * with the palette's own bands:
+     *   t < 0.1   → Shore (matches the warm-sand beach band in the renderer)
+     *   t < 0.5   → Land  (lowland tans / muted olive)
+     *   t < 1.0   → Hill  (the darker highland band — visually clearly
+     *                      elevated, this is what players see as "rises")
+     *   e ≥ peak  → Peak  (snow-capped summits)
+     * Before this, Hill kicked in at t > 0.7 — the upper half of the
+     * highland band — so most of the visually-elevated terrain was
+     * mis-labelled as plain Land. */
     let label = "Land";
-    if (s.isWater) label = "Water";
-    else if (s.isMountain) label = "Peak";
+    if (s.isWater) {
+      label = "Water";
+    } else if (s.isMountain) {
+      label = "Peak";
+    } else {
+      const range = Math.max(1, terrain.peakLine - terrain.waterLine);
+      const t = (s.elevation - terrain.waterLine) / range;
+      if (t < 0.1) label = "Shore";
+      else if (t >= 0.5) label = "Hill";
+    }
     const distM = Math.round(Math.sqrt(ox * ox + oy * oy) * METERS_PER_GRID_UNIT);
     return { label, distM, passable: s.isPassable };
-    // pxToGrid depends on view + logicalSize; declared deps are explicit.
+    /* pxToGrid depends on view + size; declared deps are explicit. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hover, terrain, radiusGridUnits, logicalSize, view.scale, view.panOx, view.panOy]);
+  }, [hover, terrain, radiusGridUnits, size.w, size.h, view.scale, view.panOx, view.panOy]);
 
   const selectedDistM = useMemo(() => {
     if (!selected) return 0;
@@ -920,8 +1036,8 @@ export function CityTerrainMap({
     <div className={styles.root}>
       <div className={styles.label}>
         <span>The land · {cityAccount.name}</span>
-        {!occupancyLoaded && <span className={styles.scouting}> · scouting…</span>}
-        {occupancyLoaded && !occupancyError && (
+        {occupancyLoading && <span className={styles.scouting}> · scouting…</span>}
+        {!occupancyLoading && !occupancyError && (
           <span className={styles.scouting}>
             {" · "}
             {playerCount} {playerCount === 1 ? "player" : "players"} · {encounterCount} wild
@@ -950,7 +1066,7 @@ export function CityTerrainMap({
         ref={wrapRef}
         role="application"
         tabIndex={0}
-        aria-label={`Terrain disc for ${cityAccount.name}. Click an occupant to inspect them, or pick an empty cell to land. Scroll or pinch to zoom, drag to pan, double-click to reset.`}
+        aria-label={`Terrain disc for ${cityAccount.name}. Click an occupant to inspect them, or pick an empty cell to land. Scroll or pinch to zoom, drag to pan, double-click to zoom in.`}
         className={styles.canvasWrap}
         onClick={handleClick}
         style={{ touchAction: "none" }}
@@ -980,7 +1096,7 @@ export function CityTerrainMap({
               resetView();
             }}
             aria-label="Reset zoom"
-            title="Reset zoom (or double-click)"
+            title="Reset zoom"
           >
             ↻
           </button>

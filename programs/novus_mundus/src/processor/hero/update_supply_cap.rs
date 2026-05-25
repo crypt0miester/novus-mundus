@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{HeroTemplate, GameEngine},
     constants::HERO_TEMPLATE_SEED,
+    emit,
+    error::GameError,
+    events::SupplyCapUpdated,
+    state::{GameEngine, HeroTemplate},
     utils::{read_u16, read_u32},
     validation::{require_signer, require_writable},
-    emit,
-    events::SupplyCapUpdated,
 };
 
 /// Update hero template supply cap (311) - DAO only
@@ -59,10 +57,8 @@ pub fn process(
 
     // 5. Verify template PDA
     let template_id_bytes = template_id.to_le_bytes();
-    let (expected_pda, _) = Address::find_program_address(
-        &[HERO_TEMPLATE_SEED, &template_id_bytes],
-        program_id,
-    );
+    let (expected_pda, _) =
+        Address::find_program_address(&[HERO_TEMPLATE_SEED, &template_id_bytes], program_id);
     if hero_template.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
     }

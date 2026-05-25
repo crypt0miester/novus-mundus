@@ -1,31 +1,23 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, EstateAccount, HeroTemplate, BuildingType},
-    helpers::{
-        add_buff_delta_to_player,
-        parse_hero_nft,
-        HeroNftContext,
-        HeroNftBuffers,
-        build_hero_nft_attributes,
-        estate::{
-            get_sanctuary_level,
-            sanctuary_meditation_max_seconds,
-            sanctuary_meditation_total_xp,
-            meditation_level_cap,
-            meditation_levels_from_xp,
-            meditation_xp_for_level,
-        },
-    },
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::MeditationClaimed,
+    helpers::{
+        add_buff_delta_to_player, build_hero_nft_attributes,
+        estate::{
+            get_sanctuary_level, meditation_level_cap, meditation_levels_from_xp,
+            meditation_xp_for_level, sanctuary_meditation_max_seconds,
+            sanctuary_meditation_total_xp,
+        },
+        parse_hero_nft, HeroNftBuffers, HeroNftContext,
+    },
+    state::{BuildingType, EstateAccount, HeroTemplate, PlayerAccount},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Claim meditation XP and potentially level up the hero
@@ -135,8 +127,7 @@ pub fn process(
     // 10. Parse hero data from NFT
     // NFT-Only System: All hero state is stored in NFT attributes
     let nft_data = hero_mint.try_borrow()?;
-    let parsed_hero = parse_hero_nft(&nft_data)
-        .ok_or(GameError::InvalidParameter)?;
+    let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // 11. Load Hero Template (for buff power calculation)
@@ -152,7 +143,8 @@ pub fn process(
     let new_meditation_xp = parsed_hero.meditation_xp.saturating_add(xp_earned);
 
     // 13. Calculate how many levels can be granted (pass current level for variable XP requirements)
-    let (potential_levels, _remaining_xp) = meditation_levels_from_xp(parsed_hero.level, new_meditation_xp);
+    let (potential_levels, _remaining_xp) =
+        meditation_levels_from_xp(parsed_hero.level, new_meditation_xp);
 
     // 14. Cap levels at meditation cap
     let cap = meditation_level_cap(sanctuary_level);
@@ -187,8 +179,11 @@ pub fn process(
     } else {
         None
     };
-    let ctx = HeroNftContext::from_parsed(&parsed_hero, template)
-        .with_meditation_update(final_meditation_xp, level_changed, template);
+    let ctx = HeroNftContext::from_parsed(&parsed_hero, template).with_meditation_update(
+        final_meditation_xp,
+        level_changed,
+        template,
+    );
 
     // Save template name for event emission
     let hero_name = template.name;
@@ -234,7 +229,11 @@ pub fn process(
 
     // Derive game_engine PDA signer
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let game_engine_seeds = crate::seeds!(
+        crate::constants::GAME_ENGINE_SEED,
+        &kingdom_id_bytes,
+        &ge_bump_seed
+    );
     let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
 
     // Update all NFT attributes
@@ -248,7 +247,8 @@ pub fn process(
         update: p_core::instructions::PluginUpdateData::AttributesSet {
             attributes: &attributes[..attr_count],
         },
-    }.invoke_signed(&[ge_signer])?;
+    }
+    .invoke_signed(&[ge_signer])?;
 
     // 20. Emit event
     emit!(MeditationClaimed {

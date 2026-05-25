@@ -1,20 +1,18 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::RECOVERY_COST_DISCOUNT_BPS,
-    error::GameError,
-    helpers::estate::{require_infirmary, infirmary_recovery_bps},
-    logic::safe_math::apply_bp,
-    state::{PlayerAccount, GameEngine, EstateAccount},
-    types::UnitType,
     emit,
+    error::GameError,
     events::estate::TroopsRecovered,
+    helpers::estate::{infirmary_recovery_bps, require_infirmary},
+    logic::safe_math::apply_bp,
+    state::{EstateAccount, GameEngine, PlayerAccount},
+    types::UnitType,
     utils::read_u64,
 };
 
@@ -65,8 +63,18 @@ pub fn process(
 
     // 4. Load Accounts
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
-    let mut estate_data = EstateAccount::load_checked_mut(estate_account, player_account.address(), owner.address(), program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
+    let estate_data = EstateAccount::load_checked_mut(
+        estate_account,
+        player_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 5. Require Infirmary
     require_infirmary(&estate_data, 1)?;
@@ -97,8 +105,8 @@ pub fn process(
     };
 
     // Apply 50% base discount
-    let discounted_cost = apply_bp(base_unit_cost, RECOVERY_COST_DISCOUNT_BPS)
-        .ok_or(GameError::MathOverflow)?;
+    let discounted_cost =
+        apply_bp(base_unit_cost, RECOVERY_COST_DISCOUNT_BPS).ok_or(GameError::MathOverflow)?;
 
     // Apply Infirmary level discount (recovery_bps reduces cost further)
     let infirmary_discount = infirmary_recovery_bps(&estate_data) as u64;
@@ -116,44 +124,59 @@ pub fn process(
         after_infirmary.saturating_mul(cost_ratio) / 10000
     } else {
         after_infirmary
-    }.max(1);
+    }
+    .max(1);
 
-    let total_cost = per_unit_cost.checked_mul(amount)
+    let total_cost = per_unit_cost
+        .checked_mul(amount)
         .ok_or(GameError::MathOverflow)?;
 
     // 8. Validate and deduct locked NOVI
     if player_data.locked_novi < total_cost {
         return Err(GameError::InsufficientLockedNovi.into());
     }
-    player_data.locked_novi = player_data.locked_novi
+    player_data.locked_novi = player_data
+        .locked_novi
         .checked_sub(total_cost)
         .ok_or(GameError::MathOverflow)?;
 
     // 9. Add units to player
     match unit_type {
         UnitType::DefensiveUnit1 => {
-            player_data.defensive_unit_1 = player_data.defensive_unit_1
-                .checked_add(amount).ok_or(GameError::MathOverflow)?;
+            player_data.defensive_unit_1 = player_data
+                .defensive_unit_1
+                .checked_add(amount)
+                .ok_or(GameError::MathOverflow)?;
         }
         UnitType::DefensiveUnit2 => {
-            player_data.defensive_unit_2 = player_data.defensive_unit_2
-                .checked_add(amount).ok_or(GameError::MathOverflow)?;
+            player_data.defensive_unit_2 = player_data
+                .defensive_unit_2
+                .checked_add(amount)
+                .ok_or(GameError::MathOverflow)?;
         }
         UnitType::DefensiveUnit3 => {
-            player_data.defensive_unit_3 = player_data.defensive_unit_3
-                .checked_add(amount).ok_or(GameError::MathOverflow)?;
+            player_data.defensive_unit_3 = player_data
+                .defensive_unit_3
+                .checked_add(amount)
+                .ok_or(GameError::MathOverflow)?;
         }
         UnitType::OperativeUnit1 => {
-            player_data.operative_unit_1 = player_data.operative_unit_1
-                .checked_add(amount).ok_or(GameError::MathOverflow)?;
+            player_data.operative_unit_1 = player_data
+                .operative_unit_1
+                .checked_add(amount)
+                .ok_or(GameError::MathOverflow)?;
         }
         UnitType::OperativeUnit2 => {
-            player_data.operative_unit_2 = player_data.operative_unit_2
-                .checked_add(amount).ok_or(GameError::MathOverflow)?;
+            player_data.operative_unit_2 = player_data
+                .operative_unit_2
+                .checked_add(amount)
+                .ok_or(GameError::MathOverflow)?;
         }
         UnitType::OperativeUnit3 => {
-            player_data.operative_unit_3 = player_data.operative_unit_3
-                .checked_add(amount).ok_or(GameError::MathOverflow)?;
+            player_data.operative_unit_3 = player_data
+                .operative_unit_3
+                .checked_add(amount)
+                .ok_or(GameError::MathOverflow)?;
         }
     }
 

@@ -1,21 +1,19 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{
-        ReinforcementAccount, ReinforcementStatus, ReinforcementTarget,
-        GameEngine, CityAccount, PlayerAccount,
-    },
-    logic::location::calculate_intercity_travel_time,
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::reinforcement::ReinforcementRecalled,
+    logic::location::calculate_intercity_travel_time,
+    state::{
+        CityAccount, GameEngine, PlayerAccount, ReinforcementAccount, ReinforcementStatus,
+        ReinforcementTarget,
+    },
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Recall reinforcement (sender initiates return)
@@ -109,8 +107,12 @@ pub fn process(
             t.reinforcement_melee = t.reinforcement_melee.saturating_sub(return_melee);
             t.reinforcement_ranged = t.reinforcement_ranged.saturating_sub(return_ranged);
             t.reinforcement_siege = t.reinforcement_siege.saturating_sub(return_siege);
-            t.reinforcement_original_units = t.reinforcement_original_units.saturating_sub(reinf.total_units());
-            t.reinforcement_original_weapons = t.reinforcement_original_weapons.saturating_sub(reinf.total_weapons());
+            t.reinforcement_original_units = t
+                .reinforcement_original_units
+                .saturating_sub(reinf.total_units());
+            t.reinforcement_original_weapons = t
+                .reinforcement_original_weapons
+                .saturating_sub(reinf.total_weapons());
             t.reinforcement_source_count = t.reinforcement_source_count.saturating_sub(1);
         }
 

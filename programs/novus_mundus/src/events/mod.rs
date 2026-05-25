@@ -19,63 +19,61 @@
 ///     timestamp: clock.unix_timestamp,
 /// });
 /// ```
-
 use pinocchio::Address;
 
 // Event modules
+pub mod castle;
 pub mod combat;
-pub mod team;
-pub mod rally;
-pub mod travel;
+pub mod dungeon;
 pub mod economy;
-pub mod hero;
 pub mod estate;
-pub mod forge;
-pub mod research;
 pub mod expedition;
+pub mod forge;
+pub mod game_event;
+pub mod hero;
+pub mod initialization;
+pub mod kingdom;
+pub mod loot;
+pub mod name;
+pub mod progression;
+pub mod rally;
 pub mod reinforcement;
+pub mod research;
 pub mod sanctuary;
 pub mod shop;
-pub mod loot;
-pub mod progression;
+pub mod team;
 pub mod token;
-pub mod name;
-pub mod initialization;
-pub mod game_event;
-pub mod dungeon;
-pub mod castle;
-pub mod kingdom;
+pub mod travel;
 
 // Re-export all events for convenience
+pub use castle::*;
 pub use combat::*;
-pub use team::*;
-pub use rally::*;
-pub use travel::*;
+pub use dungeon::*;
 pub use economy::*;
-pub use hero::*;
 pub use estate::*;
-pub use forge::*;
-pub use research::*;
 pub use expedition::*;
+pub use forge::*;
+pub use game_event::*;
+pub use hero::*;
+pub use initialization::*;
+pub use kingdom::*;
+pub use loot::*;
+pub use name::*;
+pub use progression::*;
+pub use rally::*;
 pub use reinforcement::*;
+pub use research::*;
 pub use sanctuary::*;
 pub use shop::*;
-pub use loot::*;
-pub use progression::*;
+pub use team::*;
 pub use token::*;
-pub use name::*;
-pub use initialization::*;
-pub use game_event::*;
-pub use dungeon::*;
-pub use castle::*;
-pub use kingdom::*;
+pub use travel::*;
 
 // Compile-time SHA256 for discriminator generation
 
 /// SHA256 initial hash values
 const H: [u32; 8] = [
-    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a,
-    0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
+    0x6a09e667, 0xbb67ae85, 0x3c6ef372, 0xa54ff53a, 0x510e527f, 0x9b05688c, 0x1f83d9ab, 0x5be0cd19,
 ];
 
 /// SHA256 round constants
@@ -157,7 +155,10 @@ const fn process_block(mut state: [u32; 8], data: &[u8], offset: usize) -> [u32;
     while i < 64 {
         let s0 = w[i - 15].rotate_right(7) ^ w[i - 15].rotate_right(18) ^ (w[i - 15] >> 3);
         let s1 = w[i - 2].rotate_right(17) ^ w[i - 2].rotate_right(19) ^ (w[i - 2] >> 10);
-        w[i] = w[i - 16].wrapping_add(s0).wrapping_add(w[i - 7]).wrapping_add(s1);
+        w[i] = w[i - 16]
+            .wrapping_add(s0)
+            .wrapping_add(w[i - 7])
+            .wrapping_add(s1);
         i += 1;
     }
 
@@ -174,7 +175,11 @@ const fn process_block(mut state: [u32; 8], data: &[u8], offset: usize) -> [u32;
     while j < 64 {
         let s1 = e.rotate_right(6) ^ e.rotate_right(11) ^ e.rotate_right(25);
         let ch = (e & f) ^ ((!e) & g);
-        let temp1 = h.wrapping_add(s1).wrapping_add(ch).wrapping_add(K[j]).wrapping_add(w[j]);
+        let temp1 = h
+            .wrapping_add(s1)
+            .wrapping_add(ch)
+            .wrapping_add(K[j])
+            .wrapping_add(w[j]);
         let s0 = a.rotate_right(2) ^ a.rotate_right(13) ^ a.rotate_right(22);
         let maj = (a & b) ^ (a & c) ^ (b & c);
         let temp2 = s0.wrapping_add(maj);
@@ -210,7 +215,9 @@ const fn process_block(mut state: [u32; 8], data: &[u8], offset: usize) -> [u32;
 /// ```
 pub const fn discriminator(s: &str) -> [u8; 8] {
     let hash = sha256(s.as_bytes());
-    [hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7]]
+    [
+        hash[0], hash[1], hash[2], hash[3], hash[4], hash[5], hash[6], hash[7],
+    ]
 }
 
 // Event trait and emission
@@ -241,10 +248,7 @@ pub fn emit_event<E: Event>(event: &E) {
         // sol_log_data takes a pointer to an array of slice headers + count.
         let slices: [&[u8]; 1] = [&buf[..(8 + data_len)]];
         unsafe {
-            pinocchio::syscalls::sol_log_data(
-                slices.as_ptr() as *const u8,
-                slices.len() as u64,
-            );
+            pinocchio::syscalls::sol_log_data(slices.as_ptr() as *const u8, slices.len() as u64);
         }
     }
     // On host builds, emit_event is a no-op (only used in tests).

@@ -1,16 +1,12 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u8, read_u16, read_u64},
     emit,
+    error::GameError,
     events::TeamSettingsUpdated,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Update team settings
@@ -71,7 +67,7 @@ pub fn process(
     if &member.owner != member_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -125,7 +121,7 @@ pub fn process(
 
     // 7. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TeamSettingsUpdated {

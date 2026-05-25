@@ -6,28 +6,23 @@
 //! Only callable by DAO authority.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::{
+        CASTLE_PROTECTION_DURATION, CASTLE_SEED, CASTLE_STATUS_VACANT, CASTLE_TIER_MULTIPLIER_BPS,
+        COURT_CASH_PER_DAY, COURT_NOVI_PER_DAY, KING_CASH_PER_DAY, KING_LOOT_CUT_BPS,
+        KING_NOVI_PER_DAY, MEMBER_CASH_PER_DAY, MEMBER_NOVI_PER_DAY,
+    },
     emit,
     error::GameError,
     events::CastleCreated,
     state::{CastleAccount, GameEngine},
     validation::require_empty,
-    constants::{
-        CASTLE_SEED, CASTLE_STATUS_VACANT,
-        CASTLE_TIER_MULTIPLIER_BPS,
-        KING_NOVI_PER_DAY, KING_CASH_PER_DAY,
-        COURT_NOVI_PER_DAY, COURT_CASH_PER_DAY,
-        MEMBER_NOVI_PER_DAY, MEMBER_CASH_PER_DAY,
-        KING_LOOT_CUT_BPS, CASTLE_PROTECTION_DURATION,
-    },
 };
 
 /// Create Castle instruction data
@@ -55,13 +50,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        dao_authority,
-        castle_account,
-        game_engine_account,
-        _system_program,
-        _rent_sysvar,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            dao_authority,
+            castle_account,
+            game_engine_account,
+            _system_program,
+            _rent_sysvar,
+        ]
+    );
 
     // Verify signer
     if !dao_authority.is_signer() {
@@ -117,7 +115,8 @@ pub fn process(
     // Derive PDA (kingdom-scoped)
     let city_id_bytes = city_id.to_le_bytes();
     let castle_id_bytes = castle_id.to_le_bytes();
-    let (expected_pda, bump) = CastleAccount::derive_pda(game_engine_account.address(), city_id, castle_id);
+    let (expected_pda, bump) =
+        CastleAccount::derive_pda(game_engine_account.address(), city_id, castle_id);
 
     if castle_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -145,7 +144,8 @@ pub fn process(
         lamports,
         space: CastleAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // Get current timestamp
     let clock = Clock::get()?;

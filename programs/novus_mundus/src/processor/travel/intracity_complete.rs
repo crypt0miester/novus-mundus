@@ -1,15 +1,13 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
     events::IntracityTravelCompleted,
-    state::{PlayerAccount, CityAccount, LocationAccount},
+    state::{CityAccount, LocationAccount, PlayerAccount},
     types::TravelType,
     validation::require_owner,
 };
@@ -48,7 +46,7 @@ pub fn process(
 
     // 3. Load Player Data
 
-    let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     // Verify owner matches
     if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());

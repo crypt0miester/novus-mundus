@@ -1,24 +1,22 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{PLAYER_SEED, USER_SEED},
     emit,
     error::GameError,
     events::UntrackedNoviSwept,
     state::{PlayerCore, UserAccount},
-    constants::{PLAYER_SEED, USER_SEED},
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Recover NOVI that landed in a program-PDA-owned ATA from outside the
 /// program (mis-sends, partner transfers, etc.) and is therefore not
-/// backed by any state field. 
-/// 
+/// backed by any state field.
+///
 /// # Safety
 /// State is the source of truth. The sweep can ONLY remove the difference
 /// between the (potentially larger) ATA balance and the (authoritative)
@@ -35,11 +33,7 @@ use crate::{
 ///
 /// # Instruction Data
 /// - kind: u8 (1 byte) — 0 = PlayerAccount, 1 = UserAccount
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
 
     crate::extract_accounts!(accounts, exact [

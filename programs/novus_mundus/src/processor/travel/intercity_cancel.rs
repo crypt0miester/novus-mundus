@@ -1,20 +1,18 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::LOCATION_SEED,
     emit,
     error::GameError,
     events::TravelCancelled,
-    state::{PlayerAccount, CityAccount, LocationAccount, OCCUPANT_PLAYER},
-    constants::LOCATION_SEED,
     helpers::close_account,
     logic::location::calculate_distance,
+    state::{CityAccount, LocationAccount, PlayerAccount, OCCUPANT_PLAYER},
     validation::require_owner,
 };
 
@@ -63,7 +61,7 @@ pub fn process(
 
     // 3. Load Accounts
 
-    let mut player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     // Verify owner matches
     if &player_data.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
@@ -118,7 +116,8 @@ pub fn process(
 
     // 9. Calculate Return Travel Time (using locked speed)
 
-    let return_travel_time_seconds = ((distance_traveled_km / player_data.travel_speed_locked as f64) * 3600.0) as i64;
+    let return_travel_time_seconds =
+        ((distance_traveled_km / player_data.travel_speed_locked as f64) * 3600.0) as i64;
 
     // 10. VALIDATE DESTINATION LOCATION
     //
@@ -209,7 +208,8 @@ pub fn process(
             lamports,
             space: LocationAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[location_signer])?;
+        }
+        .invoke_signed(&[location_signer])?;
 
         let mut return_data = return_location_account.try_borrow_mut()?;
         let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
@@ -230,12 +230,16 @@ pub fn process(
         let mut return_data = return_location_account.try_borrow_mut()?;
         let return_location = unsafe { LocationAccount::load_mut(&mut return_data) };
 
-        if return_location.grid_lat != return_grid_lat || return_location.grid_long != return_grid_long {
+        if return_location.grid_lat != return_grid_lat
+            || return_location.grid_long != return_grid_long
+        {
             return Err(GameError::InvalidPDA.into());
         }
 
         // Cell must be empty or already owned by this player
-        if return_location.is_occupied() && !return_location.is_occupied_by(player_account.address()) {
+        if return_location.is_occupied()
+            && !return_location.is_occupied_by(player_account.address())
+        {
             return Err(GameError::CellOccupied.into());
         }
 
@@ -270,8 +274,7 @@ pub fn process(
 
     // 13. Increment origin city player count (they're coming back)
 
-    origin_city_data.players_present = origin_city_data.players_present
-        .saturating_add(1);
+    origin_city_data.players_present = origin_city_data.players_present.saturating_add(1);
 
     // 14. Emit Event
 

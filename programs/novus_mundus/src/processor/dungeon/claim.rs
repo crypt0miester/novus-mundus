@@ -1,19 +1,17 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, DungeonRun, DungeonStatus, DungeonLeaderboard, GameEngine},
     constants::{DUNGEON_RUN_SEED, GAME_ENGINE_SEED},
-    helpers::{close_account, mint_tokens, validate_token_account_owner},
-    helpers::dungeon::{TimePeriod, calculate_novi_with_time},
-    validation::{require_signer, require_writable, require_owner, require_key_match},
     emit,
+    error::GameError,
     events::DungeonCompleted,
+    helpers::dungeon::{calculate_novi_with_time, TimePeriod},
+    helpers::{close_account, mint_tokens, validate_token_account_owner},
+    state::{DungeonLeaderboard, DungeonRun, DungeonStatus, GameEngine, PlayerAccount},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// Claim rewards after dungeon completion or failure
@@ -35,25 +33,24 @@ use crate::{
 /// - [] game_engine: GameEngine PDA (mint authority)
 /// - [] token_program: SPL Token program
 /// - [writable, optional] leaderboard: DungeonLeaderboard PDA at index 11 (victories only)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    _data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> ProgramResult {
     // 1. Parse accounts (11 mandatory; optional leaderboard at index 11)
-    crate::extract_accounts!(accounts, [
-        owner,
-        player_account,
-        dungeon_run_account,
-        hero_mint,
-        hero_collection,
-        system_program,
-        p_core_program,
-        player_novi_ata,
-        novi_mint,
-        game_engine,
-        token_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            player_account,
+            dungeon_run_account,
+            hero_mint,
+            hero_collection,
+            system_program,
+            p_core_program,
+            player_novi_ata,
+            novi_mint,
+            game_engine,
+            token_program,
+        ]
+    );
     let leaderboard_account = accounts.get(11);
 
     // 2. Validate signer
@@ -74,7 +71,7 @@ pub fn process(
     validate_token_account_owner(player_novi_ata, player_account.address())?;
 
     // 3. Load player using load_checked_mut_by_key (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
@@ -89,8 +86,7 @@ pub fn process(
     }
 
     // Validate run status - must be Completed or Failed
-    let status = DungeonStatus::from_u8(run.status)
-        .ok_or(GameError::InvalidParameter)?;
+    let status = DungeonStatus::from_u8(run.status).ok_or(GameError::InvalidParameter)?;
 
     let is_victory = match status {
         DungeonStatus::Completed => true,
@@ -105,10 +101,20 @@ pub fn process(
     // 5. Calculate rewards based on outcome
     let (base_xp, base_novi, gems, materials) = if is_victory {
         // Victory: full pending rewards including materials
-        (run.pending_xp, run.pending_novi, run.pending_gems, run.pending_materials)
+        (
+            run.pending_xp,
+            run.pending_novi,
+            run.pending_gems,
+            run.pending_materials,
+        )
     } else {
         // Failure: checkpoint rewards only (no materials on failure)
-        (run.checkpoint_xp, run.checkpoint_novi, run.checkpoint_gems, 0u32)
+        (
+            run.checkpoint_xp,
+            run.checkpoint_novi,
+            run.checkpoint_gems,
+            0u32,
+        )
     };
 
     // Get time period for bonuses
@@ -155,8 +161,6 @@ pub fn process(
     }
 
     // Drop borrows before CPI
-    drop(run);
-    drop(player);
 
     // 6a. Mint NOVI to player's ATA so wallet balance tracks locked_novi.
     //     Without this CPI, future hire/build burns fail with SPL InsufficientFunds.
@@ -166,7 +170,6 @@ pub fn process(
         let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
         let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
         let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
-        drop(game_engine_data);
 
         mint_tokens(novi_mint, player_novi_ata, game_engine, novi, &[ge_signer])?;
     }
@@ -204,11 +207,7 @@ pub fn process(
 
     // 8. Transfer hero back from DungeonRun PDA to owner using MPL Core
     let run_bump_seed = [run_bump];
-    let run_seeds = crate::seeds!(
-        DUNGEON_RUN_SEED,
-        player_account.address(),
-        &run_bump_seed
-    );
+    let run_seeds = crate::seeds!(DUNGEON_RUN_SEED, player_account.address(), &run_bump_seed);
     let run_signer = pinocchio::cpi::Signer::from(&run_seeds);
 
     p_core::instructions::TransferV1 {
@@ -219,7 +218,8 @@ pub fn process(
         authority: dungeon_run_account,
         system_program,
         log_wrapper: p_core_program,
-    }.invoke_signed(&[run_signer])?;
+    }
+    .invoke_signed(&[run_signer])?;
 
     // 9. Close dungeon run account (refund rent to owner)
     close_account(dungeon_run_account, owner)?;

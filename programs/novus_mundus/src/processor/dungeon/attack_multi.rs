@@ -1,14 +1,6 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
-use crate::{
-    error::GameError,
-    constants::DUNGEON_MAX_MULTI_ATTACKS,
-    utils::read_u8,
-};
+use crate::{constants::DUNGEON_MAX_MULTI_ATTACKS, error::GameError, utils::read_u8};
 
 use super::attack::process_attacks;
 
@@ -23,11 +15,7 @@ use super::attack::process_attacks;
 /// # Instruction Data
 /// - attack_count: u8 (1-5)
 /// - next_room_type: u8 (provided by backend for auto-advance)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // Parse attack count
     let attack_count = read_u8(data, 0, "attack_multi.attack_count")?;
 

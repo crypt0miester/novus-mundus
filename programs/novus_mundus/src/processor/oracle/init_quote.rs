@@ -1,15 +1,11 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::ORACLE_QUOTE_SEED,
     error::GameError,
     state::{GameEngine, OracleQuotePda, ORACLE_QUOTE_ACCOUNT_LEN},
-    validation::{require_signer, require_writable, require_key_match},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create the program-owned Switchboard oracle-quote PDA (DAO only).
 ///
@@ -29,13 +25,16 @@ pub fn process(
     accounts: &[AccountView],
     _instruction_data: &[u8],
 ) -> ProgramResult {
-    crate::extract_accounts!(accounts, [
-        authority,
-        game_engine_account,
-        oracle_quote_account,
-        switchboard_queue,
-        system_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            authority,
+            game_engine_account,
+            oracle_quote_account,
+            switchboard_queue,
+            system_program,
+        ]
+    );
 
     require_signer(authority)?;
     require_writable(authority)?;

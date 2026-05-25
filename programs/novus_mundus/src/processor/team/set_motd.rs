@@ -1,17 +1,12 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY, require_extension, EXT_TEAM},
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u8, read_u16, read_u64},
     emit,
+    error::GameError,
     events::MotdUpdated,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Set team message of the day (MOTD)
@@ -52,8 +47,8 @@ pub fn process(
     let motd_bytes = &instruction_data[11..11 + motd_len];
 
     // Validate UTF-8
-    let _motd_str = core::str::from_utf8(motd_bytes)
-        .map_err(|_| ProgramError::InvalidInstructionData)?;
+    let _motd_str =
+        core::str::from_utf8(motd_bytes).map_err(|_| ProgramError::InvalidInstructionData)?;
 
     // 2. Parse Accounts
 
@@ -75,7 +70,7 @@ pub fn process(
     if &member.owner != member_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -133,7 +128,7 @@ pub fn process(
 
     // 7. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(MotdUpdated {

@@ -6,27 +6,23 @@
 //! and daily rewards. Creates CourtPositionAccount PDA.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::{CASTLE_STATUS_CONTEST, CASTLE_STATUS_TRANSITIONING, COURT_SEED, PLAYER_SEED},
     emit,
     error::GameError,
     events::CourtAppointed,
+    state::{
+        player::{CourtSection, COURT_OFFSET, EXT_COURT},
+        CastleAccount, CourtPosition, CourtPositionAccount, PlayerAccount,
+    },
     utils::read_u8,
     validation::{require_empty, require_owner, require_pda},
-    state::{
-        CastleAccount, CourtPositionAccount, PlayerAccount, CourtPosition,
-        player::{EXT_COURT, COURT_OFFSET, CourtSection},
-    },
-    constants::{
-        COURT_SEED, PLAYER_SEED, CASTLE_STATUS_CONTEST, CASTLE_STATUS_TRANSITIONING,
-    },
 };
 
 /// Appoint Court instruction data
@@ -48,14 +44,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        king_wallet,
-        king_account,
-        castle_account,
-        appointee_account,
-        court_position_account,
-        _system_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            king_wallet,
+            king_account,
+            castle_account,
+            appointee_account,
+            court_position_account,
+            _system_program,
+        ]
+    );
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -74,7 +73,7 @@ pub fn process(
     require_owner(king_account, program_id)?;
 
     // Load castle first to access its kingdom (game_engine) for PDA derivation
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
     if castle.king != *king_account.address() {
@@ -88,7 +87,11 @@ pub fn process(
     // signer truly owns the PlayerAccount registered as king.
     require_pda(
         king_account,
-        &[PLAYER_SEED, castle.game_engine.as_ref(), king_wallet.address().as_ref()],
+        &[
+            PLAYER_SEED,
+            castle.game_engine.as_ref(),
+            king_wallet.address().as_ref(),
+        ],
         program_id,
     )?;
 
@@ -121,7 +124,8 @@ pub fn process(
     }
 
     // Verify court position PDA
-    let (expected_court_pda, court_bump) = CourtPositionAccount::derive_pda(castle_account.address(), position_type);
+    let (expected_court_pda, court_bump) =
+        CourtPositionAccount::derive_pda(castle_account.address(), position_type);
     if court_position_account.address() != &expected_court_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -167,7 +171,8 @@ pub fn process(
         lamports,
         space: CourtPositionAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // Initialize court position
     let mut court_data = court_position_account.try_borrow_mut()?;
@@ -187,7 +192,9 @@ pub fn process(
     let appointee_data_len = appointee_data.len();
 
     // Update appointee's court section (if extension exists)
-    if appointee_extensions & EXT_COURT != 0 && appointee_data_len >= COURT_OFFSET + CourtSection::LEN {
+    if appointee_extensions & EXT_COURT != 0
+        && appointee_data_len >= COURT_OFFSET + CourtSection::LEN
+    {
         let court_ptr = appointee_data[COURT_OFFSET..].as_mut_ptr() as *mut CourtSection;
         let court_section = unsafe { &mut *court_ptr };
         court_section.set_position(*castle_account.address(), position_type);

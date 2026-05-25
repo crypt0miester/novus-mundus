@@ -128,7 +128,9 @@ pub fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> 
         104 => player.set_speed_elixirs(player.speed_elixirs().saturating_add(amount_u16)),
         105 => player.set_attack_boosters(player.attack_boosters().saturating_add(amount_u16)),
         106 => player.set_defense_boosters(player.defense_boosters().saturating_add(amount_u16)),
-        107 => player.set_collection_boosters(player.collection_boosters().saturating_add(amount_u16)),
+        107 => {
+            player.set_collection_boosters(player.collection_boosters().saturating_add(amount_u16))
+        }
         108 => player.set_rally_horns(player.rally_horns().saturating_add(amount_u16)),
         109 => player.set_teleport_scrolls(player.teleport_scrolls().saturating_add(amount_u16)),
         110 => player.set_mystery_keys(player.mystery_keys().saturating_add(amount_u16)),
@@ -159,7 +161,9 @@ pub fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> 
 /// `flash_claims_today` increments around this call — those diverge per processor.
 pub fn update_streak_and_daily(player: &mut PlayerAccount, now: i64) {
     let current_day = (now / 86400) as u32;
-    let Some(inv) = player.inventory_mut() else { return; };
+    let Some(inv) = player.inventory_mut() else {
+        return;
+    };
 
     if inv.last_purchase_day == 0 {
         inv.loyalty_streak = 1;

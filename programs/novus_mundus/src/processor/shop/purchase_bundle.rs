@@ -1,28 +1,21 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::Transfer;
 use crate::{
+    emit,
     error::GameError,
+    events::shop::BundlePurchased,
     helpers::{
         add_to_inventory,
-        estate::{market_discount_bps, load_estate_for_player, require_market},
-        is_inventory_item_type,
-        process_token_payment_flow,
+        estate::{load_estate_for_player, market_discount_bps, require_market},
+        is_inventory_item_type, process_token_payment_flow,
     },
     state::{
-        GameEngine, ShopConfigAccount, BundleAccount, ShopItemAccount,
-        PlayerAccount, BundleTier,
-        unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
+        require_extension, unlock_extension_if_eligible, BundleAccount, BundleTier, GameEngine,
+        PlayerAccount, ShopConfigAccount, ShopItemAccount, EXT_INVENTORY, EXT_RESEARCH,
     },
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u32},
-    emit,
-    events::shop::BundlePurchased,
+    utils::{read_u32, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::Transfer;
 
 /// Purchase a bundle from the shop
 ///
@@ -57,17 +50,21 @@ pub fn process(
 
     // Minimum accounts: buyer, player, game_engine, shop_config, bundle, treasury, system, inventory, estate
     // Remaining accounts are shop items for fulfillment reference
-    crate::extract_accounts!(accounts, [
-        buyer,
-        player_account,
-        game_engine_account,
-        shop_config_account,
-        bundle_account,
-        treasury,
-        system_program,
-        inventory_account,
-        estate_account,
-    ], rest = shop_item_accounts);
+    crate::extract_accounts!(
+        accounts,
+        [
+            buyer,
+            player_account,
+            game_engine_account,
+            shop_config_account,
+            bundle_account,
+            treasury,
+            system_program,
+            inventory_account,
+            estate_account,
+        ],
+        rest = shop_item_accounts
+    );
 
     // 2. Validate Accounts
 
@@ -107,7 +104,8 @@ pub fn process(
     // 6. Load and Validate Bundle
 
     // Verify bundle PDA
-    let (expected_bundle, _bump) = BundleAccount::derive_pda(game_engine_account.address(), bundle_id);
+    let (expected_bundle, _bump) =
+        BundleAccount::derive_pda(game_engine_account.address(), bundle_id);
     if bundle_account.address() != &expected_bundle {
         return Err(GameError::InvalidPDA.into());
     }
@@ -175,7 +173,8 @@ pub fn process(
     // Bundle price already includes bundle discount (savings_bps is for display)
     // Apply additional discounts: subscription tier, milestone, streak, fib, market
     let sub_discount_bps = calculate_subscription_discount(effective_tier);
-    let milestone_discount_bps = calculate_milestone_discount(player.total_shop_spent(), shop_config);
+    let milestone_discount_bps =
+        calculate_milestone_discount(player.total_shop_spent(), shop_config);
     let streak_discount_bps = calculate_streak_discount(player.loyalty_streak(), shop_config);
     let fib_discount_bps = calculate_fib_bonus(player.daily_purchase_count(), shop_config);
 
@@ -212,7 +211,8 @@ pub fn process(
             from: buyer,
             to: treasury,
             lamports: final_price,
-        }.invoke()?;
+        }
+        .invoke()?;
     } else {
         // Token payment (payment_type >= 2)
         // Token accounts come after shop_item_accounts
@@ -252,10 +252,8 @@ pub fn process(
             let shop_item_account = &shop_item_accounts[i];
 
             // Verify this is the correct shop item
-            let (expected_item_pda, _) = ShopItemAccount::derive_pda(
-                game_engine_account.address(),
-                bundle_item.item_id,
-            );
+            let (expected_item_pda, _) =
+                ShopItemAccount::derive_pda(game_engine_account.address(), bundle_item.item_id);
             if shop_item_account.address() != &expected_item_pda {
                 return Err(GameError::InvalidAccount.into());
             }
@@ -327,7 +325,10 @@ pub fn process(
 
     // 13. Update Player Shop State
     player.set_total_shop_spent(player.total_shop_spent().saturating_add(final_price));
-    player.set_milestone_tier(calculate_milestone_tier(player.total_shop_spent(), shop_config));
+    player.set_milestone_tier(calculate_milestone_tier(
+        player.total_shop_spent(),
+        shop_config,
+    ));
     super::common::update_streak_and_daily(&mut *player, now);
 
     // Emit event
@@ -346,7 +347,7 @@ pub fn process(
 // HELPER FUNCTIONS
 
 use super::common::{
-    calculate_final_price, calculate_fib_bonus, calculate_milestone_discount,
+    calculate_fib_bonus, calculate_final_price, calculate_milestone_discount,
     calculate_milestone_tier, calculate_streak_discount, calculate_subscription_discount,
     fulfill_item,
 };

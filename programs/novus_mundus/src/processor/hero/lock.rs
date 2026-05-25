@@ -1,8 +1,6 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
@@ -19,7 +17,7 @@ use crate::{
         HeroTemplate, PlayerAccount, EXT_HEROES, NULL_PUBKEY,
     },
     utils::read_u8,
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Lock a hero NFT (transfer from wallet to PlayerAccount PDA) (132)

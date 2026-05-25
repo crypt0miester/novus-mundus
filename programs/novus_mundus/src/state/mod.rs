@@ -1,28 +1,28 @@
-pub mod game_engine;
-pub mod player;
+pub mod arena;
+pub mod building_template;
+pub mod castle;
 pub mod city;
-pub mod team;
+pub mod dungeon;
+pub mod encounter;
+pub mod estate;
+pub mod event;
+pub mod expedition;
+pub mod game_engine;
+pub mod hero;
+pub mod inventory;
 pub mod location;
+pub mod loot;
+pub mod oracle_quote;
+pub mod player;
+pub mod progression;
 pub mod rally;
 pub mod reinforcement;
-pub mod encounter;
-pub mod event;
-pub mod progression;
-pub mod loot;
 pub mod research;
-pub mod hero;
 pub mod shop;
-pub mod inventory;
-pub mod estate;
-pub mod building_template;
-pub mod expedition;
-pub mod arena;
-pub mod dungeon;
-pub mod castle;
-pub mod oracle_quote;
+pub mod team;
 
-use pinocchio::account::{Ref, RefMut};
-use pinocchio::error::ProgramError;
+use crate::utils::Pk;
+use pinocchio::{error::ProgramError, AccountView};
 
 // ACCOUNT KEY DISCRIMINATOR
 // Every on-chain account stores this as byte 0 so that a single
@@ -127,6 +127,78 @@ impl AccountKey {
         Ok(())
     }
 
+    /// Cast an account's data buffer to `&T` after verifying byte 0 (the
+    /// discriminator) matches `expected`. Logs the struct name + offending
+    /// account on failure so tx logs identify which loader rejected the input.
+    ///
+    /// # Safety
+    ///
+    /// Caller must ensure:
+    /// - No other code mutates the account data while the returned reference
+    ///   is alive (Solana on-chain aliasing convention).
+    /// - Any field reads through the returned reference fall within the
+    ///   account's allocated `data_len()`. For variable-size accounts
+    ///   (e.g. `PlayerAccount` with optional extensions) the caller is
+    ///   responsible for not reading unallocated tail sections.
+    /// - `T` is `repr(C)` with `account_key: u8` as its first field.
+    #[inline(always)]
+    pub unsafe fn cast<'a, T>(
+        account: &'a AccountView,
+        expected: AccountKey,
+        type_name: &str,
+    ) -> Result<&'a T, ProgramError> {
+        if account.data_len() == 0 {
+            pinocchio_log::log!(
+                "{}: empty account data ({})",
+                type_name,
+                Pk(account.address().as_array()),
+            );
+            return Err(crate::error::GameError::InvalidAccountKey.into());
+        }
+        let actual = *account.data_ptr();
+        if actual != expected as u8 {
+            pinocchio_log::log!(
+                "{}: discriminator mismatch — got {}, expected {} ({})",
+                type_name,
+                actual as u64,
+                expected as u64,
+                Pk(account.address().as_array()),
+            );
+            return Err(crate::error::GameError::InvalidAccountKey.into());
+        }
+        Ok(&*(account.data_ptr() as *const T))
+    }
+
+    /// Mutable variant of [`AccountKey::cast`].
+    #[inline(always)]
+    #[allow(clippy::mut_from_ref)]
+    pub unsafe fn cast_mut<'a, T>(
+        account: &'a AccountView,
+        expected: AccountKey,
+        type_name: &str,
+    ) -> Result<&'a mut T, ProgramError> {
+        if account.data_len() == 0 {
+            pinocchio_log::log!(
+                "{}: empty account data ({})",
+                type_name,
+                Pk(account.address().as_array()),
+            );
+            return Err(crate::error::GameError::InvalidAccountKey.into());
+        }
+        let actual = *account.data_ptr();
+        if actual != expected as u8 {
+            pinocchio_log::log!(
+                "{}: discriminator mismatch — got {}, expected {} ({})",
+                type_name,
+                actual as u64,
+                expected as u64,
+                Pk(account.address().as_array()),
+            );
+            return Err(crate::error::GameError::InvalidAccountKey.into());
+        }
+        Ok(&mut *(account.data_ptr() as *mut T))
+    }
+
     /// Read the account key from the first byte of account data.
     pub fn from_data(data: &[u8]) -> Option<Self> {
         if data.is_empty() {
@@ -192,112 +264,25 @@ impl AccountKey {
     }
 }
 
-/// Wrapper for immutably loaded account data with lifetime management.
-/// Implements Deref for transparent access to the underlying account.
-pub struct Loaded<'a, T> {
-    _guard: Ref<'a, [u8]>,
-    data: *const T,
-}
-
-impl<'a, T> Loaded<'a, T> {
-    /// Create a new Loaded wrapper
-    ///
-    /// # Safety
-    /// The caller must ensure:
-    /// - The data pointer is valid for the lifetime of the guard
-    /// - The account's discriminator (byte 0) has already been verified to match `T`
-    ///   (use `new_validated` instead if you have the expected `AccountKey`)
-    pub unsafe fn new(guard: Ref<'a, [u8]>, data: *const T) -> Self {
-        Self { _guard: guard, data }
-    }
-
-    /// Construct a Loaded after validating the underlying account data's
-    /// discriminator byte (byte 0) matches `expected`.
-    ///
-    /// This is the preferred constructor: it eliminates the account-type-confusion
-    /// attack surface by enforcing the discriminator at construction time.
-    pub fn new_validated(
-        guard: Ref<'a, [u8]>,
-        expected: AccountKey,
-    ) -> Result<Self, ProgramError> {
-        AccountKey::validate(&guard, expected)?;
-        let data = guard.as_ptr() as *const T;
-        Ok(Self { _guard: guard, data })
-    }
-}
-
-impl<T> core::ops::Deref for Loaded<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.data }
-    }
-}
-
-/// Wrapper for mutably loaded account data with lifetime management.
-/// Implements Deref and DerefMut for transparent access to the underlying account.
-pub struct LoadedMut<'a, T> {
-    _guard: RefMut<'a, [u8]>,
-    data: *mut T,
-}
-
-impl<'a, T> LoadedMut<'a, T> {
-    /// Create a new LoadedMut wrapper
-    ///
-    /// # Safety
-    /// The caller must ensure:
-    /// - The data pointer is valid for the lifetime of the guard
-    /// - The account's discriminator (byte 0) has already been verified to match `T`
-    ///   (use `new_validated` instead if you have the expected `AccountKey`)
-    pub unsafe fn new(guard: RefMut<'a, [u8]>, data: *mut T) -> Self {
-        Self { _guard: guard, data }
-    }
-
-    /// Construct a LoadedMut after validating the underlying account data's
-    /// discriminator byte (byte 0) matches `expected`.
-    pub fn new_validated(
-        mut guard: RefMut<'a, [u8]>,
-        expected: AccountKey,
-    ) -> Result<Self, ProgramError> {
-        AccountKey::validate(&guard, expected)?;
-        let data = guard.as_mut_ptr() as *mut T;
-        Ok(Self { _guard: guard, data })
-    }
-}
-
-impl<T> core::ops::Deref for LoadedMut<'_, T> {
-    type Target = T;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { &*self.data }
-    }
-}
-
-impl<T> core::ops::DerefMut for LoadedMut<'_, T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.data }
-    }
-}
-
-pub use game_engine::*;
-pub use player::*;
+pub use arena::*;
+pub use building_template::*;
+pub use castle::*;
 pub use city::*;
-pub use team::*;
+pub use dungeon::*;
+pub use encounter::*;
+pub use estate::*;
+pub use event::*;
+pub use expedition::*;
+pub use game_engine::*;
+pub use hero::*;
+pub use inventory::*;
 pub use location::*;
+pub use loot::*;
+pub use oracle_quote::*;
+pub use player::*;
+pub use progression::*;
 pub use rally::*;
 pub use reinforcement::*;
-pub use encounter::*;
-pub use event::*;
-pub use progression::*;
-pub use loot::*;
 pub use research::*;
-pub use hero::*;
 pub use shop::*;
-pub use inventory::*;
-pub use estate::*;
-pub use building_template::*;
-pub use expedition::*;
-pub use arena::*;
-pub use dungeon::*;
-pub use castle::*;
-pub use oracle_quote::*;
+pub use team::*;

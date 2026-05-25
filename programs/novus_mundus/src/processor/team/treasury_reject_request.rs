@@ -1,17 +1,16 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, require_extension, EXT_TEAM, NULL_PUBKEY},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
-    utils::{read_bytes32, read_u16, read_u64},
     emit,
+    error::GameError,
     events::TreasuryRequestRejected,
+    helpers::close_account,
+    state::{
+        require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, TreasuryRequest, EXT_TEAM,
+        NULL_PUBKEY,
+    },
+    utils::{read_bytes32, read_u16, read_u64},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Reject a treasury withdrawal request (higher rank)
@@ -41,9 +40,7 @@ pub fn process(
 
     let team_id = read_u64(instruction_data, 0, "team_id")?;
     let rejecter_slot_index = read_u16(instruction_data, 8, "rejecter_slot_index")?;
-    let requester_pubkey = Address::from(
-        read_bytes32(instruction_data, 10, "requester_pubkey")?
-    );
+    let requester_pubkey = Address::from(read_bytes32(instruction_data, 10, "requester_pubkey")?);
 
     // 2. Parse Accounts
 
@@ -83,13 +80,15 @@ pub fn process(
 
     // 5. Validate Rejecter is in Team
 
-    if rejecter.team_address() == NULL_PUBKEY || &rejecter.team_address() != team_account.address() {
+    if rejecter.team_address() == NULL_PUBKEY || &rejecter.team_address() != team_account.address()
+    {
         return Err(GameError::NotTeamMember.into());
     }
 
     // 6. Verify Rejecter Slot and Get Rank
 
-    let (expected_rejecter_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), rejecter_slot_index);
+    let (expected_rejecter_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), rejecter_slot_index);
     if rejecter_slot_account.address() != &expected_rejecter_slot {
         return Err(GameError::InvalidPDA.into());
     }
@@ -116,7 +115,8 @@ pub fn process(
 
     // 8. Verify and Load Request
 
-    let (expected_request, _) = TreasuryRequest::derive_pda(team_account.address(), &requester_pubkey);
+    let (expected_request, _) =
+        TreasuryRequest::derive_pda(team_account.address(), &requester_pubkey);
     if request_account.address() != &expected_request {
         return Err(GameError::InvalidPDA.into());
     }
@@ -144,7 +144,7 @@ pub fn process(
 
     // 10. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TreasuryRequestRejected {

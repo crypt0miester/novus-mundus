@@ -1,3 +1,5 @@
+pub mod remove_player;
+pub mod remove_team;
 /// Name Service Integration Processors
 ///
 /// Handles domain name assignment for players and teams.
@@ -9,10 +11,7 @@
 /// - remove_team: Remove team name, transfer domain back to user (leader only)
 /// - update_player: Swap player name (old → user, new → player)
 /// - update_team: Swap team name (old → user, new → player) (leader only)
-
 pub mod set_player;
 pub mod set_team;
-pub mod remove_player;
-pub mod remove_team;
 pub mod update_player;
 pub mod update_team;

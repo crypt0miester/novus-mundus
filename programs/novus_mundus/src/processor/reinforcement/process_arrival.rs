@@ -1,18 +1,14 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{
-        ReinforcementAccount, ReinforcementStatus, ReinforcementTarget, PlayerAccount,
-    },
-    validation::{require_writable, require_owner},
     emit,
+    error::GameError,
     events::reinforcement::ReinforcementArrived,
+    state::{PlayerAccount, ReinforcementAccount, ReinforcementStatus, ReinforcementTarget},
+    validation::{require_owner, require_writable},
 };
 
 /// Process reinforcement arrival (crank operation)
@@ -87,8 +83,12 @@ pub fn process(
         t.reinforcement_ranged = t.reinforcement_ranged.saturating_add(reinf.ranged_weapons);
         t.reinforcement_siege = t.reinforcement_siege.saturating_add(reinf.siege_weapons);
 
-        t.reinforcement_original_units = t.reinforcement_original_units.saturating_add(reinf.total_units());
-        t.reinforcement_original_weapons = t.reinforcement_original_weapons.saturating_add(reinf.total_weapons());
+        t.reinforcement_original_units = t
+            .reinforcement_original_units
+            .saturating_add(reinf.total_units());
+        t.reinforcement_original_weapons = t
+            .reinforcement_original_weapons
+            .saturating_add(reinf.total_weapons());
 
         // Best-hero-wins for buffs (MAX, not sum).
         if reinf.hero_defense_bps > t.reinforcement_hero_defense_bps {

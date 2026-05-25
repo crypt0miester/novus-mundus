@@ -6,21 +6,19 @@
 //! Applies the upgrade bonus to the castle.
 
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{
+        CASTLE_UPGRADE_ARMORY, CASTLE_UPGRADE_CHAMBERS, CASTLE_UPGRADE_FORTIFICATION,
+        CASTLE_UPGRADE_TREASURY, CASTLE_UPGRADE_WATCHTOWER,
+    },
     emit,
     error::GameError,
     events::CastleUpgradeCompleted,
     state::CastleAccount,
-    constants::{
-        CASTLE_UPGRADE_FORTIFICATION, CASTLE_UPGRADE_TREASURY,
-        CASTLE_UPGRADE_CHAMBERS, CASTLE_UPGRADE_WATCHTOWER, CASTLE_UPGRADE_ARMORY,
-    },
 };
 
 /// Complete Upgrade instruction data
@@ -37,13 +35,10 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        _crank,
-        castle_account,
-    ]);
+    crate::extract_accounts!(accounts, [_crank, castle_account,]);
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify upgrade is in progress
     if castle.upgrade_type == 0 {

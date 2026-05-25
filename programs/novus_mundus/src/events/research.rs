@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Research events - tech tree progression
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when research starts
 pub struct ResearchStarted {

@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Initialization events - player/user creation, game engine setup
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new player account is created
 pub struct PlayerCreated {

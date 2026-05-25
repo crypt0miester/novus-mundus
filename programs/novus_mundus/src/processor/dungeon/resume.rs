@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType},
     constants::DUNGEON_RESUME_GEM_COST,
-    validation::{require_signer, require_writable, require_game_authority},
     emit,
+    error::GameError,
     events::DungeonResumed,
+    state::{DungeonRun, DungeonStatus, DungeonTemplate, PlayerAccount, RoomType},
+    validation::{require_game_authority, require_signer, require_writable},
 };
 
 /// Resume a dungeon run from the last checkpoint after failure
@@ -34,11 +32,7 @@ use crate::{
 ///
 /// # Instruction Data
 /// - first_room_type: u8 (chosen by backend; authenticated by the game_authority signature)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse accounts (game_authority co-signs to authenticate first_room_type)
     crate::extract_accounts!(accounts, exact [
         owner,
@@ -59,17 +53,23 @@ pub fn process(
     let first_room_type = if !data.is_empty() { data[0] } else { 0 };
 
     // 4. Load player using load_checked_mut_by_key (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
     // 4a. Validate game_authority against the player's kingdom GameEngine.
     // The game_authority signature authenticates the backend-rolled first_room_type.
-    require_game_authority(game_engine_account, game_authority, &player.game_engine, program_id)?;
+    require_game_authority(
+        game_engine_account,
+        game_authority,
+        &player.game_engine,
+        program_id,
+    )?;
 
     // 5. Load dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
+    let run =
+        DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Verify the run belongs to this player (player_account PDA stored in run.player)
     if &run.player != player_account.address() {
@@ -77,8 +77,7 @@ pub fn process(
     }
 
     // Validate run is failed
-    let status = DungeonStatus::from_u8(run.status)
-        .ok_or(GameError::InvalidParameter)?;
+    let status = DungeonStatus::from_u8(run.status).ok_or(GameError::InvalidParameter)?;
 
     if status != DungeonStatus::Failed {
         return Err(GameError::DungeonNotFailed.into());
@@ -90,7 +89,8 @@ pub fn process(
     }
 
     // 6. Load dungeon template using load_checked
-    let template = DungeonTemplate::load_checked(dungeon_template_account, run.dungeon_id, program_id)?;
+    let template =
+        DungeonTemplate::load_checked(dungeon_template_account, run.dungeon_id, program_id)?;
 
     // Get timestamp
     let clock = Clock::get()?;
@@ -98,8 +98,8 @@ pub fn process(
 
     // 7. Calculate and deduct gem cost
     // Base cost + scaling with checkpoint floor
-    let gem_cost = DUNGEON_RESUME_GEM_COST
-        .saturating_add((run.last_checkpoint as u64).saturating_mul(100));
+    let gem_cost =
+        DUNGEON_RESUME_GEM_COST.saturating_add((run.last_checkpoint as u64).saturating_mul(100));
 
     if player.gems < gem_cost {
         return Err(GameError::InsufficientGems.into());
@@ -166,9 +166,9 @@ pub fn process(
     // darkness_level represents the cumulative darkness, not just floor number
     let base_darkness = template.darkness_base_bps;
     let per_floor_darkness = template.darkness_per_floor_bps;
-    run.darkness_level = (base_darkness / 100).saturating_add(
-        (run.current_floor as u16).saturating_mul(per_floor_darkness / 100)
-    ) as u8;
+    run.darkness_level = (base_darkness / 100)
+        .saturating_add((run.current_floor as u16).saturating_mul(per_floor_darkness / 100))
+        as u8;
 
     // Increment resume count
     run.resume_count = run.resume_count.saturating_add(1);

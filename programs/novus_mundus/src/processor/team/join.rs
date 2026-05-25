@@ -1,22 +1,20 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{
-        PlayerAccount, TeamAccount, TeamMemberSlot, NULL_PUBKEY,
-        unlock_extension_if_eligible, require_extension, EXT_INVENTORY, EXT_TEAM,
-    },
     constants::TEAM_SLOT_SEED,
-    validation::{require_signer, require_writable, require_key_match, require_empty},
-    utils::{read_u16, read_u64},
     emit,
+    error::GameError,
     events::TeamJoined,
+    state::{
+        require_extension, unlock_extension_if_eligible, PlayerAccount, TeamAccount,
+        TeamMemberSlot, EXT_INVENTORY, EXT_TEAM, NULL_PUBKEY,
+    },
+    utils::{read_u16, read_u64},
+    validation::{require_empty, require_key_match, require_signer, require_writable},
 };
 
 /// Join a team (for public teams - no invite required)
@@ -75,8 +73,8 @@ pub fn process(
     unlock_extension_if_eligible(player_account, owner, EXT_TEAM)?;
 
     // 4a. Load Accounts mutably (using by_key for kingdom scoping validation)
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -138,7 +136,12 @@ pub fn process(
 
     let slot_bump_seed = [slot_bump];
     let slot_index_bytes = slot_index.to_le_bytes();
-    let slot_seeds = crate::seeds!(TEAM_SLOT_SEED, team_account.address(), &slot_index_bytes, &slot_bump_seed);
+    let slot_seeds = crate::seeds!(
+        TEAM_SLOT_SEED,
+        team_account.address(),
+        &slot_index_bytes,
+        &slot_bump_seed
+    );
     let slot_signer = pinocchio::cpi::Signer::from(&slot_seeds);
 
     CreateAccount {
@@ -147,7 +150,8 @@ pub fn process(
         lamports: slot_lamports,
         space: TeamMemberSlot::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[slot_signer])?;
+    }
+    .invoke_signed(&[slot_signer])?;
 
     // 8. Initialize Slot Data
 

@@ -1,5 +1,5 @@
-use crate::state::{PlayerAccount, HeroTemplate, BuffConfig, BuffStat, get_buff_stat_name};
 use crate::logic::calculate_buff_at_level;
+use crate::state::{get_buff_stat_name, BuffConfig, BuffStat, HeroTemplate, PlayerAccount};
 
 // // ========================================================// ========================================================// ========================================================// ========================================================// ========================================================// ========================================================
 // Formatting Utilities
@@ -40,7 +40,11 @@ pub fn format_i64_to_bytes(value: i64, buf: &mut [u8; 20]) -> &[u8] {
 
     let negative = value < 0;
     // Use absolute value via wrapping; handles i64::MIN safely.
-    let mut n: u64 = if negative { value.unsigned_abs() } else { value as u64 };
+    let mut n: u64 = if negative {
+        value.unsigned_abs()
+    } else {
+        value as u64
+    };
     let mut pos = 20;
 
     while n > 0 {
@@ -78,7 +82,9 @@ pub fn add_hero_buffs_to_player_with_location(
 ) {
     for buff_config in template.buffs.iter() {
         let stat = BuffStat::from_u8(buff_config.stat);
-        if matches!(stat, BuffStat::None) { continue; }
+        if matches!(stat, BuffStat::None) {
+            continue;
+        }
 
         // Calculate base buff value deterministically: base × (√φ)^level
         let base_value = calculate_buff_at_level(buff_config.base_bps as u64, level);
@@ -114,7 +120,9 @@ pub fn subtract_hero_buffs_from_player_with_location(
 ) {
     for buff_config in template.buffs.iter() {
         let stat = BuffStat::from_u8(buff_config.stat);
-        if matches!(stat, BuffStat::None) { continue; }
+        if matches!(stat, BuffStat::None) {
+            continue;
+        }
 
         // Calculate base buff value deterministically: base × (√φ)^level
         let base_value = calculate_buff_at_level(buff_config.base_bps as u64, level);
@@ -134,7 +142,9 @@ pub fn subtract_hero_buffs_from_player_with_location(
 /// Clear all hero buff fields on player (used before recalculation)
 #[inline]
 pub fn clear_hero_buffs(player: &mut PlayerAccount) {
-    let Some(heroes) = player.heroes_mut() else { return; };
+    let Some(heroes) = player.heroes_mut() else {
+        return;
+    };
     heroes.hero_attack_bps = 0;
     heroes.hero_defense_bps = 0;
     heroes.hero_economy_bps = 0;
@@ -167,14 +177,18 @@ pub fn add_buff_delta_to_player(
 ) {
     for buff_config in template.buffs.iter() {
         let stat = BuffStat::from_u8(buff_config.stat);
-        if matches!(stat, BuffStat::None) { continue; }
+        if matches!(stat, BuffStat::None) {
+            continue;
+        }
 
         // Calculate delta between levels deterministically
         let old_value = calculate_buff_at_level(buff_config.base_bps as u64, old_level);
         let new_value = calculate_buff_at_level(buff_config.base_bps as u64, new_level);
         let delta = new_value.saturating_sub(old_value);
 
-        if delta == 0 { continue; }
+        if delta == 0 {
+            continue;
+        }
 
         apply_buff_to_player(player, stat, delta as u16, true);
     }
@@ -183,7 +197,9 @@ pub fn add_buff_delta_to_player(
 /// Internal: Apply a single buff value to the appropriate player stat
 #[inline]
 fn apply_buff_to_player(player: &mut PlayerAccount, stat: BuffStat, value: u16, add: bool) {
-    let Some(heroes) = player.heroes_mut() else { return; };
+    let Some(heroes) = player.heroes_mut() else {
+        return;
+    };
     let target = match stat {
         BuffStat::AttackPower => &mut heroes.hero_attack_bps,
         BuffStat::DefensePower => &mut heroes.hero_defense_bps,
@@ -212,7 +228,6 @@ fn apply_buff_to_player(player: &mut PlayerAccount, stat: BuffStat, value: u16, 
         *target = target.saturating_sub(value);
     }
 }
-
 
 // NFT Attribute Building
 
@@ -279,10 +294,7 @@ impl HeroNftContext {
     /// NFT-Only System: Used when updating an existing hero's NFT.
     /// Reads current state from NFT, applies changes, writes back.
     #[inline]
-    pub fn from_parsed(
-        parsed: &super::nft_parser::ParsedHeroNft,
-        template: &HeroTemplate,
-    ) -> Self {
+    pub fn from_parsed(parsed: &super::nft_parser::ParsedHeroNft, template: &HeroTemplate) -> Self {
         Self {
             level: parsed.level,
             meditation_xp: parsed.meditation_xp,

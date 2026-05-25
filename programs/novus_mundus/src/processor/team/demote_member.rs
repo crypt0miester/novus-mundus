@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, TeamMemberSlot, require_extension, EXT_TEAM, NULL_PUBKEY},
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u8, read_u16, read_u64},
     emit,
+    error::GameError,
     events::MemberRankChanged,
+    state::{require_extension, PlayerAccount, TeamAccount, TeamMemberSlot, EXT_TEAM, NULL_PUBKEY},
+    utils::{read_u16, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Demote a team member to a lower rank
@@ -71,7 +69,7 @@ pub fn process(
     if &demoter.owner != demoter_owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -97,7 +95,8 @@ pub fn process(
 
     // 6. Verify Demoter Slot and Get Rank
 
-    let (expected_demoter_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), demoter_slot_index);
+    let (expected_demoter_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), demoter_slot_index);
     if demoter_slot_account.address() != &expected_demoter_slot {
         return Err(GameError::InvalidPDA.into());
     }
@@ -118,7 +117,8 @@ pub fn process(
 
     // 7. Verify Target Slot
 
-    let (expected_target_slot, _) = TeamMemberSlot::derive_pda(team_account.address(), target_slot_index);
+    let (expected_target_slot, _) =
+        TeamMemberSlot::derive_pda(team_account.address(), target_slot_index);
     if target_slot_account.address() != &expected_target_slot {
         return Err(GameError::InvalidPDA.into());
     }

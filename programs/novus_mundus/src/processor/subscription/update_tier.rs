@@ -1,19 +1,11 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-};
+use pinocchio::{error::ProgramError, AccountView, Address};
 
 use crate::{
+    constants::GAME_ENGINE_SEED,
     error::GameError,
     state::{GameEngine, SubscriptionTier},
     utils::read_u8,
-    validation::{
-        require_signer,
-        require_writable,
-        require_pda,
-    },
-    constants::GAME_ENGINE_SEED,
+    validation::{require_pda, require_signer, require_writable},
 };
 
 /// Update subscription tier configuration (DAO ONLY)
@@ -42,12 +34,14 @@ pub fn process(
 
     // 3. Load game engine (before PDA check so we can read kingdom_id)
     let mut game_engine_data_check = game_engine.try_borrow_mut()?;
-    let game_engine_data = unsafe {
-        GameEngine::load_mut(&mut game_engine_data_check)
-    };
+    let game_engine_data = unsafe { GameEngine::load_mut(&mut game_engine_data_check) };
 
     let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
-    let _bump = require_pda(game_engine, &[GAME_ENGINE_SEED, &kingdom_id_bytes], program_id)?;
+    let _bump = require_pda(
+        game_engine,
+        &[GAME_ENGINE_SEED, &kingdom_id_bytes],
+        program_id,
+    )?;
 
     // 4. Verify DAO authority
     if authority.address() != &game_engine_data.authority {
@@ -69,9 +63,7 @@ pub fn process(
 
     // 6. Deserialize new tier config
     let tier_data = &data[1..];
-    let new_tier = unsafe {
-        SubscriptionTier::load(tier_data)
-    };
+    let new_tier = unsafe { SubscriptionTier::load(tier_data) };
 
     // 7. Validate tier_index matches
     if new_tier.tier_index != tier_index {
@@ -82,7 +74,8 @@ pub fn process(
     game_engine_data.subscription_tiers[tier_index as usize] = *new_tier;
 
     // 9. Increment version
-    game_engine_data.version = game_engine_data.version
+    game_engine_data.version = game_engine_data
+        .version
         .checked_add(1)
         .ok_or(GameError::MathOverflow)?;
 

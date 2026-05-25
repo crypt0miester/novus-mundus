@@ -1,30 +1,23 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{HERO_TEMPLATE_SEED, PLAYER_SEED},
+    emit,
     error::GameError,
-    state::{PlayerAccount, HeroTemplate, EstateAccount, GameEngine, NULL_PUBKEY, require_extension, EXT_HEROES},
-    constants::{PLAYER_SEED, HERO_TEMPLATE_SEED},
+    events::HeroUnlocked,
     helpers::{
-        subtract_hero_buffs_from_player_with_location,
-        parse_hero_nft,
-        HeroNftContext,
-        HeroNftBuffers,
-        build_hero_nft_attributes,
+        build_hero_nft_attributes, parse_hero_nft, subtract_hero_buffs_from_player_with_location,
+        HeroNftBuffers, HeroNftContext,
+    },
+    state::{
+        require_extension, EstateAccount, GameEngine, HeroTemplate, PlayerAccount, EXT_HEROES,
+        NULL_PUBKEY,
     },
     utils::read_u8,
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
-    },
-    emit,
-    events::HeroUnlocked,
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Unlock a hero NFT (transfer from PlayerAccount PDA back to wallet) (133)
@@ -118,7 +111,8 @@ pub fn process(
         new_owner: owner,
         system_program,
         log_wrapper: p_core_program,
-    }.invoke_signed(&[player_signer])?;
+    }
+    .invoke_signed(&[player_signer])?;
 
     // 8. Phase 2: Update state AFTER successful transfer (mutable borrow)
     let mut player_data = player_account.try_borrow_mut()?;
@@ -156,8 +150,7 @@ pub fn process(
 
     // 11. Parse hero data from NFT and subtract buffs
     let nft_data = hero_mint.try_borrow()?;
-    let parsed_hero = parse_hero_nft(&nft_data)
-        .ok_or(GameError::InvalidParameter)?;
+    let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
     // Validate the HeroTemplate's program ownership AND PDA derivation
@@ -190,7 +183,12 @@ pub fn process(
     // 13. Location Synergy: Get stored location bonus and subtract with same bonus
     let location_bonus_bps = player.slot_location_bonus_at(slot_index as usize);
 
-    subtract_hero_buffs_from_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
+    subtract_hero_buffs_from_player_with_location(
+        player,
+        parsed_hero.level,
+        template,
+        location_bonus_bps,
+    );
 
     // Clear location bonus + slot cooldown cache for this slot
     player.set_slot_location_bonus_at(slot_index as usize, 0);
@@ -209,7 +207,11 @@ pub fn process(
     };
 
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let game_engine_seeds = crate::seeds!(
+        crate::constants::GAME_ENGINE_SEED,
+        &kingdom_id_bytes,
+        &ge_bump_seed
+    );
     let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
 
     let mut buffers = HeroNftBuffers::new();
@@ -226,7 +228,8 @@ pub fn process(
         update: p_core::instructions::PluginUpdateData::AttributesSet {
             attributes: &attributes[..attr_count],
         },
-    }.invoke_signed(&[ge_signer])?;
+    }
+    .invoke_signed(&[ge_signer])?;
 
     // 13. Emit HeroUnlocked event
     let clock = Clock::get()?;

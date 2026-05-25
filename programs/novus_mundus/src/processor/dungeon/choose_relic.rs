@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, DungeonTemplate, DungeonRun, DungeonStatus, RoomType, GameEngine},
-    validation::{require_signer, require_writable},
-    utils::read_u8,
     emit,
-    events::{DungeonRelicChosen, DungeonBossFight},
+    error::GameError,
+    events::{DungeonBossFight, DungeonRelicChosen},
+    state::{DungeonRun, DungeonStatus, DungeonTemplate, GameEngine, PlayerAccount, RoomType},
+    utils::read_u8,
+    validation::{require_signer, require_writable},
 };
 // Note: Dawn extra relic choice and the +1-choice relic (id 19) are handled by the backend
 // providing a 4th relic option. The on-chain code validates against all provided options.
@@ -36,11 +34,7 @@ use crate::{
 /// - relic_option_2: u8 (second relic option offered by backend)
 /// - relic_option_3: u8 (third relic option offered by backend)
 /// - relic_option_4: u8 (optional 4th option for Dawn or +1-choice relic id 19)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse accounts
     crate::extract_accounts!(accounts, exact [
         owner,
@@ -57,14 +51,18 @@ pub fn process(
     require_writable(dungeon_run_account)?;
 
     // 3. Load and validate player using load_checked (kingdom-scoped)
-    let _player = PlayerAccount::load_checked(player_account, game_engine_account.address(), owner.address(), program_id)?;
+    let _player = PlayerAccount::load_checked(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 4. Validate game_authority against GameEngine (kingdom-scoped)
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     if game_authority.address() != &game_engine.game_authority {
         return Err(GameError::Unauthorized.into());
     }
-    drop(game_engine);
 
     // 5. Parse instruction data
     let relic_id = read_u8(data, 0, "choose_relic.relic_id")?;
@@ -91,11 +89,11 @@ pub fn process(
     }
 
     // 6. Load dungeon run using load_checked_mut (PDA derived from player_account)
-    let mut run_data = DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
+    let run_data =
+        DungeonRun::load_checked_mut(dungeon_run_account, player_account.address(), program_id)?;
 
     // Validate run is awaiting relic
-    let status = DungeonStatus::from_u8(run_data.status)
-        .ok_or(GameError::InvalidParameter)?;
+    let status = DungeonStatus::from_u8(run_data.status).ok_or(GameError::InvalidParameter)?;
 
     if status != DungeonStatus::AwaitingRelic {
         return Err(GameError::NotAwaitingRelic.into());
@@ -107,7 +105,8 @@ pub fn process(
     }
 
     // 7. Load dungeon template using load_checked (validates dungeon_id)
-    let template = DungeonTemplate::load_checked(dungeon_template_account, run_data.dungeon_id, program_id)?;
+    let template =
+        DungeonTemplate::load_checked(dungeon_template_account, run_data.dungeon_id, program_id)?;
 
     // Get timestamp
     let clock = Clock::get()?;

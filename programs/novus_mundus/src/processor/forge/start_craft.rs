@@ -1,28 +1,26 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::PLAYER_SEED,
     emit,
     error::GameError,
     events::CraftStarted,
-    state::{
-        PlayerAccount,
-        estate::{CraftedEquipmentAccount, CraftableEquipment, QualityTier},
-    },
     helpers::{
         burn_tokens,
         estate::{
-            load_estate_for_player, can_craft_quality_tier, require_forge,
-            get_forge_level, calculate_stages_required, calculate_window_duration,
+            calculate_stages_required, calculate_window_duration, can_craft_quality_tier,
+            get_forge_level, load_estate_for_player, require_forge,
         },
     },
-    constants::PLAYER_SEED,
+    state::{
+        estate::{CraftableEquipment, CraftedEquipmentAccount, QualityTier},
+        PlayerAccount,
+    },
     utils::read_u8,
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Start a staged tempering craft
@@ -98,10 +96,12 @@ pub fn process(
     );
 
     // 3. Parse Instruction Data
-    let equipment_type = CraftableEquipment::from_u8(read_u8(instruction_data, 0, "start_craft.equipment_type")?)
-        .ok_or(GameError::InvalidParameter)?;
-    let quality_tier = QualityTier::from_u8(read_u8(instruction_data, 1, "start_craft.quality_tier")?)
-        .ok_or(GameError::InvalidParameter)?;
+    let equipment_type =
+        CraftableEquipment::from_u8(read_u8(instruction_data, 0, "start_craft.equipment_type")?)
+            .ok_or(GameError::InvalidParameter)?;
+    let quality_tier =
+        QualityTier::from_u8(read_u8(instruction_data, 1, "start_craft.quality_tier")?)
+            .ok_or(GameError::InvalidParameter)?;
 
     // Cannot craft Common tier (shop-bought baseline)
     if quality_tier == QualityTier::Common {
@@ -110,7 +110,8 @@ pub fn process(
 
     // 8. Calculate Costs (before borrows)
     let novi_cost = quality_tier.novi_cost();
-    let (common_cost, uncommon_cost, rare_cost, epic_cost, legendary_cost) = quality_tier.material_cost();
+    let (common_cost, uncommon_cost, rare_cost, epic_cost, legendary_cost) =
+        quality_tier.material_cost();
 
     // 4. Phase 1: Validate and capture values (scoped borrows, dropped before CPI)
     let (player_ge, player_bump, player_name, forge_level) = {

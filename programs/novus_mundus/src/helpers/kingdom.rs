@@ -5,9 +5,9 @@
 
 #![allow(dead_code)]
 
-use pinocchio::Address;
-use pinocchio::error::ProgramError;
 use crate::error::GameError;
+use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
 /// Validate that a player belongs to the specified kingdom
 ///

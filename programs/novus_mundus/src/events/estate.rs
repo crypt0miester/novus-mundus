@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Estate events - buildings and plots
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when an estate is created for a player
 pub struct EstateCreated {

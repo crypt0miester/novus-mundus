@@ -1,23 +1,21 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
     events::TravelSpeedup,
-    state::{PlayerAccount, GameEngine},
+    state::{GameEngine, PlayerAccount},
     types::TravelType,
 };
 
 /// Speed-up tiers for travel
 /// Each tier reduces remaining travel time
-pub const SPEEDUP_TIER_1: u8 = 1;  // 50% of time remains
-pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
+pub const SPEEDUP_TIER_1: u8 = 1; // 50% of time remains
+pub const SPEEDUP_TIER_2: u8 = 2; // 25% of time remains
 
 /// Speed up current travel by spending gems
 ///
@@ -71,7 +69,12 @@ pub fn process(
     // 4. Load Accounts (kingdom-scoped)
 
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-    let mut player_data = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), owner.address(), program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        owner.address(),
+        program_id,
+    )?;
 
     // 6. Validate Currently Traveling
 
@@ -103,8 +106,8 @@ pub fn process(
     // Tier 2: 25% of time remains (multiply remaining by 0.25)
 
     let (time_multiplier, tier_cost_multiplier): (f64, u64) = match speedup_tier {
-        SPEEDUP_TIER_1 => (0.5, 1),    // 50% of time remains, 1x gem cost
-        SPEEDUP_TIER_2 => (0.25, 2),   // 25% of time remains, 2x gem cost
+        SPEEDUP_TIER_1 => (0.5, 1),  // 50% of time remains, 1x gem cost
+        SPEEDUP_TIER_2 => (0.25, 2), // 25% of time remains, 2x gem cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
 

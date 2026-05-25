@@ -1,18 +1,17 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::USER_SEED,
-    state::UserAccount,
-    validation::{require_signer, require_writable, require_key_match, derive_pda},
-    token_helpers::create_associated_token_account,
     emit,
     events::UserCreated,
+    state::UserAccount,
+    token_helpers::create_associated_token_account,
+    validation::{derive_pda, require_key_match, require_signer, require_writable},
 };
 
 /// Initialize a new user account and NOVI token account
@@ -86,10 +85,7 @@ pub fn process(
     // 3. Derive and Validate PDA
 
     // Derive expected user PDA
-    let (expected_user, bump) = derive_pda(
-        &[USER_SEED, owner.address().as_ref()],
-        program_id,
-    );
+    let (expected_user, bump) = derive_pda(&[USER_SEED, owner.address().as_ref()], program_id);
 
     // Verify user account matches expected PDA
     if user.address() != &expected_user {
@@ -118,16 +114,15 @@ pub fn process(
         lamports,
         space: UserAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 6. Initialize User Data
     {
         // Scope the mutable borrow so it's dropped before the ATA CPI below,
         // which needs to re-borrow `user` internally.
         let mut user_data_ref = user.try_borrow_mut()?;
-        let user_data = unsafe {
-            UserAccount::load_mut(&mut user_data_ref)
-        };
+        let user_data = unsafe { UserAccount::load_mut(&mut user_data_ref) };
 
         use crate::NULL_PUBKEY;
 
@@ -149,10 +144,10 @@ pub fn process(
 
     // Create or verify user's Associated Token Account
     create_associated_token_account(
-        owner,                      // Payer (owner pays for creation)
-        user_token_account,         // The ATA to create
-        user,                       // ATA owner (user PDA)
-        novi_mint,                  // Token mint (NOVI)
+        owner,              // Payer (owner pays for creation)
+        user_token_account, // The ATA to create
+        user,               // ATA owner (user PDA)
+        novi_mint,          // Token mint (NOVI)
         system_program,
         token_program,
     )?;

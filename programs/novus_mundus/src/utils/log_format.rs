@@ -22,7 +22,11 @@ unsafe impl Log for Pk<'_> {
         let mut len = 0u8;
         five8::encode_32(self.0, Some(&mut len), &mut tmp);
         let len = len as usize;
-        let to_write = if len < buffer.len() { len } else { buffer.len() };
+        let to_write = if len < buffer.len() {
+            len
+        } else {
+            buffer.len()
+        };
         for i in 0..to_write {
             buffer[i] = MaybeUninit::new(tmp[i]);
         }

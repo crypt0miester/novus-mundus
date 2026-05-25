@@ -11,22 +11,22 @@
 //! 5. `[]` system_program: System program
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{ARENA_PARTICIPANT_SEED, ARENA_LOADOUT_SEED, ARENA_STARTING_ELO},
+    constants::{ARENA_LOADOUT_SEED, ARENA_PARTICIPANT_SEED, ARENA_STARTING_ELO},
     error::GameError,
     state::{
-        ArenaSeasonAccount, ArenaParticipantAccount, ArenaLoadoutAccount, ArenaStatus,
-        PlayerAccount, ARENA_PARTICIPANT_ACCOUNT_SIZE, ARENA_LOADOUT_ACCOUNT_SIZE,
+        ArenaLoadoutAccount, ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus,
+        PlayerAccount, ARENA_LOADOUT_ACCOUNT_SIZE, ARENA_PARTICIPANT_ACCOUNT_SIZE,
     },
-    validation::{require_signer, require_writable, require_key_match, require_owner, require_data_len},
     utils::read_u32,
+    validation::{
+        require_data_len, require_key_match, require_owner, require_signer, require_writable,
+    },
 };
 
 /// Instruction data for join_season
@@ -70,7 +70,6 @@ pub fn process(
     let player_key = *player_account.address();
     let player_level = player.level;
     let player_game_engine = player.game_engine;
-    drop(player);
 
     // 6. Load and validate Arena Season
     require_owner(arena_season, program_id)?;
@@ -103,8 +102,11 @@ pub fn process(
     drop(season_data);
 
     // 7. Verify participant account doesn't already exist
-    let (expected_participant_pda, participant_bump) =
-        ArenaParticipantAccount::derive_pda(&player_game_engine, season_id, player_account.address());
+    let (expected_participant_pda, participant_bump) = ArenaParticipantAccount::derive_pda(
+        &player_game_engine,
+        season_id,
+        player_account.address(),
+    );
     if participant_account.address() != &expected_participant_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -133,7 +135,8 @@ pub fn process(
         lamports: participant_lamports,
         space: ARENA_PARTICIPANT_ACCOUNT_SIZE as u64,
         owner: program_id,
-    }.invoke_signed(&[participant_signer])?;
+    }
+    .invoke_signed(&[participant_signer])?;
 
     // 9. Initialize Participant Account
     let mut participant_data_ref = participant_account.try_borrow_mut()?;
@@ -186,7 +189,8 @@ pub fn process(
             lamports: loadout_lamports,
             space: ARENA_LOADOUT_ACCOUNT_SIZE as u64,
             owner: program_id,
-        }.invoke_signed(&[loadout_signer])?;
+        }
+        .invoke_signed(&[loadout_signer])?;
 
         // Initialize Loadout Account
         let mut loadout_data_ref = loadout_account.try_borrow_mut()?;

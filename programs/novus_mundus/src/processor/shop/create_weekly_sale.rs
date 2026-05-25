@@ -1,16 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::WEEKLY_SALE_SEED,
     error::GameError,
     state::{GameEngine, WeeklySaleAccount, WeeklySaleTheme},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u16, read_u64, read_i64},
+    utils::{read_i64, read_u16, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a weekly sale (DAO only)
 ///
@@ -103,7 +99,8 @@ pub fn process(
 
     // 6. Derive and Verify Weekly Sale PDA
 
-    let (expected_pda, bump) = WeeklySaleAccount::derive_pda(game_engine_account.address(), week_number);
+    let (expected_pda, bump) =
+        WeeklySaleAccount::derive_pda(game_engine_account.address(), week_number);
 
     if weekly_sale_account.address() != &expected_pda {
         return Err(GameError::InvalidPDA.into());
@@ -129,7 +126,8 @@ pub fn process(
         lamports,
         space: WeeklySaleAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize Weekly Sale Data
 

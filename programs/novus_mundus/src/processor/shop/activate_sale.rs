@@ -1,19 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    error::ProgramError,
-    Address,
-    sysvars::Sysvar,
-};
 use crate::{
     error::GameError,
-    state::{
-        SeasonalSaleAccount, SeasonalSaleStatus,
-        DAOPromotionAccount, DAOPromotionStatus,
-    },
-    validation::{require_signer, require_writable, require_owner},
-    utils::{read_u8, read_u64, read_bytes32},
+    state::{DAOPromotionAccount, DAOPromotionStatus, SeasonalSaleAccount, SeasonalSaleStatus},
+    utils::{read_bytes32, read_u64, read_u8},
+    validation::{require_owner, require_signer, require_writable},
 };
+use pinocchio::{error::ProgramError, sysvars::Sysvar, AccountView, Address, ProgramResult};
 
 /// Sale type for activation
 const SALE_TYPE_SEASONAL: u8 = 0;
@@ -71,24 +62,20 @@ pub fn process(
     // 5. Process Based on Sale Type
 
     match sale_type {
-        SALE_TYPE_SEASONAL => {
-            activate_seasonal_sale(
-                game_engine_account.address(),
-                sale_account,
-                instruction_data,
-                now,
-                program_id,
-            )
-        }
-        SALE_TYPE_DAO_PROMO => {
-            activate_dao_promotion(
-                game_engine_account.address(),
-                sale_account,
-                instruction_data,
-                now,
-                program_id,
-            )
-        }
+        SALE_TYPE_SEASONAL => activate_seasonal_sale(
+            game_engine_account.address(),
+            sale_account,
+            instruction_data,
+            now,
+            program_id,
+        ),
+        SALE_TYPE_DAO_PROMO => activate_dao_promotion(
+            game_engine_account.address(),
+            sale_account,
+            instruction_data,
+            now,
+            program_id,
+        ),
         _ => Err(GameError::InvalidParameter.into()),
     }
 }

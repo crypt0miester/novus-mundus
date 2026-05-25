@@ -1,8 +1,6 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
@@ -11,12 +9,9 @@ use crate::{
     error::GameError,
     events::HeroAbilityUsed,
     helpers::parse_hero_nft,
-    state::{
-        AbilityKind, HeroTemplate, PlayerAccount, NULL_PUBKEY,
-        require_extension, EXT_HEROES,
-    },
+    state::{require_extension, AbilityKind, HeroTemplate, PlayerAccount, EXT_HEROES, NULL_PUBKEY},
     utils::read_u8,
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Pending one-shot effects auto-expire after this many seconds so they
@@ -116,10 +111,7 @@ pub fn process(
     // ability on cooldown forever; using it now restamps a correct `now`.
     let last_used = player.ability_last_used_at(slot_index as usize);
     let cooldown_secs = template.ability_cooldown_secs as i64;
-    if last_used > 0
-        && last_used <= now
-        && now < last_used.saturating_add(cooldown_secs)
-    {
+    if last_used > 0 && last_used <= now && now < last_used.saturating_add(cooldown_secs) {
         return Err(GameError::HeroAbilityOnCooldown.into());
     }
 

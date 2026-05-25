@@ -1,18 +1,22 @@
 use pinocchio::{
-    ProgramResult, AccountView, error::ProgramError, Address, sysvars::{Sysvar, clock::Clock}
+    error::ProgramError,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, CityAccount, EncounterAccount, LocationAccount, OCCUPANT_ENCOUNTER},
-    types::EncounterType,
     constants::{ENCOUNTER_SEED, LOCATION_SEED},
-    helpers::{burn_tokens},
-    validation::{require_signer, require_writable, require_key_match},
-    logic::{get_time_of_day, can_spawn_rarity_at_time, get_rarity_spawn_weight, safe_math::apply_bp},
     emit,
+    error::GameError,
     events::EncounterSpawned,
+    helpers::burn_tokens,
+    logic::{
+        can_spawn_rarity_at_time, get_rarity_spawn_weight, get_time_of_day, safe_math::apply_bp,
+    },
+    state::{CityAccount, EncounterAccount, LocationAccount, PlayerAccount, OCCUPANT_ENCOUNTER},
+    types::EncounterType,
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Spawn an encounter in a city
@@ -99,20 +103,22 @@ pub fn process(
 
     let encounter_type = EncounterType::try_from(instruction_data[0])?;
     let client_grid_lat = i32::from_le_bytes([
-        instruction_data[1], instruction_data[2],
-        instruction_data[3], instruction_data[4],
+        instruction_data[1],
+        instruction_data[2],
+        instruction_data[3],
+        instruction_data[4],
     ]);
     let client_grid_long = i32::from_le_bytes([
-        instruction_data[5], instruction_data[6],
-        instruction_data[7], instruction_data[8],
+        instruction_data[5],
+        instruction_data[6],
+        instruction_data[7],
+        instruction_data[8],
     ]);
 
     // 4. Load GameEngine to Check Auto-Spawn vs Player-Spawn
 
     let game_engine_data = game_engine_account.try_borrow()?;
-    let game_engine_data = unsafe {
-        crate::state::GameEngine::load(&game_engine_data)
-    };
+    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data) };
 
     // Check if this is an auto-spawn (authority is game_engine.authority)
     let is_auto_spawn = authority.address() == &game_engine_data.authority;
@@ -184,8 +190,11 @@ pub fn process(
 
         if base_burn_cost > 0 {
             // Apply DAO cost multiplier (basis points: 10000 = 1.0x, no u128!)
-            let dao_adjusted_cost = apply_bp(base_burn_cost, game_engine_data.economic_config.cost_multiplier as u64)
-                .ok_or(GameError::MathOverflow)?;
+            let dao_adjusted_cost = apply_bp(
+                base_burn_cost,
+                game_engine_data.economic_config.cost_multiplier as u64,
+            )
+            .ok_or(GameError::MathOverflow)?;
 
             // 7a. Apply Time-Based Spawn Cost Discount (DETERMINISTIC)
             // Spawning at optimal time = cheaper (spawn weight as discount)
@@ -203,7 +212,11 @@ pub fn process(
 
             let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine_data.bump];
-            let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+            let seeds = crate::seeds!(
+                crate::constants::GAME_ENGINE_SEED,
+                &kingdom_id_bytes,
+                &bump_seed
+            );
             let signer = pinocchio::cpi::Signer::from(&seeds);
 
             // Burn tokens from player
@@ -273,7 +286,12 @@ pub fn process(
     let city_id_bytes = city_data.city_id.to_le_bytes();
     let encounter_id_bytes = encounter_id.to_le_bytes();
     let (expected_encounter, encounter_bump) = Address::find_program_address(
-        &[ENCOUNTER_SEED, game_engine_account.address().as_ref(), &city_id_bytes, &encounter_id_bytes],
+        &[
+            ENCOUNTER_SEED,
+            game_engine_account.address().as_ref(),
+            &city_id_bytes,
+            &encounter_id_bytes,
+        ],
         program_id,
     );
 
@@ -307,7 +325,8 @@ pub fn process(
             lamports: location_lamports,
             space: LocationAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[location_signer])?;
+        }
+        .invoke_signed(&[location_signer])?;
 
         let mut location_data = spawn_location_account.try_borrow_mut()?;
         let location = unsafe { LocationAccount::load_mut(&mut location_data) };
@@ -353,38 +372,38 @@ pub fn process(
     // 11. Create Encounter Account (with 0 attackers initially - minimal size!)
 
     let space = EncounterAccount::calculate_len(0);
-    let lamports = pinocchio::sysvars::rent::Rent::get()?
-        .try_minimum_balance(space)?;
+    let lamports = pinocchio::sysvars::rent::Rent::get()?.try_minimum_balance(space)?;
 
     let enc_bump_seed = [encounter_bump];
-    let seeds = crate::seeds!(ENCOUNTER_SEED, game_engine_account.address(), &city_id_bytes, &encounter_id_bytes, &enc_bump_seed);
+    let seeds = crate::seeds!(
+        ENCOUNTER_SEED,
+        game_engine_account.address(),
+        &city_id_bytes,
+        &encounter_id_bytes,
+        &enc_bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
-        from: payer,  // Payer pays rent (can be backend for auto-spawns!)
+        from: payer, // Payer pays rent (can be backend for auto-spawns!)
         to: encounter_account,
         lamports,
         space: space as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 12. Initialize Encounter Data
     // (clock already obtained above for time-of-day check)
 
     let mut encounter_account_data = encounter_account.try_borrow_mut()?;
-    let encounter_data = unsafe {
-        EncounterAccount::load_mut(&mut encounter_account_data)
-    };
+    let encounter_data = unsafe { EncounterAccount::load_mut(&mut encounter_account_data) };
 
     // NEW: Calculate Level-Based Stats
 
     // Determine encounter level based on city range and player level (if player spawn)
-    let encounter_level = calculate_encounter_level(
-        city_data,
-        encounter_type,
-        player_account,
-        is_auto_spawn,
-    )?;
+    let encounter_level =
+        calculate_encounter_level(city_data, encounter_type, player_account, is_auto_spawn)?;
 
     // Level-scaled health, multiplied by rarity. With the rarity multiplier
     // (Common 1×, Legendary 5×, WorldEvent 10×) high-rarity encounters scale
@@ -411,7 +430,7 @@ pub fn process(
         game_engine: *game_engine_account.address(),
         id: encounter_id,
         city_id: city_data.city_id,
-        level: encounter_level,                 
+        level: encounter_level,
         rarity: encounter_type as u8,
         _padding0: [0; 4],
         location_lat: spawn_lat,
@@ -446,7 +465,6 @@ pub fn process(
     Ok(())
 }
 
-
 /// Calculate encounter level based on city, rarity, and nearby players (DETERMINISTIC)
 ///
 /// # Strategy
@@ -476,13 +494,15 @@ fn calculate_encounter_level(
         // Auto-spawn: Use deterministic golden ratio distribution
         // Uses encounter_id for deterministic level assignment
         let spawn_index = city_data.total_encounters_spawned as u64;
-        Ok(crate::logic::deterministic_encounter_level(min, max, spawn_index))
+        Ok(crate::logic::deterministic_encounter_level(
+            min,
+            max,
+            spawn_index,
+        ))
     } else {
         // Player spawn: Spawn at player's level (deterministic, no variance)
         let player_account_data = player_account.try_borrow()?;
-        let player_data = unsafe {
-            PlayerAccount::load(&player_account_data)
-        };
+        let player_data = unsafe { PlayerAccount::load(&player_account_data) };
 
         let player_level = player_data.level;
 

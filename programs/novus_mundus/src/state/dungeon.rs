@@ -13,12 +13,10 @@
 //! - DungeonRun: ["dungeon_run", player]
 //! - DungeonLeaderboard: ["dungeon_leaderboard", dungeon_id, week_number]
 
-use pinocchio::Address;
 use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
-use crate::constants::{
-    DUNGEON_TEMPLATE_SEED, DUNGEON_RUN_SEED, DUNGEON_LEADERBOARD_SEED,
-};
+use crate::constants::{DUNGEON_LEADERBOARD_SEED, DUNGEON_RUN_SEED, DUNGEON_TEMPLATE_SEED};
 use crate::state::event::LeaderboardEntry;
 
 // DUNGEON STATUS
@@ -258,12 +256,12 @@ pub struct DungeonTemplate {
     pub floor_power: [u32; 10],
 
     /// Room type weights (basis points, must sum to 10000)
-    pub combat_weight: u16,     // Default: 6000 (60%)
-    pub treasure_weight: u16,   // Default: 1500 (15%)
-    pub camp_weight: u16,       // Default: 1000 (10%)
-    pub rest_weight: u16,       // Default: 1000 (10%)
-    pub trap_weight: u16,       // Default: 500 (5%)
-    pub _padding2: u16,         // Alignment
+    pub combat_weight: u16, // Default: 6000 (60%)
+    pub treasure_weight: u16, // Default: 1500 (15%)
+    pub camp_weight: u16,     // Default: 1000 (10%)
+    pub rest_weight: u16,     // Default: 1000 (10%)
+    pub trap_weight: u16,     // Default: 500 (5%)
+    pub _padding2: u16,       // Alignment
 
     /// Darkness configuration
     pub darkness_base_bps: u16,
@@ -296,7 +294,11 @@ impl DungeonTemplate {
 
     /// Get dungeon name as &str
     pub fn name(&self) -> &str {
-        let end = self.name.iter().position(|&b| b == 0).unwrap_or(self.name.len());
+        let end = self
+            .name
+            .iter()
+            .position(|&b| b == 0)
+            .unwrap_or(self.name.len());
         core::str::from_utf8(&self.name[..end]).unwrap_or("")
     }
 
@@ -336,7 +338,8 @@ impl DungeonTemplate {
         pinocchio::Address::create_program_address(
             &[DUNGEON_TEMPLATE_SEED, &dungeon_id_bytes, &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a DungeonTemplate.
@@ -345,35 +348,24 @@ impl DungeonTemplate {
         account: &'a pinocchio::AccountView,
         dungeon_id: u16,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        // 1. Check account is owned by program
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(dungeon_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "DungeonTemplate")?;
 
-        // 3. Load data
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::DungeonTemplate)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        // 4. Verify dungeon_id field matches
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::DungeonTemplate,
+                "DungeonTemplate",
+            )?
+        };
         if loaded.dungeon_id != dungeon_id {
             return Err(crate::error::GameError::InvalidParameter.into());
         }
-
-        // 5. Verify bump matches
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        crate::validation::require_bump_eq(loaded.bump, bump, "DungeonTemplate", account)?;
+        Ok(loaded)
     }
 }
 
@@ -690,7 +682,8 @@ impl DungeonRun {
         pinocchio::Address::create_program_address(
             &[DUNGEON_RUN_SEED, player_account.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a DungeonRun.
@@ -700,30 +693,17 @@ impl DungeonRun {
         account: &'a pinocchio::AccountView,
         player_account: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        // 1. Check account is owned by program
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(player_account);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "DungeonRun")?;
 
-        // 3. Load data
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::DungeonRun)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        // 4. Verify bump matches
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::DungeonRun, "DungeonRun")?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "DungeonRun", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify a DungeonRun mutably.
@@ -733,30 +713,21 @@ impl DungeonRun {
         account: &'a pinocchio::AccountView,
         player_account: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        // 1. Check account is owned by program
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
-        // 2. Derive PDA and verify
         let (expected_pda, bump) = Self::derive_pda(player_account);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "DungeonRun")?;
 
-        // 3. Load data
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::DungeonRun)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        // 4. Verify bump matches
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::DungeonRun,
+                "DungeonRun",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "DungeonRun", account)?;
+        Ok(loaded)
     }
 }
 
@@ -818,14 +789,17 @@ impl DungeonLeaderboard {
         time_seconds: i64,
         full_clear: bool,
     ) -> u64 {
-        let base_score = (floors_cleared as u64).saturating_mul(10000)
+        let base_score = (floors_cleared as u64)
+            .saturating_mul(10000)
             .saturating_add((enemies_killed as u64).saturating_mul(100))
             .saturating_add((relics_collected as u64).saturating_mul(500));
 
         let time_penalty = (time_seconds as u64).min(base_score);
         let clear_bonus = if full_clear { 50000u64 } else { 0 };
 
-        base_score.saturating_sub(time_penalty).saturating_add(clear_bonus)
+        base_score
+            .saturating_sub(time_penalty)
+            .saturating_add(clear_bonus)
     }
 
     /// Try to insert a score into the leaderboard
@@ -893,20 +867,37 @@ impl DungeonLeaderboard {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let week_bytes = week_number.to_le_bytes();
         pinocchio::Address::find_program_address(
-            &[DUNGEON_LEADERBOARD_SEED, game_engine.as_ref(), &dungeon_id_bytes, &week_bytes],
+            &[
+                DUNGEON_LEADERBOARD_SEED,
+                game_engine.as_ref(),
+                &dungeon_id_bytes,
+                &week_bytes,
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Address, dungeon_id: u16, week_number: u16, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        dungeon_id: u16,
+        week_number: u16,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let dungeon_id_bytes = dungeon_id.to_le_bytes();
         let week_bytes = week_number.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[DUNGEON_LEADERBOARD_SEED, game_engine.as_ref(), &dungeon_id_bytes, &week_bytes, &bump_seed],
+            &[
+                DUNGEON_LEADERBOARD_SEED,
+                game_engine.as_ref(),
+                &dungeon_id_bytes,
+                &week_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Check if leaderboard belongs to a specific kingdom

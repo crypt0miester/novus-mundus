@@ -1,8 +1,5 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
-};
-use crate::constants::{REINFORCEMENT_SEED, GARRISON_SEED};
+use crate::constants::{GARRISON_SEED, REINFORCEMENT_SEED};
+use pinocchio::{error::ProgramError, Address};
 
 // Reinforcement Target (Player vs Castle)
 
@@ -249,7 +246,11 @@ impl ReinforcementAccount {
     /// Derive PDA for player reinforcement
     /// Seeds: [REINFORCEMENT_SEED, game_engine, sender, destination]
     /// Only one reinforcement per sender→destination pair within a kingdom
-    pub fn derive_player_pda(game_engine: &Address, sender: &Address, destination: &Address) -> (Address, u8) {
+    pub fn derive_player_pda(
+        game_engine: &Address,
+        sender: &Address,
+        destination: &Address,
+    ) -> (Address, u8) {
         pinocchio::Address::find_program_address(
             &[
                 REINFORCEMENT_SEED,
@@ -264,7 +265,11 @@ impl ReinforcementAccount {
     /// Derive PDA for castle garrison
     /// Seeds: [GARRISON_SEED, game_engine, sender, castle]
     /// Only one garrison per sender→castle pair within a kingdom
-    pub fn derive_castle_pda(game_engine: &Address, sender: &Address, castle: &Address) -> (Address, u8) {
+    pub fn derive_castle_pda(
+        game_engine: &Address,
+        sender: &Address,
+        castle: &Address,
+    ) -> (Address, u8) {
         pinocchio::Address::find_program_address(
             &[
                 GARRISON_SEED,
@@ -293,7 +298,8 @@ impl ReinforcementAccount {
                 &bump_seed,
             ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Create PDA from known bump (castle garrison)
@@ -313,7 +319,8 @@ impl ReinforcementAccount {
                 &bump_seed,
             ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify a ReinforcementAccount immutably (player reinforcement).
@@ -323,30 +330,27 @@ impl ReinforcementAccount {
         sender: &Address,
         destination: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_player_pda(game_engine, sender, destination);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ReinforcementAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Reinforcement)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::Reinforcement,
+                "ReinforcementAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ReinforcementAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "ReinforcementAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a ReinforcementAccount mutably (player reinforcement).
@@ -356,30 +360,27 @@ impl ReinforcementAccount {
         sender: &Address,
         destination: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_player_pda(game_engine, sender, destination);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ReinforcementAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Reinforcement)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Reinforcement,
+                "ReinforcementAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ReinforcementAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "ReinforcementAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a ReinforcementAccount immutably (castle garrison).
@@ -389,30 +390,27 @@ impl ReinforcementAccount {
         sender: &Address,
         castle: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_castle_pda(game_engine, sender, castle);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ReinforcementAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Reinforcement)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::Reinforcement,
+                "ReinforcementAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ReinforcementAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "ReinforcementAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify a ReinforcementAccount mutably (castle garrison).
@@ -422,30 +420,27 @@ impl ReinforcementAccount {
         sender: &Address,
         castle: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_castle_pda(game_engine, sender, castle);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "ReinforcementAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Reinforcement)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Reinforcement,
+                "ReinforcementAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ReinforcementAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "ReinforcementAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Check if reinforcement belongs to a specific kingdom

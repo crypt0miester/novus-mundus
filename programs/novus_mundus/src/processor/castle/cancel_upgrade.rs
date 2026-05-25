@@ -5,20 +5,18 @@
 //! King can cancel an in-progress upgrade and receive 50% refund.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::GAME_ENGINE_SEED,
     emit,
     error::GameError,
     events::CastleUpgradeCancelled,
-    state::{CastleAccount, PlayerAccount, GameEngine},
-    constants::GAME_ENGINE_SEED,
     helpers::{mint_tokens, validate_token_account_owner},
+    state::{CastleAccount, GameEngine, PlayerAccount},
     validation::require_owner,
 };
 
@@ -48,15 +46,18 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        king_wallet,
-        king_account,
-        castle_account,
-        game_engine_account,
-        novi_mint,
-        _token_program,
-        locked_token_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            king_wallet,
+            king_account,
+            castle_account,
+            game_engine_account,
+            novi_mint,
+            _token_program,
+            locked_token_account,
+        ]
+    );
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -75,7 +76,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify caller is the king
     if castle.king != *king_account.address() {

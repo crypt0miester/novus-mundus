@@ -6,27 +6,21 @@
 //! Creates KingRegistryAccount if first time ruling.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::{
+        CASTLE_CONTEST_DURATION, CASTLE_STATUS_CONTEST, GARRISON_CAP_BY_TIER, KING_REGISTRY_SEED,
+        MAX_CASTLES_PER_KING,
+    },
     emit,
     error::GameError,
     events::CastleClaimed,
-    state::{
-        CastleAccount, KingRegistryAccount, PlayerAccount,
-        player::NULL_PUBKEY,
-    },
-    constants::{
-        KING_REGISTRY_SEED, CASTLE_STATUS_CONTEST,
-        CASTLE_CONTEST_DURATION, MAX_CASTLES_PER_KING,
-        GARRISON_CAP_BY_TIER,
-    },
+    state::{player::NULL_PUBKEY, CastleAccount, KingRegistryAccount, PlayerAccount},
     utils::read_u16,
     validation::require_owner,
 };
@@ -48,12 +42,15 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        player_wallet,
-        player_account,
-        castle_account,
-        king_registry_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_wallet,
+            player_account,
+            castle_account,
+            king_registry_account,
+        ]
+    );
 
     // Verify signer
     if !player_wallet.is_signer() {
@@ -87,7 +84,8 @@ pub fn process(
     // Load castle
     require_owner(castle_account, program_id)?;
 
-    let (expected_castle_pda, _castle_bump) = CastleAccount::derive_pda(&player_game_engine, city_id, castle_id);
+    let (expected_castle_pda, _castle_bump) =
+        CastleAccount::derive_pda(&player_game_engine, city_id, castle_id);
     if castle_account.address() != &expected_castle_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -123,7 +121,8 @@ pub fn process(
     }
 
     // Check troops (stored in thousands)
-    let total_troops = player.defensive_unit_1
+    let total_troops = player
+        .defensive_unit_1
         .saturating_add(player.defensive_unit_2)
         .saturating_add(player.defensive_unit_3);
     let troops_thousands = (total_troops / 1_000) as u8;
@@ -136,7 +135,8 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Handle king registry account (create if doesn't exist)
-    let (expected_registry_pda, registry_bump) = KingRegistryAccount::derive_pda(player_account.address());
+    let (expected_registry_pda, registry_bump) =
+        KingRegistryAccount::derive_pda(player_account.address());
     if king_registry_account.address() != &expected_registry_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -148,11 +148,7 @@ pub fn process(
         let lamports = crate::utils::rent_exempt_const(KingRegistryAccount::LEN);
 
         let bump_seed = [registry_bump];
-        let seeds = crate::seeds!(
-            KING_REGISTRY_SEED,
-            player_account.address(),
-            &bump_seed
-        );
+        let seeds = crate::seeds!(KING_REGISTRY_SEED, player_account.address(), &bump_seed);
         let signer = pinocchio::cpi::Signer::from(&seeds);
 
         CreateAccount {
@@ -161,7 +157,8 @@ pub fn process(
             lamports,
             space: KingRegistryAccount::LEN as u64,
             owner: program_id,
-        }.invoke_signed(&[signer])?;
+        }
+        .invoke_signed(&[signer])?;
 
         // Initialize registry
         let mut registry_data = king_registry_account.try_borrow_mut()?;

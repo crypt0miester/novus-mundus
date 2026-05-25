@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Game event events - event creation, participation, finalization
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a game event is created
 pub struct GameEventCreated {

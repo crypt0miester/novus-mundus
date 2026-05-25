@@ -1,14 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-};
 use crate::{
     error::GameError,
     state::{GameEngine, ShopConfigAccount},
-    validation::{require_signer, require_writable},
     utils::{read_bytes32, read_u16, read_u64, read_u8},
+    validation::{require_signer, require_writable},
 };
+use pinocchio::{AccountView, Address, ProgramResult};
 
 /// Update field flags
 pub const UPDATE_DISCOUNT_CAPS: u8 = 1;
@@ -41,11 +37,10 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts (3 required + 0–2 optional feed-validation slots)
 
-    crate::extract_accounts!(accounts, [
-        dao_authority,
-        game_engine_account,
-        shop_config_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [dao_authority, game_engine_account, shop_config_account,]
+    );
 
     // 2. Validate Accounts
 
@@ -79,18 +74,24 @@ pub fn process(
     // Update discount caps (8 bytes: 4 x u16)
     if update_flags & UPDATE_DISCOUNT_CAPS != 0 {
         config.max_base_discount_bps = read_u16(instruction_data, offset, "max_base_discount_bps")?;
-        config.max_bundle_discount_bps = read_u16(instruction_data, offset + 2, "max_bundle_discount_bps")?;
-        config.max_fib_discount_bps = read_u16(instruction_data, offset + 4, "max_fib_discount_bps")?;
-        config.max_total_discount_bps = read_u16(instruction_data, offset + 6, "max_total_discount_bps")?;
+        config.max_bundle_discount_bps =
+            read_u16(instruction_data, offset + 2, "max_bundle_discount_bps")?;
+        config.max_fib_discount_bps =
+            read_u16(instruction_data, offset + 4, "max_fib_discount_bps")?;
+        config.max_total_discount_bps =
+            read_u16(instruction_data, offset + 6, "max_total_discount_bps")?;
         offset += 8;
     }
 
     // Update sale limits (6 bytes)
     if update_flags & UPDATE_SALE_LIMITS != 0 {
-        config.max_flash_sales_per_day = read_u8(instruction_data, offset, "max_flash_sales_per_day")?;
+        config.max_flash_sales_per_day =
+            read_u8(instruction_data, offset, "max_flash_sales_per_day")?;
         config.max_daily_deals = read_u8(instruction_data, offset + 1, "max_daily_deals")?;
-        config.flash_sale_min_duration_secs = read_u16(instruction_data, offset + 2, "flash_sale_min_duration_secs")?;
-        config.flash_sale_max_duration_secs = read_u16(instruction_data, offset + 4, "flash_sale_max_duration_secs")?;
+        config.flash_sale_min_duration_secs =
+            read_u16(instruction_data, offset + 2, "flash_sale_min_duration_secs")?;
+        config.flash_sale_max_duration_secs =
+            read_u16(instruction_data, offset + 4, "flash_sale_max_duration_secs")?;
         offset += 6;
     }
 
@@ -109,8 +110,10 @@ pub fn process(
         config.bronze_discount_bps = read_u16(instruction_data, offset, "bronze_discount_bps")?;
         config.silver_discount_bps = read_u16(instruction_data, offset + 2, "silver_discount_bps")?;
         config.gold_discount_bps = read_u16(instruction_data, offset + 4, "gold_discount_bps")?;
-        config.platinum_discount_bps = read_u16(instruction_data, offset + 6, "platinum_discount_bps")?;
-        config.diamond_discount_bps = read_u16(instruction_data, offset + 8, "diamond_discount_bps")?;
+        config.platinum_discount_bps =
+            read_u16(instruction_data, offset + 6, "platinum_discount_bps")?;
+        config.diamond_discount_bps =
+            read_u16(instruction_data, offset + 8, "diamond_discount_bps")?;
         offset += 10;
     }
 
@@ -135,8 +138,13 @@ pub fn process(
         config.sol_pyth_feed = Address::from(pyth_bytes);
         config.sol_switchboard_feed = Address::from(sb_bytes);
         config.switchboard_queue = Address::from(queue_bytes);
-        config.sol_max_staleness_slots = read_u16(instruction_data, offset + 96, "sol_max_staleness_slots")?;
-        config.sol_confidence_threshold_bps = read_u16(instruction_data, offset + 98, "sol_confidence_threshold_bps")?;
+        config.sol_max_staleness_slots =
+            read_u16(instruction_data, offset + 96, "sol_max_staleness_slots")?;
+        config.sol_confidence_threshold_bps = read_u16(
+            instruction_data,
+            offset + 98,
+            "sol_confidence_threshold_bps",
+        )?;
     }
 
     Ok(())

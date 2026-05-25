@@ -7,24 +7,22 @@
 //! accounts and returns rent to original holders.
 
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::CASTLE_STATUS_TRANSITIONING,
     emit,
     error::GameError,
     events::CastleTransitionProgress,
-    state::{
-        CastleAccount, CourtPositionAccount, PlayerAccount,
-        player::{NULL_PUBKEY, EXT_COURT, COURT_OFFSET, CourtSection},
-    },
-    constants::CASTLE_STATUS_TRANSITIONING,
     helpers::close_account,
+    state::{
+        player::{CourtSection, COURT_OFFSET, EXT_COURT, NULL_PUBKEY},
+        CastleAccount, CourtPositionAccount, PlayerAccount,
+    },
     utils::read_u8,
-    validation::{require_owner, require_initialized},
+    validation::{require_initialized, require_owner},
 };
 
 /// Phase constant for event
@@ -48,13 +46,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        _crank,
-        castle_account,
-        court_account,
-        holder_account,
-        rent_recipient,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            _crank,
+            castle_account,
+            court_account,
+            holder_account,
+            rent_recipient,
+        ]
+    );
 
     // Parse instruction data (city_id/castle_id from account)
     let position = read_u8(instruction_data, 0, "position")?;
@@ -65,7 +66,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle is in transitioning state
     if castle.status != CASTLE_STATUS_TRANSITIONING {
@@ -75,10 +76,8 @@ pub fn process(
     // Load court position account
     require_owner(court_account, program_id)?;
 
-    let (expected_court_pda, _) = CourtPositionAccount::derive_pda(
-        castle_account.address(),
-        position,
-    );
+    let (expected_court_pda, _) =
+        CourtPositionAccount::derive_pda(castle_account.address(), position);
     if court_account.address() != &expected_court_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -130,7 +129,11 @@ pub fn process(
     }
 
     // Calculate progress for event
-    let cleaned_count = if castle.transition_court_cleaned { castle.max_court } else { castle.max_court.saturating_sub(castle.court_count) };
+    let cleaned_count = if castle.transition_court_cleaned {
+        castle.max_court
+    } else {
+        castle.max_court.saturating_sub(castle.court_count)
+    };
     let total_count = castle.max_court;
 
     // Drop borrows before closing

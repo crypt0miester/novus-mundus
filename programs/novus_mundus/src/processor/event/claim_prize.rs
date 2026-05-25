@@ -1,28 +1,30 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::PRIZE_DISTRIBUTION,
+    emit,
     error::GameError,
-    helpers::{close_account, estate::{treasury_prize_bonus_bps, load_estate_for_player}, validate_token_account_owner},
-    token_helpers::create_associated_token_account,
+    events::progression::EventPrizeClaimed,
+    helpers::{
+        close_account,
+        estate::{load_estate_for_player, treasury_prize_bonus_bps},
+        validate_token_account_owner,
+    },
+    logic::{
+        eligibility::{
+            check_account_age, check_activity_requirement, check_transfer_ratio,
+            get_min_age_for_prize, get_min_attacks_for_prize, get_transfer_ratio_for_prize,
+        },
+        safe_math::apply_bp,
+    },
     state::{EventAccount, EventParticipation, PlayerAccount},
+    token_helpers::create_associated_token_account,
     types::PrizeType,
     validation::{require_signer, require_writable},
-    logic::{
-        safe_math::apply_bp,
-        eligibility::{
-            check_transfer_ratio, check_account_age, check_activity_requirement,
-            get_transfer_ratio_for_prize, get_min_age_for_prize, get_min_attacks_for_prize,
-        },
-    },
-    emit,
-    events::progression::EventPrizeClaimed,
 };
 
 /// Claim event prize
@@ -71,25 +73,33 @@ pub fn process(
 
     let base_account_count = 10;
 
-    crate::extract_accounts!(accounts, [
-        payer,
-        winner_account,
-        event_account,
-        participation_account,
-        winner_owner,
-        winner_novi_ata,
-        novi_mint,
-        game_engine,
-        token_program,
-        winner_estate,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            payer,
+            winner_account,
+            event_account,
+            participation_account,
+            winner_owner,
+            winner_novi_ata,
+            novi_mint,
+            game_engine,
+            token_program,
+            winner_estate,
+        ]
+    );
 
     // Optional accounts for SPL token prizes:
     // [10] event_vault, [11] winner_spl_token_account, [12] prize_token_mint,
     // [13] system_program, [14] associated_token_program
     let (event_vault, winner_spl_token_account, prize_mint, spl_system_program) =
         if accounts.len() >= base_account_count + 5 {
-            (Some(&accounts[10]), Some(&accounts[11]), Some(&accounts[12]), Some(&accounts[13]))
+            (
+                Some(&accounts[10]),
+                Some(&accounts[11]),
+                Some(&accounts[12]),
+                Some(&accounts[13]),
+            )
         } else {
             (None, None, None, None)
         };
@@ -178,7 +188,8 @@ pub fn process(
     }
 
     // 6. Find Winner's Rank
-    let rank = event_data.find_rank(winner_owner.address())
+    let rank = event_data
+        .find_rank(winner_owner.address())
         .ok_or(GameError::NotEventWinner)?;
 
     // Rank is 0-indexed, leaderboard is 0-9 for top 10
@@ -188,8 +199,8 @@ pub fn process(
 
     // 7. Calculate Prize Share (using basis points)
     let prize_bps = PRIZE_DISTRIBUTION[rank] as u64;
-    let base_prize_share = apply_bp(event_data.prize_amount, prize_bps)
-        .ok_or(GameError::MathOverflow)?;
+    let base_prize_share =
+        apply_bp(event_data.prize_amount, prize_bps).ok_or(GameError::MathOverflow)?;
 
     if base_prize_share == 0 {
         return Err(GameError::NothingToClaim.into());
@@ -213,21 +224,23 @@ pub fn process(
     }
 
     // 8. Transfer Prize Based on Type
-    let prize_type = PrizeType::from_u8(event_data.prize_type)
-        .ok_or(GameError::InvalidParameter)?;
+    let prize_type =
+        PrizeType::from_u8(event_data.prize_type).ok_or(GameError::InvalidParameter)?;
 
     match prize_type {
         PrizeType::LockedNovi => {
             // Load GameEngine for mint authority
             let game_engine_data_ref = game_engine.try_borrow()?;
-            let game_engine_data = unsafe {
-                crate::state::GameEngine::load(&game_engine_data_ref)
-            };
+            let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data_ref) };
 
             // Create PDA signer for GameEngine (mint authority)
             let kingdom_id_bytes = game_engine_data.kingdom_id.to_le_bytes();
             let bump_seed = [game_engine_data.bump];
-            let seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &bump_seed);
+            let seeds = crate::seeds!(
+                crate::constants::GAME_ENGINE_SEED,
+                &kingdom_id_bytes,
+                &bump_seed
+            );
             let signer = pinocchio::cpi::Signer::from(&seeds);
 
             crate::require_keys_eq!(
@@ -247,16 +260,17 @@ pub fn process(
             )?;
 
             // Update locked_novi balance in PlayerAccount state
-            winner_data.locked_novi = winner_data.locked_novi
+            winner_data.locked_novi = winner_data
+                .locked_novi
                 .checked_add(prize_share)
                 .ok_or(GameError::MathOverflow)?;
-        },
+        }
         PrizeType::Gems => {
             winner_data.gems = winner_data.gems.saturating_add(prize_share);
-        },
+        }
         PrizeType::Cash => {
             winner_data.cash_on_hand = winner_data.cash_on_hand.saturating_add(prize_share);
-        },
+        }
         PrizeType::SPLToken => {
             // Verify token accounts provided
             let vault = event_vault.ok_or(ProgramError::NotEnoughAccountKeys)?;
@@ -289,10 +303,10 @@ pub fn process(
             // Create the winner's prize-token ATA if it does not exist.
             if recipient.data_len() == 0 {
                 create_associated_token_account(
-                    payer,          // Payer (funds rent)
-                    recipient,      // ATA to create
-                    winner_owner,   // Wallet that owns the ATA
-                    prize_mint,     // Prize token mint
+                    payer,        // Payer (funds rent)
+                    recipient,    // ATA to create
+                    winner_owner, // Wallet that owns the ATA
+                    prize_mint,   // Prize token mint
                     system_program,
                     token_program,
                 )?;
@@ -318,11 +332,11 @@ pub fn process(
             crate::helpers::transfer_tokens(
                 vault,
                 recipient,
-                event_account,  // EventAccount PDA is the vault's authority
+                event_account, // EventAccount PDA is the vault's authority
                 prize_share,
                 &[event_signer],
             )?;
-        },
+        }
     }
 
     // 9. Cleanup - Update Event Prize Remaining

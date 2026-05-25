@@ -1,8 +1,5 @@
-use pinocchio::{
-    Address,
-    error::ProgramError,
-};
 use crate::constants::ESTATE_SEED;
+use pinocchio::{error::ProgramError, Address};
 
 // Building Types (19 buildings across 3 tiers)
 
@@ -15,7 +12,7 @@ pub enum BuildingType {
     Barracks = 1,
     Workshop = 2,
     Vault = 3,
-    Dock = 4,       // Fishing expeditions (parallel to Workshop for mining)
+    Dock = 4, // Fishing expeditions (parallel to Workshop for mining)
 
     // Tier 2 (Estate Level 10+)
     Forge = 5,
@@ -30,17 +27,17 @@ pub enum BuildingType {
     Citadel = 12,
 
     // Tier 1 expansion
-    Camp = 13,            // Operative unit hiring (split from Barracks)
+    Camp = 13, // Operative unit hiring (split from Barracks)
     // Tier 2 expansion
-    Mine = 14,            // Mining expeditions (split from Workshop)
+    Mine = 14, // Mining expeditions (split from Workshop)
     // Tier 3 expansion
-    DungeonEntry = 15,    // Dungeon access (split from Arena)
+    DungeonEntry = 15, // Dungeon access (split from Arena)
     // Tier 1 expansion
-    Farm = 16,            // Produce collection (new land-based path)
+    Farm = 16, // Produce collection (new land-based path)
     // Tier 2 expansion
-    TransportBay = 17,    // Travel gating (new)
+    TransportBay = 17, // Travel gating (new)
     // Tier 3 expansion
-    Infirmary = 18,       // Unit recovery in combat (new)
+    Infirmary = 18, // Unit recovery in combat (new)
 }
 
 impl BuildingType {
@@ -55,32 +52,32 @@ impl BuildingType {
         match self {
             // Chapter 1: Foundation - all buildable from start
             // Estate level = sum of building levels, grows naturally
-            BuildingType::Mansion => 0,      // Your home base - first building
-            BuildingType::Barracks => 0,     // Recruit your first units
-            BuildingType::Workshop => 0,     // Mining expeditions
-            BuildingType::Dock => 0,         // Fishing expeditions
-            BuildingType::Vault => 0,        // Secure your wealth
+            BuildingType::Mansion => 0, // Your home base - first building
+            BuildingType::Barracks => 0, // Recruit your first units
+            BuildingType::Workshop => 0, // Mining expeditions
+            BuildingType::Dock => 0,    // Fishing expeditions
+            BuildingType::Vault => 0,   // Secure your wealth
 
             // Chapter 2: Expansion (Levels 5-10)
             // NOTE: All set to 0 during SDK development for testability
-            BuildingType::MeditationChamber => 0,    // Recruit your first hero!
-            BuildingType::Market => 0,               // Trade with others
-            BuildingType::Citadel => 0,              // Lead your first rally!
-            BuildingType::Academy => 0,              // Begin research
+            BuildingType::MeditationChamber => 0, // Recruit your first hero!
+            BuildingType::Market => 0,            // Trade with others
+            BuildingType::Citadel => 0,           // Lead your first rally!
+            BuildingType::Academy => 0,           // Begin research
 
             // Chapter 3: Mastery (Levels 10-16)
-            BuildingType::Forge => 0,                // Craft quality equipment
-            BuildingType::Arena => 0,                // Prove yourself in PvP
-            BuildingType::Observatory => 0,          // Enhance your loot
-            BuildingType::Treasury => 0,             // Maximize your prizes
+            BuildingType::Forge => 0,       // Craft quality equipment
+            BuildingType::Arena => 0,       // Prove yourself in PvP
+            BuildingType::Observatory => 0, // Enhance your loot
+            BuildingType::Treasury => 0,    // Maximize your prizes
 
             // Expansion buildings (all 0 during development for testability)
-            BuildingType::Camp => 0,                 // Operative unit hiring
-            BuildingType::Mine => 0,                 // Mining expeditions
-            BuildingType::DungeonEntry => 0,         // Dungeon access
-            BuildingType::Farm => 0,                 // Produce collection
-            BuildingType::TransportBay => 0,         // Travel gating
-            BuildingType::Infirmary => 0,            // Unit recovery
+            BuildingType::Camp => 0,         // Operative unit hiring
+            BuildingType::Mine => 0,         // Mining expeditions
+            BuildingType::DungeonEntry => 0, // Dungeon access
+            BuildingType::Farm => 0,         // Produce collection
+            BuildingType::TransportBay => 0, // Travel gating
+            BuildingType::Infirmary => 0,    // Unit recovery
         }
     }
 
@@ -89,20 +86,29 @@ impl BuildingType {
     pub const fn tier(self) -> u8 {
         match self {
             // Chapter 1: Foundation - Tier 1 (10k NOVI, 4h)
-            BuildingType::Mansion | BuildingType::Barracks |
-            BuildingType::Workshop | BuildingType::Vault |
-            BuildingType::Dock |
-            BuildingType::Camp | BuildingType::Farm => 1,
+            BuildingType::Mansion
+            | BuildingType::Barracks
+            | BuildingType::Workshop
+            | BuildingType::Vault
+            | BuildingType::Dock
+            | BuildingType::Camp
+            | BuildingType::Farm => 1,
 
             // Chapter 2: Expansion - Tier 2 (50k NOVI, 12h)
-            BuildingType::MeditationChamber | BuildingType::Market |
-            BuildingType::Citadel | BuildingType::Academy |
-            BuildingType::Mine | BuildingType::TransportBay => 2,
+            BuildingType::MeditationChamber
+            | BuildingType::Market
+            | BuildingType::Citadel
+            | BuildingType::Academy
+            | BuildingType::Mine
+            | BuildingType::TransportBay => 2,
 
             // Chapter 3: Mastery - Tier 3 (200k NOVI, 24h)
-            BuildingType::Forge | BuildingType::Arena |
-            BuildingType::Observatory | BuildingType::Treasury |
-            BuildingType::DungeonEntry | BuildingType::Infirmary => 3,
+            BuildingType::Forge
+            | BuildingType::Arena
+            | BuildingType::Observatory
+            | BuildingType::Treasury
+            | BuildingType::DungeonEntry
+            | BuildingType::Infirmary => 3,
         }
     }
 
@@ -138,10 +144,10 @@ impl BuildingType {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BuildingStatus {
-    Empty = 0,      // Slot has no building
-    Building = 1,   // Under initial construction
-    Active = 2,     // Fully operational
-    Upgrading = 3,  // Being upgraded (still provides buffs at current level)
+    Empty = 0,     // Slot has no building
+    Building = 1,  // Under initial construction
+    Active = 2,    // Fully operational
+    Upgrading = 3, // Being upgraded (still provides buffs at current level)
 }
 
 impl BuildingStatus {
@@ -162,14 +168,14 @@ impl BuildingStatus {
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum QualityTier {
-    Common = 0,      // Shop-bought baseline
-    Refined = 1,     // First craftable tier
+    Common = 0,  // Shop-bought baseline
+    Refined = 1, // First craftable tier
     Superior = 2,
     Elite = 3,
     Masterwork = 4,
     Legendary = 5,
     Mythic = 6,
-    Divine = 7,      // Ultimate tier
+    Divine = 7, // Ultimate tier
 }
 
 impl QualityTier {
@@ -207,13 +213,13 @@ impl QualityTier {
     pub const fn craft_time_seconds(self) -> i64 {
         match self {
             QualityTier::Common => 0,
-            QualityTier::Refined => 4 * 3600,      // 4h
-            QualityTier::Superior => 8 * 3600,     // 8h
-            QualityTier::Elite => 16 * 3600,       // 16h
-            QualityTier::Masterwork => 24 * 3600,  // 24h
-            QualityTier::Legendary => 48 * 3600,   // 48h
-            QualityTier::Mythic => 72 * 3600,      // 72h
-            QualityTier::Divine => 168 * 3600,     // 7 days
+            QualityTier::Refined => 4 * 3600,     // 4h
+            QualityTier::Superior => 8 * 3600,    // 8h
+            QualityTier::Elite => 16 * 3600,      // 16h
+            QualityTier::Masterwork => 24 * 3600, // 24h
+            QualityTier::Legendary => 48 * 3600,  // 48h
+            QualityTier::Mythic => 72 * 3600,     // 72h
+            QualityTier::Divine => 168 * 3600,    // 7 days
         }
     }
 
@@ -221,13 +227,13 @@ impl QualityTier {
     pub const fn success_rate_bps(self) -> u16 {
         match self {
             QualityTier::Common => 10000,
-            QualityTier::Refined => 10000,  // 100%
-            QualityTier::Superior => 9500,  // 95%
-            QualityTier::Elite => 8500,     // 85%
+            QualityTier::Refined => 10000,   // 100%
+            QualityTier::Superior => 9500,   // 95%
+            QualityTier::Elite => 8500,      // 85%
             QualityTier::Masterwork => 7000, // 70%
-            QualityTier::Legendary => 5000, // 50%
-            QualityTier::Mythic => 3000,    // 30%
-            QualityTier::Divine => 1500,    // 15%
+            QualityTier::Legendary => 5000,  // 50%
+            QualityTier::Mythic => 3000,     // 30%
+            QualityTier::Divine => 1500,     // 15%
         }
     }
 
@@ -305,14 +311,14 @@ impl QualityTier {
     /// More stages = more skill required to complete the craft
     pub const fn stages_required(&self) -> u8 {
         match self {
-            Self::Common => 0,      // Cannot craft Common
-            Self::Refined => 1,     // Single strike - anyone can do it
-            Self::Superior => 2,    // Basic tempering
-            Self::Elite => 3,       // Journeyman work
-            Self::Masterwork => 5,  // Serious dedication
-            Self::Legendary => 8,   // Master craftsman
-            Self::Mythic => 11,     // Approaching perfection
-            Self::Divine => 13,     // Absolute perfection
+            Self::Common => 0,     // Cannot craft Common
+            Self::Refined => 1,    // Single strike - anyone can do it
+            Self::Superior => 2,   // Basic tempering
+            Self::Elite => 3,      // Journeyman work
+            Self::Masterwork => 5, // Serious dedication
+            Self::Legendary => 8,  // Master craftsman
+            Self::Mythic => 11,    // Approaching perfection
+            Self::Divine => 13,    // Absolute perfection
         }
     }
 
@@ -321,13 +327,13 @@ impl QualityTier {
     pub const fn stage_interval_secs(&self) -> i64 {
         match self {
             Self::Common => 0,
-            Self::Refined => 60,       // 1 minute - relaxed
+            Self::Refined => 60, // 1 minute - relaxed
             Self::Superior => 50,
             Self::Elite => 40,
             Self::Masterwork => 30,
             Self::Legendary => 25,
             Self::Mythic => 20,
-            Self::Divine => 15,        // 15 seconds - intense focus
+            Self::Divine => 15, // 15 seconds - intense focus
         }
     }
 
@@ -336,13 +342,13 @@ impl QualityTier {
     pub const fn base_window_duration_secs(&self) -> i64 {
         match self {
             Self::Common => 0,
-            Self::Refined => 3600,     // 1 hour - very forgiving
-            Self::Superior => 1800,    // 30 min
-            Self::Elite => 900,        // 15 min
-            Self::Masterwork => 300,   // 5 min
-            Self::Legendary => 120,    // 2 min
-            Self::Mythic => 90,        // 1.5 min
-            Self::Divine => 60,        // 1 min - razor sharp timing
+            Self::Refined => 3600,   // 1 hour - very forgiving
+            Self::Superior => 1800,  // 30 min
+            Self::Elite => 900,      // 15 min
+            Self::Masterwork => 300, // 5 min
+            Self::Legendary => 120,  // 2 min
+            Self::Mythic => 90,      // 1.5 min
+            Self::Divine => 60,      // 1 min - razor sharp timing
         }
     }
 }
@@ -353,14 +359,14 @@ impl QualityTier {
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct BuildingSlot {
-    pub building_type: u8,          // BuildingType enum
-    pub status: u8,                 // BuildingStatus enum
-    pub level: u8,                  // Current level (1-20)
-    pub mastery_level: u8,          // Building-specific mastery (1-100)
-    pub mastery_xp: u32,            // XP towards next mastery level
-    pub construction_started: i64,  // When construction/upgrade started
-    pub construction_ends: i64,     // When construction/upgrade completes
-    pub total_novi_invested: u64,   // Lifetime NOVI spent on this building
+    pub building_type: u8,         // BuildingType enum
+    pub status: u8,                // BuildingStatus enum
+    pub level: u8,                 // Current level (1-20)
+    pub mastery_level: u8,         // Building-specific mastery (1-100)
+    pub mastery_xp: u32,           // XP towards next mastery level
+    pub construction_started: i64, // When construction/upgrade started
+    pub construction_ends: i64,    // When construction/upgrade completes
+    pub total_novi_invested: u64,  // Lifetime NOVI spent on this building
     pub _padding: [u8; 4],
 }
 
@@ -386,15 +392,15 @@ impl BuildingSlot {
 
     /// Check if building is active (can be used)
     pub fn is_active(&self) -> bool {
-        self.status == BuildingStatus::Active as u8 ||
-        self.status == BuildingStatus::Upgrading as u8
+        self.status == BuildingStatus::Active as u8
+            || self.status == BuildingStatus::Upgrading as u8
     }
 
     /// Check if construction/upgrade is complete
     pub fn is_construction_complete(&self, now: i64) -> bool {
-        (self.status == BuildingStatus::Building as u8 ||
-         self.status == BuildingStatus::Upgrading as u8) &&
-        now >= self.construction_ends
+        (self.status == BuildingStatus::Building as u8
+            || self.status == BuildingStatus::Upgrading as u8)
+            && now >= self.construction_ends
     }
 
     // Build/upgrade cost and time are read from the on-chain BuildingTemplate
@@ -440,15 +446,15 @@ pub struct EstateAccount {
     /// Account discriminator
     pub account_key: u8,
     // Identity (35 bytes)
-    pub owner: Address,                     // Player who owns this estate
-    pub city_id: u16,                      // City where estate is located
+    pub owner: Address, // Player who owns this estate
+    pub city_id: u16,   // City where estate is located
     pub bump: u8,
 
     // Progression (4 bytes)
-    pub estate_level: u8,                  // Sum of all building levels
-    pub plots_owned: u8,                   // Number of land plots (1-5)
-    pub total_buildings: u8,               // Number of non-empty slots
-    pub current_slots: u8,                 // Allocated slot capacity (for expansion)
+    pub estate_level: u8,    // Sum of all building levels
+    pub plots_owned: u8,     // Number of land plots (1-5)
+    pub total_buildings: u8, // Number of non-empty slots
+    pub current_slots: u8,   // Allocated slot capacity (for expansion)
 
     // Cached buffs (28 bytes - updated when buildings change)
     pub attack_bps: u16,
@@ -467,25 +473,25 @@ pub struct EstateAccount {
     pub pvp_damage_bps: u16,
 
     // Daily activity tracking (23 bytes)
-    pub last_login_date: u16,              // Days since epoch
-    pub login_streak: u16,                 // Current consecutive days
-    pub longest_login_streak: u16,         // Best ever
-    pub permanent_bonus_bps: u16,          // From 180-day milestone (+5%)
-    pub daily_date: u16,                   // Current day for mini-games
-    pub dawn_timestamp: i64,               // When player started today
-    pub windows_completed: u8,             // Bitflags: 0b00000DML
-    pub dawn_buildings: u16,               // Bitflags for completed dawn activities
-    pub midday_buildings: u16,             // Bitflags for completed midday activities
-    pub dusk_buildings: u16,               // Bitflags for completed dusk activities
+    pub last_login_date: u16,      // Days since epoch
+    pub login_streak: u16,         // Current consecutive days
+    pub longest_login_streak: u16, // Best ever
+    pub permanent_bonus_bps: u16,  // From 180-day milestone (+5%)
+    pub daily_date: u16,           // Current day for mini-games
+    pub dawn_timestamp: i64,       // When player started today
+    pub windows_completed: u8,     // Bitflags: 0b00000DML
+    pub dawn_buildings: u16,       // Bitflags for completed dawn activities
+    pub midday_buildings: u16,     // Bitflags for completed midday activities
+    pub dusk_buildings: u16,       // Bitflags for completed dusk activities
 
     // Active daily buffs (43 bytes)
-    pub unit_effectiveness_bps: u16,       // From Barracks mini-game
-    pub mastery_bonus_bps: u16,            // From Forge mini-game
-    pub arena_damage_bps: u16,             // From Arena mini-game
-    pub daily_loot_bonus_bps: u16,         // From Observatory mini-game
-    pub market_discount_bps: u16,          // From Market mini-game
-    pub blessed_hero: Address,              // From MeditationChamber mini-game
-    pub citadel_stance: u8,                // From Citadel mini-game
+    pub unit_effectiveness_bps: u16, // From Barracks mini-game
+    pub mastery_bonus_bps: u16,      // From Forge mini-game
+    pub arena_damage_bps: u16,       // From Arena mini-game
+    pub daily_loot_bonus_bps: u16,   // From Observatory mini-game
+    pub market_discount_bps: u16,    // From Market mini-game
+    pub blessed_hero: Address,       // From MeditationChamber mini-game
+    pub citadel_stance: u8,          // From Citadel mini-game
 
     // Timestamps (16 bytes)
     pub created_at: i64,
@@ -528,19 +534,55 @@ impl EstateAccount {
     pub const INITIAL_LEN: usize = Self::HEADER_SIZE + (INITIAL_BUILDING_SLOTS * BuildingSlot::LEN);
 
     // --- Wounded field accessors (stored as [u8; 4] for alignment) ---
-    #[inline] pub fn get_wounded_def_1(&self) -> u32 { u32::from_le_bytes(self.wounded_def_1) }
-    #[inline] pub fn get_wounded_def_2(&self) -> u32 { u32::from_le_bytes(self.wounded_def_2) }
-    #[inline] pub fn get_wounded_def_3(&self) -> u32 { u32::from_le_bytes(self.wounded_def_3) }
-    #[inline] pub fn get_wounded_op_1(&self) -> u32 { u32::from_le_bytes(self.wounded_op_1) }
-    #[inline] pub fn get_wounded_op_2(&self) -> u32 { u32::from_le_bytes(self.wounded_op_2) }
-    #[inline] pub fn get_wounded_op_3(&self) -> u32 { u32::from_le_bytes(self.wounded_op_3) }
+    #[inline]
+    pub fn get_wounded_def_1(&self) -> u32 {
+        u32::from_le_bytes(self.wounded_def_1)
+    }
+    #[inline]
+    pub fn get_wounded_def_2(&self) -> u32 {
+        u32::from_le_bytes(self.wounded_def_2)
+    }
+    #[inline]
+    pub fn get_wounded_def_3(&self) -> u32 {
+        u32::from_le_bytes(self.wounded_def_3)
+    }
+    #[inline]
+    pub fn get_wounded_op_1(&self) -> u32 {
+        u32::from_le_bytes(self.wounded_op_1)
+    }
+    #[inline]
+    pub fn get_wounded_op_2(&self) -> u32 {
+        u32::from_le_bytes(self.wounded_op_2)
+    }
+    #[inline]
+    pub fn get_wounded_op_3(&self) -> u32 {
+        u32::from_le_bytes(self.wounded_op_3)
+    }
 
-    #[inline] pub fn set_wounded_def_1(&mut self, v: u32) { self.wounded_def_1 = v.to_le_bytes(); }
-    #[inline] pub fn set_wounded_def_2(&mut self, v: u32) { self.wounded_def_2 = v.to_le_bytes(); }
-    #[inline] pub fn set_wounded_def_3(&mut self, v: u32) { self.wounded_def_3 = v.to_le_bytes(); }
-    #[inline] pub fn set_wounded_op_1(&mut self, v: u32) { self.wounded_op_1 = v.to_le_bytes(); }
-    #[inline] pub fn set_wounded_op_2(&mut self, v: u32) { self.wounded_op_2 = v.to_le_bytes(); }
-    #[inline] pub fn set_wounded_op_3(&mut self, v: u32) { self.wounded_op_3 = v.to_le_bytes(); }
+    #[inline]
+    pub fn set_wounded_def_1(&mut self, v: u32) {
+        self.wounded_def_1 = v.to_le_bytes();
+    }
+    #[inline]
+    pub fn set_wounded_def_2(&mut self, v: u32) {
+        self.wounded_def_2 = v.to_le_bytes();
+    }
+    #[inline]
+    pub fn set_wounded_def_3(&mut self, v: u32) {
+        self.wounded_def_3 = v.to_le_bytes();
+    }
+    #[inline]
+    pub fn set_wounded_op_1(&mut self, v: u32) {
+        self.wounded_op_1 = v.to_le_bytes();
+    }
+    #[inline]
+    pub fn set_wounded_op_2(&mut self, v: u32) {
+        self.wounded_op_2 = v.to_le_bytes();
+    }
+    #[inline]
+    pub fn set_wounded_op_3(&mut self, v: u32) {
+        self.wounded_op_3 = v.to_le_bytes();
+    }
 
     /// Calculate required account size for a given number of slots
     #[inline]
@@ -625,11 +667,11 @@ impl EstateAccount {
         const BASE_PLOT_COST: u64 = 1_000_000; // 100k NOVI for plot 2 (with 1 decimal)
 
         match self.plots_owned {
-            1 => Some(BASE_PLOT_COST),                    // Plot 2: 100k
-            2 => Some(BASE_PLOT_COST * 2618 / 1000),      // Plot 3: ~262k
-            3 => Some(BASE_PLOT_COST * 6854 / 1000),      // Plot 4: ~685k
-            4 => Some(BASE_PLOT_COST * 17944 / 1000),     // Plot 5: ~1.79M
-            _ => None, // Max plots owned
+            1 => Some(BASE_PLOT_COST),                // Plot 2: 100k
+            2 => Some(BASE_PLOT_COST * 2618 / 1000),  // Plot 3: ~262k
+            3 => Some(BASE_PLOT_COST * 6854 / 1000),  // Plot 4: ~685k
+            4 => Some(BASE_PLOT_COST * 17944 / 1000), // Plot 5: ~1.79M
+            _ => None,                                // Max plots owned
         }
     }
 
@@ -644,9 +686,9 @@ impl EstateAccount {
 
             // Progression: sum of all building levels, starts at 0
             estate_level: 0,
-            plots_owned: 1,                              // Start with 1 plot
+            plots_owned: 1, // Start with 1 plot
             total_buildings: 0,
-            current_slots: 4,                            // 1 plot = 4 slots initially
+            current_slots: 4, // 1 plot = 4 slots initially
 
             // Buffs start at 0
             attack_bps: 0,
@@ -727,7 +769,8 @@ impl EstateAccount {
 
     /// Find building by type
     pub fn find_building(&self, building_type: BuildingType) -> Option<&BuildingSlot> {
-        self.buildings.iter()
+        self.buildings
+            .iter()
             .take(self.max_slots())
             .find(|b| b.building_type == building_type as u8 && !b.is_empty())
     }
@@ -735,7 +778,8 @@ impl EstateAccount {
     /// Find building by type (mutable)
     pub fn find_building_mut(&mut self, building_type: BuildingType) -> Option<&mut BuildingSlot> {
         let max = self.max_slots();
-        self.buildings.iter_mut()
+        self.buildings
+            .iter_mut()
             .take(max)
             .find(|b| b.building_type == building_type as u8 && !b.is_empty())
     }
@@ -926,7 +970,9 @@ impl EstateAccount {
                 Some(BuildingType::Barracks) => {
                     // Barracks: Attack and training speed
                     self.attack_bps = self.attack_bps.saturating_add(level * buff_per_level);
-                    self.training_speed_bps = self.training_speed_bps.saturating_add(level * buff_per_level / 2);
+                    self.training_speed_bps = self
+                        .training_speed_bps
+                        .saturating_add(level * buff_per_level / 2);
                 }
                 Some(BuildingType::Workshop) => {
                     // Workshop: Mining bonus calculated dynamically via workshop_mining_bonus_bps()
@@ -937,55 +983,72 @@ impl EstateAccount {
                 Some(BuildingType::Vault) => {
                     // Vault: Storage and NOVI cap
                     self.storage_bps = self.storage_bps.saturating_add(level * buff_per_level);
-                    self.novi_cap_bonus_bps = self.novi_cap_bonus_bps.saturating_add(level * 250); // 2.5% per level
+                    self.novi_cap_bonus_bps = self.novi_cap_bonus_bps.saturating_add(level * 250);
+                    // 2.5% per level
                 }
                 Some(BuildingType::Forge) => {
                     // Forge: Craft success rate
-                    self.craft_success_bps = self.craft_success_bps.saturating_add(level * buff_per_level * 3); // 1.5% per level
+                    self.craft_success_bps = self
+                        .craft_success_bps
+                        .saturating_add(level * buff_per_level * 3); // 1.5% per level
                 }
                 Some(BuildingType::Market) => {
                     // Market: Trade discount
-                    self.trade_discount_bps = self.trade_discount_bps.saturating_add(level * 100); // 1% per level
+                    self.trade_discount_bps = self.trade_discount_bps.saturating_add(level * 100);
+                    // 1% per level
                 }
                 Some(BuildingType::Academy) => {
                     // Academy: Research speed
-                    self.research_speed_bps = self.research_speed_bps.saturating_add(level * buff_per_level * 3); // 1.5% per level
+                    self.research_speed_bps = self
+                        .research_speed_bps
+                        .saturating_add(level * buff_per_level * 3); // 1.5% per level
                 }
                 Some(BuildingType::Arena) => {
                     // Arena: PvP damage
-                    self.pvp_damage_bps = self.pvp_damage_bps.saturating_add(level * buff_per_level);
+                    self.pvp_damage_bps =
+                        self.pvp_damage_bps.saturating_add(level * buff_per_level);
                 }
                 Some(BuildingType::MeditationChamber) => {
                     // MeditationChamber: No direct buff, enables hero slots
                 }
                 Some(BuildingType::Observatory) => {
                     // Observatory: Loot bonus
-                    self.loot_bonus_bps = self.loot_bonus_bps.saturating_add(level * buff_per_level * 2); // 1% per level
+                    self.loot_bonus_bps = self
+                        .loot_bonus_bps
+                        .saturating_add(level * buff_per_level * 2); // 1% per level
                 }
                 Some(BuildingType::Treasury) => {
                     // Treasury: Prize bonus
-                    self.prize_bonus_bps = self.prize_bonus_bps.saturating_add(level * 250); // 2.5% per level
+                    self.prize_bonus_bps = self.prize_bonus_bps.saturating_add(level * 250);
+                    // 2.5% per level
                 }
                 Some(BuildingType::Citadel) => {
                     // Citadel: Defense and rally capacity
                     self.defense_bps = self.defense_bps.saturating_add(level * buff_per_level);
-                    self.rally_capacity_bonus_bps = self.rally_capacity_bonus_bps.saturating_add(level * 500); // 5% per level
+                    self.rally_capacity_bonus_bps =
+                        self.rally_capacity_bonus_bps.saturating_add(level * 500);
+                    // 5% per level
                 }
                 Some(BuildingType::Camp) => {
                     // Camp: Operative training speed (shares field with Barracks)
-                    self.training_speed_bps = self.training_speed_bps.saturating_add(level * buff_per_level / 2);
+                    self.training_speed_bps = self
+                        .training_speed_bps
+                        .saturating_add(level * buff_per_level / 2);
                 }
                 Some(BuildingType::Mine) => {
                     // Mine: Resource generation bonus (mining)
-                    self.resource_gen_bps = self.resource_gen_bps.saturating_add(level * buff_per_level);
+                    self.resource_gen_bps =
+                        self.resource_gen_bps.saturating_add(level * buff_per_level);
                 }
                 Some(BuildingType::DungeonEntry) => {
                     // DungeonEntry: Loot bonus (dungeon loot, additive with Observatory)
-                    self.loot_bonus_bps = self.loot_bonus_bps.saturating_add(level * buff_per_level);
+                    self.loot_bonus_bps =
+                        self.loot_bonus_bps.saturating_add(level * buff_per_level);
                 }
                 Some(BuildingType::Farm) => {
                     // Farm: Resource generation bonus (farming, additive with Mine)
-                    self.resource_gen_bps = self.resource_gen_bps.saturating_add(level * buff_per_level);
+                    self.resource_gen_bps =
+                        self.resource_gen_bps.saturating_add(level * buff_per_level);
                 }
                 Some(BuildingType::TransportBay) => {
                     // TransportBay: No cached buff (computed dynamically via stables_travel_reduction_bps)
@@ -1030,21 +1093,18 @@ impl EstateAccount {
     /// Get streak multiplier (basis points)
     pub fn get_streak_multiplier_bps(&self) -> u16 {
         match self.login_streak {
-            0..=6 => 10000,      // 1.0x
-            7..=13 => 12500,     // 1.25x
-            14..=29 => 15000,    // 1.5x
-            30..=59 => 20000,    // 2.0x
-            60..=89 => 25000,    // 2.5x
-            _ => 30000,          // 3.0x (90+ days)
+            0..=6 => 10000,   // 1.0x
+            7..=13 => 12500,  // 1.25x
+            14..=29 => 15000, // 1.5x
+            30..=59 => 20000, // 2.0x
+            60..=89 => 25000, // 2.5x
+            _ => 30000,       // 3.0x (90+ days)
         }
     }
 
     /// Derive the PDA for an estate account (scoped to player PDA)
     pub fn derive_pda(player_pda: &Address) -> (Address, u8) {
-        pinocchio::Address::find_program_address(
-            &[ESTATE_SEED, player_pda.as_ref()],
-            &crate::ID,
-        )
+        pinocchio::Address::find_program_address(&[ESTATE_SEED, player_pda.as_ref()], &crate::ID)
     }
 
     /// Create PDA from known bump
@@ -1053,7 +1113,8 @@ impl EstateAccount {
         pinocchio::Address::create_program_address(
             &[ESTATE_SEED, player_pda.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify an EstateAccount immutably.
@@ -1063,29 +1124,23 @@ impl EstateAccount {
         player_pda: &Address,
         expected_owner: &Address,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(player_pda);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "EstateAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Estate)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if &loaded.owner != expected_owner {
-            return Err(crate::error::GameError::Unauthorized.into());
-        }
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(account, super::AccountKey::Estate, "EstateAccount")?
+        };
+        crate::validation::require_stored_owner(
+            &loaded.owner,
+            expected_owner,
+            "EstateAccount",
+            account,
+        )?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "EstateAccount", account)?;
+        Ok(loaded)
     }
 
     /// Load and verify an EstateAccount mutably.
@@ -1095,29 +1150,27 @@ impl EstateAccount {
         player_pda: &Address,
         expected_owner: &Address,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(player_pda);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "EstateAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Estate)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if &loaded.owner != expected_owner {
-            return Err(crate::error::GameError::Unauthorized.into());
-        }
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Estate,
+                "EstateAccount",
+            )?
+        };
+        crate::validation::require_stored_owner(
+            &loaded.owner,
+            expected_owner,
+            "EstateAccount",
+            account,
+        )?;
+        crate::validation::require_bump_eq(loaded.bump, bump, "EstateAccount", account)?;
+        Ok(loaded)
     }
 }
 
@@ -1155,7 +1208,9 @@ pub struct QualityCounts {
 }
 
 impl QualityCounts {
-    pub const EMPTY: Self = Self { counts: [0; QualityTier::COUNT] };
+    pub const EMPTY: Self = Self {
+        counts: [0; QualityTier::COUNT],
+    };
 
     /// Get total items across all tiers
     pub fn total(&self) -> u64 {
@@ -1192,7 +1247,6 @@ pub struct CraftedEquipmentAccount {
     pub armor: QualityCounts,
 
     // Staged Tempering State
-
     /// Equipment being crafted (CraftableEquipment enum, 255 = none)
     pub active_craft_equipment: u8,
     /// Target quality tier (QualityTier enum)
@@ -1280,14 +1334,14 @@ impl CraftedEquipmentAccount {
     /// Legendary=25%, Mythic=40%, Divine=60%
     pub fn tier_to_bonus_bps(tier: u8) -> u16 {
         match tier {
-            0 => 0,        // None/unequipped
-            1 => 250,      // Refined: +2.5%
-            2 => 500,      // Superior: +5%
-            3 => 1000,     // Elite: +10%
-            4 => 1500,     // Masterwork: +15%
-            5 => 2500,     // Legendary: +25%
-            6 => 4000,     // Mythic: +40%
-            7 => 6000,     // Divine: +60%
+            0 => 0,    // None/unequipped
+            1 => 250,  // Refined: +2.5%
+            2 => 500,  // Superior: +5%
+            3 => 1000, // Elite: +10%
+            4 => 1500, // Masterwork: +15%
+            5 => 2500, // Legendary: +25%
+            6 => 4000, // Mythic: +40%
+            7 => 6000, // Divine: +60%
             _ => 0,
         }
     }
@@ -1399,7 +1453,8 @@ impl CraftedEquipmentAccount {
 
     /// Calculate total weapon quality buff (melee + ranged + siege)
     pub fn total_weapon_buff_bps(&self) -> u64 {
-        self.melee_weapons.total_buff_bps()
+        self.melee_weapons
+            .total_buff_bps()
             .saturating_add(self.ranged_weapons.total_buff_bps())
             .saturating_add(self.siege_weapons.total_buff_bps())
     }
@@ -1422,6 +1477,7 @@ impl CraftedEquipmentAccount {
         pinocchio::Address::create_program_address(
             &[b"crafted_equipment", owner.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }

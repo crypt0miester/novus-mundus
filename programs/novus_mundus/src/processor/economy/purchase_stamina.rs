@@ -1,21 +1,17 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
-use pinocchio::sysvars::{Sysvar, clock::Clock};
+use pinocchio::sysvars::{clock::Clock, Sysvar};
 
 use crate::{
     constants::PLAYER_SEED,
-    error::GameError,
-    state::PlayerAccount,
-    helpers::{burn_tokens},
-    logic::{add_stamina, safe_math::apply_bp},
-    validation::{require_signer, require_writable},
     emit,
+    error::GameError,
     events::StaminaPurchased,
+    helpers::burn_tokens,
+    logic::{add_stamina, safe_math::apply_bp},
+    state::PlayerAccount,
     utils::read_u64,
+    validation::{require_signer, require_writable},
 };
 
 /// Purchase stamina refill (monetization)
@@ -69,9 +65,7 @@ pub fn process(
     // 4. PHASE 1: Validate and calculate cost (scoped borrow - dropped before CPI)
     let (novi_cost, player_bump) = {
         let player_data_ref = player_account.try_borrow()?;
-        let player_data = unsafe {
-            PlayerAccount::load(&player_data_ref)
-        };
+        let player_data = unsafe { PlayerAccount::load(&player_data_ref) };
 
         // Verify ownership
         if &player_data.owner != owner.address() {
@@ -79,16 +73,15 @@ pub fn process(
         }
 
         // Validate game_engine account (ownership + PDA + discriminator + bump)
-        let game_engine_data = crate::state::GameEngine::load_checked_by_key(
-            game_engine_account,
-            program_id,
-        )?;
+        let game_engine_data =
+            crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
         let economic_config = &game_engine_data.economic_config;
 
         // Calculate Novi Cost (with DAO multiplier)
         let base_stamina_cost = economic_config.stamina_cost;
-        let adjusted_stamina_cost = apply_bp(base_stamina_cost, economic_config.cost_multiplier as u64)
-            .ok_or(GameError::MathOverflow)?;
+        let adjusted_stamina_cost =
+            apply_bp(base_stamina_cost, economic_config.cost_multiplier as u64)
+                .ok_or(GameError::MathOverflow)?;
 
         let novi_cost = (stamina_amount as u64)
             .checked_mul(adjusted_stamina_cost)
@@ -100,7 +93,12 @@ pub fn process(
     // 5. PHASE 2: Burn Novi Tokens (CPI - requires no active borrows on player)
     // Player PDA owns the token account, so player is the burn authority
     let bump_seed = [player_bump];
-    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine_account.address(), owner.address(), &bump_seed);
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine_account.address(),
+        owner.address(),
+        &bump_seed
+    );
     let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
@@ -114,13 +112,10 @@ pub fn process(
     // 6. PHASE 3: Re-borrow and update state (after CPI)
     {
         let mut player_data_ref = player_account.try_borrow_mut()?;
-        let player_data = unsafe {
-            PlayerAccount::load_mut(&mut player_data_ref)
-        };
+        let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
         // Deduct locked NOVI
-        player_data.locked_novi = player_data.locked_novi
-            .saturating_sub(novi_cost);
+        player_data.locked_novi = player_data.locked_novi.saturating_sub(novi_cost);
 
         // Add Stamina (Respects Cap)
         let actual_added = add_stamina(player_data, stamina_amount);

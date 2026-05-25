@@ -22,21 +22,13 @@ pub fn is_inventory_item_type(item_type: u16) -> bool {
     matches!(item_type, 3 | 300..=399 | 1000..)
 }
 
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    sysvars::Sysvar,
-    ProgramResult,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::INVENTORY_SEED,
     error::GameError,
-    state::{
-        PlayerInventoryHeader, InventoryItem, PlayerInventory,
-    },
+    state::{InventoryItem, PlayerInventory, PlayerInventoryHeader},
 };
+use pinocchio::{error::ProgramError, sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Get or create inventory account, auto-expanding if needed.
 ///
@@ -151,11 +143,7 @@ fn create_inventory(
     let lamports = rent.try_minimum_balance(account_size)?;
 
     let bump_seed = [bump];
-    let seeds = crate::seeds!(
-        INVENTORY_SEED,
-        owner.as_ref(),
-        &bump_seed
-    );
+    let seeds = crate::seeds!(INVENTORY_SEED, owner.as_ref(), &bump_seed);
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
@@ -164,7 +152,8 @@ fn create_inventory(
         lamports,
         space: account_size as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // Initialize header
     let mut data = inventory_account.try_borrow_mut()?;
@@ -179,9 +168,7 @@ fn create_inventory(
     let items_start = PlayerInventoryHeader::LEN;
     for i in 0..initial_slots as usize {
         let item_offset = items_start + (i * InventoryItem::LEN);
-        let item = unsafe {
-            &mut *(data.as_mut_ptr().add(item_offset) as *mut InventoryItem)
-        };
+        let item = unsafe { &mut *(data.as_mut_ptr().add(item_offset) as *mut InventoryItem) };
         *item = InventoryItem::empty();
     }
 
@@ -189,10 +176,7 @@ fn create_inventory(
 }
 
 /// Expand inventory by EXPANSION_SLOTS
-fn expand_inventory(
-    payer: &AccountView,
-    inventory_account: &AccountView,
-) -> ProgramResult {
+fn expand_inventory(payer: &AccountView, inventory_account: &AccountView) -> ProgramResult {
     let current_slot_count = {
         let data = inventory_account.try_borrow()?;
         let header = unsafe { PlayerInventoryHeader::load(&data) };
@@ -215,7 +199,8 @@ fn expand_inventory(
             from: payer,
             to: inventory_account,
             lamports: additional_lamports,
-        }.invoke()?;
+        }
+        .invoke()?;
     }
 
     // Resize account
@@ -227,7 +212,8 @@ fn expand_inventory(
     header.slot_count = new_slot_count;
 
     // Zero out new slots
-    let old_items_end = PlayerInventoryHeader::LEN + (current_slot_count as usize * InventoryItem::LEN);
+    let old_items_end =
+        PlayerInventoryHeader::LEN + (current_slot_count as usize * InventoryItem::LEN);
     let new_items_end = PlayerInventoryHeader::LEN + (new_slot_count as usize * InventoryItem::LEN);
 
     for byte in data[old_items_end..new_items_end].iter_mut() {

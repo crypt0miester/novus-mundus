@@ -29,27 +29,29 @@
 //! If a hero was sent with the expedition, it is returned to owner's wallet on claim.
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::{
-        EXPEDITION_SEED, EXPEDITION_MINING,
-        MINING_DURATION_HOURS, MINING_RARE_CHANCE_BPS, MINING_FRAGMENT_BONUS,
-        FISHING_DURATION_HOURS, FISHING_RARE_CHANCE_BPS, FISHING_FRAGMENT_BONUS,
-        RARE_FIND_MULTIPLIER, PERFECT_SCORE_THRESHOLD, PERFECT_EXPEDITION_BONUS_BPS,
-        OPERATIVE_TIER_1_MULTIPLIER_BPS, OPERATIVE_TIER_2_MULTIPLIER_BPS, OPERATIVE_TIER_3_MULTIPLIER_BPS,
+        EXPEDITION_MINING, EXPEDITION_SEED, FISHING_DURATION_HOURS, FISHING_FRAGMENT_BONUS,
+        FISHING_RARE_CHANCE_BPS, MINING_DURATION_HOURS, MINING_FRAGMENT_BONUS,
+        MINING_RARE_CHANCE_BPS, OPERATIVE_TIER_1_MULTIPLIER_BPS, OPERATIVE_TIER_2_MULTIPLIER_BPS,
+        OPERATIVE_TIER_3_MULTIPLIER_BPS, PERFECT_EXPEDITION_BONUS_BPS, PERFECT_SCORE_THRESHOLD,
+        RARE_FIND_MULTIPLIER,
     },
-    error::GameError,
-    state::{PlayerAccount, ExpeditionAccount, GameEngine, NULL_PUBKEY, is_hero_at_home},
-    helpers::{close_account, estate::{load_estate_for_player, observatory_loot_bonus_bps}, parse_hero_nft},
-    validation::{require_signer, require_writable, require_owner, require_initialized},
-    logic::{get_time_of_day, apply_time_multiplier, ActivityType, safe_math::isqrt},
     emit,
+    error::GameError,
     events::ExpeditionClaimed,
+    helpers::{
+        close_account,
+        estate::{load_estate_for_player, observatory_loot_bonus_bps},
+        parse_hero_nft,
+    },
+    logic::{apply_time_multiplier, get_time_of_day, safe_math::isqrt, ActivityType},
+    state::{is_hero_at_home, ExpeditionAccount, GameEngine, PlayerAccount, NULL_PUBKEY},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Bonus yield when hero's origin city matches expedition location AND has affinity
@@ -88,13 +90,17 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 5, up to 9 with hero)
-    crate::extract_accounts!(accounts, [
-        owner,
-        player_account,
-        expedition_account,
-        estate_account,
-        game_engine_account,
-    ], rest = hero_accounts);
+    crate::extract_accounts!(
+        accounts,
+        [
+            owner,
+            player_account,
+            expedition_account,
+            estate_account,
+            game_engine_account,
+        ],
+        rest = hero_accounts
+    );
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -117,7 +123,18 @@ pub fn process(
     require_initialized(expedition_account).map_err(|_| GameError::NoExpeditionInProgress)?;
 
     // 5. Load Expedition Data (before closing)
-    let (expedition_type, tier, strikes, score, start_time, op_unit_1, op_unit_2, op_unit_3, hero_mint_key, expedition_city) = {
+    let (
+        expedition_type,
+        tier,
+        strikes,
+        score,
+        start_time,
+        op_unit_1,
+        op_unit_2,
+        op_unit_3,
+        hero_mint_key,
+        expedition_city,
+    ) = {
         let expedition_data = expedition_account.try_borrow()?;
         let expedition = unsafe { ExpeditionAccount::load(&expedition_data) };
 
@@ -148,7 +165,6 @@ pub fn process(
     let max_ops = game_engine.economic_config.max_operatives_per_expedition;
     let mining_rates = game_engine.economic_config.mining_gems_per_op_hour;
     let fishing_rates = game_engine.economic_config.fishing_produce_per_op_hour;
-    drop(game_engine);
 
     // Calculate weighted operatives for reward calculation
     // Higher-tier operatives provide better yields:
@@ -182,9 +198,15 @@ pub fn process(
     let now = Clock::get()?.unix_timestamp;
 
     let duration_hours = if expedition_type == EXPEDITION_MINING {
-        MINING_DURATION_HOURS.get(tier as usize).copied().unwrap_or(1)
+        MINING_DURATION_HOURS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(1)
     } else {
-        FISHING_DURATION_HOURS.get(tier as usize).copied().unwrap_or(1)
+        FISHING_DURATION_HOURS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(1)
     };
 
     let duration_seconds = duration_hours as i64 * 3600;
@@ -280,9 +302,14 @@ pub fn process(
 
         // Parse hero NFT for affinity buff and origin_city
         let nft_data = hero_mint.try_borrow()?;
-        let (affinity_bonus, origin_matches) = if let Some(parsed_hero) = parse_hero_nft(&nft_data) {
+        let (affinity_bonus, origin_matches) = if let Some(parsed_hero) = parse_hero_nft(&nft_data)
+        {
             // Look for MiningAffinity (17) or FishingAffinity (18) in hero's buffs
-            let target_stat = if expedition_type == EXPEDITION_MINING { 17u8 } else { 18u8 };
+            let target_stat = if expedition_type == EXPEDITION_MINING {
+                17u8
+            } else {
+                18u8
+            };
             let mut bonus_bps: u16 = 0;
             for i in 0..(parsed_hero.buff_count as usize).min(4) {
                 if parsed_hero.buffs[i].stat == target_stat {
@@ -320,16 +347,23 @@ pub fn process(
 
     // 14. Check for rare find (deterministic based on start_time)
     // Load estate for Observatory bonus
-    let observatory_bonus = if let Ok(estate) = load_estate_for_player(estate_account, player_data, program_id) {
-        observatory_loot_bonus_bps(estate)
-    } else {
-        0
-    };
+    let observatory_bonus =
+        if let Ok(estate) = load_estate_for_player(estate_account, player_data, program_id) {
+            observatory_loot_bonus_bps(estate)
+        } else {
+            0
+        };
 
     let rare_chance_bps = if expedition_type == EXPEDITION_MINING {
-        MINING_RARE_CHANCE_BPS.get(tier as usize).copied().unwrap_or(100)
+        MINING_RARE_CHANCE_BPS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(100)
     } else {
-        FISHING_RARE_CHANCE_BPS.get(tier as usize).copied().unwrap_or(100)
+        FISHING_RARE_CHANCE_BPS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(100)
     };
 
     // Add observatory bonus to rare chance
@@ -347,37 +381,50 @@ pub fn process(
 
     // 15. Grant rewards
     let _fragment_bonus = if expedition_type == EXPEDITION_MINING {
-        player_data.gems = player_data.gems
+        player_data.gems = player_data
+            .gems
             .checked_add(final_yield)
             .ok_or(GameError::MathOverflow)?;
 
         // Guaranteed fragment bonus
-        let fragments = MINING_FRAGMENT_BONUS.get(tier as usize).copied().unwrap_or(1);
-        player_data.fragments = player_data.fragments
+        let fragments = MINING_FRAGMENT_BONUS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(1);
+        player_data.fragments = player_data
+            .fragments
             .checked_add(fragments)
             .ok_or(GameError::MathOverflow)?;
         fragments
     } else {
-        player_data.produce = player_data.produce
+        player_data.produce = player_data
+            .produce
             .checked_add(final_yield)
             .ok_or(GameError::MathOverflow)?;
 
         // Guaranteed fragment bonus (fishing gives fewer)
-        let fragments = FISHING_FRAGMENT_BONUS.get(tier as usize).copied().unwrap_or(1);
-        player_data.fragments = player_data.fragments
+        let fragments = FISHING_FRAGMENT_BONUS
+            .get(tier as usize)
+            .copied()
+            .unwrap_or(1);
+        player_data.fragments = player_data
+            .fragments
             .checked_add(fragments)
             .ok_or(GameError::MathOverflow)?;
         fragments
     };
 
     // 16. RETURN LOCKED OPERATIVES to player
-    player_data.operative_unit_1 = player_data.operative_unit_1
+    player_data.operative_unit_1 = player_data
+        .operative_unit_1
         .checked_add(op_unit_1)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_2 = player_data.operative_unit_2
+    player_data.operative_unit_2 = player_data
+        .operative_unit_2
         .checked_add(op_unit_2)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_3 = player_data.operative_unit_3
+    player_data.operative_unit_3 = player_data
+        .operative_unit_3
         .checked_add(op_unit_3)
         .ok_or(GameError::MathOverflow)?;
 
@@ -403,11 +450,7 @@ pub fn process(
             program_id,
         );
         let bump_seed = [expedition_bump];
-        let expedition_seeds = crate::seeds!(
-            EXPEDITION_SEED,
-            owner.address(),
-            &bump_seed
-        );
+        let expedition_seeds = crate::seeds!(EXPEDITION_SEED, owner.address(), &bump_seed);
         let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
         // Transfer hero NFT from expedition back to owner
@@ -419,7 +462,8 @@ pub fn process(
             authority: expedition_account,
             system_program,
             log_wrapper: p_core_program,
-        }.invoke_signed(&[expedition_signer])?;
+        }
+        .invoke_signed(&[expedition_signer])?;
     }
 
     // 18. Close expedition account (refund rent to owner)

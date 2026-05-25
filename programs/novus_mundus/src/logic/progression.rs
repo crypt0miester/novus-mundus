@@ -1,7 +1,7 @@
 use crate::{
     error::GameError,
+    logic::{get_time_multiplier_bp, get_time_of_day, safe_math::apply_bp, ActivityType},
     state::PlayerAccount,
-    logic::{get_time_of_day, get_time_multiplier_bp, ActivityType, safe_math::apply_bp},
 };
 
 /// XP required to advance *into* `level` (the per-level cost, deducted on level-up).
@@ -61,10 +61,7 @@ pub fn grant_xp_with_time_bonus(
 /// Grant XP to player and handle level-ups (without time bonus)
 /// Use grant_xp_with_time_bonus for time-aware XP grants.
 /// Returns (levels_gained, new_level, overflow_xp)
-pub fn grant_xp(
-    player: &mut PlayerAccount,
-    xp_amount: u64,
-) -> Result<(u8, u8, u64), GameError> {
+pub fn grant_xp(player: &mut PlayerAccount, xp_amount: u64) -> Result<(u8, u8, u64), GameError> {
     let mut current_xp = player.current_xp.saturating_add(xp_amount);
     let mut current_level = player.level;
     let mut levels_gained = 0u8;
@@ -100,7 +97,7 @@ pub fn calculate_xp_reward(action: XpAction) -> u64 {
         XpAction::DefeatPlayer { target_level } => {
             // More XP for defeating higher-level players
             50 + (target_level as u64 * 10)
-        },
+        }
         XpAction::DefeatEncounter { rarity } => {
             // XP scales with encounter rarity
             match rarity {
@@ -112,15 +109,15 @@ pub fn calculate_xp_reward(action: XpAction) -> u64 {
                 5 => 500, // World Event
                 _ => 0,
             }
-        },
+        }
         XpAction::CompleteTravel { distance_km } => {
             // 1 XP per km traveled
             distance_km as u64
-        },
+        }
         XpAction::CollectResources { amount } => {
             // 1 XP per 1000 resources collected
             amount / 1000
-        },
+        }
     }
 }
 
@@ -166,14 +163,11 @@ pub fn calculate_daily_rewards(
     let multiplier = tier.daily_reward_multiplier;
 
     // Apply multiplier to all rewards (basis points: divide by 10000, no u128!)
-    let cash = apply_bp(base_cash, multiplier as u64)
-        .ok_or(GameError::MathOverflow)?;
+    let cash = apply_bp(base_cash, multiplier as u64).ok_or(GameError::MathOverflow)?;
 
-    let produce = apply_bp(base_produce, multiplier as u64)
-        .ok_or(GameError::MathOverflow)?;
+    let produce = apply_bp(base_produce, multiplier as u64).ok_or(GameError::MathOverflow)?;
 
-    let xp = apply_bp(base_xp, multiplier as u64)
-        .ok_or(GameError::MathOverflow)?;
+    let xp = apply_bp(base_xp, multiplier as u64).ok_or(GameError::MathOverflow)?;
 
     Ok(DailyRewards { cash, produce, xp })
 }
@@ -190,5 +184,4 @@ mod tests {
         assert_eq!(xp_required_for_level(3), 161);
         assert_eq!(xp_required_for_level(4), 261);
     }
-
 }

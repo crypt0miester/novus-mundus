@@ -1,17 +1,12 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::CreateAccount;
 use crate::{
     constants::FLASH_SALE_SEED,
     error::GameError,
-    state::{GameEngine, ShopConfigAccount, FlashSaleAccount, FlashSaleStatus},
-    validation::{require_signer, require_writable, require_key_match},
-    utils::{read_u8, read_u16, read_u32, read_u64, read_i64},
+    state::{FlashSaleAccount, FlashSaleStatus, GameEngine, ShopConfigAccount},
+    utils::{read_i64, read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
 
 /// Create a flash sale (DAO only)
 ///
@@ -150,7 +145,8 @@ pub fn process(
         lamports,
         space: FlashSaleAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 10. Initialize Flash Sale Data
 

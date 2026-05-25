@@ -1,16 +1,12 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, TeamAccount, require_extension, EXT_TEAM, NULL_PUBKEY},
-    validation::{require_signer, require_writable},
-    utils::read_u64,
     emit,
+    error::GameError,
     events::TreasuryDeposit,
+    state::{require_extension, PlayerAccount, TeamAccount, EXT_TEAM, NULL_PUBKEY},
+    utils::read_u64,
+    validation::{require_signer, require_writable},
 };
 
 /// Deposit cash to team treasury
@@ -56,11 +52,11 @@ pub fn process(
 
     // 4. Load Accounts (using by_key for kingdom scoping)
 
-    let mut player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
-    let mut team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
+    let team = TeamAccount::load_checked_mut_by_key(team_account, program_id)?;
     if team.id != team_id {
         return Err(GameError::InvalidPDA.into());
     }
@@ -96,15 +92,13 @@ pub fn process(
 
     // 7. Transfer Cash to Treasury
 
-    player.cash_on_hand = player.cash_on_hand
-        .saturating_sub(amount);
+    player.cash_on_hand = player.cash_on_hand.saturating_sub(amount);
 
-    team.treasury = team.treasury
-        .saturating_add(amount);
+    team.treasury = team.treasury.saturating_add(amount);
 
     // 8. Emit Event
 
-    use pinocchio::sysvars::{Sysvar, clock::Clock};
+    use pinocchio::sysvars::{clock::Clock, Sysvar};
     let now = Clock::get()?.unix_timestamp;
 
     emit!(TreasuryDeposit {

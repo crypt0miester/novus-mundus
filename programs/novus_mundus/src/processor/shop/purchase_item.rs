@@ -1,29 +1,23 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
-use pinocchio_system::instructions::{CreateAccount, Transfer};
 use crate::{
     constants::PLAYER_PURCHASE_SEED,
+    emit,
     error::GameError,
+    events::shop::ItemPurchased,
     helpers::{
         add_to_inventory,
-        estate::{market_discount_bps, load_estate_for_player, require_market},
-        is_inventory_item_type,
-        process_token_payment_flow,
+        estate::{load_estate_for_player, market_discount_bps, require_market},
+        is_inventory_item_type, process_token_payment_flow,
     },
     state::{
-        GameEngine, ShopConfigAccount, ShopItemAccount, PlayerPurchaseAccount,
-        PlayerAccount, DailyDealAccount, WeeklySaleAccount,
-        unlock_extension_if_eligible, require_extension, EXT_RESEARCH, EXT_INVENTORY,
+        require_extension, unlock_extension_if_eligible, DailyDealAccount, GameEngine,
+        PlayerAccount, PlayerPurchaseAccount, ShopConfigAccount, ShopItemAccount,
+        WeeklySaleAccount, EXT_INVENTORY, EXT_RESEARCH,
     },
-    validation::{require_signer, require_writable, require_key_match, require_owner},
-    utils::{read_u8, read_u16, read_u32},
-    emit,
-    events::shop::ItemPurchased,
+    utils::{read_u16, read_u32, read_u8},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::{CreateAccount, Transfer};
 
 /// Discount source flags for optional accounts
 pub const DISCOUNT_DAILY_DEAL: u8 = 1;
@@ -78,18 +72,21 @@ pub fn process(
 ) -> ProgramResult {
     // 1. Parse Accounts
 
-    crate::extract_accounts!(accounts, [
-        buyer,
-        player_account,
-        game_engine_account,
-        shop_config_account,
-        shop_item_account,
-        player_purchase_account,
-        treasury,
-        system_program,
-        inventory_account,
-        estate_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            buyer,
+            player_account,
+            game_engine_account,
+            shop_config_account,
+            shop_item_account,
+            player_purchase_account,
+            treasury,
+            system_program,
+            inventory_account,
+            estate_account,
+        ]
+    );
 
     // 2. Validate Accounts
 
@@ -187,14 +184,20 @@ pub fn process(
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
     // 9. Load Player and Calculate Discounts (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine_account.address(), buyer.address(), program_id)?;
+    let player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine_account.address(),
+        buyer.address(),
+        program_id,
+    )?;
 
     // Calculate subscription discount (using effective tier to handle expiration)
     let effective_tier = player.get_effective_tier(now);
     let sub_discount_bps = calculate_subscription_discount(effective_tier);
 
     // Calculate milestone discount based on lifetime spending
-    let milestone_discount_bps = calculate_milestone_discount(player.total_shop_spent(), shop_config);
+    let milestone_discount_bps =
+        calculate_milestone_discount(player.total_shop_spent(), shop_config);
 
     // Calculate loyalty streak discount
     let streak_discount_bps = calculate_streak_discount(player.loyalty_streak(), shop_config);
@@ -273,7 +276,8 @@ pub fn process(
                 lamports,
                 space: PlayerPurchaseAccount::LEN as u64,
                 owner: program_id,
-            }.invoke_signed(&[signer])?;
+            }
+            .invoke_signed(&[signer])?;
 
             // Initialize
             let mut pp_data_ref = player_purchase_account.try_borrow_mut()?;
@@ -320,11 +324,16 @@ pub fn process(
             from: buyer,
             to: treasury,
             lamports: final_price,
-        }.invoke()?;
+        }
+        .invoke()?;
     } else {
         // Token payment (payment_type >= 2)
         // Calculate offset for token accounts (after base + optional discount accounts)
-        let discount_flags = if instruction_data.len() >= 8 { instruction_data[7] } else { 0 };
+        let discount_flags = if instruction_data.len() >= 8 {
+            instruction_data[7]
+        } else {
+            0
+        };
         let discount_accounts = (discount_flags & DISCOUNT_DAILY_DEAL != 0) as usize
             + (discount_flags & DISCOUNT_WEEKLY_SALE != 0) as usize;
         let token_offset = 10 + discount_accounts;
@@ -406,7 +415,7 @@ pub fn process(
 // HELPER FUNCTIONS
 
 use super::common::{
-    calculate_final_price, calculate_fib_bonus, calculate_milestone_discount,
+    calculate_fib_bonus, calculate_final_price, calculate_milestone_discount,
     calculate_milestone_tier, calculate_streak_discount, calculate_subscription_discount,
     fulfill_item,
 };
@@ -538,7 +547,9 @@ fn check_weekly_sale(
         return None;
     }
     let week_number = u64::from_le_bytes(
-        instruction_data[*data_offset..*data_offset + 8].try_into().ok()?
+        instruction_data[*data_offset..*data_offset + 8]
+            .try_into()
+            .ok()?,
     );
     *data_offset += 8;
 

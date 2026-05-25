@@ -1,3 +1,4 @@
+pub mod claim_prize;
 /// Event management processors
 ///
 /// Skill-based competitions with in-game leaderboards:
@@ -8,8 +9,6 @@
 ///
 /// Event scoring is automatic - processors update scores when actions occur.
 /// Players can only participate in ONE event at a time.
-
 pub mod create;
-pub mod join;
 pub mod finalize;
-pub mod claim_prize;
+pub mod join;

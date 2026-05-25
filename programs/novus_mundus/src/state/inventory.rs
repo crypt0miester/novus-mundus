@@ -1,18 +1,18 @@
-use pinocchio::Address;
-use pinocchio::error::ProgramError;
 use crate::constants::INVENTORY_SEED;
+use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
 /// Inventory item stored in player's inventory account
 #[repr(C)]
 #[derive(Copy, Clone)]
 pub struct InventoryItem {
-    pub item_type: u16,         // 2 bytes - ItemType enum value
-    pub rarity: u8,             // 1 byte - Rarity (0=Common, 1=Uncommon, 2=Rare, 3=Epic, 4=Legendary)
-    pub _pad: u8,               // 1 byte - Padding
-    pub quantity: u16,          // 2 bytes - Stack count
-    pub bonus_bps: u16,         // 2 bytes - Bonus in basis points
-    pub item_id: u32,           // 4 bytes - Specific item ID within type
-    pub obtained_at: u32,       // 4 bytes - Unix timestamp (u32 for space)
+    pub item_type: u16,   // 2 bytes - ItemType enum value
+    pub rarity: u8,       // 1 byte - Rarity (0=Common, 1=Uncommon, 2=Rare, 3=Epic, 4=Legendary)
+    pub _pad: u8,         // 1 byte - Padding
+    pub quantity: u16,    // 2 bytes - Stack count
+    pub bonus_bps: u16,   // 2 bytes - Bonus in basis points
+    pub item_id: u32,     // 4 bytes - Specific item ID within type
+    pub obtained_at: u32, // 4 bytes - Unix timestamp (u32 for space)
 }
 
 impl InventoryItem {
@@ -53,11 +53,11 @@ impl Default for InventoryItem {
 pub struct PlayerInventoryHeader {
     /// Account discriminator
     pub account_key: u8,
-    pub owner: Address,          // 32 bytes - Player's wallet
-    pub bump: u8,               // 1 byte
-    pub _padding: [u8; 3],      // 3 bytes - Alignment
-    pub slot_count: u16,        // 2 bytes - Total slots allocated
-    pub used_slots: u16,        // 2 bytes - Slots currently in use
+    pub owner: Address,    // 32 bytes - Player's wallet
+    pub bump: u8,          // 1 byte
+    pub _padding: [u8; 3], // 3 bytes - Alignment
+    pub slot_count: u16,   // 2 bytes - Total slots allocated
+    pub used_slots: u16,   // 2 bytes - Slots currently in use
 }
 
 impl PlayerInventoryHeader {
@@ -90,10 +90,7 @@ impl PlayerInventoryHeader {
     /// Derive PDA for player inventory
     /// Seeds: [INVENTORY_SEED, player]
     pub fn derive_pda(player: &Address) -> (Address, u8) {
-        pinocchio::Address::find_program_address(
-            &[INVENTORY_SEED, player.as_ref()],
-            &crate::ID,
-        )
+        pinocchio::Address::find_program_address(&[INVENTORY_SEED, player.as_ref()], &crate::ID)
     }
 
     /// Create PDA from known bump
@@ -102,7 +99,8 @@ impl PlayerInventoryHeader {
         pinocchio::Address::create_program_address(
             &[INVENTORY_SEED, player.as_ref(), &bump_seed],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 }
 
@@ -134,15 +132,22 @@ impl<'a> PlayerInventory<'a> {
 
     /// Find item by type for stacking
     pub fn find_item_by_type(&self, item_type: u16) -> Option<usize> {
-        self.items.iter().position(|item| {
-            item.item_type == item_type && item.quantity > 0
-        })
+        self.items
+            .iter()
+            .position(|item| item.item_type == item_type && item.quantity > 0)
     }
 
     /// Add item to inventory, returns true if successful
     /// If item type exists and is stackable, adds to existing stack
     /// Otherwise finds empty slot
-    pub fn add_item(&mut self, item_type: u16, quantity: u16, rarity: u8, item_id: u32, now: u32) -> bool {
+    pub fn add_item(
+        &mut self,
+        item_type: u16,
+        quantity: u16,
+        rarity: u8,
+        item_id: u32,
+        now: u32,
+    ) -> bool {
         // Try to stack with existing
         if let Some(idx) = self.find_item_by_type(item_type) {
             self.items[idx].quantity = self.items[idx].quantity.saturating_add(quantity);
@@ -172,4 +177,3 @@ impl<'a> PlayerInventory<'a> {
         self.find_empty_slot().is_none()
     }
 }
-

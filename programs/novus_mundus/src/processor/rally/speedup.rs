@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    emit,
     error::GameError,
-    state::{PlayerAccount, GameEngine, RallyAccount, RallyParticipant, RallyStatus},
+    events::RallySpeedup,
+    state::{GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus},
     utils::read_u8,
     validation::require_owner,
-    emit,
-    events::RallySpeedup,
 };
 
 /// Speedup type constants - what phase/target to speed up
@@ -82,14 +80,19 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // 5. Load Payer (anyone can pay for speedup, kingdom-scoped)
-    let mut payer_data = PlayerAccount::load_checked_mut(payer_player_account, game_engine_account.address(), payer_owner.address(), program_id)?;
+    let payer_data = PlayerAccount::load_checked_mut(
+        payer_player_account,
+        game_engine_account.address(),
+        payer_owner.address(),
+        program_id,
+    )?;
 
     let now = Clock::get()?.unix_timestamp;
 
     // 6. Calculate tier multipliers (same for all speedup types)
     let (time_multiplier, tier_cost_multiplier): (f64, u64) = match speedup_tier {
-        1 => (0.5, 1),    // 50% of time remains, 1x gem cost
-        2 => (0.25, 2),   // 25% of time remains, 2x gem cost
+        1 => (0.5, 1),  // 50% of time remains, 1x gem cost
+        2 => (0.25, 2), // 25% of time remains, 2x gem cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
@@ -114,8 +117,9 @@ pub fn process(
             }
 
             // Validate participant belongs to this rally
-            if participant_data.rally_id != rally_data.id ||
-               participant_data.rally_creator != rally_data.creator {
+            if participant_data.rally_id != rally_data.id
+                || participant_data.rally_creator != rally_data.creator
+            {
                 return Err(GameError::NotRallyParticipant.into());
             }
 
@@ -204,8 +208,9 @@ pub fn process(
             let participant_data = unsafe { RallyParticipant::load_mut(&mut participant_data_ref) };
 
             // Validate participant belongs to this rally
-            if participant_data.rally_id != rally_data.id ||
-               participant_data.rally_creator != rally_data.creator {
+            if participant_data.rally_id != rally_data.id
+                || participant_data.rally_creator != rally_data.creator
+            {
                 return Err(GameError::NotRallyParticipant.into());
             }
 
@@ -214,7 +219,8 @@ pub fn process(
             if participant_data.return_started_at == 0 {
                 // Not started returning yet - check if rally is in Returning/Cancelled
                 if rally_data.status != RallyStatus::Returning as u8
-                    && rally_data.status != RallyStatus::Cancelled as u8 {
+                    && rally_data.status != RallyStatus::Cancelled as u8
+                {
                     return Err(GameError::NotReturningYet.into());
                 }
                 return Err(GameError::NotReturningYet.into());
@@ -224,8 +230,8 @@ pub fn process(
                 return Err(GameError::ParticipantAlreadyReturned.into());
             }
 
-            let return_completes_at = participant_data.return_started_at +
-                participant_data.return_duration as i64;
+            let return_completes_at =
+                participant_data.return_started_at + participant_data.return_duration as i64;
 
             if now >= return_completes_at {
                 return Err(GameError::ParticipantAlreadyReturned.into());

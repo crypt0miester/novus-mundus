@@ -1,23 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     emit,
     error::GameError,
-    events::{CraftStrike, CraftCompleted},
-    state::{
-        PlayerAccount, EstateAccount, BuildingType,
-        estate::{CraftedEquipmentAccount, CraftableEquipment, QualityTier},
-    },
-    helpers::estate::{
-        load_estate_for_player, get_forge_level, calculate_window_duration,
-    },
+    events::{CraftCompleted, CraftStrike},
+    helpers::estate::{calculate_window_duration, get_forge_level, load_estate_for_player},
     logic::safe_math::apply_bp_bonus,
-    validation::{require_signer, require_writable, require_owner},
+    state::{
+        estate::{CraftableEquipment, CraftedEquipmentAccount, QualityTier},
+        BuildingType, EstateAccount, PlayerAccount,
+    },
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Strike the current tempering stage
@@ -143,8 +139,8 @@ pub fn process(
 
         let equipment_type = CraftableEquipment::from_u8(crafted.active_craft_equipment)
             .ok_or(GameError::InvalidParameter)?;
-        let quality_tier = QualityTier::from_u8(crafted.target_tier)
-            .ok_or(GameError::InvalidParameter)?;
+        let quality_tier =
+            QualityTier::from_u8(crafted.target_tier).ok_or(GameError::InvalidParameter)?;
 
         // Calculate average precision for the completed event (before borrows)
         let final_avg_precision = if crafted.stages_completed > 0 {
@@ -156,7 +152,8 @@ pub fn process(
         // Add crafted item to quality counts
         let counts = crafted.get_quality_counts_mut(equipment_type);
         let inventory_slot = counts.counts[quality_tier as usize];
-        counts.counts[quality_tier as usize] = counts.counts[quality_tier as usize].saturating_add(1);
+        counts.counts[quality_tier as usize] =
+            counts.counts[quality_tier as usize].saturating_add(1);
         // Mutable borrow of counts ends here naturally
 
         // Update stats
@@ -173,7 +170,7 @@ pub fn process(
 
         // Base mastery XP by quality tier (higher tier = more XP)
         let base_mastery_xp: u64 = match quality_tier {
-            QualityTier::Common => 0,      // Can't craft common
+            QualityTier::Common => 0, // Can't craft common
             QualityTier::Refined => 10,
             QualityTier::Superior => 25,
             QualityTier::Elite => 50,
@@ -237,8 +234,8 @@ pub fn process(
     }
 
     // 11. More stages remain - set up next window
-    let quality_tier = QualityTier::from_u8(crafted.target_tier)
-        .ok_or(GameError::InvalidParameter)?;
+    let quality_tier =
+        QualityTier::from_u8(crafted.target_tier).ok_or(GameError::InvalidParameter)?;
 
     // Calculate window duration (extended by Forge level)
     let window_duration = calculate_window_duration(quality_tier, forge_level);

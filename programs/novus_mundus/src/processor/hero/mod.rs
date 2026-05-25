@@ -1,3 +1,5 @@
+pub mod assign_defensive;
+pub mod burn;
 /// Hero system instructions
 ///
 /// This module contains all hero-related instruction processors:
@@ -8,14 +10,11 @@
 /// - unlock: Unlock hero from player account
 /// - level_up: Level up hero with fragments
 /// - assign_defensive: Set defensive hero slot
-
 pub mod create_collection;
 pub mod create_template;
-pub mod mint;
-pub mod lock;
-pub mod unlock;
 pub mod level_up;
-pub mod assign_defensive;
-pub mod burn;
+pub mod lock;
+pub mod mint;
+pub mod unlock;
 pub mod update_supply_cap;
 pub mod use_ability;

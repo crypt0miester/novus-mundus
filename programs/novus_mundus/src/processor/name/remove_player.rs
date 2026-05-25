@@ -1,23 +1,21 @@
 use pinocchio::{
-    AccountView,
     cpi::Signer,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use alt_name_service::instructions::Transfer;
 
 use crate::{
     constants::PLAYER_SEED,
+    emit,
     error::GameError,
+    events::PlayerNameRemoved,
     helpers::{compute_name_hash, validate_and_get_domain_name},
     state::PlayerAccount,
     utils::read_bytes32,
     validation::{require_key_match, require_owner, require_signer, require_writable},
-    emit,
-    events::PlayerNameRemoved,
     NULL_PUBKEY,
 };
 

@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Shop events - purchases and transactions
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a shop item is purchased
 pub struct ItemPurchased {

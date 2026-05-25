@@ -1,22 +1,20 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{ReinforcementAccount, ReinforcementStatus, PlayerAccount, GameEngine},
-    utils::read_u8,
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::reinforcement::ReinforcementSpeedup,
+    state::{GameEngine, PlayerAccount, ReinforcementAccount, ReinforcementStatus},
+    utils::read_u8,
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Speed-up tiers for reinforcement travel
-pub const SPEEDUP_TIER_1: u8 = 1;  // 50% of time remains
-pub const SPEEDUP_TIER_2: u8 = 2;  // 25% of time remains
+pub const SPEEDUP_TIER_1: u8 = 1; // 50% of time remains
+pub const SPEEDUP_TIER_2: u8 = 2; // 25% of time remains
 
 /// Speed up reinforcement travel by spending gems
 ///
@@ -115,8 +113,8 @@ pub fn process(
 
     // 9. Calculate Time Reduction
     let (time_multiplier, tier_cost_multiplier): (f64, u64) = match speedup_tier {
-        SPEEDUP_TIER_1 => (0.5, 1),    // 50% of time remains, 1x gem cost
-        SPEEDUP_TIER_2 => (0.25, 2),   // 25% of time remains, 2x gem cost
+        SPEEDUP_TIER_1 => (0.5, 1),  // 50% of time remains, 1x gem cost
+        SPEEDUP_TIER_2 => (0.25, 2), // 25% of time remains, 2x gem cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
@@ -126,7 +124,9 @@ pub fn process(
     let game_engine_data_ref = game_engine.try_borrow()?;
     let game_engine_state = unsafe { GameEngine::load(&game_engine_data_ref) };
 
-    let gems_per_minute = game_engine_state.gameplay_config.gem_cost_per_minute_speedup;
+    let gems_per_minute = game_engine_state
+        .gameplay_config
+        .gem_cost_per_minute_speedup;
     let base_gem_cost = remaining_minutes.saturating_mul(gems_per_minute as u64);
     let total_gem_cost = base_gem_cost.saturating_mul(tier_cost_multiplier);
 

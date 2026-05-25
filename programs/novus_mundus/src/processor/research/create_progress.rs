@@ -1,20 +1,14 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, rent::Rent},
+    sysvars::{rent::Rent, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    state::{PlayerAccount, ResearchProgress, EXT_RESEARCH},
-    validation::{
-        require_signer,
-        require_writable,
-        require_key_match,
-    },
     constants::RESEARCH_SEED,
+    state::{PlayerAccount, ResearchProgress, EXT_RESEARCH},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Create research progress account for a player
@@ -78,7 +72,8 @@ pub fn process(
         lamports,
         space: ResearchProgress::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 6. Initialize research progress (scoped to drop borrow before CPI/resize)
     {
@@ -119,7 +114,8 @@ pub fn process(
                     from: payer,
                     to: player_account,
                     lamports: lamports_needed,
-                }.invoke()?;
+                }
+                .invoke()?;
             }
 
             // Resize the account data

@@ -10,29 +10,24 @@
 //! the garrison contribution, and subtracted from the player's cached buffs.
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::{GARRISON_SEED, HERO_TEMPLATE_SEED, PLAYER_SEED},
     emit,
     error::GameError,
     events::GarrisonJoined,
-    validation::{require_empty, require_owner, require_pda},
+    helpers::{parse_hero_nft, subtract_hero_buffs_from_player_with_location},
     state::{
-        CastleAccount, GarrisonContributionAccount, PlayerAccount, HeroTemplate,
-        player::NULL_PUBKEY,
+        player::NULL_PUBKEY, CastleAccount, GarrisonContributionAccount, HeroTemplate,
+        PlayerAccount,
     },
-    constants::{GARRISON_SEED, PLAYER_SEED, HERO_TEMPLATE_SEED},
-    helpers::{
-        parse_hero_nft,
-        subtract_hero_buffs_from_player_with_location,
-    },
-    utils::{read_u8, read_u64},
+    utils::{read_u64, read_u8},
+    validation::{require_empty, require_owner, require_pda},
 };
 
 /// Join Garrison instruction data
@@ -63,13 +58,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        player_wallet,
-        player_account,
-        castle_account,
-        garrison_account,
-        system_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_wallet,
+            player_account,
+            castle_account,
+            garrison_account,
+            system_program,
+        ]
+    );
 
     // Verify signer
     if !player_wallet.is_signer() {
@@ -95,7 +93,7 @@ pub fn process(
     }
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle tier supports garrison
     if castle.max_garrison == 0 {
@@ -113,10 +111,8 @@ pub fn process(
     }
 
     // Verify garrison PDA
-    let (expected_garrison_pda, garrison_bump) = GarrisonContributionAccount::derive_pda(
-        castle_account.address(),
-        player_account.address(),
-    );
+    let (expected_garrison_pda, garrison_bump) =
+        GarrisonContributionAccount::derive_pda(castle_account.address(), player_account.address());
     if garrison_account.address() != &expected_garrison_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -125,16 +121,18 @@ pub fn process(
     require_empty(garrison_account).map_err(|_| GameError::AlreadyInGarrison)?;
 
     // Verify player has sufficient units
-    if units_1 > player.defensive_unit_1 ||
-       units_2 > player.defensive_unit_2 ||
-       units_3 > player.defensive_unit_3 {
+    if units_1 > player.defensive_unit_1
+        || units_2 > player.defensive_unit_2
+        || units_3 > player.defensive_unit_3
+    {
         return Err(GameError::InsufficientUnits.into());
     }
 
     // Verify player has sufficient weapons
-    if melee > player.melee_weapons ||
-       ranged > player.ranged_weapons ||
-       siege > player.siege_weapons {
+    if melee > player.melee_weapons
+        || ranged > player.ranged_weapons
+        || siege > player.siege_weapons
+    {
         return Err(GameError::InsufficientWeapons.into());
     }
 
@@ -190,8 +188,7 @@ pub fn process(
         // Subtract hero buffs from player (hero is leaving locked state)
         {
             let nft_data = hero_mint.try_borrow()?;
-            let parsed_hero = parse_hero_nft(&nft_data)
-                .ok_or(GameError::InvalidParameter)?;
+            let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
 
             // Validate HeroTemplate program ownership AND PDA derivation
             require_owner(hero_template_account, program_id)?;
@@ -210,7 +207,12 @@ pub fn process(
             }
 
             let location_bonus_bps = player.slot_location_bonus_at(hero_slot as usize);
-            subtract_hero_buffs_from_player_with_location(player, parsed_hero.level, template, location_bonus_bps);
+            subtract_hero_buffs_from_player_with_location(
+                player,
+                parsed_hero.level,
+                template,
+                location_bonus_bps,
+            );
             player.set_slot_location_bonus_at(hero_slot as usize, 0);
         }
 
@@ -236,7 +238,12 @@ pub fn process(
         drop(player_data);
 
         let player_bump_seed = [player_bump];
-        let player_seeds = crate::seeds!(PLAYER_SEED, player_game_engine.as_ref(), player_wallet.address(), &player_bump_seed);
+        let player_seeds = crate::seeds!(
+            PLAYER_SEED,
+            player_game_engine.as_ref(),
+            player_wallet.address(),
+            &player_bump_seed
+        );
         let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
         p_core::instructions::TransferV1 {
@@ -247,7 +254,8 @@ pub fn process(
             authority: player_account,
             system_program,
             log_wrapper: p_core_program,
-        }.invoke_signed(&[player_signer])?;
+        }
+        .invoke_signed(&[player_signer])?;
 
         // Re-borrow for remaining state updates
         player_data = player_account.try_borrow_mut()?;
@@ -307,7 +315,8 @@ pub fn process(
         lamports,
         space: GarrisonContributionAccount::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // Initialize garrison contribution
     let mut garrison_data = garrison_account.try_borrow_mut()?;

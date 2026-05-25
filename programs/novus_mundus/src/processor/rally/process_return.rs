@@ -1,34 +1,29 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::{GAME_ENGINE_SEED, INTRACITY_WALKING_SPEED_KMH, PLAYER_SEED},
+    emit,
     error::GameError,
+    events::RallyParticipantReturned,
     helpers::{
-        close_account,
-        mint_tokens,
-        validate_token_account_owner,
-        parse_hero_nft,
-        add_hero_buffs_to_player_with_location,
-        estate::{load_estate_for_player_mut, has_infirmary},
+        add_hero_buffs_to_player_with_location, close_account,
+        estate::{has_infirmary, load_estate_for_player_mut},
+        mint_tokens, parse_hero_nft, validate_token_account_owner,
     },
     logic::{
         calculate_networth,
         location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
     },
     state::{
-        CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant,
-        RallyStatus, HeroTemplate, player::NULL_PUBKEY,
-        tier_from_mint_cost, is_hero_at_home, location_bonus_for_tier,
+        is_hero_at_home, location_bonus_for_tier, player::NULL_PUBKEY, tier_from_mint_cost,
+        CityAccount, GameEngine, HeroTemplate, PlayerAccount, RallyAccount, RallyParticipant,
+        RallyStatus,
     },
-    validation::{require_writable, require_owner, require_key_match},
-    emit,
-    events::RallyParticipantReturned,
+    validation::{require_key_match, require_owner, require_writable},
 };
 
 /// Process return from a rally
@@ -72,19 +67,22 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, [
-        rally_account,
-        rally_participant_account,
-        player_account,
-        participant_owner,
-        game_engine_account,
-        rally_city_account,
-        home_city_account,
-        estate_account,
-        player_novi_ata,
-        novi_mint,
-        token_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            rally_account,
+            rally_participant_account,
+            player_account,
+            participant_owner,
+            game_engine_account,
+            rally_city_account,
+            home_city_account,
+            estate_account,
+            player_novi_ata,
+            novi_mint,
+            token_program,
+        ]
+    );
 
     // 2. Validate basic account requirements
     require_writable(rally_account)?;
@@ -195,7 +193,8 @@ pub fn process(
         }
 
         // Calculate return duration based on their location
-        let return_duration = if participant.arrived_at_rally || now >= participant.arrives_at_rally {
+        let return_duration = if participant.arrived_at_rally || now >= participant.arrives_at_rally
+        {
             // At rally point, travel back home
             if participant.home_city == rally_city {
                 // Same city - intracity walking
@@ -209,7 +208,8 @@ pub fn process(
             } else {
                 // Different city - intercity travel
                 let current_theme = game_engine_data.theme_config.current_theme as usize;
-                let theme_speed = game_engine_data.gameplay_config.theme_travel_speeds_kmh[current_theme];
+                let theme_speed =
+                    game_engine_data.gameplay_config.theme_travel_speeds_kmh[current_theme];
                 calculate_intercity_travel_time(
                     rally_city_data.latitude,
                     rally_city_data.longitude,
@@ -224,8 +224,6 @@ pub fn process(
             time_spent.max(0)
         };
 
-        drop(game_engine_data);
-
         // For late joiners during Gathering, decrement rally counts (like leave.rs)
         if rally_status == RallyStatus::Gathering as u8 {
             rally.participant_count = rally.participant_count.saturating_sub(1);
@@ -233,9 +231,15 @@ pub fn process(
                 rally.arrived_count = rally.arrived_count.saturating_sub(1);
             }
             rally.total_units = rally.total_units.saturating_sub(participant.total_units());
-            rally.total_melee_weapons = rally.total_melee_weapons.saturating_sub(participant.melee_weapons_committed);
-            rally.total_ranged_weapons = rally.total_ranged_weapons.saturating_sub(participant.ranged_weapons_committed);
-            rally.total_siege_weapons = rally.total_siege_weapons.saturating_sub(participant.siege_weapons_committed);
+            rally.total_melee_weapons = rally
+                .total_melee_weapons
+                .saturating_sub(participant.melee_weapons_committed);
+            rally.total_ranged_weapons = rally
+                .total_ranged_weapons
+                .saturating_sub(participant.ranged_weapons_committed);
+            rally.total_siege_weapons = rally
+                .total_siege_weapons
+                .saturating_sub(participant.siege_weapons_committed);
         }
 
         // Start return journey
@@ -283,23 +287,29 @@ pub fn process(
         // Award loot (only if attacker won)
         if attacker_won {
             player.melee_weapons = player.melee_weapons.saturating_add(participant.loot_melee);
-            player.ranged_weapons = player.ranged_weapons.saturating_add(participant.loot_ranged);
+            player.ranged_weapons = player
+                .ranged_weapons
+                .saturating_add(participant.loot_ranged);
             player.siege_weapons = player.siege_weapons.saturating_add(participant.loot_siege);
 
             player.cash_on_hand = player.cash_on_hand.saturating_add(participant.loot_cash);
-            player.locked_novi = player.locked_novi.saturating_add(participant.loot_locked_novi);
+            player.locked_novi = player
+                .locked_novi
+                .saturating_add(participant.loot_locked_novi);
             player.produce = player.produce.saturating_add(participant.loot_produce);
             player.vehicles = player.vehicles.saturating_add(participant.loot_vehicles);
             player.fragments = player.fragments.saturating_add(participant.loot_fragments);
             player.gems = player.gems.saturating_add(participant.loot_gems);
 
-            loot_received = participant.loot_cash
+            loot_received = participant
+                .loot_cash
                 .saturating_add(participant.loot_produce)
                 .saturating_add(participant.loot_vehicles);
 
             if let Some(rs) = player.rally_stats_mut() {
                 rs.total_rallies_won = rs.total_rallies_won.saturating_add(1);
-                rs.total_rally_loot_earned = rs.total_rally_loot_earned.saturating_add(loot_received);
+                rs.total_rally_loot_earned =
+                    rs.total_rally_loot_earned.saturating_add(loot_received);
             }
         } else {
             loot_received = 0;
@@ -378,8 +388,7 @@ pub fn process(
 
         // Parse hero NFT to get level and template_id
         let nft_data = hero_mint.try_borrow()?;
-        let parsed_hero = parse_hero_nft(&nft_data)
-            .ok_or(GameError::InvalidParameter)?;
+        let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
         drop(nft_data);
 
         // Load and verify template
@@ -408,7 +417,12 @@ pub fn process(
                 0
             };
 
-            add_hero_buffs_to_player_with_location(&mut player, parsed_hero.level, template, location_bonus_bps);
+            add_hero_buffs_to_player_with_location(
+                &mut player,
+                parsed_hero.level,
+                template,
+                location_bonus_bps,
+            );
 
             player.set_active_hero_at(slot as usize, committed_hero_key);
             player.set_slot_location_bonus_at(slot as usize, location_bonus_bps);
@@ -458,10 +472,8 @@ pub fn process(
     };
 
     // Drop borrows before closing account
-    drop(player);
     drop(participant_data_ref);
     drop(rally_data_ref);
-    drop(game_engine);
 
     // 11c. Mint NOVI to player's ATA so wallet balance tracks the locked_novi
     //      bumped by rally loot above. Without this CPI the two drift apart,
@@ -472,7 +484,6 @@ pub fn process(
         let ge_kid_bytes = ge_data.kingdom_id.to_le_bytes();
         let ge_seeds = crate::seeds!(GAME_ENGINE_SEED, &ge_kid_bytes, &ge_bump_seed);
         let ge_signer = pinocchio::cpi::Signer::from(&ge_seeds);
-        drop(ge_data);
 
         mint_tokens(
             novi_mint,
@@ -496,7 +507,12 @@ pub fn process(
         require_writable(hero_mint)?;
 
         let bump_seed = [player_bump];
-        let player_seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), participant_owner.address(), &bump_seed);
+        let player_seeds = crate::seeds!(
+            PLAYER_SEED,
+            player_ge.as_ref(),
+            participant_owner.address(),
+            &bump_seed
+        );
         let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
         p_core::instructions::TransferV1 {
@@ -507,7 +523,8 @@ pub fn process(
             authority: player_account,
             system_program,
             log_wrapper: system_program,
-        }.invoke_signed(&[player_signer])?;
+        }
+        .invoke_signed(&[player_signer])?;
     }
 
     // 13. Close RallyParticipant account (refund rent to participant)

@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Team events - team creation, membership, treasury, leadership
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a new team is created
 pub struct TeamCreated {

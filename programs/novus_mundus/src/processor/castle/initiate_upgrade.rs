@@ -10,28 +10,24 @@
 //! - Armory: +3% defense quality per level
 
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{
+        CASTLE_UPGRADE_ARMORY, CASTLE_UPGRADE_CHAMBERS, CASTLE_UPGRADE_FORTIFICATION,
+        CASTLE_UPGRADE_TREASURY, CASTLE_UPGRADE_WATCHTOWER, MAX_ARMORY_LEVEL, MAX_CHAMBERS_LEVEL,
+        MAX_FORTIFICATION_LEVEL, MAX_TREASURY_LEVEL, MAX_WATCHTOWER_LEVEL, PLAYER_SEED,
+    },
     emit,
     error::GameError,
     events::CastleUpgradeStarted,
-    state::{CastleAccount, PlayerAccount},
-    constants::{
-        CASTLE_UPGRADE_FORTIFICATION, CASTLE_UPGRADE_TREASURY,
-        CASTLE_UPGRADE_CHAMBERS, CASTLE_UPGRADE_WATCHTOWER, CASTLE_UPGRADE_ARMORY,
-        MAX_FORTIFICATION_LEVEL, MAX_TREASURY_LEVEL,
-        MAX_CHAMBERS_LEVEL, MAX_WATCHTOWER_LEVEL, MAX_ARMORY_LEVEL,
-        PLAYER_SEED,
-    },
     helpers::burn_tokens,
-    validation::require_owner,
+    state::{CastleAccount, PlayerAccount},
     utils::read_u8,
+    validation::require_owner,
 };
 
 /// Upgrade durations in seconds (base time per level)
@@ -61,14 +57,17 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        king_wallet,
-        king_account,
-        castle_account,
-        locked_token_account,
-        novi_mint,
-        _token_program,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            king_wallet,
+            king_account,
+            castle_account,
+            locked_token_account,
+            novi_mint,
+            _token_program,
+        ]
+    );
 
     // Verify signer
     if !king_wallet.is_signer() {
@@ -97,7 +96,7 @@ pub fn process(
     };
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     crate::require_keys_eq!(
         novi_mint.address().as_array(),
@@ -146,7 +145,12 @@ pub fn process(
     // Burn NOVI tokens from locked token account
     // PlayerAccount PDA is the authority over locked tokens
     let bump_seed = [king_bump];
-    let king_seeds = crate::seeds!(PLAYER_SEED, king_game_engine.as_ref(), king_wallet.address(), &bump_seed);
+    let king_seeds = crate::seeds!(
+        PLAYER_SEED,
+        king_game_engine.as_ref(),
+        king_wallet.address(),
+        &bump_seed
+    );
     let king_signer = pinocchio::cpi::Signer::from(&king_seeds);
 
     burn_tokens(

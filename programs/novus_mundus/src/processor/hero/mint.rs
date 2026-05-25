@@ -1,24 +1,19 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, HeroTemplate, GameEngine, EstateAccount, calculate_mint_bonus},
-    constants::{HERO_TEMPLATE_SEED, HERO_MINT_RECEIPT_SEED, ESTATE_SEED, PLAYER_SEED},
-    helpers::{HeroNftContext, HeroNftBuffers, build_hero_nft_attributes, estate::get_sanctuary_level},
-    utils::read_u16,
-    validation::{
-        require_signer,
-        require_writable,
-        require_owner,
-        require_pda,
-    },
+    constants::{ESTATE_SEED, HERO_MINT_RECEIPT_SEED, HERO_TEMPLATE_SEED, PLAYER_SEED},
     emit,
+    error::GameError,
     events::HeroMinted,
+    helpers::{
+        build_hero_nft_attributes, estate::get_sanctuary_level, HeroNftBuffers, HeroNftContext,
+    },
+    state::{calculate_mint_bonus, EstateAccount, GameEngine, HeroTemplate, PlayerAccount},
+    utils::read_u16,
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Mint a new hero NFT (131) - Deterministic System (NFT-Only)
@@ -103,10 +98,8 @@ pub fn process(
 
     // 7. SAFETY: Verify template PDA derivation
     let template_id_bytes = template_id.to_le_bytes();
-    let (expected_template_pda, _template_bump) = Address::find_program_address(
-        &[HERO_TEMPLATE_SEED, &template_id_bytes],
-        program_id,
-    );
+    let (expected_template_pda, _template_bump) =
+        Address::find_program_address(&[HERO_TEMPLATE_SEED, &template_id_bytes], program_id);
 
     if hero_template.address() != &expected_template_pda {
         return Err(GameError::InvalidPDA.into());
@@ -134,7 +127,11 @@ pub fn process(
     // re-derive using game_engine.address() (the account passed in this ix).
     require_pda(
         player_account,
-        &[PLAYER_SEED, game_engine.address().as_ref(), minter.address().as_ref()],
+        &[
+            PLAYER_SEED,
+            game_engine.address().as_ref(),
+            minter.address().as_ref(),
+        ],
         program_id,
     )?;
 
@@ -162,7 +159,11 @@ pub fn process(
 
     // 14. Per-player mint limit: Verify receipt PDA doesn't already exist
     let (expected_receipt_pda, receipt_bump) = Address::find_program_address(
-        &[HERO_MINT_RECEIPT_SEED, player_account.address().as_ref(), &template_id_bytes],
+        &[
+            HERO_MINT_RECEIPT_SEED,
+            player_account.address().as_ref(),
+            &template_id_bytes,
+        ],
         program_id,
     );
 
@@ -208,7 +209,8 @@ pub fn process(
         from: minter,
         to: treasury,
         lamports: mint_cost,
-    }.invoke()?;
+    }
+    .invoke()?;
 
     // 17. Create 0-byte receipt PDA (marks this player+template as minted)
     let receipt_bump_seed = [receipt_bump];
@@ -229,7 +231,8 @@ pub fn process(
         lamports: rent_lamports,
         space: 0,
         owner: program_id,
-    }.invoke_signed(&[receipt_signer])?;
+    }
+    .invoke_signed(&[receipt_signer])?;
 
     // 18. Get serial number from template (BEFORE incrementing!)
     let template_data = hero_template.try_borrow()?;
@@ -245,7 +248,11 @@ pub fn process(
     };
 
     let ge_bump_seed = [ge_bump];
-    let game_engine_seeds = crate::seeds!(crate::constants::GAME_ENGINE_SEED, &kingdom_id_bytes, &ge_bump_seed);
+    let game_engine_seeds = crate::seeds!(
+        crate::constants::GAME_ENGINE_SEED,
+        &kingdom_id_bytes,
+        &ge_bump_seed
+    );
     let ge_signer = pinocchio::cpi::Signer::from(&game_engine_seeds);
 
     // Get template name
@@ -266,7 +273,8 @@ pub fn process(
         name: name_slice,
         uri: b"https://novusmundus.gg/heroes/",
         plugins: &[], // No inline plugins; Attributes is added via AddPluginV1 below
-    }.invoke_signed(&[ge_signer])?;
+    }
+    .invoke_signed(&[ge_signer])?;
 
     // 20. Add Attributes plugin using p-core AddPluginV1
     let ge_signer2 = pinocchio::cpi::Signer::from(&game_engine_seeds);
@@ -290,7 +298,8 @@ pub fn process(
             authority: p_core::plugins::PluginAuthority::UpdateAuthority,
             attributes: &attributes[..attr_count],
         },
-    }.invoke_signed(&[ge_signer2])?;
+    }
+    .invoke_signed(&[ge_signer2])?;
 
     // 21. CRITICAL: Update template.minted_count (ONLY AFTER SUCCESS!)
     let mut template_data = hero_template_writable.try_borrow_mut()?;

@@ -80,7 +80,9 @@ pub fn calculate_share(total: u64, contribution: u64, total_contribution: u64) -
         return Some(0);
     }
     // Calculate contribution percentage in BP
-    let share_bp = contribution.checked_mul(BP_SCALE)?.checked_div(total_contribution)?;
+    let share_bp = contribution
+        .checked_mul(BP_SCALE)?
+        .checked_div(total_contribution)?;
     apply_bp(total, share_bp)
 }
 
@@ -201,13 +203,13 @@ mod tests {
     fn test_apply_bp() {
         assert_eq!(apply_bp(1000, 15000), Some(1500)); // 1.5x
         assert_eq!(apply_bp(1000, 10000), Some(1000)); // 1.0x
-        assert_eq!(apply_bp(1000, 5000), Some(500));   // 0.5x
-        assert_eq!(apply_bp(1000, 0), Some(0));        // 0x
+        assert_eq!(apply_bp(1000, 5000), Some(500)); // 0.5x
+        assert_eq!(apply_bp(1000, 0), Some(0)); // 0x
     }
 
     #[test]
     fn test_apply_bp_bonus_penalty() {
-        assert_eq!(apply_bp_bonus(1000, 500), Some(1050));  // +5%
+        assert_eq!(apply_bp_bonus(1000, 500), Some(1050)); // +5%
         assert_eq!(apply_bp_penalty(1000, 500), Some(950)); // -5%
         assert_eq!(apply_bp_bonus(1000, 10000), Some(2000)); // +100%
     }
@@ -246,10 +248,10 @@ mod tests {
 
     #[test]
     fn test_calculate_share() {
-        assert_eq!(calculate_share(1000, 30, 100), Some(300));  // 30%
-        assert_eq!(calculate_share(1000, 0, 100), Some(0));     // 0%
+        assert_eq!(calculate_share(1000, 30, 100), Some(300)); // 30%
+        assert_eq!(calculate_share(1000, 0, 100), Some(0)); // 0%
         assert_eq!(calculate_share(1000, 100, 100), Some(1000)); // 100%
-        assert_eq!(calculate_share(1000, 50, 0), Some(0));      // div by zero -> 0
+        assert_eq!(calculate_share(1000, 50, 0), Some(0)); // div by zero -> 0
     }
 
     #[test]

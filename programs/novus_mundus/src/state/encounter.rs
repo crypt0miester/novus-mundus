@@ -1,6 +1,6 @@
-use pinocchio::Address;
-use pinocchio::error::ProgramError;
 use crate::constants::ENCOUNTER_SEED;
+use pinocchio::error::ProgramError;
+use pinocchio::Address;
 
 /// Encounter account with dynamic attacker list
 /// KINGDOM-SCOPED: Encounters exist within a kingdom
@@ -20,28 +20,28 @@ use crate::constants::ENCOUNTER_SEED;
 #[derive(Copy, Clone)]
 pub struct EncounterAccount {
     /// Account discriminator (AccountKey::Encounter)
-    pub account_key: u8,                        // 1 byte
+    pub account_key: u8, // 1 byte
 
-    pub game_engine: Address,                    // 32 bytes - Kingdom this encounter belongs to
-    pub id: u64,                                // 8 bytes
-    pub city_id: u16,                           // 2 bytes - Which city the encounter is in
-    pub level: u8,                              // 1 byte - Encounter level (1-100)
-    pub rarity: u8,                             // 1 byte (0=common, 1=uncommon, 2=rare, etc)
-    pub _padding0: [u8; 4],                     // 4 bytes (alignment)
-    pub location_lat: f64,                      // 8 bytes - Random position within city
-    pub location_long: f64,                     // 8 bytes - Random position within city
-    pub spawned_at: i64,                        // 8 bytes
-    pub despawn_at: i64,                        // 8 bytes
-    pub health: u64,                            // 8 bytes
-    pub max_health: u64,                        // 8 bytes
-    pub defense: u32,                           // 4 bytes - Damage reduction (basis points: 10000 = 100%)
-    pub _padding1: [u8; 4],                     // 4 bytes (alignment)
+    pub game_engine: Address, // 32 bytes - Kingdom this encounter belongs to
+    pub id: u64,              // 8 bytes
+    pub city_id: u16,         // 2 bytes - Which city the encounter is in
+    pub level: u8,            // 1 byte - Encounter level (1-100)
+    pub rarity: u8,           // 1 byte (0=common, 1=uncommon, 2=rare, etc)
+    pub _padding0: [u8; 4],   // 4 bytes (alignment)
+    pub location_lat: f64,    // 8 bytes - Random position within city
+    pub location_long: f64,   // 8 bytes - Random position within city
+    pub spawned_at: i64,      // 8 bytes
+    pub despawn_at: i64,      // 8 bytes
+    pub health: u64,          // 8 bytes
+    pub max_health: u64,      // 8 bytes
+    pub defense: u32,         // 4 bytes - Damage reduction (basis points: 10000 = 100%)
+    pub _padding1: [u8; 4],   // 4 bytes (alignment)
 
-    pub attacker_count: u8,                     // 1 byte (actual count)
-    pub bump: u8,                               // 1 byte - PDA bump seed
-    pub _padding2: [u8; 6],                     // 6 bytes (reduced from 7)
+    pub attacker_count: u8, // 1 byte (actual count)
+    pub bump: u8,           // 1 byte - PDA bump seed
+    pub _padding2: [u8; 6], // 6 bytes (reduced from 7)
 
-    // NO FIXED ARRAY - attackers stored dynamically after this struct
+                            // NO FIXED ARRAY - attackers stored dynamically after this struct
 }
 
 impl EncounterAccount {
@@ -69,20 +69,37 @@ impl EncounterAccount {
         let city_id_bytes = city_id.to_le_bytes();
         let encounter_id_bytes = encounter_id.to_le_bytes();
         pinocchio::Address::find_program_address(
-            &[ENCOUNTER_SEED, game_engine.as_ref(), &city_id_bytes, &encounter_id_bytes],
+            &[
+                ENCOUNTER_SEED,
+                game_engine.as_ref(),
+                &city_id_bytes,
+                &encounter_id_bytes,
+            ],
             &crate::ID,
         )
     }
 
     /// Create PDA from known bump
-    pub fn create_pda(game_engine: &Address, city_id: u16, encounter_id: u64, bump: u8) -> Result<Address, ProgramError> {
+    pub fn create_pda(
+        game_engine: &Address,
+        city_id: u16,
+        encounter_id: u64,
+        bump: u8,
+    ) -> Result<Address, ProgramError> {
         let city_id_bytes = city_id.to_le_bytes();
         let encounter_id_bytes = encounter_id.to_le_bytes();
         let bump_seed = [bump];
         pinocchio::Address::create_program_address(
-            &[ENCOUNTER_SEED, game_engine.as_ref(), &city_id_bytes, &encounter_id_bytes, &bump_seed],
+            &[
+                ENCOUNTER_SEED,
+                game_engine.as_ref(),
+                &city_id_bytes,
+                &encounter_id_bytes,
+                &bump_seed,
+            ],
             &crate::ID,
-        ).map_err(|e| e.into())
+        )
+        .map_err(|e| e.into())
     }
 
     /// Load and verify an EncounterAccount immutably.
@@ -93,30 +110,27 @@ impl EncounterAccount {
         city_id: u16,
         encounter_id: u64,
         program_id: &Address,
-    ) -> Result<super::Loaded<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, encounter_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "EncounterAccount")?;
 
-        let data = account.try_borrow()?;
-        super::AccountKey::validate(&data, super::AccountKey::Encounter)?;
-        let ptr = data.as_ptr() as *const Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::Loaded::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::Encounter,
+                "EncounterAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "EncounterAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "EncounterAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Load and verify an EncounterAccount mutably.
@@ -127,30 +141,27 @@ impl EncounterAccount {
         city_id: u16,
         encounter_id: u64,
         program_id: &Address,
-    ) -> Result<super::LoadedMut<'a, Self>, ProgramError> {
-        if unsafe { account.owner() } != program_id {
-            return Err(ProgramError::IllegalOwner);
-        }
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
 
         let (expected_pda, bump) = Self::derive_pda(game_engine, city_id, encounter_id);
-        if account.address() != &expected_pda {
-            return Err(crate::error::GameError::InvalidPDA.into());
-        }
+        crate::validation::require_pda_eq(account, &expected_pda, "EncounterAccount")?;
 
-        let mut data = account.try_borrow_mut()?;
-        super::AccountKey::validate(&data, super::AccountKey::Encounter)?;
-        let ptr = data.as_mut_ptr() as *mut Self;
-        let loaded = unsafe { &*ptr };
-
-        if loaded.bump != bump {
-            return Err(ProgramError::InvalidSeeds);
-        }
-
-        if &loaded.game_engine != game_engine {
-            return Err(crate::error::GameError::KingdomMismatch.into());
-        }
-
-        Ok(unsafe { super::LoadedMut::new(data, ptr) })
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Encounter,
+                "EncounterAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "EncounterAccount", account)?;
+        crate::validation::require_stored_game_engine(
+            &loaded.game_engine,
+            game_engine,
+            "EncounterAccount",
+            account,
+        )?;
+        Ok(loaded)
     }
 
     /// Check if encounter belongs to a specific kingdom
@@ -178,12 +189,7 @@ impl EncounterAccount {
 
         let attacker_bytes = &account_data[offset..end];
 
-        unsafe {
-            core::slice::from_raw_parts(
-                attacker_bytes.as_ptr() as *const Address,
-                count
-            )
-        }
+        unsafe { core::slice::from_raw_parts(attacker_bytes.as_ptr() as *const Address, count) }
     }
 
     /// Get mutable slice of attackers from account data
@@ -207,10 +213,7 @@ impl EncounterAccount {
         let attacker_bytes = &mut account_data[offset..end];
 
         unsafe {
-            core::slice::from_raw_parts_mut(
-                attacker_bytes.as_mut_ptr() as *mut Address,
-                count
-            )
+            core::slice::from_raw_parts_mut(attacker_bytes.as_mut_ptr() as *mut Address, count)
         }
     }
 

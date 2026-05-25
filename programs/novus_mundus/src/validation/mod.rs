@@ -5,11 +5,7 @@
 //! Cold-path branch hints (`utils::unlikely`) lay the failure arm cold so
 //! the success path is fall-through (~1–3 CU per call site).
 
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-};
+use pinocchio::{error::ProgramError, AccountView, Address};
 
 use crate::utils::{unlikely, Pk};
 
@@ -135,6 +131,92 @@ pub fn require_key_match(account: &AccountView, expected: &Address) -> Result<()
     Ok(())
 }
 
+/// Require account.address() == expected PDA, with the loaded struct's name in the log.
+/// Use from `load_checked*` to surface which account type failed PDA verification.
+#[inline(always)]
+pub fn require_pda_eq(
+    account: &AccountView,
+    expected: &Address,
+    type_name: &str,
+) -> Result<(), ProgramError> {
+    if unlikely(account.address() != expected) {
+        pinocchio_log::log!(
+            "{}: PDA mismatch — got {}, expected {}",
+            type_name,
+            Pk(account.address().as_array()),
+            Pk(expected.as_array()),
+        );
+        return Err(crate::error::GameError::InvalidPDA.into());
+    }
+    Ok(())
+}
+
+/// Require an account's stored bump matches the canonically-derived bump,
+/// logging the struct name on failure.
+#[inline(always)]
+pub fn require_bump_eq(
+    stored: u8,
+    canonical: u8,
+    type_name: &str,
+    account: &AccountView,
+) -> Result<(), ProgramError> {
+    if unlikely(stored != canonical) {
+        pinocchio_log::log!(
+            "{}: bump mismatch — stored {}, canonical {} ({})",
+            type_name,
+            stored as u64,
+            canonical as u64,
+            Pk(account.address().as_array()),
+        );
+        return Err(ProgramError::InvalidSeeds);
+    }
+    Ok(())
+}
+
+/// Require an account's stored `owner` field matches the expected signer/owner,
+/// logging the struct name on failure. Returns `Unauthorized` (game error).
+#[inline(always)]
+pub fn require_stored_owner(
+    stored: &Address,
+    expected: &Address,
+    type_name: &str,
+    account: &AccountView,
+) -> Result<(), ProgramError> {
+    if unlikely(stored != expected) {
+        pinocchio_log::log!(
+            "{}: owner mismatch — stored {}, expected {} ({})",
+            type_name,
+            Pk(stored.as_array()),
+            Pk(expected.as_array()),
+            Pk(account.address().as_array()),
+        );
+        return Err(crate::error::GameError::Unauthorized.into());
+    }
+    Ok(())
+}
+
+/// Require an account's stored `game_engine` field matches the expected kingdom,
+/// logging the struct name on failure. Returns `KingdomMismatch`.
+#[inline(always)]
+pub fn require_stored_game_engine(
+    stored: &Address,
+    expected: &Address,
+    type_name: &str,
+    account: &AccountView,
+) -> Result<(), ProgramError> {
+    if unlikely(stored != expected) {
+        pinocchio_log::log!(
+            "{}: kingdom mismatch — stored {}, expected {} ({})",
+            type_name,
+            Pk(stored.as_array()),
+            Pk(expected.as_array()),
+            Pk(account.address().as_array()),
+        );
+        return Err(crate::error::GameError::KingdomMismatch.into());
+    }
+    Ok(())
+}
+
 /// Require `game_authority` co-signs for `player`'s kingdom.
 ///
 /// Loads `game_engine_account`, confirms it is the player's own GameEngine
@@ -148,7 +230,8 @@ pub fn require_game_authority(
     player_game_engine: &Address,
     program_id: &Address,
 ) -> Result<(), ProgramError> {
-    let game_engine = crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
+    let game_engine =
+        crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
     if game_engine_account.address() != player_game_engine {
         return Err(crate::error::GameError::KingdomMismatch.into());
     }

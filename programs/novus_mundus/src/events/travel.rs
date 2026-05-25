@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Travel events - intercity and intracity movement
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when a player starts traveling between cities
 pub struct IntercityTravelStarted {

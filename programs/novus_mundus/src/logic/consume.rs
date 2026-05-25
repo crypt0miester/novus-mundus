@@ -1,4 +1,10 @@
-use crate::{logic::{is_fibonacci, safe_math::{chain_bp, apply_bp}}, state::EconomicConfig};
+use crate::{
+    logic::{
+        is_fibonacci,
+        safe_math::{apply_bp, chain_bp},
+    },
+    state::EconomicConfig,
+};
 
 /// Calculate consumption value from locked NOVI amount (Deterministic System)
 ///
@@ -32,7 +38,11 @@ use crate::{logic::{is_fibonacci, safe_math::{chain_bp, apply_bp}}, state::Econo
 /// let power = consume_novi_logic(100, 10000, &economic_config);
 /// // power is fully deterministic
 /// ```
-pub fn consume_novi_logic(novi_amount: u64, synchrony_bp: u32, economic_config: &EconomicConfig) -> u64 {
+pub fn consume_novi_logic(
+    novi_amount: u64,
+    synchrony_bp: u32,
+    economic_config: &EconomicConfig,
+) -> u64 {
     // Base multiplier: Direct from config (deterministic, no min/max!)
     // Default: 137500 bp = 13.75x
     let base_mult_bp = economic_config.novi_consumption_base;
@@ -43,8 +53,11 @@ pub fn consume_novi_logic(novi_amount: u64, synchrony_bp: u32, economic_config: 
 
     // Calculate base consumption value using interleaved multiply/divide (no u128!)
     // Formula: novi × base_mult / 10000 × secondary_mult / 10000 × synchrony / 10000
-    let base_value = chain_bp(novi_amount, &[base_mult_bp, secondary_mult_bp, synchrony_bp as u64])
-        .unwrap_or(0);
+    let base_value = chain_bp(
+        novi_amount,
+        &[base_mult_bp, secondary_mult_bp, synchrony_bp as u64],
+    )
+    .unwrap_or(0);
 
     // Apply Fibonacci bonus deterministically using golden ratio from config
     // Default: φ = 1.618x = 16180 bp for exact Fibonacci matches
@@ -94,7 +107,8 @@ pub fn calculate_synchrony(
     // 2. Happiness bonus (0 to happiness_synchrony_max based on average happiness)
     // Average both defensive and operative happiness (0.0-1.0 scale)
     let avg_happiness = (player.happiness_defensive + player.happiness_operative) / 2.0;
-    let happiness_bonus = ((avg_happiness * gameplay_config.happiness_synchrony_max as f32) as u32).min(gameplay_config.happiness_synchrony_max);
+    let happiness_bonus = ((avg_happiness * gameplay_config.happiness_synchrony_max as f32) as u32)
+        .min(gameplay_config.happiness_synchrony_max);
     synchrony_bp += happiness_bonus;
 
     // 3. Reputation bonus (from config array)
@@ -113,8 +127,8 @@ pub fn calculate_synchrony(
     synchrony_bp += reputation_bonus;
 
     // 4. Level bonus (level * level_synchrony_bonus_per_level)
-    let level_bonus = (player.level as u32)
-        .saturating_mul(gameplay_config.level_synchrony_bonus_per_level);
+    let level_bonus =
+        (player.level as u32).saturating_mul(gameplay_config.level_synchrony_bonus_per_level);
     synchrony_bp += level_bonus;
 
     // Synchrony multiplier in basis points (10000 = 1.0x).

@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::PLAYER_SEED,
-    state::PlayerAccount,
-    validation::{require_writable, require_owner, require_pda},
     emit,
     events::SubscriptionExpired,
+    state::PlayerAccount,
+    validation::{require_owner, require_pda, require_writable},
 };
 
 /// Downgrade expired subscription to free tier
@@ -39,7 +37,7 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts
-    crate::extract_accounts!(accounts, exact [player_account]);
+    crate::extract_accounts!(accounts, exact[player_account]);
 
     require_writable(player_account)?;
     require_owner(player_account, program_id)?;
@@ -49,7 +47,15 @@ pub fn process(
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
     // 4. Validate Player PDA
-    let player_bump = require_pda(player_account, &[PLAYER_SEED, player_data.game_engine.as_ref(), player_data.owner.as_ref()], program_id)?;
+    let player_bump = require_pda(
+        player_account,
+        &[
+            PLAYER_SEED,
+            player_data.game_engine.as_ref(),
+            player_data.owner.as_ref(),
+        ],
+        program_id,
+    )?;
     if player_data.bump != player_bump {
         return Err(ProgramError::InvalidSeeds);
     }

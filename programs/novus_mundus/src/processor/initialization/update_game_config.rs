@@ -1,20 +1,14 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::{
-    state::{
-        GameEngine, GameCaps, EconomicConfig, GameplayConfig,
-        SubscriptionTier, MintingConfig, ThemeModifierConfig,
-        NoviPurchaseConfig, ArenaConfig, ExpeditionConfig,
-        DungeonConfig, CastleConfig, CombatConfig,
-    },
-    validation::{require_signer, require_writable},
-    utils::read_u16,
     error::GameError,
+    state::{
+        ArenaConfig, CastleConfig, CombatConfig, DungeonConfig, EconomicConfig, ExpeditionConfig,
+        GameCaps, GameEngine, GameplayConfig, MintingConfig, NoviPurchaseConfig, SubscriptionTier,
+        ThemeModifierConfig,
+    },
+    utils::read_u16,
+    validation::{require_signer, require_writable},
 };
 
 // Update flag bits — one per sub-config, applied in declaration order
@@ -56,11 +50,7 @@ const UPDATE_USD_PRICE: u16 = 1 << 12;
 /// 7: ArenaConfig, 8: ExpeditionConfig, 9: DungeonConfig,
 /// 10: CastleConfig, 11: CombatConfig,
 /// 12: usd_price_cents (raw u64 — static SOL/USD reference; cents per SOL)
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // Need at least 2 bytes for update_flags
     let update_flags = read_u16(data, 0, "update_game_config.update_flags")?;
 
@@ -75,7 +65,7 @@ pub fn process(
     require_writable(game_engine_account)?;
 
     // Validate game_engine account (ownership + PDA + discriminator + bump)
-    let mut engine = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;
+    let engine = GameEngine::load_checked_mut_by_key(game_engine_account, program_id)?;
 
     // Verify DAO authority
     if engine.authority != *authority.address() {
@@ -109,12 +99,24 @@ pub fn process(
     apply_update!(UPDATE_CAPS, engine.caps, GameCaps);
     apply_update!(UPDATE_ECONOMIC, engine.economic_config, EconomicConfig);
     apply_update!(UPDATE_GAMEPLAY, engine.gameplay_config, GameplayConfig);
-    apply_update!(UPDATE_SUBSCRIPTIONS, engine.subscription_tiers, [SubscriptionTier; 4]);
+    apply_update!(
+        UPDATE_SUBSCRIPTIONS,
+        engine.subscription_tiers,
+        [SubscriptionTier; 4]
+    );
     apply_update!(UPDATE_MINTING, engine.minting_config, MintingConfig);
     apply_update!(UPDATE_THEME, engine.theme_config, ThemeModifierConfig);
-    apply_update!(UPDATE_NOVI_PURCHASE, engine.novi_purchase_config, NoviPurchaseConfig);
+    apply_update!(
+        UPDATE_NOVI_PURCHASE,
+        engine.novi_purchase_config,
+        NoviPurchaseConfig
+    );
     apply_update!(UPDATE_ARENA, engine.arena_config, ArenaConfig);
-    apply_update!(UPDATE_EXPEDITION, engine.expedition_config, ExpeditionConfig);
+    apply_update!(
+        UPDATE_EXPEDITION,
+        engine.expedition_config,
+        ExpeditionConfig
+    );
     apply_update!(UPDATE_DUNGEON, engine.dungeon_config, DungeonConfig);
     apply_update!(UPDATE_CASTLE, engine.castle_config, CastleConfig);
     apply_update!(UPDATE_COMBAT, engine.combat_config, CombatConfig);

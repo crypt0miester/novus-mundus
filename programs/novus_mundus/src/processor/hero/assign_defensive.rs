@@ -1,20 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, NULL_PUBKEY, require_extension, EXT_HEROES},
-    utils::read_u8,
-    validation::{
-        require_signer,
-        require_writable,
-    },
     emit,
+    error::GameError,
     events::HeroAssignedDefensive,
+    state::{require_extension, PlayerAccount, EXT_HEROES, NULL_PUBKEY},
+    utils::read_u8,
+    validation::{require_signer, require_writable},
 };
 
 /// Assign which locked hero is used for defense (135)

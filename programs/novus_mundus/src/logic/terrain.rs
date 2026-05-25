@@ -42,7 +42,6 @@ pub struct TerrainSample {
     pub nearest_anchor: usize,
 }
 
-
 // Public API
 /// Surface elevation at an offset from city center. Returns 0-255.
 pub fn elevation(terrain: &CityTerrain, ox: i32, oy: i32) -> u8 {
@@ -68,7 +67,9 @@ pub fn elevation(terrain: &CityTerrain, ox: i32, oy: i32) -> u8 {
     let blend = b2.saturating_sub(b1).saturating_mul(t).saturating_div(256);
     let base = b1.saturating_add(blend);
     let pressure = pressure_effect(&anchors[ni], &anchors[si], dn, ds) as i32;
-    let texture = (noise(terrain.seed, ox, oy) as i32).saturating_sub(128).saturating_div(4);
+    let texture = (noise(terrain.seed, ox, oy) as i32)
+        .saturating_sub(128)
+        .saturating_div(4);
 
     clamp_u8(base.saturating_add(pressure).saturating_add(texture))
 }
@@ -87,7 +88,11 @@ pub fn is_passable(terrain: &CityTerrain, ox: i32, oy: i32) -> bool {
 pub fn terrain_moisture(terrain: &CityTerrain, ox: i32, oy: i32) -> u8 {
     let anchors = terrain.anchors;
     if anchors.len() < 2 {
-        return if anchors.len() == 1 { anchors[0].moisture } else { 128 };
+        return if anchors.len() == 1 {
+            anchors[0].moisture
+        } else {
+            128
+        };
     }
     let (ni, si, dn, ds) = two_nearest(anchors, ox, oy);
     let m1 = anchors[ni].moisture as i32;
@@ -153,7 +158,11 @@ pub struct TerrainAffinity {
 /// Impassable coordinates (water, mountains) return zero bonuses.
 pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffinity {
     if terrain.anchors.is_empty() {
-        return TerrainAffinity { mining_bps: 0, fishing_bps: 0, elevation_bps: 0 };
+        return TerrainAffinity {
+            mining_bps: 0,
+            fishing_bps: 0,
+            elevation_bps: 0,
+        };
     }
 
     let e = elevation(terrain, ox, oy) as i32;
@@ -162,7 +171,11 @@ pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffin
 
     // Impassable terrain gives no bonus
     if e <= wl || e >= pl {
-        return TerrainAffinity { mining_bps: 0, fishing_bps: 0, elevation_bps: 0 };
+        return TerrainAffinity {
+            mining_bps: 0,
+            fishing_bps: 0,
+            elevation_bps: 0,
+        };
     }
 
     let midpoint = wl.saturating_add(pl).saturating_div(2);
@@ -172,7 +185,10 @@ pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffin
     // Linear scale: midpoint -> 0 BPS, peak_line -> 1500 BPS
     let mining_bps = if e > midpoint {
         let above = e.saturating_sub(midpoint) as u32;
-        above.saturating_mul(1500).saturating_div(half_range as u32).min(1500) as u16
+        above
+            .saturating_mul(1500)
+            .saturating_div(half_range as u32)
+            .min(1500) as u16
     } else {
         0
     };
@@ -181,7 +197,10 @@ pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffin
     // Linear scale: midpoint -> 0 BPS, water_line -> 1500 BPS
     let fishing_bps = if e < midpoint {
         let below = midpoint.saturating_sub(e) as u32;
-        below.saturating_mul(1500).saturating_div(half_range as u32).min(1500) as u16
+        below
+            .saturating_mul(1500)
+            .saturating_div(half_range as u32)
+            .min(1500) as u16
     } else {
         0
     };
@@ -189,9 +208,17 @@ pub fn terrain_affinity(terrain: &CityTerrain, ox: i32, oy: i32) -> TerrainAffin
     // Combat: elevation advantage relative to midpoint
     // Linear scale: water_line -> -500 BPS, midpoint -> 0, peak_line -> +500 BPS
     let centered = e.saturating_sub(midpoint);
-    let elevation_bps = centered.saturating_mul(500).saturating_div(half_range).max(-500).min(500) as i16;
+    let elevation_bps = centered
+        .saturating_mul(500)
+        .saturating_div(half_range)
+        .max(-500)
+        .min(500) as i16;
 
-    TerrainAffinity { mining_bps, fishing_bps, elevation_bps }
+    TerrainAffinity {
+        mining_bps,
+        fishing_bps,
+        elevation_bps,
+    }
 }
 
 /// Parse terrain header. Returns (seed, water_line, peak_line, anchor_count, version).
@@ -212,24 +239,16 @@ pub fn to_grid(coord: f64) -> i32 {
 }
 
 /// Compute (offset_x, offset_y) from city center in grid units.
-pub fn city_offset(
-    grid_lat: i32,
-    grid_long: i32,
-    city_lat: f64,
-    city_long: f64,
-) -> (i32, i32) {
+pub fn city_offset(grid_lat: i32, grid_long: i32, city_lat: f64, city_long: f64) -> (i32, i32) {
     (
         grid_long.saturating_sub(to_grid(city_long)),
         grid_lat.saturating_sub(to_grid(city_lat)),
     )
 }
 
-
 // Serialization
 pub const TERRAIN_HEADER_SIZE: usize = 16;
 pub const ANCHOR_SIZE: usize = 9;
-
-
 
 // Internal: nearest anchor search
 fn two_nearest(anchors: &[Anchor], ox: i32, oy: i32) -> (usize, usize, u64, u64) {
@@ -258,14 +277,12 @@ fn two_nearest(anchors: &[Anchor], ox: i32, oy: i32) -> (usize, usize, u64, u64)
     (best_idx, second_idx, best_d, second_d)
 }
 
-
 // Internal: buoyancy (isostasy)
 /// lift × (255 - mass) / 255
 fn buoyancy(mass: u8, lift: u8) -> u8 {
     let inv_mass = 255u32.saturating_sub(mass as u32);
     (lift as u32).saturating_mul(inv_mass).saturating_div(255) as u8
 }
-
 
 // Internal: pressure at anchor boundaries
 fn pressure_effect(nearest: &Anchor, second: &Anchor, dist_n: u64, dist_s: u64) -> i16 {
@@ -283,10 +300,7 @@ fn pressure_effect(nearest: &Anchor, second: &Anchor, dist_n: u64, dist_s: u64) 
     }
 
     // Scale: 0 at proximity=32, 255 at proximity=64
-    let strength = proximity
-        .saturating_sub(32)
-        .saturating_mul(8)
-        .min(255) as i32;
+    let strength = proximity.saturating_sub(32).saturating_mul(8).min(255) as i32;
 
     let rpx = (nearest.push_x as i32).saturating_sub(second.push_x as i32);
     let rpy = (nearest.push_y as i32).saturating_sub(second.push_y as i32);
@@ -296,16 +310,20 @@ fn pressure_effect(nearest: &Anchor, second: &Anchor, dist_n: u64, dist_s: u64) 
 
     let bx = (second.x as i32).saturating_sub(nearest.x as i32);
     let by = (second.y as i32).saturating_sub(nearest.y as i32);
-    let mag = bx.saturating_abs().saturating_add(by.saturating_abs()).max(1);
+    let mag = bx
+        .saturating_abs()
+        .saturating_add(by.saturating_abs())
+        .max(1);
     let nx = bx.saturating_mul(64).saturating_div(mag);
     let ny = by.saturating_mul(64).saturating_div(mag);
 
-    let dot = rpx.saturating_mul(nx).saturating_add(rpy.saturating_mul(ny));
+    let dot = rpx
+        .saturating_mul(nx)
+        .saturating_add(rpy.saturating_mul(ny));
     let effect = clamp_i32(dot.saturating_div(128), -60, 60);
 
     effect.saturating_mul(strength).saturating_div(256) as i16
 }
-
 
 // Internal: multi-octave noise
 fn terrain_hash(seed: u32, x: i32, y: i32) -> u8 {
@@ -332,8 +350,12 @@ fn smooth_octave(seed: u32, x: i32, y: i32, shift: u32) -> u32 {
     let gx = x.div_euclid(s);
     let gy = y.div_euclid(s);
     // Fractional position in cell, scaled to 0..256
-    let fx = (x.rem_euclid(s) as u32).saturating_mul(256).saturating_div(s as u32);
-    let fy = (y.rem_euclid(s) as u32).saturating_mul(256).saturating_div(s as u32);
+    let fx = (x.rem_euclid(s) as u32)
+        .saturating_mul(256)
+        .saturating_div(s as u32);
+    let fy = (y.rem_euclid(s) as u32)
+        .saturating_mul(256)
+        .saturating_div(s as u32);
     // 4 corner hashes
     let v00 = terrain_hash(seed, gx, gy) as u32;
     let v10 = terrain_hash(seed, gx.saturating_add(1), gy) as u32;
@@ -366,7 +388,6 @@ fn noise(seed: u32, x: i32, y: i32) -> u8 {
     weighted.saturating_div(7) as u8
 }
 
-
 // Internal: clamp
 fn clamp_u8(v: i32) -> u8 {
     if v < 0 {
@@ -388,14 +409,18 @@ fn clamp_i32(v: i32, min: i32, max: i32) -> i32 {
     }
 }
 
-
 // Tests
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn make_terrain<'a>(anchors: &'a [Anchor], seed: u32, wl: u8, pl: u8) -> CityTerrain<'a> {
-        CityTerrain { seed, water_line: wl, peak_line: pl, anchors }
+        CityTerrain {
+            seed,
+            water_line: wl,
+            peak_line: pl,
+            anchors,
+        }
     }
 
     /// Parse one anchor from 9 bytes.
@@ -430,18 +455,114 @@ mod tests {
 
     fn london_anchors() -> [Anchor; 12] {
         [
-            Anchor { x: -200, y: 200, mass: 88, lift: 172, push_x: 0, push_y: 0, moisture: 170 },
-            Anchor { x: 600, y: 800, mass: 85, lift: 168, push_x: 0, push_y: 0, moisture: 170 },
-            Anchor { x: -1200, y: -400, mass: 82, lift: 175, push_x: 0, push_y: 0, moisture: 170 },
-            Anchor { x: -600, y: -2200, mass: 72, lift: 192, push_x: 0, push_y: 2, moisture: 170 },
-            Anchor { x: -1800, y: 1800, mass: 70, lift: 195, push_x: 1, push_y: -1, moisture: 170 },
-            Anchor { x: 700, y: 2500, mass: 80, lift: 178, push_x: 0, push_y: 0, moisture: 170 },
-            Anchor { x: 3200, y: 0, mass: 205, lift: 55, push_x: -2, push_y: 0, moisture: 128 },
-            Anchor { x: 2800, y: -1500, mass: 215, lift: 45, push_x: -1, push_y: 1, moisture: 128 },
-            Anchor { x: 3500, y: 1500, mass: 210, lift: 50, push_x: -2, push_y: -1, moisture: 128 },
-            Anchor { x: 1800, y: -600, mass: 140, lift: 120, push_x: -1, push_y: 0, moisture: 170 },
-            Anchor { x: 4200, y: -2500, mass: 220, lift: 40, push_x: 0, push_y: 0, moisture: 128 },
-            Anchor { x: 200, y: -3200, mass: 78, lift: 185, push_x: 0, push_y: 1, moisture: 170 },
+            Anchor {
+                x: -200,
+                y: 200,
+                mass: 88,
+                lift: 172,
+                push_x: 0,
+                push_y: 0,
+                moisture: 170,
+            },
+            Anchor {
+                x: 600,
+                y: 800,
+                mass: 85,
+                lift: 168,
+                push_x: 0,
+                push_y: 0,
+                moisture: 170,
+            },
+            Anchor {
+                x: -1200,
+                y: -400,
+                mass: 82,
+                lift: 175,
+                push_x: 0,
+                push_y: 0,
+                moisture: 170,
+            },
+            Anchor {
+                x: -600,
+                y: -2200,
+                mass: 72,
+                lift: 192,
+                push_x: 0,
+                push_y: 2,
+                moisture: 170,
+            },
+            Anchor {
+                x: -1800,
+                y: 1800,
+                mass: 70,
+                lift: 195,
+                push_x: 1,
+                push_y: -1,
+                moisture: 170,
+            },
+            Anchor {
+                x: 700,
+                y: 2500,
+                mass: 80,
+                lift: 178,
+                push_x: 0,
+                push_y: 0,
+                moisture: 170,
+            },
+            Anchor {
+                x: 3200,
+                y: 0,
+                mass: 205,
+                lift: 55,
+                push_x: -2,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 2800,
+                y: -1500,
+                mass: 215,
+                lift: 45,
+                push_x: -1,
+                push_y: 1,
+                moisture: 128,
+            },
+            Anchor {
+                x: 3500,
+                y: 1500,
+                mass: 210,
+                lift: 50,
+                push_x: -2,
+                push_y: -1,
+                moisture: 128,
+            },
+            Anchor {
+                x: 1800,
+                y: -600,
+                mass: 140,
+                lift: 120,
+                push_x: -1,
+                push_y: 0,
+                moisture: 170,
+            },
+            Anchor {
+                x: 4200,
+                y: -2500,
+                mass: 220,
+                lift: 40,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 200,
+                y: -3200,
+                mass: 78,
+                lift: 185,
+                push_x: 0,
+                push_y: 1,
+                moisture: 170,
+            },
         ]
     }
 
@@ -483,8 +604,24 @@ mod tests {
     #[test]
     fn nearest_basic() {
         let anchors = [
-            Anchor { x: -100, y: 0, mass: 80, lift: 170, push_x: 0, push_y: 0, moisture: 128 },
-            Anchor { x: 100, y: 0, mass: 200, lift: 50, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: -100,
+                y: 0,
+                mass: 80,
+                lift: 170,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 100,
+                y: 0,
+                mass: 200,
+                lift: 50,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let (ni, si, _, _) = two_nearest(&anchors, -50, 0);
         assert_eq!(ni, 0);
@@ -506,7 +643,15 @@ mod tests {
 
     #[test]
     fn single_anchor_returns_buoyancy() {
-        let a = [Anchor { x: 0, y: 0, mass: 85, lift: 175, push_x: 0, push_y: 0, moisture: 128 }];
+        let a = [Anchor {
+            x: 0,
+            y: 0,
+            mass: 85,
+            lift: 175,
+            push_x: 0,
+            push_y: 0,
+            moisture: 128,
+        }];
         let t = make_terrain(&a, 42, 90, 245);
         assert_eq!(elevation(&t, 0, 0), buoyancy(85, 175));
     }
@@ -523,7 +668,11 @@ mod tests {
         let a = london_anchors();
         let t = make_terrain(&a, 1279872052, 90, 245);
         let e = elevation(&t, 3800, 0);
-        assert!(e <= 90, "Far east (Thames Estuary) should be water, got elevation {}", e);
+        assert!(
+            e <= 90,
+            "Far east (Thames Estuary) should be water, got elevation {}",
+            e
+        );
     }
 
     #[test]
@@ -538,8 +687,24 @@ mod tests {
     #[test]
     fn convergent_creates_uplift() {
         let anchors = [
-            Anchor { x: -500, y: 0, mass: 85, lift: 170, push_x: 50, push_y: 0, moisture: 128 },
-            Anchor { x: 500, y: 0, mass: 85, lift: 170, push_x: -50, push_y: 0, moisture: 128 },
+            Anchor {
+                x: -500,
+                y: 0,
+                mass: 85,
+                lift: 170,
+                push_x: 50,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 500,
+                y: 0,
+                mass: 85,
+                lift: 170,
+                push_x: -50,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         // Use seed 42 to get deterministic noise
         let t = make_terrain(&anchors, 42, 90, 245);
@@ -548,15 +713,32 @@ mod tests {
         assert!(
             boundary >= interior,
             "Boundary ({}) should be >= interior ({}) with convergent pressure",
-            boundary, interior
+            boundary,
+            interior
         );
     }
 
     #[test]
     fn divergent_creates_depression() {
         let anchors = [
-            Anchor { x: -500, y: 0, mass: 85, lift: 170, push_x: -50, push_y: 0, moisture: 128 },
-            Anchor { x: 500, y: 0, mass: 85, lift: 170, push_x: 50, push_y: 0, moisture: 128 },
+            Anchor {
+                x: -500,
+                y: 0,
+                mass: 85,
+                lift: 170,
+                push_x: -50,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 500,
+                y: 0,
+                mass: 85,
+                lift: 170,
+                push_x: 50,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 42, 90, 245);
         let boundary = elevation(&t, 0, 0);
@@ -564,7 +746,8 @@ mod tests {
         assert!(
             boundary <= interior,
             "Boundary ({}) should be <= interior ({}) with divergent pressure",
-            boundary, interior
+            boundary,
+            interior
         );
     }
 
@@ -573,8 +756,24 @@ mod tests {
     #[test]
     fn ocean_anchor_below_water_line() {
         let anchors = [
-            Anchor { x: 0, y: 0, mass: 220, lift: 40, push_x: 0, push_y: 0, moisture: 128 },
-            Anchor { x: 5000, y: 0, mass: 80, lift: 170, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: 0,
+                y: 0,
+                mass: 220,
+                lift: 40,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 5000,
+                y: 0,
+                mass: 80,
+                lift: 170,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 0, 90, 245);
         assert!(!is_passable(&t, 0, 0), "Ocean anchor should be impassable");
@@ -583,8 +782,24 @@ mod tests {
     #[test]
     fn land_anchor_above_water_line() {
         let anchors = [
-            Anchor { x: 0, y: 0, mass: 80, lift: 180, push_x: 0, push_y: 0, moisture: 128 },
-            Anchor { x: 5000, y: 0, mass: 220, lift: 40, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: 0,
+                y: 0,
+                mass: 80,
+                lift: 180,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 5000,
+                y: 0,
+                mass: 220,
+                lift: 40,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 0, 90, 245);
         assert!(is_passable(&t, 0, 0), "Land anchor should be passable");
@@ -595,8 +810,24 @@ mod tests {
     #[test]
     fn sample_classifies_correctly() {
         let anchors = [
-            Anchor { x: -500, y: 0, mass: 80, lift: 180, push_x: 0, push_y: 0, moisture: 128 },
-            Anchor { x: 500, y: 0, mass: 220, lift: 40, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: -500,
+                y: 0,
+                mass: 80,
+                lift: 180,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
+            Anchor {
+                x: 500,
+                y: 0,
+                mass: 220,
+                lift: 40,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 42, 90, 245);
 
@@ -616,7 +847,15 @@ mod tests {
 
     #[test]
     fn anchor_serialize_roundtrip() {
-        let a = Anchor { x: -1234, y: 5678, mass: 200, lift: 45, push_x: -3, push_y: 7, moisture: 180 };
+        let a = Anchor {
+            x: -1234,
+            y: 5678,
+            mass: 200,
+            lift: 45,
+            push_x: -3,
+            push_y: 7,
+            moisture: 180,
+        };
         let mut buf = [0u8; 9];
         serialize_anchor(&a, &mut buf);
         assert_eq!(parse_anchor(&buf), a);
@@ -626,11 +865,11 @@ mod tests {
     fn header_parse() {
         let data = [
             0x12, 0x34, 0x56, 0x78, // seed
-            90,                       // water_line
-            240,                      // peak_line
-            0x0A, 0x00,              // anchor_count = 10
-            3,                        // version
-            0, 0, 0, 0, 0, 0, 0,    // reserved
+            90,   // water_line
+            240,  // peak_line
+            0x0A, 0x00, // anchor_count = 10
+            3,    // version
+            0, 0, 0, 0, 0, 0, 0, // reserved
         ];
         let (seed, wl, pl, count, ver) = parse_terrain_header(&data);
         assert_eq!(seed, 0x78563412);
@@ -699,25 +938,70 @@ mod tests {
     fn affinity_high_ground_mining_bonus() {
         // Land anchor near peak_line should give mining bonus
         let anchors = [
-            Anchor { x: 0, y: 0, mass: 20, lift: 230, push_x: 0, push_y: 0, moisture: 128 }, // very high elevation
-            Anchor { x: 5000, y: 0, mass: 220, lift: 40, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: 0,
+                y: 0,
+                mass: 20,
+                lift: 230,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            }, // very high elevation
+            Anchor {
+                x: 5000,
+                y: 0,
+                mass: 220,
+                lift: 40,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 42, 90, 245);
         let e = elevation(&t, 0, 0);
-        assert!(e as u32 > (90u32 + 245) / 2, "Elevation {} should be above midpoint", e);
+        assert!(
+            e as u32 > (90u32 + 245) / 2,
+            "Elevation {} should be above midpoint",
+            e
+        );
 
         let aff = terrain_affinity(&t, 0, 0);
-        assert!(aff.mining_bps > 0, "Mining bonus should be positive at high elevation");
-        assert_eq!(aff.fishing_bps, 0, "Fishing bonus should be 0 at high elevation");
-        assert!(aff.elevation_bps > 0, "Elevation advantage should be positive at high ground");
+        assert!(
+            aff.mining_bps > 0,
+            "Mining bonus should be positive at high elevation"
+        );
+        assert_eq!(
+            aff.fishing_bps, 0,
+            "Fishing bonus should be 0 at high elevation"
+        );
+        assert!(
+            aff.elevation_bps > 0,
+            "Elevation advantage should be positive at high ground"
+        );
     }
 
     #[test]
     fn affinity_low_ground_fishing_bonus() {
         // Land anchor just above water_line should give fishing bonus
         let anchors = [
-            Anchor { x: 0, y: 0, mass: 90, lift: 160, push_x: 0, push_y: 0, moisture: 128 }, // low elevation (~103)
-            Anchor { x: 5000, y: 0, mass: 20, lift: 230, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: 0,
+                y: 0,
+                mass: 90,
+                lift: 160,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            }, // low elevation (~103)
+            Anchor {
+                x: 5000,
+                y: 0,
+                mass: 20,
+                lift: 230,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 42, 90, 245);
         let e = elevation(&t, 0, 0);
@@ -727,17 +1011,39 @@ mod tests {
 
         let aff = terrain_affinity(&t, 0, 0);
         if (e as u32) < midpoint {
-            assert!(aff.fishing_bps > 0, "Fishing bonus should be positive near coast");
+            assert!(
+                aff.fishing_bps > 0,
+                "Fishing bonus should be positive near coast"
+            );
             assert_eq!(aff.mining_bps, 0, "Mining bonus should be 0 near coast");
-            assert!(aff.elevation_bps < 0, "Elevation should be negative at low ground");
+            assert!(
+                aff.elevation_bps < 0,
+                "Elevation should be negative at low ground"
+            );
         }
     }
 
     #[test]
     fn affinity_water_gives_zero() {
         let anchors = [
-            Anchor { x: 0, y: 0, mass: 220, lift: 40, push_x: 0, push_y: 0, moisture: 128 }, // ocean
-            Anchor { x: 5000, y: 0, mass: 80, lift: 170, push_x: 0, push_y: 0, moisture: 128 },
+            Anchor {
+                x: 0,
+                y: 0,
+                mass: 220,
+                lift: 40,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            }, // ocean
+            Anchor {
+                x: 5000,
+                y: 0,
+                mass: 80,
+                lift: 170,
+                push_x: 0,
+                push_y: 0,
+                moisture: 128,
+            },
         ];
         let t = make_terrain(&anchors, 0, 90, 245);
         let aff = terrain_affinity(&t, 0, 0);

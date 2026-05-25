@@ -1,22 +1,18 @@
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
     emit,
     error::GameError,
     events::ItemEquipped,
     state::{
+        estate::{CraftableEquipment, CraftedEquipmentAccount},
         PlayerAccount,
-        estate::{CraftedEquipmentAccount, CraftableEquipment},
     },
     utils::read_u8,
-    validation::{require_signer, require_writable, require_owner, require_pda},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
-use pinocchio::sysvars::{Sysvar, clock::Clock};
+use pinocchio::sysvars::{clock::Clock, Sysvar};
 
 /// Equip Crafted Equipment
 ///
@@ -70,8 +66,9 @@ pub fn process(
     )?;
 
     // 3. Parse Instruction Data
-    let equipment_type = CraftableEquipment::from_u8(read_u8(instruction_data, 0, "equip.equipment_type")?)
-        .ok_or(GameError::InvalidParameter)?;
+    let equipment_type =
+        CraftableEquipment::from_u8(read_u8(instruction_data, 0, "equip.equipment_type")?)
+            .ok_or(GameError::InvalidParameter)?;
     let quality_tier = read_u8(instruction_data, 1, "equip.quality_tier")?;
 
     // Validate tier is in range (0 = unequip, 1-7 = valid tiers)
@@ -132,7 +129,7 @@ pub fn process(
         player: *player_account.address(),
         player_name: player.name,
         hero_mint: Address::default(), // No hero involved in this equip system
-        hero_name: [0u8; 32], // No hero involved in this equip system
+        hero_name: [0u8; 32],          // No hero involved in this equip system
         slot: equipment_type as u8,
         quality: quality_tier,
         from_inventory: quality_tier, // Using quality tier as inventory identifier

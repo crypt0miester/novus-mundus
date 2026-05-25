@@ -7,16 +7,12 @@
 //! 0. `[WRITE]` loadout_account: ArenaLoadoutAccount PDA
 //! 1. `[SIGNER]` player_authority: Player's wallet
 
-use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{AccountView, Address, ProgramResult};
 
 use crate::{
     state::{ArenaLoadoutAccount, PlayerCore},
+    utils::{read_bytes32, read_u64},
     validation::require_signer,
-    utils::{read_u64, read_bytes32},
 };
 
 /// Instruction data for update_loadout
@@ -42,7 +38,11 @@ pub fn process(
     require_signer(player_authority)?;
 
     // 3. Parse Instruction Data (88 bytes minimum)
-    let arena_hero = Address::from(read_bytes32(instruction_data, 0, "update_loadout.arena_hero")?);
+    let arena_hero = Address::from(read_bytes32(
+        instruction_data,
+        0,
+        "update_loadout.arena_hero",
+    )?);
 
     let defensive_units_0 = read_u64(instruction_data, 32, "update_loadout.defensive_units_0")?;
     let defensive_units_1 = read_u64(instruction_data, 40, "update_loadout.defensive_units_1")?;
@@ -54,13 +54,11 @@ pub fn process(
     let armor_pieces = read_u64(instruction_data, 80, "update_loadout.armor_pieces")?;
 
     // 4. Load and validate Loadout (using by_key for kingdom scoping)
-    let mut loadout = ArenaLoadoutAccount::load_checked_mut_by_key(
-        loadout_account,
-        program_id,
-    )?;
+    let loadout = ArenaLoadoutAccount::load_checked_mut_by_key(loadout_account, program_id)?;
     // Verify player authority matches (loadout.player stores the PlayerCore PDA,
     // so derive it from wallet key + game_engine to compare)
-    let (expected_player_pda, _) = PlayerCore::derive_pda(&loadout.game_engine, player_authority.address());
+    let (expected_player_pda, _) =
+        PlayerCore::derive_pda(&loadout.game_engine, player_authority.address());
     if loadout.player != expected_player_pda {
         return Err(crate::error::GameError::Unauthorized.into());
     }

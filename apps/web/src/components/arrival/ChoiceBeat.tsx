@@ -10,6 +10,7 @@ import {
   type RealmMapSelectedContext,
 } from "@/components/world/RealmMap";
 import { CityTerrainMap } from "@/components/world/CityTerrainMap";
+import { CellAffinityPanel } from "@/components/world/CellAffinityPanel";
 import { BeatButton, BeatEyebrow } from "./Beat";
 import type { CityChoice } from "./Arrival";
 
@@ -125,6 +126,28 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
     );
   };
 
+  const commitChoice = () => {
+    if (!selectedCity || !spawnCell || !autoSpawn) return;
+    const a = selectedCity.account;
+    onChoose({
+      cityId: a.cityId,
+      name: a.name,
+      cityType: a.cityType,
+      latitude: a.latitude,
+      longitude: a.longitude,
+      spawnLat: spawnCell.gridLat / 10000,
+      spawnLong: spawnCell.gridLong / 10000,
+      /*
+       * Flavor/bearing come from the auto-pick. When the player overrides
+       * the cell we keep the original narrative anchor — recomputing for an
+       * arbitrary cell would need a separate classifier and the narrative
+       * is approximate either way.
+       */
+      spawnFlavor: autoSpawn.flavor,
+      spawnBearing: autoSpawn.bearing,
+    });
+  };
+
   const renderSelected = ({ node }: RealmMapSelectedContext) => {
     const a = node.city;
     const t = cityType(a.cityType);
@@ -174,9 +197,22 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
           {pickError
             ? pickError
             : spawnCell
-              ? "your patch is chosen. Click the disc to move it, or drive your stakes below."
+              ? "your patch is chosen. Click the disc to move it, or drive your stakes."
               : "finding you a patch…"}
         </p>
+        {/* On-chain terrain bonuses for the chosen spawn cell. This is
+            arguably the most important place to surface them — the new
+            player's first cell sets up what they're naturally good at. */}
+        {spawnCell && selectedCity && (
+          <CellAffinityPanel cityAccount={selectedCity.account} cell={spawnCell} />
+        )}
+        <BeatButton
+          disabled={!spawnCell || !autoSpawn || !!pickError}
+          className="mt-4 w-full lowercase"
+          onClick={commitChoice}
+        >
+          drive your stakes at {a.name}
+        </BeatButton>
       </>
     );
   };
@@ -207,38 +243,12 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
             scrollHead="the choice"
             renderSelected={renderSelected}
             renderSheetOverride={renderSheetOverride}
-            // Arrival owns the page heading; suppress the parchment "THE
-            // KINGDOM" cartouche so the two don't stack and fight.
+            /* Arrival owns the page heading; suppress the parchment "THE
+             * KINGDOM" cartouche so the two don't stack and fight. */
             hideCartouche
           />
         </div>
       )}
-
-      <BeatButton
-        disabled={!selectedCity || !spawnCell || !autoSpawn}
-        className="mt-6 px-6 lowercase"
-        onClick={() => {
-          if (!selectedCity || !spawnCell || !autoSpawn) return;
-          const a = selectedCity.account;
-          onChoose({
-            cityId: a.cityId,
-            name: a.name,
-            cityType: a.cityType,
-            latitude: a.latitude,
-            longitude: a.longitude,
-            spawnLat: spawnCell.gridLat / 10000,
-            spawnLong: spawnCell.gridLong / 10000,
-            // Flavor/bearing come from the auto-pick. When the player
-            // overrides the cell we keep the original narrative anchor —
-            // recomputing for an arbitrary cell would need a separate
-            // classifier and the narrative is approximate either way.
-            spawnFlavor: autoSpawn.flavor,
-            spawnBearing: autoSpawn.bearing,
-          });
-        }}
-      >
-        {selectedCity ? `drive your stakes at ${selectedCity.account.name}` : "choose your ground"}
-      </BeatButton>
     </div>
   );
 }

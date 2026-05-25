@@ -1,15 +1,10 @@
-use pinocchio::{
-    ProgramResult,
-    AccountView,
-    Address,
-    sysvars::Sysvar,
-};
 use crate::{
     error::GameError,
-    state::{GameEngine, DailyDealAccount},
+    state::{DailyDealAccount, GameEngine},
+    utils::{read_u16, read_u32, read_u8},
     validation::{require_signer, require_writable},
-    utils::{read_u8, read_u16, read_u32},
 };
+use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
 
 /// Rotate daily deal to next day (DAO or crank)
 ///

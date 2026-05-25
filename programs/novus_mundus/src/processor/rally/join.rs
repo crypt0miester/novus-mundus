@@ -1,33 +1,27 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{RALLY_PARTICIPANT_SEED, INTRACITY_WALKING_SPEED_KMH},
+    constants::{INTRACITY_WALKING_SPEED_KMH, RALLY_PARTICIPANT_SEED},
+    emit,
     error::GameError,
-    state::{
-        CityAccount, GameEngine, PlayerAccount, RallyAccount, RallyParticipant, RallyStatus,
-        TeamAccount, HeroTemplate, player::NULL_PUBKEY,
-        unlock_extension_if_eligible, require_extension, EXT_TEAM, EXT_RALLY,
-        calculate_weighted_power_for_level,
-    },
+    events::RallyJoined,
+    helpers::{parse_hero_nft, subtract_hero_buffs_from_player_with_location},
     logic::{
         calculate_networth,
         location::{calculate_intercity_travel_time, calculate_intracity_travel_time},
     },
-    helpers::{
-        parse_hero_nft,
-        subtract_hero_buffs_from_player_with_location,
+    state::{
+        calculate_weighted_power_for_level, player::NULL_PUBKEY, require_extension,
+        unlock_extension_if_eligible, CityAccount, GameEngine, HeroTemplate, PlayerAccount,
+        RallyAccount, RallyParticipant, RallyStatus, TeamAccount, EXT_RALLY, EXT_TEAM,
     },
     utils::{read_u64, read_u8},
-    validation::{require_signer, require_writable, require_key_match, require_owner},
-    emit,
-    events::RallyJoined,
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// Join an existing rally with the NEW architecture
@@ -67,16 +61,19 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (8 base, +2 optional for hero commitment)
-    crate::extract_accounts!(accounts, [
-        player_account,
-        rally_account,
-        participant_account,
-        player_owner,
-        game_engine,
-        rally_city_account,
-        system_program,
-        team_account,
-    ]);
+    crate::extract_accounts!(
+        accounts,
+        [
+            player_account,
+            rally_account,
+            participant_account,
+            player_owner,
+            game_engine,
+            rally_city_account,
+            system_program,
+            team_account,
+        ]
+    );
 
     // 2. Validate Accounts
     require_signer(player_owner)?;
@@ -141,7 +138,12 @@ pub fn process(
     unlock_extension_if_eligible(player_account, player_owner, EXT_RALLY)?;
 
     // 7a. Load Player and validate (kingdom-scoped)
-    let mut player = PlayerAccount::load_checked_mut(player_account, game_engine.address(), player_owner.address(), program_id)?;
+    let mut player = PlayerAccount::load_checked_mut(
+        player_account,
+        game_engine.address(),
+        player_owner.address(),
+        program_id,
+    )?;
 
     // Cannot be the creator (they join automatically at create)
     if player_owner.address() == &rally_creator {
@@ -275,8 +277,7 @@ pub fn process(
 
         // Parse hero NFT
         let nft_data = hero_mint.try_borrow()?;
-        let parsed_hero = parse_hero_nft(&nft_data)
-            .ok_or(GameError::InvalidParameter)?;
+        let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
         drop(nft_data);
 
         // Load and verify template
@@ -287,11 +288,17 @@ pub fn process(
         }
 
         // Calculate hero power contribution
-        hero_power_contribution = calculate_weighted_power_for_level(parsed_hero.level, template) as u64;
+        hero_power_contribution =
+            calculate_weighted_power_for_level(parsed_hero.level, template) as u64;
 
         // Subtract hero buffs from player (using stored location bonus)
         let location_bonus = player.slot_location_bonus_at(slot as usize);
-        subtract_hero_buffs_from_player_with_location(&mut player, parsed_hero.level, template, location_bonus);
+        subtract_hero_buffs_from_player_with_location(
+            &mut player,
+            parsed_hero.level,
+            template,
+            location_bonus,
+        );
 
         drop(template_data);
 
@@ -328,13 +335,15 @@ pub fn process(
     rally.total_siege_weapons = rally.total_siege_weapons.saturating_add(siege);
 
     // Need to drop borrows before CPIs
-    drop(player);
     drop(rally_data_ref);
-    drop(game_engine_data);
 
     // 12. Verify and create RallyParticipant PDA (kingdom-scoped)
-    let (expected_participant_pda, participant_bump) =
-        RallyParticipant::derive_pda(game_engine.address(), &rally_creator, rally_id, player_owner.address());
+    let (expected_participant_pda, participant_bump) = RallyParticipant::derive_pda(
+        game_engine.address(),
+        &rally_creator,
+        rally_id,
+        player_owner.address(),
+    );
     if participant_account.address() != &expected_participant_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -363,7 +372,8 @@ pub fn process(
         lamports: participant_lamports,
         space: RallyParticipant::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[participant_signer])?;
+    }
+    .invoke_signed(&[participant_signer])?;
 
     // 13. Initialize RallyParticipant
     let mut participant_data_ref = participant_account.try_borrow_mut()?;

@@ -11,34 +11,26 @@
 //! transition to claim the castle (or it becomes vacant).
 
 use pinocchio::{
-    AccountView,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{CASTLE_ATTACK_RANGE_METERS, CASTLE_CONTEST_DURATION, CASTLE_STATUS_TRANSITIONING},
     emit,
     error::GameError,
     events::{CastleAttacked, CastleConquered, CastleDefended},
-    state::{
-        CastleAccount, GarrisonContributionAccount, PlayerAccount, GameEngine,
-        LocationAccount,
-    },
-    constants::{
-        CASTLE_STATUS_TRANSITIONING, CASTLE_ATTACK_RANGE_METERS,
-        CASTLE_CONTEST_DURATION,
-    },
     logic::{
-        calculate_damage_output,
+        calculate_damage_output, calculate_distance_meters, calculate_networth,
+        combat::{resolve_weapon_combat, WeaponSet},
         inflict_damage,
-        calculate_networth,
-        calculate_distance_meters,
         safe_math::calculate_share,
-        combat::{WeaponSet, resolve_weapon_combat},
+    },
+    state::{
+        CastleAccount, GameEngine, GarrisonContributionAccount, LocationAccount, PlayerAccount,
     },
     utils::read_u8,
-    validation::{require_signer, require_writable, require_owner},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Attack Castle instruction data
@@ -59,12 +51,16 @@ pub fn process(
     instruction_data: &[u8],
 ) -> ProgramResult {
     // Parse accounts
-    crate::extract_accounts!(accounts, [
-        attacker_wallet,
-        attacker_player,
-        castle_account,
-        game_engine_account,
-    ], rest = garrison_accounts);
+    crate::extract_accounts!(
+        accounts,
+        [
+            attacker_wallet,
+            attacker_player,
+            castle_account,
+            game_engine_account,
+        ],
+        rest = garrison_accounts
+    );
 
     // Validate accounts
     require_signer(attacker_wallet)?;
@@ -85,7 +81,7 @@ pub fn process(
     let economic_config = &game_engine.economic_config;
 
     // Load castle
-    let mut castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
+    let castle = CastleAccount::load_checked_mut_by_key(castle_account, program_id)?;
 
     // Verify castle can be attacked
     if !castle.can_be_attacked(now) {
@@ -93,7 +89,12 @@ pub fn process(
     }
 
     // Load attacker (kingdom-scoped)
-    let mut attacker = PlayerAccount::load_checked_mut(attacker_player, game_engine_account.address(), attacker_wallet.address(), program_id)?;
+    let attacker = PlayerAccount::load_checked_mut(
+        attacker_player,
+        game_engine_account.address(),
+        attacker_wallet.address(),
+        program_id,
+    )?;
 
     // Verify attacker is not traveling
     if attacker.is_traveling_any() {
@@ -253,8 +254,11 @@ pub fn process(
         attacker.equipped_armor_bonus_bps(),
     );
 
-    let attacker_casualties = attacker_defensive_total
-        .saturating_sub(att_unit_1.saturating_add(att_unit_2).saturating_add(att_unit_3));
+    let attacker_casualties = attacker_defensive_total.saturating_sub(
+        att_unit_1
+            .saturating_add(att_unit_2)
+            .saturating_add(att_unit_3),
+    );
 
     attacker.defensive_unit_1 = att_unit_1;
     attacker.defensive_unit_2 = att_unit_2;
@@ -278,7 +282,8 @@ pub fn process(
     // with `inflict_damage` here: garrison aggregates multiple players and we
     // don't carry per-tier breakdowns through the castle path.
     let garrison_casualty_ratio = if total_garrison_units > 0 && effective_attacker_damage > 0 {
-        ((effective_attacker_damage as u128 * 10000) / (total_garrison_units as u128 * 10)).min(10000) as u64
+        ((effective_attacker_damage as u128 * 10000) / (total_garrison_units as u128 * 10))
+            .min(10000) as u64
     } else {
         0
     };
@@ -332,13 +337,16 @@ pub fn process(
         let weapons_lost_ranged = attacker_weapons.ranged.saturating_sub(recovered.ranged);
         let weapons_lost_siege = attacker_weapons.siege.saturating_sub(recovered.siege);
 
-        attacker.melee_weapons = attacker.melee_weapons
+        attacker.melee_weapons = attacker
+            .melee_weapons
             .saturating_sub(weapons_lost_melee)
             .saturating_add(looted.melee);
-        attacker.ranged_weapons = attacker.ranged_weapons
+        attacker.ranged_weapons = attacker
+            .ranged_weapons
             .saturating_sub(weapons_lost_ranged)
             .saturating_add(looted.ranged);
-        attacker.siege_weapons = attacker.siege_weapons
+        attacker.siege_weapons = attacker
+            .siege_weapons
             .saturating_sub(weapons_lost_siege)
             .saturating_add(looted.siege);
     } else {
@@ -349,9 +357,12 @@ pub fn process(
             0
         };
 
-        let melee_lost = (attacker_weapons.melee as u128 * casualty_ratio_bps as u128 / 10000) as u64;
-        let ranged_lost = (attacker_weapons.ranged as u128 * casualty_ratio_bps as u128 / 10000) as u64;
-        let siege_lost = (attacker_weapons.siege as u128 * casualty_ratio_bps as u128 / 10000) as u64;
+        let melee_lost =
+            (attacker_weapons.melee as u128 * casualty_ratio_bps as u128 / 10000) as u64;
+        let ranged_lost =
+            (attacker_weapons.ranged as u128 * casualty_ratio_bps as u128 / 10000) as u64;
+        let siege_lost =
+            (attacker_weapons.siege as u128 * casualty_ratio_bps as u128 / 10000) as u64;
 
         attacker.melee_weapons = attacker.melee_weapons.saturating_sub(melee_lost);
         attacker.ranged_weapons = attacker.ranged_weapons.saturating_sub(ranged_lost);
@@ -376,7 +387,8 @@ pub fn process(
     if total_garrison_power > 0 {
         for i in 0..garrison_count {
             let garrison_account = &garrison_accounts[i];
-            if unsafe { garrison_account.owner() } != program_id || garrison_account.data_len() == 0 {
+            if unsafe { garrison_account.owner() } != program_id || garrison_account.data_len() == 0
+            {
                 continue;
             }
 
@@ -395,25 +407,27 @@ pub fn process(
             };
 
             // Distribute casualties proportionally
-            let their_casualties = calculate_share(garrison_casualties, contribution_bps, 10000)
-                .unwrap_or(0);
+            let their_casualties =
+                calculate_share(garrison_casualties, contribution_bps, 10000).unwrap_or(0);
 
             // Reduce units (simplified - reduce proportionally across tiers)
             let their_total_units = garrison.total_units();
             if their_total_units > 0 {
-                let unit_1_share = (garrison.units_1 as u128 * 10000 / their_total_units as u128) as u64;
-                let unit_2_share = (garrison.units_2 as u128 * 10000 / their_total_units as u128) as u64;
+                let unit_1_share =
+                    (garrison.units_1 as u128 * 10000 / their_total_units as u128) as u64;
+                let unit_2_share =
+                    (garrison.units_2 as u128 * 10000 / their_total_units as u128) as u64;
 
                 garrison.units_1 = garrison.units_1.saturating_sub(
-                    calculate_share(their_casualties, unit_1_share, 10000).unwrap_or(0)
+                    calculate_share(their_casualties, unit_1_share, 10000).unwrap_or(0),
                 );
                 garrison.units_2 = garrison.units_2.saturating_sub(
-                    calculate_share(their_casualties, unit_2_share, 10000).unwrap_or(0)
+                    calculate_share(their_casualties, unit_2_share, 10000).unwrap_or(0),
                 );
                 garrison.units_3 = garrison.units_3.saturating_sub(
-                    their_casualties.saturating_sub(
-                        garrison.units_1.saturating_add(garrison.units_2)
-                    ).min(garrison.units_3)
+                    their_casualties
+                        .saturating_sub(garrison.units_1.saturating_add(garrison.units_2))
+                        .min(garrison.units_3),
                 );
             }
 
@@ -421,13 +435,13 @@ pub fn process(
             if !attacker_won {
                 let defender_looted = weapon_result.defender_weapons_looted;
                 garrison.loot_melee = garrison.loot_melee.saturating_add(
-                    calculate_share(defender_looted.melee, contribution_bps, 10000).unwrap_or(0)
+                    calculate_share(defender_looted.melee, contribution_bps, 10000).unwrap_or(0),
                 );
                 garrison.loot_ranged = garrison.loot_ranged.saturating_add(
-                    calculate_share(defender_looted.ranged, contribution_bps, 10000).unwrap_or(0)
+                    calculate_share(defender_looted.ranged, contribution_bps, 10000).unwrap_or(0),
                 );
                 garrison.loot_siege = garrison.loot_siege.saturating_add(
-                    calculate_share(defender_looted.siege, contribution_bps, 10000).unwrap_or(0)
+                    calculate_share(defender_looted.siege, contribution_bps, 10000).unwrap_or(0),
                 );
             }
         }
@@ -439,7 +453,8 @@ pub fn process(
 
         // Check if garrison is effectively defeated (< 10% remaining or already empty)
         let remaining_garrison = total_garrison_units.saturating_sub(garrison_casualties);
-        let garrison_defeated = remaining_garrison < total_garrison_units / 10 || total_garrison_units == 0;
+        let garrison_defeated =
+            remaining_garrison < total_garrison_units / 10 || total_garrison_units == 0;
 
         if garrison_defeated {
             // If already transitioning, just update the pending king and reset timer

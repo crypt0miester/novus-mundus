@@ -2,14 +2,7 @@
 ///
 /// This module provides actual token burn/mint/transfer operations
 /// using the pinocchio-token crate for compute-optimized CPIs.
-
-use pinocchio::{
-    AccountView,
-    cpi::Signer,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{cpi::Signer, error::ProgramError, AccountView, Address, ProgramResult};
 use pinocchio_token::instructions::*;
 
 use crate::error::GameError;
@@ -178,14 +171,14 @@ pub fn transfer_tokens<'a>(
 
 // ORACLE & TOKEN PAYMENT HELPERS
 
-use p_pyth::{Price, PriceUpdateV2, PythError};
-use p_switchboard::{OracleQuote, QuoteVerifier, SbError};
 use crate::constants::{PYTH_PROGRAM_ID, PYTH_RECEIVER_PROGRAM_ID};
-use crate::state::{AllowedTokenAccount, OracleQuotePda, ShopConfigAccount};
-use crate::validation::require_key_match;
 use crate::logic::safe_math::apply_bp_penalty;
+use crate::state::{AllowedTokenAccount, OracleQuotePda, ShopConfigAccount};
 use crate::token_helpers::create_associated_token_account;
 use crate::utils::{unlikely, Pk};
+use crate::validation::require_key_match;
+use p_pyth::{Price, PriceUpdateV2, PythError};
+use p_switchboard::{OracleQuote, QuoteVerifier, SbError};
 
 /// Oracle program, identified by the account passed at the SOL-feed slot.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -333,12 +326,22 @@ pub fn scale_ratio(
         let scale = 10u128
             .checked_pow(net_expo as u32)
             .ok_or(GameError::OracleOverflow)?;
-        (numerator.checked_mul(scale).ok_or(GameError::OracleOverflow)?, denominator)
+        (
+            numerator
+                .checked_mul(scale)
+                .ok_or(GameError::OracleOverflow)?,
+            denominator,
+        )
     } else {
         let scale = 10u128
             .checked_pow((-net_expo) as u32)
             .ok_or(GameError::OracleOverflow)?;
-        (numerator, denominator.checked_mul(scale).ok_or(GameError::OracleOverflow)?)
+        (
+            numerator,
+            denominator
+                .checked_mul(scale)
+                .ok_or(GameError::OracleOverflow)?,
+        )
     };
 
     if den == 0 {
@@ -481,9 +484,9 @@ pub fn process_token_payment_flow(
     // address; the caller's tx fails clean and they retry.
     if treasury_token_ata.data_len() == 0 {
         create_associated_token_account(
-            buyer,                       // payer (buyer covers rent in this fallback)
-            treasury_token_ata,          // ATA to create
-            treasury_wallet_account,     // wallet that owns the ATA
+            buyer,                   // payer (buyer covers rent in this fallback)
+            treasury_token_ata,      // ATA to create
+            treasury_wallet_account, // wallet that owns the ATA
             token_mint,
             system_program,
             token_program,
@@ -501,7 +504,8 @@ pub fn process_token_payment_flow(
         game_engine_key,
         token_mint.address(),
         program_id,
-    ).map_err(|_| GameError::TokenNotAllowed)?;
+    )
+    .map_err(|_| GameError::TokenNotAllowed)?;
 
     // Branch on pricing model.
     let token_amount = if allowed_token.pegged_to_usd != 0 {
@@ -553,7 +557,9 @@ pub fn process_token_payment_flow(
         match detect_oracle_type(&token_accounts[5])? {
             OracleType::Pyth => {
                 if unlikely(detect_oracle_type(&token_accounts[6])? != OracleType::Pyth) {
-                    pinocchio_log::log!("process_token_payment_flow: mixed Pyth+Switchboard feeds rejected");
+                    pinocchio_log::log!(
+                        "process_token_payment_flow: mixed Pyth+Switchboard feeds rejected"
+                    );
                     return Err(GameError::OracleUnavailable.into());
                 }
                 calculate_token_amount_pyth(
@@ -594,8 +600,7 @@ pub fn process_token_payment_flow(
 
     // Apply token discount (Layer 0 - first discount applied)
     let discounted_token_amount = if allowed_token.discount_bps > 0 {
-        apply_bp_penalty(token_amount, allowed_token.discount_bps)
-            .ok_or(GameError::MathOverflow)?
+        apply_bp_penalty(token_amount, allowed_token.discount_bps).ok_or(GameError::MathOverflow)?
     } else {
         token_amount
     };
@@ -646,7 +651,12 @@ fn calculate_token_amount_pyth(
     let mint_data = token_mint.try_borrow()?;
     let token_decimals = read_token_decimals(&mint_data)?;
 
-    calculate_token_amount(final_price_lamports, &sol_price, &token_price, token_decimals)
+    calculate_token_amount(
+        final_price_lamports,
+        &sol_price,
+        &token_price,
+        token_decimals,
+    )
 }
 
 /// Verify the program-owned Switchboard oracle-quote PDA and return the

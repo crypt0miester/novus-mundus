@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
-    sysvars::{Sysvar, clock::Clock},
-    ProgramResult,
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, GameEngine, team::TeamAccount, NULL_PUBKEY},
-    helpers::estate::{vault_transfer_bonus_bps, require_vault, load_estate_for_player},
     emit,
+    error::GameError,
     events::CashTransferred,
-    validation::require_owner,
+    helpers::estate::{load_estate_for_player, require_vault, vault_transfer_bonus_bps},
+    state::{team::TeamAccount, GameEngine, PlayerAccount, NULL_PUBKEY},
     utils::read_u64,
+    validation::require_owner,
 };
 
 /// Transfer cash between team members
@@ -58,11 +56,7 @@ use crate::{
 /// # Instruction Data
 /// - amount: u64 (8 bytes) - Amount of cash to transfer
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
-pub fn process(
-    program_id: &Address,
-    accounts: &[AccountView],
-    data: &[u8],
-) -> ProgramResult {
+pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Instruction Data
 
     let amount = read_u64(data, 0, "transfer_cash.amount")?;
@@ -101,7 +95,12 @@ pub fn process(
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Sender: load_checked (verifies PDA + ownership, kingdom-scoped)
-    let mut sender_player = PlayerAccount::load_checked_mut(sender_player_account, game_engine_account.address(), sender.address(), program_id)?;
+    let sender_player = PlayerAccount::load_checked_mut(
+        sender_player_account,
+        game_engine_account.address(),
+        sender.address(),
+        program_id,
+    )?;
 
     // Receiver: manual load (we don't have receiver's wallet key in accounts)
     // Must verify program ownership to prevent fake account attacks
@@ -110,7 +109,12 @@ pub fn process(
     let receiver_player = unsafe { PlayerAccount::load_mut(&mut receiver_data_ref) };
 
     // Team: load_checked (verifies PDA + ownership using team_id, kingdom-scoped)
-    let _team = TeamAccount::load_checked(team_account, game_engine_account.address(), team_id, program_id)?;
+    let _team = TeamAccount::load_checked(
+        team_account,
+        game_engine_account.address(),
+        team_id,
+        program_id,
+    )?;
 
     // 6. Get Current Time
 
@@ -130,7 +134,8 @@ pub fn process(
 
     // 8. Validate Same Team
 
-    if sender_player.team_address() == NULL_PUBKEY || receiver_player.team_address() == NULL_PUBKEY {
+    if sender_player.team_address() == NULL_PUBKEY || receiver_player.team_address() == NULL_PUBKEY
+    {
         return Err(GameError::NotOnTeam.into());
     }
 
@@ -203,7 +208,9 @@ pub fn process(
     } else if vault_bonus_bps > 0 {
         // Apply bonus: limit × (10000 + bonus_bps) / 10000
         let bonus_multiplier = 10000u64.saturating_add(vault_bonus_bps as u64);
-        tier.max_daily_transfer_amount.saturating_mul(bonus_multiplier) / 10000
+        tier.max_daily_transfer_amount
+            .saturating_mul(bonus_multiplier)
+            / 10000
     } else {
         tier.max_daily_transfer_amount
     };

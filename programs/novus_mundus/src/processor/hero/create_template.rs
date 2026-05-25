@@ -1,20 +1,11 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{GameEngine, HeroTemplate, BuffConfig, AbilityKind},
-    utils::{read_u8, read_u16, read_u32, read_u64},
-    validation::{
-        require_signer,
-        require_writable,
-        require_key_match,
-    },
+    state::{AbilityKind, BuffConfig, GameEngine, HeroTemplate},
+    utils::{read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 const ABILITY_DATA_LEN: usize = 12; // kind(1) + stat(1) + param1(2) + param2(4) + cooldown_secs(4)
@@ -92,7 +83,11 @@ pub fn process(
 
     let enabled = read_u8(instruction_data, 48, "create_template.enabled")? != 0;
     let event_exclusive = read_u8(instruction_data, 49, "create_template.event_exclusive")? != 0;
-    let required_player_level = read_u8(instruction_data, 50, "create_template.required_player_level")?;
+    let required_player_level = read_u8(
+        instruction_data,
+        50,
+        "create_template.required_player_level",
+    )?;
 
     // Parse meditation_city_id (0 = any city, else specific city required for meditation)
     let meditation_city_id = read_u16(instruction_data, 51, "create_template.meditation_city_id")?;
@@ -104,10 +99,22 @@ pub fn process(
         let offset = 53 + (i * 5);
         buffs[i] = BuffConfig {
             stat: read_u8(instruction_data, offset, "create_template.buff_stat")?,
-            base_bps: read_u16(instruction_data, offset + 1, "create_template.buff_base_bps")?,
+            base_bps: read_u16(
+                instruction_data,
+                offset + 1,
+                "create_template.buff_base_bps",
+            )?,
             _reserved: [
-                read_u8(instruction_data, offset + 3, "create_template.buff_reserved")?,
-                read_u8(instruction_data, offset + 4, "create_template.buff_reserved")?,
+                read_u8(
+                    instruction_data,
+                    offset + 3,
+                    "create_template.buff_reserved",
+                )?,
+                read_u8(
+                    instruction_data,
+                    offset + 4,
+                    "create_template.buff_reserved",
+                )?,
             ],
         };
     }
@@ -118,7 +125,11 @@ pub fn process(
     let ability_stat = read_u8(instruction_data, 74, "create_template.ability_stat")?;
     let ability_param1 = read_u16(instruction_data, 75, "create_template.ability_param1")?;
     let ability_param2 = read_u32(instruction_data, 77, "create_template.ability_param2")?;
-    let ability_cooldown_secs = read_u32(instruction_data, 81, "create_template.ability_cooldown_secs")?;
+    let ability_cooldown_secs = read_u32(
+        instruction_data,
+        81,
+        "create_template.ability_cooldown_secs",
+    )?;
 
     // Validate ability config (reject unknown kinds; 0 = no ability)
     if !AbilityKind::is_valid(ability_kind) {
@@ -141,7 +152,11 @@ pub fn process(
 
     let template_id_bytes = template_id.to_le_bytes();
     let bump_seed = [bump];
-    let seeds = crate::seeds!(crate::constants::HERO_TEMPLATE_SEED, &template_id_bytes, &bump_seed);
+    let seeds = crate::seeds!(
+        crate::constants::HERO_TEMPLATE_SEED,
+        &template_id_bytes,
+        &bump_seed
+    );
     let signer = pinocchio::cpi::Signer::from(&seeds);
 
     CreateAccount {
@@ -150,7 +165,8 @@ pub fn process(
         lamports,
         space: HeroTemplate::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 7. Initialize template data
     let mut template_data = hero_template.try_borrow_mut()?;

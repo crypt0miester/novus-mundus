@@ -1,7 +1,6 @@
+use super::{discriminator, Event, PackBytes};
 /// Expedition events - mining, fishing, gathering
-
 use pinocchio::Address;
-use super::{Event, PackBytes, discriminator};
 
 /// Emitted when an expedition starts
 pub struct ExpeditionStarted {

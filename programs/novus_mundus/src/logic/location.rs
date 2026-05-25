@@ -80,14 +80,9 @@ pub fn calculate_distance(
 /// // distance ≈ 111 meters (1 degree latitude ≈ 111 km)
 /// ```
 #[inline]
-pub fn calculate_distance_meters(
-    lat1: f64,
-    long1: f64,
-    lat2: f64,
-    long2: f64,
-) -> f64 {
+pub fn calculate_distance_meters(lat1: f64, long1: f64, lat2: f64, long2: f64) -> f64 {
     let distance_km = calculate_distance(lat1, long1, lat2, long2);
-    distance_km * 1000.0  // Convert to meters
+    distance_km * 1000.0 // Convert to meters
 }
 
 /// Validate latitude is within valid range
@@ -195,7 +190,12 @@ pub fn calculate_intercity_travel_time(
     dest_city_long: f64,
     theme_speed_kmh: f32,
 ) -> i64 {
-    let distance = calculate_distance(origin_city_lat, origin_city_long, dest_city_lat, dest_city_long);
+    let distance = calculate_distance(
+        origin_city_lat,
+        origin_city_long,
+        dest_city_lat,
+        dest_city_long,
+    );
     calculate_travel_time_with_speed(distance, theme_speed_kmh)
 }
 

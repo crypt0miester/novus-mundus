@@ -1,18 +1,16 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, rent::Rent, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{EstateAccount, PlayerAccount, SLOTS_PER_PLOT},
     constants::PLAYER_SEED,
-    helpers::burn_tokens,
-    validation::{require_signer, require_writable, require_owner},
     emit,
+    error::GameError,
     events::estate::PlotPurchased,
+    helpers::burn_tokens,
+    state::{EstateAccount, PlayerAccount, SLOTS_PER_PLOT},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Buy Plot
@@ -86,7 +84,8 @@ pub fn process(
         }
 
         // 5. Get plot cost and current plot count
-        let cost = estate_data.next_plot_cost()
+        let cost = estate_data
+            .next_plot_cost()
             .ok_or(GameError::ExceedsMaxCap)?;
         let plot_index = estate_data.plots_owned;
 
@@ -95,7 +94,13 @@ pub fn process(
             return Err(GameError::InsufficientLockedNovi.into());
         }
 
-        (cost, plot_index, player_data.game_engine, player_data.bump, player_data.name)
+        (
+            cost,
+            plot_index,
+            player_data.game_engine,
+            player_data.bump,
+            player_data.name,
+        )
     }; // borrows dropped
 
     // 7. Burn NOVI tokens (CPI - no active borrows)
@@ -145,8 +150,7 @@ pub fn process(
     let mut estate_data_ref = estate_account.try_borrow_mut()?;
     let estate_data = unsafe { EstateAccount::load_mut(&mut estate_data_ref) };
 
-    estate_data.buy_plot()
-        .ok_or(GameError::ExceedsMaxCap)?;
+    estate_data.buy_plot().ok_or(GameError::ExceedsMaxCap)?;
 
     // 9. Update activity timestamp
     let clock = Clock::get()?;

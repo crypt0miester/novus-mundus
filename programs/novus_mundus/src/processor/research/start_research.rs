@@ -1,31 +1,29 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
     sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::{PlayerAccount, ResearchProgress, ResearchTemplate, ResearchCategory, require_extension, EXT_RESEARCH},
     constants::PLAYER_SEED,
-    logic::{get_time_of_day, get_time_multiplier, ActivityType},
+    emit,
+    error::GameError,
+    events::ResearchStarted,
     helpers::{
         burn_tokens,
         estate::{
-            require_academy, required_academy_level_for_research, academy_research_speed_bps,
-            load_estate_for_player, get_academy_mastery, academy_mastery_speed_bonus_bps,
-            academy_mastery_cost_discount_bps,
+            academy_mastery_cost_discount_bps, academy_mastery_speed_bonus_bps,
+            academy_research_speed_bps, get_academy_mastery, load_estate_for_player,
+            require_academy, required_academy_level_for_research,
         },
     },
-    validation::{
-        require_signer,
-        require_writable,
+    logic::{get_time_multiplier, get_time_of_day, ActivityType},
+    state::{
+        require_extension, PlayerAccount, ResearchCategory, ResearchProgress, ResearchTemplate,
+        EXT_RESEARCH,
     },
     utils::read_u8,
-    emit,
-    events::ResearchStarted,
+    validation::{require_signer, require_writable},
 };
 
 /// Start researching a specific node
@@ -85,8 +83,16 @@ pub fn process(
 
     // 4. Pre-CPI phase: validate everything and extract values needed for CPI
     // We must drop all borrows before calling burn_tokens CPI, then re-borrow after.
-    let (novi_cost, player_bump, next_level, current_long, base_research_time,
-         building_speed_bps, mastery_speed_bps, player_name) = {
+    let (
+        novi_cost,
+        player_bump,
+        next_level,
+        current_long,
+        base_research_time,
+        building_speed_bps,
+        mastery_speed_bps,
+        player_name,
+    ) = {
         let player_data = player_account.try_borrow()?;
         let player = unsafe { PlayerAccount::load(&player_data) };
 
@@ -152,9 +158,8 @@ pub fn process(
 
         let mastery = get_academy_mastery(estate);
         let discount_bps = academy_mastery_cost_discount_bps(mastery) as u64;
-        let novi_cost = base_novi_cost
-            .saturating_mul(10000u64.saturating_sub(discount_bps))
-            / 10000;
+        let novi_cost =
+            base_novi_cost.saturating_mul(10000u64.saturating_sub(discount_bps)) / 10000;
 
         // 12. Check player has enough balance
         if player.locked_novi < novi_cost {
@@ -165,13 +170,26 @@ pub fn process(
         let building_speed_bps = academy_research_speed_bps(estate) as i64;
         let mastery_speed_bps = academy_mastery_speed_bonus_bps(mastery) as i64;
 
-        (novi_cost, player.bump, next_level, player.current_long,
-         base_research_time, building_speed_bps, mastery_speed_bps, player.name)
+        (
+            novi_cost,
+            player.bump,
+            next_level,
+            player.current_long,
+            base_research_time,
+            building_speed_bps,
+            mastery_speed_bps,
+            player.name,
+        )
     }; // All borrows dropped here
 
     // 12a. Burn NOVI tokens (CPI - no borrows held)
     let bump_seed = [player_bump];
-    let player_seeds = crate::seeds!(PLAYER_SEED, game_engine.address(), player_owner.address(), &bump_seed);
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine.address(),
+        player_owner.address(),
+        &bump_seed
+    );
     let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
 
     burn_tokens(
@@ -205,7 +223,8 @@ pub fn process(
         time_adjusted_research.saturating_mul(time_ratio) / 10000
     } else {
         time_adjusted_research
-    }.max(60); // Minimum 60 seconds research time
+    }
+    .max(60); // Minimum 60 seconds research time
 
     let completes_at = now.saturating_add(research_time);
 

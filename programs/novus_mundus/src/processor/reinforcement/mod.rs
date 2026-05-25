@@ -1,3 +1,7 @@
+pub mod process_arrival;
+pub mod process_return;
+pub mod recall;
+pub mod relieve;
 /// Reinforcement System Processors
 ///
 /// Allows teammates to send defensive units to help defend each other.
@@ -15,10 +19,5 @@
 /// - Sender pays account rent (refunded on close)
 /// - Receiver has capacity limits (hero_unit_capacity_bps)
 /// - Casualties are tracked per reinforcement
-
 pub mod send;
-pub mod process_arrival;
-pub mod recall;
-pub mod relieve;
-pub mod process_return;
 pub mod speedup;

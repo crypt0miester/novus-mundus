@@ -8,20 +8,18 @@
 //! Use case: Player urgently needs operatives for combat/rally.
 
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
     constants::EXPEDITION_SEED,
-    error::GameError,
-    state::{PlayerAccount, ExpeditionAccount, NULL_PUBKEY},
-    helpers::close_account,
-    validation::{require_signer, require_writable, require_owner, require_initialized},
     emit,
+    error::GameError,
     events::ExpeditionAborted,
+    helpers::close_account,
+    state::{ExpeditionAccount, PlayerAccount, NULL_PUBKEY},
+    validation::{require_initialized, require_owner, require_signer, require_writable},
 };
 
 /// Abort an active expedition
@@ -50,11 +48,11 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse Accounts (minimum 3, up to 7 with hero)
-    crate::extract_accounts!(accounts, [
-        owner,
-        player_account,
-        expedition_account,
-    ], rest = hero_accounts);
+    crate::extract_accounts!(
+        accounts,
+        [owner, player_account, expedition_account,],
+        rest = hero_accounts
+    );
 
     // 2. Validate Accounts
     require_signer(owner)?;
@@ -108,13 +106,16 @@ pub fn process(
     }
 
     // 8. RETURN LOCKED OPERATIVES to player (no rewards, NOVI is burnt)
-    player_data.operative_unit_1 = player_data.operative_unit_1
+    player_data.operative_unit_1 = player_data
+        .operative_unit_1
         .checked_add(op_unit_1)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_2 = player_data.operative_unit_2
+    player_data.operative_unit_2 = player_data
+        .operative_unit_2
         .checked_add(op_unit_2)
         .ok_or(GameError::MathOverflow)?;
-    player_data.operative_unit_3 = player_data.operative_unit_3
+    player_data.operative_unit_3 = player_data
+        .operative_unit_3
         .checked_add(op_unit_3)
         .ok_or(GameError::MathOverflow)?;
 
@@ -139,11 +140,7 @@ pub fn process(
             program_id,
         );
         let bump_seed = [expedition_bump];
-        let expedition_seeds = crate::seeds!(
-            EXPEDITION_SEED,
-            owner.address(),
-            &bump_seed
-        );
+        let expedition_seeds = crate::seeds!(EXPEDITION_SEED, owner.address(), &bump_seed);
         let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
         // Transfer hero NFT from expedition back to owner
@@ -155,7 +152,8 @@ pub fn process(
             authority: expedition_account,
             system_program,
             log_wrapper: p_core_program,
-        }.invoke_signed(&[expedition_signer])?;
+        }
+        .invoke_signed(&[expedition_signer])?;
     }
 
     // 10. Close expedition account (refund rent to owner)

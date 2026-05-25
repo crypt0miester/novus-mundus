@@ -1,19 +1,17 @@
 use pinocchio::{
-    AccountView,
     error::ProgramError,
-    Address,
-    ProgramResult,
-    sysvars::{Sysvar, clock::Clock},
+    sysvars::{clock::Clock, Sysvar},
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
+    constants::{HERO_COLLECTION_SEED, HERO_MINT_RECEIPT_SEED, HERO_TEMPLATE_SEED},
+    emit,
     error::GameError,
-    state::{PlayerAccount, HeroTemplate, tier_from_mint_cost, calculate_burn_reward},
-    constants::{HERO_TEMPLATE_SEED, HERO_MINT_RECEIPT_SEED, HERO_COLLECTION_SEED},
+    events::HeroBurned,
+    state::{calculate_burn_reward, tier_from_mint_cost, HeroTemplate, PlayerAccount},
     utils::read_u16,
     validation::{require_signer, require_writable},
-    emit,
-    events::HeroBurned,
 };
 
 /// Burn a hero NFT (310)
@@ -102,10 +100,8 @@ pub fn process(
 
     // 9. Verify template PDA
     let template_id_bytes = template_id.to_le_bytes();
-    let (expected_template_pda, _) = Address::find_program_address(
-        &[HERO_TEMPLATE_SEED, &template_id_bytes],
-        program_id,
-    );
+    let (expected_template_pda, _) =
+        Address::find_program_address(&[HERO_TEMPLATE_SEED, &template_id_bytes], program_id);
     if hero_template.address() != &expected_template_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -124,10 +120,8 @@ pub fn process(
     drop(template_data);
 
     // 11. Verify hero collection PDA
-    let (expected_collection_pda, _) = Address::find_program_address(
-        &[HERO_COLLECTION_SEED],
-        program_id,
-    );
+    let (expected_collection_pda, _) =
+        Address::find_program_address(&[HERO_COLLECTION_SEED], program_id);
     if hero_collection.address() != &expected_collection_pda {
         return Err(GameError::InvalidPDA.into());
     }
@@ -140,7 +134,8 @@ pub fn process(
         authority: owner,
         system_program,
         log_wrapper: p_core_program,
-    }.invoke()?;
+    }
+    .invoke()?;
 
     // 13. Credit locked NOVI reward to player
     {
@@ -163,14 +158,19 @@ pub fn process(
     if mint_receipt.lamports() > 0 && unsafe { mint_receipt.owner() } == program_id {
         // Verify receipt PDA derivation
         let (expected_receipt_pda, _) = Address::find_program_address(
-            &[HERO_MINT_RECEIPT_SEED, player_account.address().as_ref(), &template_id_bytes],
+            &[
+                HERO_MINT_RECEIPT_SEED,
+                player_account.address().as_ref(),
+                &template_id_bytes,
+            ],
             program_id,
         );
         if mint_receipt.address() == &expected_receipt_pda {
             // Transfer all lamports to owner (closes the account)
             let receipt_lamports = mint_receipt.lamports();
             owner.set_lamports(
-                owner.lamports()
+                owner
+                    .lamports()
                     .checked_add(receipt_lamports)
                     .ok_or(ProgramError::ArithmeticOverflow)?,
             );

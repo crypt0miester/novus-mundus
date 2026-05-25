@@ -43,8 +43,6 @@ export async function sendWithRetry(
   signers: Keypair[],
   opts?: number | SendOptions
 ): Promise<string | null> {
-  if (ctx.dryRun) return null;
-
   // Backwards-compatible: bare number = retries
   const options: SendOptions = typeof opts === 'number' ? { retries: opts } : (opts ?? {});
   const retries = options.retries ?? 3;
@@ -65,6 +63,18 @@ export async function sendWithRetry(
 
   const ixArray = Array.isArray(ix) ? ix : [ix];
   instructions.push(...ixArray);
+
+  /* Dry-run = simulate, so encoding/validation/CU failures surface without sending. */
+  if (ctx.dryRun) {
+    const sim = await novusSimulateTransaction(ctx, instructions, signers);
+    if (!sim.success) {
+      throw new Error(`Dry-run simulation failed: ${sim.error}\n${sim.logs.join('\n')}`);
+    }
+    if (ctx.verbose) {
+      log.info(`  sim: ${sim.unitsConsumed ?? '?'} CU`);
+    }
+    return null;
+  }
 
   // Simulation requires a signed VersionedTransaction
   if (options.simulate) {
@@ -124,7 +134,7 @@ export interface SimulationResult {
  * Simulate a transaction without sending it.
  * Builds a signed VersionedTransaction (v0) for simulation.
  */
-export async function NovusSimulateTransaction(
+export async function novusSimulateTransaction(
   ctx: CLIContext,
   ix: TransactionInstruction | TransactionInstruction[],
   signers: Keypair[],
@@ -214,15 +224,10 @@ export async function createOrSkip(
     return false;
   }
 
-  if (ctx.dryRun) {
-    log.dryRun(`Would create: ${name}`);
-    stats.created++;
-    return true;
-  }
-
   const ix = buildIx();
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-  log.create(name);
+  if (ctx.dryRun) log.dryRun(`Would create: ${name}`);
+  else log.create(name);
   stats.created++;
   return true;
 }
@@ -238,26 +243,18 @@ export async function createOrUpdate(
   const exists = await accountExists(ctx.connection, pda);
 
   if (!exists) {
-    if (ctx.dryRun) {
-      log.dryRun(`Would create: ${name}`);
-      stats.created++;
-      return 'created';
-    }
     const ix = buildCreate();
     await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-    log.create(name);
+    if (ctx.dryRun) log.dryRun(`Would create: ${name}`);
+    else log.create(name);
     stats.created++;
     return 'created';
   }
 
-  if (ctx.dryRun) {
-    log.dryRun(`Would update: ${name}`);
-    stats.updated++;
-    return 'updated';
-  }
   const ix = buildUpdate();
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-  log.update(name);
+  if (ctx.dryRun) log.dryRun(`Would update: ${name}`);
+  else log.update(name);
   stats.updated++;
   return 'updated';
 }
@@ -275,15 +272,10 @@ export async function updateOnly(
     return false;
   }
 
-  if (ctx.dryRun) {
-    log.dryRun(`Would update: ${name}`);
-    stats.updated++;
-    return true;
-  }
-
   const ix = buildUpdate();
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-  log.update(name);
+  if (ctx.dryRun) log.dryRun(`Would update: ${name}`);
+  else log.update(name);
   stats.updated++;
   return true;
 }

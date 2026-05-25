@@ -2,8 +2,8 @@
 //!
 //! Events related to kingdom lifecycle and player membership
 
+use crate::events::{discriminator, Event, Name32, PackBytes};
 use pinocchio::Address;
-use crate::events::{Event, PackBytes, discriminator, Name32};
 
 /// Emitted when a new kingdom is created
 pub struct KingdomCreated {

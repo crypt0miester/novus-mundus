@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
@@ -61,6 +61,7 @@ import {
   type RealmMapSelectedContext,
 } from "@/components/world/RealmMap";
 import { CityTerrainMap, type CityTerrainEntity } from "@/components/world/CityTerrainMap";
+import { CellAffinityPanel } from "@/components/world/CellAffinityPanel";
 
 const TYPE_META = [
   { label: "Capital", glyph: "♛" },
@@ -408,6 +409,24 @@ export function MapTab() {
   const pvpRangeMeters = ge?.combatConfig?.pvpAttackRangeMeters ?? 15;
   const maxLevelDiff = ge?.gameplayConfig?.maxEncounterLevelDiff ?? 30;
   const { current: playerStamina } = useStamina(player);
+
+  /* Clear the side-panel selection when the selected encounter dies, so the
+   * right-hand panel mirrors the disc's own dead-encounter filter (see
+   * useCityOccupied). Otherwise the panel keeps showing the encounter's
+   * stats and a Strike CTA pointing at a corpse, which the chain would
+   * reject with EncounterDead. We don't clear while `viewedEncounters` is
+   * still loading (data === undefined) or the selection would evaporate on
+   * first mount before the store catches up. */
+  useEffect(() => {
+    if (!selectedEntity || selectedEntity.occupantType !== 2) return;
+    if (!viewedEncounters) return;
+    const enc = viewedEncounters.find(
+      (e) => e.pubkey.toBase58() === selectedEntity.pubkey,
+    );
+    if (!enc || enc.account.health.isZero()) {
+      setSelectedEntity(null);
+    }
+  }, [selectedEntity, viewedEncounters]);
 
   const selectedEntityCombat = useMemo(() => {
     if (!selectedEntity || !player || !isHomeDestination) return null;
@@ -1048,6 +1067,13 @@ export function MapTab() {
                   : "your seat. Touch a cell in the disc to walk there, or another city to set out."}
               </p>
 
+              {/* On-chain terrain bonuses for the chosen walk cell. Hidden
+                  until a cell is picked so we don't suggest bonuses for an
+                  unselected target. */}
+              {destCell && currentCityData && (
+                <CellAffinityPanel cityAccount={currentCityData.account} cell={destCell} />
+              )}
+
               <div className="hidden md:block">
                 <div style={{ marginTop: "0.9rem" }}>
                   <TxButton
@@ -1090,6 +1116,13 @@ export function MapTab() {
                 ? "landing cell chosen, set out below."
                 : "touch the mapadd to pick where to alight."}
             </p>
+
+            {/* On-chain terrain bonuses for the chosen landing cell in the
+                destination city. Lets the player pick tactically — land on
+                a hill for mining/combat, on the shore for fishing. */}
+            {destCell && destCityData && (
+              <CellAffinityPanel cityAccount={destCityData.account} cell={destCell} />
+            )}
 
             {/* Desktop keeps the inline CTAs; on mobile they're hidden and
                 the MorphTabBar carries them (see useMorphActions above). */}

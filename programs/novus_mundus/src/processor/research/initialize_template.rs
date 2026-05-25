@@ -1,21 +1,12 @@
-use pinocchio::{
-    AccountView,
-    error::ProgramError,
-    Address,
-    ProgramResult,
-};
+use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
+    constants::RESEARCH_TEMPLATE_SEED,
     error::GameError,
     state::{GameEngine, ResearchTemplate},
-    validation::{
-        require_signer,
-        require_writable,
-        require_key_match,
-    },
-    constants::RESEARCH_TEMPLATE_SEED,
-    utils::{read_u8, read_u16, read_u32, read_u64},
+    utils::{read_u16, read_u32, read_u64, read_u8},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Initialize a research template (DAO only)
@@ -76,12 +67,28 @@ pub fn process(
 
     let buff_type = read_u8(instruction_data, 15, "initialize_template.buff_type")?;
 
-    let buff_per_level_bps = read_u16(instruction_data, 16, "initialize_template.buff_per_level_bps")?;
+    let buff_per_level_bps = read_u16(
+        instruction_data,
+        16,
+        "initialize_template.buff_per_level_bps",
+    )?;
 
-    let prerequisite_research = read_u8(instruction_data, 18, "initialize_template.prerequisite_research")?;
-    let prerequisite_level = read_u8(instruction_data, 19, "initialize_template.prerequisite_level")?;
+    let prerequisite_research = read_u8(
+        instruction_data,
+        18,
+        "initialize_template.prerequisite_research",
+    )?;
+    let prerequisite_level = read_u8(
+        instruction_data,
+        19,
+        "initialize_template.prerequisite_level",
+    )?;
 
-    let gem_cost_per_minute = read_u16(instruction_data, 20, "initialize_template.gem_cost_per_minute")?;
+    let gem_cost_per_minute = read_u16(
+        instruction_data,
+        20,
+        "initialize_template.gem_cost_per_minute",
+    )?;
 
     // 5. Validate research type
     if research_type >= 30 {
@@ -109,7 +116,8 @@ pub fn process(
         lamports,
         space: ResearchTemplate::LEN as u64,
         owner: program_id,
-    }.invoke_signed(&[signer])?;
+    }
+    .invoke_signed(&[signer])?;
 
     // 8. Initialize template data
     let mut template_data = research_template.try_borrow_mut()?;

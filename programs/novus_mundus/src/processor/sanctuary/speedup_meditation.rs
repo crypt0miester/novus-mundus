@@ -1,17 +1,15 @@
 use pinocchio::{
-    AccountView,
-    Address,
     sysvars::{clock::Clock, Sysvar},
-    ProgramResult,
+    AccountView, Address, ProgramResult,
 };
 
 use crate::{
-    error::GameError,
-    state::PlayerAccount,
-    validation::{require_signer, require_writable, require_owner},
-    utils::read_u8,
     emit,
+    error::GameError,
     events::MeditationSpeedup,
+    state::PlayerAccount,
+    utils::read_u8,
+    validation::{require_owner, require_signer, require_writable},
 };
 
 /// Gems cost per minute of meditation speedup
@@ -91,8 +89,8 @@ pub fn process(
     // Tier 2: adds 360 minutes (6 hours), costs 360 × GEMS_PER_MINUTE
 
     let (minutes_to_add, cost_multiplier): (u64, u64) = match speedup_tier {
-        1 => (60, 1),     // 1 hour, 1x cost
-        2 => (360, 1),    // 6 hours, 1x cost
+        1 => (60, 1),  // 1 hour, 1x cost
+        2 => (360, 1), // 6 hours, 1x cost
         _ => return Err(GameError::InvalidParameter.into()),
     };
 
@@ -106,14 +104,18 @@ pub fn process(
     }
 
     // 10. Deduct gems
-    player.gems = player.gems
+    player.gems = player
+        .gems
         .checked_sub(gem_cost)
         .ok_or(GameError::MathOverflow)?;
 
     // 11. Apply speedup by moving meditation_started_at backwards
     let seconds_to_add = (minutes_to_add * 60) as i64;
-    player.set_meditation_started_at(player.meditation_started_at()
-        .saturating_sub(seconds_to_add));
+    player.set_meditation_started_at(
+        player
+            .meditation_started_at()
+            .saturating_sub(seconds_to_add),
+    );
 
     // 12. Emit event
     emit!(MeditationSpeedup {

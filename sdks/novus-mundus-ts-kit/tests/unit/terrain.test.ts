@@ -293,22 +293,32 @@ describe('serialization', () => {
 // ─── Color mapping ───
 
 describe('elevationToColor', () => {
-  it('water is blue-ish', () => {
+  it('water is blue-leaning slate (desaturated, not bright cyan)', () => {
     const [r, g, b] = elevationToColor(50, 90, 245);
+    /* B is still the dominant channel — the wash is blue-grey — but the
+     * channels stay close together so the result reads as muted slate
+     * rather than saturated marine blue. */
     expect(b).toBeGreaterThan(r);
     expect(b).toBeGreaterThan(g);
+    expect(b - r).toBeLessThan(60);
   });
 
-  it('land is green-ish', () => {
+  it('land is warm earth (sepia, not modern green)', () => {
     const [r, g, b] = elevationToColor(130, 90, 245);
-    expect(g).toBeGreaterThan(r);
+    /* Antique-map palette: warm channels (r ≈ g) dominate blue. The old
+     * test asserted g > r — that was a modern-grass-green call and no
+     * longer holds in the sepia gamut. */
+    expect(r).toBeGreaterThan(b);
     expect(g).toBeGreaterThan(b);
+    expect(Math.abs(r - g)).toBeLessThan(20);
   });
 
-  it('mountain is gray/white', () => {
+  it('mountain is sepia brown (engraved-ink feel, not neutral grey)', () => {
     const [r, g, b] = elevationToColor(250, 90, 245);
-    expect(Math.abs(r - g)).toBeLessThan(5);
-    expect(Math.abs(g - b)).toBeLessThan(5);
+    /* Warm brown gradient: r > g > b. Replaces the previous grey/white
+     * snow-cap palette. */
+    expect(r).toBeGreaterThan(g);
+    expect(g).toBeGreaterThan(b);
   });
 
   it('beach is sandy', () => {
