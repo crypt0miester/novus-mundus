@@ -329,7 +329,7 @@ export function LeftPanelMobile() {
               </span>
               <TxButton
                 onClick={handleClaim}
-                className="h-6 px-2 text-[10px] font-semibold leading-none"
+                className="h-6 px-2 text-[10px] font-semibold leading-none w-auto"
               >
                 Claim
               </TxButton>
