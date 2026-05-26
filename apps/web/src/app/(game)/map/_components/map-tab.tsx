@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { PublicKey } from "@solana/web3.js";
 import { ChevronRight } from "lucide-react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
   deriveLocationPda,
@@ -21,6 +23,7 @@ import {
   calculateDistance,
   calculateDistanceMeters,
   calculateIntercityTravelTime,
+  calculateIntracityTravelTime,
   calculateTeleportCost,
   getCurrentTimeOfDay,
   getTimeOfDayName,
@@ -28,14 +31,21 @@ import {
   getEncounterStaminaCost,
   getTotalDefensiveUnits,
   ENCOUNTER_ATTACK_RANGE_METERS,
+  OCCUPANT_PLAYER,
+  OCCUPANT_ENCOUNTER,
+  OCCUPANT_CASTLE,
   ActivityType,
   SubscriptionTier,
   EncounterType,
   TravelType,
   deciToNovi,
+  isNullPubkey,
 } from "novus-mundus-sdk";
-import { useWorldPlayers } from "@/lib/hooks/world";
+import { useWorldPlayers, useWorldCastles } from "@/lib/hooks/world";
 import { useCityPlayers } from "@/lib/hooks/useCityPlayers";
+import { useTeam } from "@/lib/hooks/useTeam";
+import { useTeams } from "@/lib/hooks/useTeams";
+import { useCityOccupied } from "@/lib/hooks/useCityOccupied";
 import { useEncounters } from "@/lib/hooks/useEncounters";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -49,6 +59,7 @@ import { useStamina } from "@/lib/hooks/useStamina";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import type { PanelAction } from "@/lib/store/right-panel";
+import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/buildings";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton, type TxPhase } from "@/components/shared/TxButton";
@@ -60,8 +71,20 @@ import {
   type RealmCityNode,
   type RealmMapSelectedContext,
 } from "@/components/world/RealmMap";
-import { CityTerrainMap, type CityTerrainEntity } from "@/components/world/CityTerrainMap";
+import {
+  CityTerrainMap,
+  type CityTerrainEntity,
+  type CityTerrainMapHandle,
+  type DotTooltip,
+} from "@/components/world/CityTerrainMap";
 import { CellAffinityPanel } from "@/components/world/CellAffinityPanel";
+import { CosmeticBadgeChip } from "@/components/cosmetics/CosmeticBadgeChip";
+import { CosmeticTitleChip } from "@/components/cosmetics/CosmeticTitleChip";
+import {
+  getCosmeticColor,
+  getCosmeticFrame,
+  cosmeticColorAnimationClass,
+} from "@/lib/config/cosmetics-catalog";
 
 const TYPE_META = [
   { label: "Capital", glyph: "♛" },
@@ -75,6 +98,51 @@ const typeIdx = (t: number) => Math.max(0, Math.min(3, t | 0));
 const TELEPORT_STABLE_LEVEL = 10;
 
 const ENCOUNTER_RANGE_METERS = ENCOUNTER_ATTACK_RANGE_METERS;
+
+/**
+ * URL-driven RightPanel openers. Each entry maps a `?openPanel=<key>` value
+ * to a resolver that pulls the panel's props out of the same URLSearchParams
+ * (along with a display title). Returning `null` skips opening — used when
+ * the required props are missing or malformed.
+ *
+ * Keys must match the registry in `RightPanel.tsx` (`PANELS[key]`).
+ */
+const PANEL_RESOLVERS: Record<
+  string,
+  (sp: URLSearchParams) => { title: string; props: Record<string, unknown> } | null
+> = {
+  "reinforce-composer": (sp) => {
+    const targetWallet = sp.get("targetWallet");
+    if (!targetWallet) return null;
+    return { title: "Reinforce", props: { targetWallet } };
+  },
+  "rally-detail": (sp) => {
+    const rallyPubkey = sp.get("rallyPubkey");
+    if (!rallyPubkey) return null;
+    return { title: "Rally", props: { rallyPubkey } };
+  },
+  "rally-composer": (sp) => {
+    const targetPubkey = sp.get("targetPubkey");
+    const targetType = parseInt(sp.get("targetType") ?? "", 10);
+    const targetCityId = parseInt(sp.get("targetCityId") ?? "", 10);
+    if (!targetPubkey || !Number.isFinite(targetType) || !Number.isFinite(targetCityId)) return null;
+    return {
+      title: "Raise Rally",
+      props: {
+        targetPubkey,
+        targetType,
+        targetCityId,
+        targetLabel: sp.get("targetLabel") ?? undefined,
+      },
+    };
+  },
+  "garrison-composer": (sp) => {
+    const cityId = parseInt(sp.get("cityId") ?? "", 10);
+    const castleId = parseInt(sp.get("castleId") ?? "", 10);
+    if (!Number.isFinite(cityId) || !Number.isFinite(castleId)) return null;
+    return { title: "Join Garrison", props: { cityId, castleId } };
+  },
+};
 
 // Shared styling for the travel-gate hints under the realm-map CTAs.
 const TRAVEL_NOTE_STYLE = {
@@ -91,6 +159,7 @@ export function MapTab() {
   const { data: geData } = useGameEngine();
   const { data: cities } = useAllCities();
   const { data: worldPlayers } = useWorldPlayers();
+  const { data: worldCastles } = useWorldCastles();
   const { data: estateData } = useEstate();
   const travel = useTravelProgress();
   const client = useNovusMundusClient();
@@ -108,12 +177,169 @@ export function MapTab() {
    * fresh and the ref starts null again, which is the right behaviour
    * (open the tab → land in your city). */
   const hasInitDestinationRef = useRef(false);
+  // Imperative handle on the disc — `mapRef.current?.focusCell(lat, lng)`
+  // pans and zooms the disc onto a cell. Used by the EntityPanel's name
+  // click handler today; intended as the generic "navigate the map"
+  // entry point for future prompts (search hits, deep-link routes, etc.).
+  const mapRef = useRef<CityTerrainMapHandle | null>(null);
   useEffect(() => {
     if (hasInitDestinationRef.current) return;
     if (player?.currentCity == null) return;
     hasInitDestinationRef.current = true;
     setDestinationCity(player.currentCity);
-  }, [player?.currentCity]);
+    // Snap the disc onto the player's cell once the disc mounts. Mirrors
+    // the deep-link path's tryFocus: the disc isn't ready on the same
+    // tick (mapRef wires through CityTerrainMap → 2D fallback after the
+    // ResizeObserver runs), so poll until the imperative handle exists.
+    // Track the pending timeout so unmount (StrictMode re-mount, navigation)
+    // can cancel — otherwise two chains can run concurrently for 3 s, each
+    // calling focusCell with stale targetLat/targetLong captured at first
+    // effect invocation.
+    const targetLat = Math.round(player.currentLat * 10000);
+    const targetLong = Math.round(player.currentLong * 10000);
+    let tries = 30;
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+    let cancelled = false;
+    const tryFocus = () => {
+      if (cancelled) return;
+      if (mapRef.current) {
+        mapRef.current.focusCell(targetLat, targetLong);
+      } else if (tries-- > 0) {
+        timeoutId = setTimeout(tryFocus, 100);
+      }
+    };
+    tryFocus();
+    return () => {
+      cancelled = true;
+      if (timeoutId != null) clearTimeout(timeoutId);
+    };
+  }, [player?.currentCity, player?.currentLat, player?.currentLong]);
+
+  // Deep-link entry — two independent payloads, consumed together so back/
+  // refresh doesn't replay them:
+  //   1. ?city=<id>&lat=<rawLat>&long=<rawLong>[&player=<pda>] — drill into
+  //      the city, focus the cell, optionally pre-select an entity. From the
+  //      team tab's "View on Map" action.
+  //   2. ?openPanel=<key>&...props — open the named RightPanel composer with
+  //      the props forwarded straight through. Used by team tab Reinforce /
+  //      rally browse Join clicks so the action lands on the map instead of
+  //      a /team sub-route.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const deepLinkConsumedRef = useRef(false);
+  // Cancel handle for the in-flight tryFocus chain started by the
+  // deep-link effect — the StrictMode re-mount otherwise leaves two
+  // parallel chains racing for 2 s.
+  const deepLinkFocusCleanupRef = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (deepLinkConsumedRef.current) return;
+    const cityParam = searchParams.get("city");
+    const latParam = searchParams.get("lat");
+    const longParam = searchParams.get("long");
+    const playerParam = searchParams.get("player");
+    const encounterParam = searchParams.get("encounter");
+    const castleParam = searchParams.get("castle");
+    const openPanel = searchParams.get("openPanel");
+    if (!cityParam && !openPanel) return;
+    deepLinkConsumedRef.current = true;
+
+    /* Resolve the pre-selected entity from whichever pubkey param is
+     * present. `?player=` and `?encounter=` map to the LocationAccount
+     * occupant types (1, 2). `?castle=` is the disc's UI-only castle
+     * sentinel (3) — castles aren't in Location PDAs, but the click
+     * pipeline routes them through the same EntityPanel dispatch. */
+    let preselected: {
+      pubkey: string;
+      occupantType: number;
+    } | null = null;
+    if (playerParam) preselected = { pubkey: playerParam, occupantType: OCCUPANT_PLAYER };
+    else if (encounterParam) preselected = { pubkey: encounterParam, occupantType: OCCUPANT_ENCOUNTER };
+    else if (castleParam) preselected = { pubkey: castleParam, occupantType: OCCUPANT_CASTLE };
+
+    if (cityParam) {
+      const cityId = parseInt(cityParam, 10);
+      if (Number.isFinite(cityId)) {
+        hasInitDestinationRef.current = true;
+        setDestinationCity(cityId);
+        if (latParam && longParam) {
+          const lat = parseFloat(latParam);
+          const long = parseFloat(longParam);
+          if (Number.isFinite(lat) && Number.isFinite(long)) {
+            const gridLat = Math.round(lat * 10000);
+            const gridLong = Math.round(long * 10000);
+            if (preselected) {
+              setSelectedEntity({
+                pubkey: preselected.pubkey,
+                occupantType: preselected.occupantType,
+                gridLat,
+                gridLong,
+              });
+            }
+            let tries = 20;
+            let timeoutId: ReturnType<typeof setTimeout> | null = null;
+            let cancelled = false;
+            const tryFocus = () => {
+              if (cancelled) return;
+              if (mapRef.current) {
+                mapRef.current.focusCell(gridLat, gridLong);
+              } else if (tries-- > 0) {
+                timeoutId = setTimeout(tryFocus, 100);
+              }
+            };
+            tryFocus();
+            deepLinkFocusCleanupRef.current = () => {
+              cancelled = true;
+              if (timeoutId != null) clearTimeout(timeoutId);
+            };
+          }
+        }
+      }
+    }
+
+    // openPanel — resolve title + props per registered key. Anything not in
+    // PANEL_RESOLVERS is silently ignored (a bad key would just no-op
+    // instead of throwing in the URL effect).
+    if (openPanel) {
+      const resolver = PANEL_RESOLVERS[openPanel];
+      if (resolver) {
+        const resolved = resolver(searchParams);
+        if (resolved) {
+          useRightPanelStore.getState().show(resolved.title, openPanel, resolved.props);
+        }
+      }
+    }
+
+    // Strip every consumed param so back/refresh doesn't repeat the focus.
+    const next = new URLSearchParams(searchParams.toString());
+    for (const k of [
+      "city",
+      "lat",
+      "long",
+      "player",
+      "encounter",
+      "castle",
+      "openPanel",
+      // Panel-prop names — same set the resolvers below read.
+      "targetWallet",
+      "rallyPubkey",
+      "targetPubkey",
+      "targetType",
+      "targetCityId",
+      "targetLabel",
+      "cityId",
+      "castleId",
+    ]) {
+      next.delete(k);
+    }
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+
+    return () => {
+      deepLinkFocusCleanupRef.current?.();
+      deepLinkFocusCleanupRef.current = null;
+    };
+  }, [searchParams, pathname, router]);
   // Encounters for the currently-viewed city — used to enrich the entity
   // panel when the user clicks an encounter dot. Declared AFTER
   // `destinationCity` because the hook reads it.
@@ -123,6 +349,13 @@ export function MapTab() {
   // is drilled in. The program-wide WS keeps it fresh — no 30 s tanstack
   // polling. Used to render every in-flight intracity walker on the disc.
   const { data: cityPlayers } = useCityPlayers(destinationCity ?? undefined);
+  /* Mirror the disc's occupancy view so the entity-cleanup effect
+   * can detect a despawned/dead encounter even when it's already
+   * been filtered out of `viewedEncounters` (useEncounters drops
+   * entries with `despawnAt <= now`). When an encounter despawns
+   * its Location PDA is closed, removing it from `occupied`. */
+  const { data: viewedOccupied, isLoading: viewedOccupiedLoading } =
+    useCityOccupied(destinationCity);
   const [destCell, setDestCell] = useState<{
     gridLat: number;
     gridLong: number;
@@ -131,6 +364,148 @@ export function MapTab() {
   // right-hand scroll panel from "city detail" to "entity detail" (player
   // profile or encounter target). Cleared by clicking empty terrain.
   const [selectedEntity, setSelectedEntity] = useState<CityTerrainEntity | null>(null);
+
+  /* Local team affiliation — base58 of `player.team` if the local
+   * player has joined a team, else null. Drives the same-team dot
+   * colour and the "Same Team" / "Rival" tooltip suffix below. */
+  const myTeamStr =
+    player && !isNullPubkey(player.team) ? player.team.toBase58() : null;
+  /* On-demand fetch of the local team's account so we can surface its
+   * NAME (not just slot index) on team-mate tooltips. The hook is a
+   * no-op when myTeam is null. */
+  const { data: myTeamData } = useTeam(player && !isNullPubkey(player.team) ? player.team : null);
+  const myTeamName = myTeamData?.account?.name?.trim() || null;
+
+  /* Multi-team fetch — all unique team PDAs referenced by players in
+   * the viewed city. Resolves rival names too (a rival player's
+   * "Rival #N · <Team Name>") so the disc reads as a full battlefield
+   * roster rather than anonymous red dots. */
+  const cityTeamPubkeys = useMemo(() => {
+    if (!cityPlayers) return [];
+    const seen = new Set<string>();
+    const out: PublicKey[] = [];
+    for (const p of cityPlayers) {
+      if (!p.account || isNullPubkey(p.account.team)) continue;
+      const s = p.account.team.toBase58();
+      if (seen.has(s)) continue;
+      seen.add(s);
+      out.push(p.account.team);
+    }
+    return out;
+  }, [cityPlayers]);
+  const teamsByPda = useTeams(cityTeamPubkeys);
+
+  /* Pubkeys of OTHER players in the viewed city who are on my team.
+   * Computed from `cityPlayers` (already filtered to this city) so
+   * we don't drag in the whole world. Empty array when the viewer
+   * is solo. */
+  const teamMatePubkeys = useMemo(() => {
+    if (!myTeamStr || !cityPlayers) return [];
+    const out: string[] = [];
+    for (const p of cityPlayers) {
+      if (!p.account) continue;
+      if (isNullPubkey(p.account.team)) continue;
+      if (p.account.team.toBase58() !== myTeamStr) continue;
+      out.push(p.pubkey.toBase58());
+    }
+    return out;
+  }, [myTeamStr, cityPlayers]);
+
+  /* Hover-tooltip resolver — looks up the rich label for a dot when
+   * the cursor passes over it on the disc. Uses the same chain data
+   * the EntityPanel uses (cityPlayers / viewedEncounters / local
+   * player). The renderer is game-agnostic; this callback bridges. */
+  const resolveDotTooltip = useCallback(
+    (occupant: string, occupantType: number): DotTooltip | null => {
+      if (occupantType === OCCUPANT_PLAYER) {
+        // Local player — derive from chain-state `player` + pubkey.
+        if (player && playerData?.pubkey?.toBase58?.() === occupant) {
+          const tier = TIER_NAMES[player.subscriptionTier] ?? null;
+          // Show the player's own on-chain name — including the default
+          // "Player #N" — instead of swapping it for "You". The user
+          // wants to see THEIR identity in the tooltip, not a viewer
+          // pronoun.
+          const displayName = player.name?.trim() || "Unnamed player";
+          const colorEntry = getCosmeticColor(player.equippedNameColor);
+          return {
+            primary: displayName,
+            secondary: tier
+              ? `lv ${player.level ?? 0} · ${tier}`
+              : `lv ${player.level ?? 0}`,
+            badgeId: player.equippedBadge,
+            frameId: player.equippedAvatarFrame,
+            titleId: player.equippedTitle,
+            nameColorHex: colorEntry?.hex,
+            nameColorAnim: colorEntry?.animation,
+          };
+        }
+        // Other players — cityPlayers is already filtered to the viewed city.
+        const p = cityPlayers?.find((x) => x.pubkey.toBase58() === occupant);
+        if (!p?.account) return null;
+        // Use whatever the chain has — `init_player` always sets a default
+        // "Player #<n>" name, and custom names override it. Falling back to
+        // a generic "Unnamed" string would hide that the chain *does*
+        // identify the player, just without a vanity name yet.
+        const name = p.account.name?.trim() || "Unnamed player";
+        const tier = TIER_NAMES[p.account.subscriptionTier] ?? null;
+        // Team status — same as my team, rival, or solo.
+        const theirTeamStr = isNullPubkey(p.account.team)
+          ? null
+          : p.account.team.toBase58();
+        let teamSuffix = "";
+        let accent: string | undefined;
+        if (theirTeamStr && myTeamStr && theirTeamStr === myTeamStr) {
+          // Same team — name + rank ("Vanguard's Hand #3").
+          const teamLabel = myTeamName ?? "Team";
+          teamSuffix = ` · ${teamLabel} #${p.account.teamSlotIndex ?? 0}`;
+          accent = "rgba(220, 175, 60, 0.95)"; // allied gold
+        } else if (theirTeamStr) {
+          // Rival — pull the team name from the multi-team cache (filled
+          // by useTeams above). Falls back to "Rival" when the fetch
+          // hasn't landed yet so the tooltip never lies about identity.
+          const rivalTeam = teamsByPda.get(theirTeamStr);
+          const rivalName = rivalTeam?.name?.trim();
+          teamSuffix = rivalName
+            ? ` · ${rivalName} #${p.account.teamSlotIndex ?? 0}`
+            : ` · Rival #${p.account.teamSlotIndex ?? 0}`;
+          accent = "rgba(180, 60, 60, 0.85)"; // rival red
+        }
+        const tierSeg = tier ? ` · ${tier}` : "";
+        const colorEntry = getCosmeticColor(p.account.equippedNameColor);
+        return {
+          primary: name,
+          secondary: `lv ${p.account.level ?? 0}${tierSeg}${teamSuffix}`,
+          accent,
+          badgeId: p.account.equippedBadge,
+          frameId: p.account.equippedAvatarFrame,
+          titleId: p.account.equippedTitle,
+          nameColorHex: colorEntry?.hex,
+          nameColorAnim: colorEntry?.animation,
+        };
+      }
+      if (occupantType === OCCUPANT_ENCOUNTER) {
+        const e = viewedEncounters?.find((x) => x.pubkey.toBase58() === occupant);
+        if (!e?.account) return null;
+        const rarity = ENCOUNTER_RARITY_NAMES[e.account.rarity] ?? "Wild";
+        const level = e.account.level ?? 0;
+        // Encounter HP can exceed 2^53 for boss-tier wilds, so percent
+        // math goes through BigInt and lands on a clamped 0–100 number.
+        const hpBig = BigInt(e.account.health.toString());
+        const maxHpBig = BigInt(e.account.maxHealth.toString());
+        const hpPct =
+          maxHpBig > 0n
+            ? Math.max(0, Math.min(100, Number((hpBig * 100n) / maxHpBig)))
+            : 0;
+        return {
+          primary: `${rarity} wild`,
+          secondary: `lv ${level} · HP ${hpPct}%`,
+          accent: ENCOUNTER_RARITY_COLOR[e.account.rarity],
+        };
+      }
+      return null;
+    },
+    [player, playerData, cityPlayers, viewedEncounters, myTeamStr, myTeamName, teamsByPda],
+  );
 
   const stableLevel = useMemo(() => {
     const buildings = estateData?.account?.buildings;
@@ -180,6 +555,28 @@ export function MapTab() {
       travelMult,
     };
   }, [currentCityData, destCityData, ge, chainNow]);
+
+  /* Intracity walk preview — surfaces distance + time for a chosen
+   * landing cell inside the player's home city. Intracity travel has no
+   * NOVI fee on chain (intracity_start.rs deducts no fee), so the chip
+   * only shows the distance/time pair. Mirrors the intercity preview
+   * shape so both contexts read the same way. */
+  const intracityPreview = useMemo(() => {
+    if (!player || !destCell) return null;
+    // Player's current grid position vs the chosen cell. 1 grid unit ≈
+    // 0.0001° ≈ 11 m at the equator (same constant used by the disc
+    // renderer for its "X m from centre" readout).
+    const ox = destCell.gridLong - Math.round(player.currentLong * 10000);
+    const oy = destCell.gridLat - Math.round(player.currentLat * 10000);
+    const distanceMeters = Math.round(Math.sqrt(ox * ox + oy * oy) * 11);
+    const baseSpeedKmh = ge?.gameplayConfig?.themeTravelSpeedsKmh?.[0] ?? 5;
+    const travelTimeSec = calculateIntracityTravelTime(distanceMeters, baseSpeedKmh);
+    return {
+      distanceMeters,
+      travelTimeSec,
+      timeStr: formatTime(travelTimeSec, "compact"),
+    };
+  }, [player, destCell, ge]);
 
   const startTravel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
@@ -428,19 +825,52 @@ export function MapTab() {
    * right-hand panel mirrors the disc's own dead-encounter filter (see
    * useCityOccupied). Otherwise the panel keeps showing the encounter's
    * stats and a Strike CTA pointing at a corpse, which the chain would
-   * reject with EncounterDead. We don't clear while `viewedEncounters` is
-   * still loading (data === undefined) or the selection would evaporate on
-   * first mount before the store catches up. */
+   * reject with EncounterDead.
+   *
+   * Two signals trigger a clear:
+   *  (a) The encounter account IS in the store and its health is zero
+   *      — the chain just hasn't closed the location PDA yet.
+   *  (b) The encounter's Location PDA is no longer in `viewedOccupied`
+   *      AND useCityOccupied has finished its seed fetch for this
+   *      city — the chain closed the location (dead or despawned).
+   *
+   * (b) catches the despawn race: when an encounter's `despawnAt`
+   * elapses, `useEncounters` filters it out of `data` and `enc`
+   * becomes undefined, but `useCityOccupied` (location PDA stream)
+   * also drops the cell because the PDA was closed on-chain. */
   useEffect(() => {
-    if (!selectedEntity || selectedEntity.occupantType !== 2) return;
-    if (!viewedEncounters) return;
-    const enc = viewedEncounters.find(
-      (e) => e.pubkey.toBase58() === selectedEntity.pubkey,
-    );
-    if (!enc || enc.account.health.isZero()) {
-      setSelectedEntity(null);
+    if (!selectedEntity) return;
+    // Encounter-only signal: the EncounterAccount in the store reports
+    // health=0 — the chain has killed it but hasn't closed the Location
+    // PDA yet, so it's still in viewedOccupied for a moment.
+    if (selectedEntity.occupantType === 2) {
+      const enc = viewedEncounters.find(
+        (e) => e.pubkey.toBase58() === selectedEntity.pubkey,
+      );
+      if (enc && enc.account.health.isZero()) {
+        setSelectedEntity(null);
+        return;
+      }
     }
-  }, [selectedEntity, viewedEncounters]);
+    // Generic signal (players AND encounters): the entity's Location
+    // PDA is no longer in viewedOccupied. For encounters this catches
+    // despawn; for players it catches walk-away / leave-city / death.
+    // selectedEntity stores a snapshot of grid coords at click time;
+    // when the player moves, viewedOccupied drops the old cell, so the
+    // snapshot is stale and Strike CTAs would dispatch against stale
+    // coords. Clearing forces the user to reselect at the new position.
+    if (!viewedOccupiedLoading) {
+      const stillOccupied = viewedOccupied.some(
+        (c) =>
+          c.gridLat === selectedEntity.gridLat &&
+          c.gridLong === selectedEntity.gridLong &&
+          c.occupant === selectedEntity.pubkey,
+      );
+      if (!stillOccupied) {
+        setSelectedEntity(null);
+      }
+    }
+  }, [selectedEntity, viewedEncounters, viewedOccupied, viewedOccupiedLoading]);
 
   const selectedEntityCombat = useMemo(() => {
     if (!selectedEntity || !player || !isHomeDestination) return null;
@@ -913,6 +1343,9 @@ export function MapTab() {
     });
   } else if (isHomeDestination && destCell) {
     // Intracity walk: a cell in your own city has been picked.
+    // intracity_start gates on require_stables(estate, 1) at
+    // programs/novus_mundus/src/processor/travel/intracity_start.rs:136,
+    // so we must mirror that gate in the UI to avoid an on-chain reject.
     morphActions.push({
       id: "intra-walk",
       label: "Walk here",
@@ -994,6 +1427,7 @@ export function MapTab() {
           entity={selectedEntity}
           city={node.city}
           worldPlayers={worldPlayers}
+          worldCastles={worldCastles}
           encounters={viewedEncounters}
           myPlayerPda={playerData?.pubkey?.toBase58?.()}
           onApproach={canApproach ? approachEntity : undefined}
@@ -1009,7 +1443,22 @@ export function MapTab() {
               ? selectedEntityCombat.reason
               : null
           }
-          onDismiss={() => setSelectedEntity(null)}
+          myPlayerLevel={player?.level}
+          maxLevelDiff={maxLevelDiff}
+          myTeamStr={myTeamStr}
+          myTeamName={myTeamName}
+          teamsByPda={teamsByPda}
+          onFocus={(gridLat, gridLong) => mapRef.current?.focusCell(gridLat, gridLong)}
+          onDismiss={() => {
+            // "Back to the chart" — clear both entity AND city so the user
+            // lands on the realm overview. Previously this only cleared
+            // the entity, which left the user drilled in someone else's
+            // city with no obvious exit (especially after a team-tab
+            // Reinforce deep-link). Matches the button label.
+            setSelectedEntity(null);
+            setDestinationCity(null);
+            setDestCell(null);
+          }}
         />
       );
     }
@@ -1023,24 +1472,72 @@ export function MapTab() {
           {isHome ? ". your seat" : ""}
         </span>
 
-        <dl className={styles.lineMeta}>
-          <dt>people present</dt>
-          <dd className={styles.numeral}>{node.city.playersPresent.toLocaleString()}</dd>
-          <dt>wilds about it</dt>
-          <dd className={styles.numeral}>
-            lv {node.city.minEncounterLevel}–{node.city.maxEncounterLevel}
-          </dd>
-          {!isCurrent && travelPreview && (
+        {/* City detail stats — same StatCard grid as the player EntityPanel,
+            so a city readout and an entity readout share one visual language.
+            "in your range" mirrors the chain-side strike window in
+            attack_encounter; if the windows don't overlap we render it in
+            seal-red so a level-1 player scouting a lv 50–100 city sees "no"
+            at a glance. */}
+        {(() => {
+          let rangeLabel: string | null = null;
+          let rangeTone: "danger" | undefined;
+          if (player && maxLevelDiff != null) {
+            const pLevel = player.level ?? 0;
+            const lo = Math.max(pLevel - maxLevelDiff, node.city.minEncounterLevel);
+            const hi = Math.min(pLevel + maxLevelDiff, node.city.maxEncounterLevel);
+            if (lo <= hi) {
+              rangeLabel = `lv ${lo}–${hi}`;
+            } else {
+              rangeLabel = "out of reach";
+              rangeTone = "danger";
+            }
+          }
+          return (
             <>
-              <dt>road by foot</dt>
-              <dd className={styles.numeral}>
-                {travelPreview.distanceKm.toLocaleString()} km · {travelPreview.timeStr}
-              </dd>
-              <dt>by the stables (travel cost)</dt>
-              <dd className={styles.numeral}>{travelPreview.teleportCost.toLocaleString()} NOVI</dd>
+              <div
+                style={{
+                  marginTop: "0.7rem",
+                  display: "grid",
+                  gridTemplateColumns: rangeLabel ? "1fr 1fr 1fr" : "1fr 1fr",
+                  gap: "0.4rem",
+                }}
+              >
+                <StatCard
+                  label="people present"
+                  value={node.city.playersPresent.toLocaleString()}
+                />
+                <StatCard
+                  label="wilds about it"
+                  value={`lv ${node.city.minEncounterLevel}–${node.city.maxEncounterLevel}`}
+                />
+                {rangeLabel && (
+                  <StatCard label="in your range" value={rangeLabel} tone={rangeTone} />
+                )}
+              </div>
+              {!isCurrent && travelPreview && (
+                <div
+                  style={{
+                    marginTop: "0.4rem",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "0.4rem",
+                  }}
+                >
+                  <StatCard
+                    label="road by foot"
+                    value={`${travelPreview.distanceKm.toLocaleString()} km`}
+                    hint={travelPreview.timeStr}
+                  />
+                  <StatCard
+                    label="by the stables"
+                    value={travelPreview.teleportCost.toLocaleString()}
+                    hint="NOVI"
+                  />
+                </div>
+              )}
             </>
-          )}
-        </dl>
+          );
+        })()}
 
         {!isCurrent && travelPreview && (
           <p
@@ -1080,6 +1577,58 @@ export function MapTab() {
                   ? "destination chosen, walk below."
                   : "your seat. Touch a cell in the disc to walk there, or another city to set out."}
               </p>
+
+              {/* Travel preview — distance + time for the chosen walk.
+                  Intracity has no NOVI cost on chain, so the chip is a
+                  two-up matching the intercity preview's first row. */}
+              {destCell && intracityPreview && (
+                <div
+                  style={{
+                    marginTop: "0.7rem",
+                    display: "grid",
+                    gridTemplateColumns: "1fr 1fr",
+                    gap: "0.4rem",
+                  }}
+                >
+                  <StatCard
+                    label="distance"
+                    value={
+                      intracityPreview.distanceMeters >= 1000
+                        ? `${(intracityPreview.distanceMeters / 1000).toFixed(1)} km`
+                        : `${intracityPreview.distanceMeters.toLocaleString()} m`
+                    }
+                  />
+                  <StatCard label="on foot" value={intracityPreview.timeStr} />
+                </div>
+              )}
+
+              {/* Cell coordinates — same readout the EntityPanel surfaces
+                  for occupants, available here too so the player sees the
+                  picked cell's lat/long before committing. */}
+              {destCell && (
+                <div
+                  style={{
+                    marginTop: "0.35rem",
+                    padding: "0.35rem 0.6rem",
+                    background: "var(--readout-tint)",
+                    border: "1px solid var(--parchment-edge)",
+                    fontSize: "0.6rem",
+                    letterSpacing: "0.04em",
+                    color: "var(--ink-soft)",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    gap: "0.5rem",
+                    fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
+                    fontVariantNumeric: "tabular-nums",
+                  }}
+                >
+                  <span>lat</span>
+                  <span>{(destCell.gridLat / 10000).toFixed(4)}°</span>
+                  <span style={{ color: "var(--ink-faint)" }}>·</span>
+                  <span>long</span>
+                  <span>{(destCell.gridLong / 10000).toFixed(4)}°</span>
+                </div>
+              )}
 
               {/* On-chain terrain bonuses for the chosen walk cell. Hidden
                   until a cell is picked so we don't suggest bonuses for an
@@ -1303,7 +1852,12 @@ export function MapTab() {
       ? undefined
       : (gridLat: number, gridLong: number) => {
           setDestCell({ gridLat, gridLong });
-          setSelectedEntity(null);
+          /* Don't clear the entity selection here — the user is
+           * usually picking a neighbour cell to walk to a selected
+           * encounter/player for the strike workflow. Keeping the
+           * entity selected means the EntityPanel + its
+           * Approach/Strike button stay visible alongside the
+           * landing-cell square. */
         };
 
     // Intracity travel — draw a line + moving marker from the player's
@@ -1314,13 +1868,24 @@ export function MapTab() {
     // intracity flight; currentCity == destinationCity for intracity).
     const walkLine =
       isIntracityTravel && player && node.city.cityId === player.currentCity
-        ? {
-            fromGridLat: toGrid(player.currentLat),
-            fromGridLong: toGrid(player.currentLong),
-            toGridLat: toGrid(player.travelingToLat),
-            toGridLong: toGrid(player.travelingToLong),
-            pct: travel.pct,
-          }
+        ? (() => {
+            // Local player's walk carries their own cosmetic identity
+            // so the line + marker pulse in their equipped color — same
+            // contract as `otherWalks` below. Catalog lookups are cheap
+            // (O(1) record reads).
+            const colorEntry = getCosmeticColor(player.equippedNameColor);
+            const frameEntry = getCosmeticFrame(player.equippedAvatarFrame);
+            return {
+              fromGridLat: toGrid(player.currentLat),
+              fromGridLong: toGrid(player.currentLong),
+              toGridLat: toGrid(player.travelingToLat),
+              toGridLong: toGrid(player.travelingToLong),
+              pct: travel.pct,
+              nameColorHex: colorEntry?.hex,
+              nameColorAnim: colorEntry?.animation,
+              frameBorderColor: frameEntry?.ring.borderColor,
+            };
+          })()
         : undefined;
 
     // Every OTHER player intracity-walking in this city. Source is the
@@ -1347,25 +1912,44 @@ export function MapTab() {
           total > 0
             ? Math.min(100, Math.max(0, ((chainNow - dep) / total) * 100))
             : 0;
+        // Walker's cosmetic identity travels with the line + marker.
+        // Color comes from the catalog (animated when the entry sets
+        // `animation`); frame ring color comes from the catalog frame
+        // entry. Both fall through to undefined for un-cosmeticked
+        // walkers — the renderer uses the canonical seal-orange.
+        const colorEntry = getCosmeticColor(a.equippedNameColor);
+        const frameEntry = getCosmeticFrame(a.equippedAvatarFrame);
         return {
           fromGridLat: toGrid(a.currentLat),
           fromGridLong: toGrid(a.currentLong),
           toGridLat: toGrid(a.travelingToLat),
           toGridLong: toGrid(a.travelingToLong),
           pct,
+          nameColorHex: colorEntry?.hex,
+          nameColorAnim: colorEntry?.animation,
+          frameBorderColor: frameEntry?.ring.borderColor,
         };
       });
 
     return (
       <CityTerrainMap
+        ref={mapRef}
         cityAccount={targetCity.account}
         selected={selectedCell}
         onSelect={onSelectCell}
         selectedEntity={selectedEntity}
-        onEntitySelect={setSelectedEntity}
+        onEntitySelect={(entity) => {
+          // Picking an entity drops any in-flight landing cell — the
+          // entity selection IS the new focus, and a stale travel marker
+          // sitting elsewhere on the disc reads as a competing pick.
+          setSelectedEntity(entity);
+          if (entity) setDestCell(null);
+        }}
         travel={walkLine}
         otherWalks={otherWalks}
         myPlayerPubkey={playerData?.pubkey?.toBase58?.()}
+        teamMatePubkeys={teamMatePubkeys}
+        getDotTooltip={resolveDotTooltip}
         /* Auto-focus only on the home-city drill-in — destination views
          * are for scouting and shouldn't snap-yank the viewer to a cell
          * that isn't theirs yet. `isHome` already gates the targetCity
@@ -1412,7 +1996,9 @@ export function MapTab() {
         selectedEntity
           ? selectedEntity.occupantType === 2
             ? "the wild"
-            : "the player"
+            : selectedEntity.occupantType === 3
+              ? "the castle"
+              : "the player"
           : travel.traveling
             ? "the journey"
             : destinationCity
@@ -1504,12 +2090,22 @@ function StatCard({
   value,
   hint,
   accent,
+  tone,
 }: {
   label: string;
   value: string;
   hint?: string;
+  /** `true` renders the value in seal-gold — used for "headline" stats like networth. */
   accent?: boolean;
+  /** `"danger"` overrides accent in red — used when a stat shouts "no" at a glance. */
+  tone?: "danger";
 }) {
+  const valueColor =
+    tone === "danger"
+      ? "rgba(180, 60, 60, 0.95)"
+      : accent
+        ? "var(--seal)"
+        : "var(--ink)";
   return (
     <div style={PANEL_VARS.card}>
       <div
@@ -1528,7 +2124,7 @@ function StatCard({
           fontVariantNumeric: "tabular-nums",
           fontWeight: 700,
           fontSize: "1.1rem",
-          color: accent ? "var(--seal)" : "var(--ink)",
+          color: valueColor,
           marginTop: "0.15rem",
           lineHeight: 1.1,
         }}
@@ -1557,6 +2153,14 @@ interface EntityPanelProps {
   worldPlayers:
     | { pubkey: { toBase58: () => string }; account: PlayerSnapshot | null }[]
     | undefined;
+  /**
+   * Every castle in the kingdom — looked up by pubkey when the selected
+   * entity is a castle. Castles aren't in worldPlayers/encounters because
+   * their lat/long lives directly on the CastleAccount, not a Location PDA.
+   */
+  worldCastles?:
+    | { pubkey: { toBase58: () => string }; account: CastleSnapshot }[]
+    | undefined;
   encounters: { pubkey: { toBase58: () => string }; account: EncounterSnapshot }[] | undefined;
   myPlayerPda: string | undefined;
   /**
@@ -1577,8 +2181,76 @@ interface EntityPanelProps {
    * stamina, no standing army). Null means the strike is clear to dispatch.
    */
   strikeDisabledReason?: string | null;
+  /**
+   * Local player's level — used to render the encounter-vs-you level-gap
+   * preview before the player commits to approach/strike. Omit (or pass
+   * undefined) and the gap row is suppressed.
+   */
+  myPlayerLevel?: number;
+  /**
+   * Local player's team pubkey (base58) — drives the same/rival chip
+   * colour on the inspected player's team chip. Null = solo viewer.
+   */
+  myTeamStr?: string | null;
+  /**
+   * Local player's team display name. Used to label the chip when the
+   * inspected player is on the same team — falls back to "Team" when
+   * the team account hasn't loaded yet.
+   */
+  myTeamName?: string | null;
+  /**
+   * Multi-team cache (base58 → TeamAccount). Lets the panel resolve
+   * the inspected player's team name even when it's a rival team.
+   */
+  teamsByPda?: Map<string, { name: string }>;
+  /**
+   * GameEngine.gameplayConfig.maxEncounterLevelDiff — the chain-side cap.
+   * If `myPlayerLevel` is set but this is undefined, we still show the
+   * raw delta but skip the "vs cap" colouring.
+   */
+  maxLevelDiff?: number;
+  /**
+   * Click-the-name → pan/zoom the disc onto the entity's cell. Generic
+   * navigation hook — same shape as the mount-time auto-focus. Omit to
+   * render the name as plain text (no click target).
+   */
+  onFocus?: (gridLat: number, gridLong: number) => void;
   onDismiss: () => void;
 }
+
+// Minimal projection of the CastleAccount fields the panel renders. The
+// SDK CastleAccount has many more fields (upgrades, court, DAO config) but
+// the inspect panel only needs identity + ownership + garrison.
+interface CastleSnapshot {
+  name: string;
+  castleId: number;
+  cityId: number;
+  tier: number;
+  status: number;
+  team: { toBase58(): string };
+  king: { toBase58(): string };
+  garrisonCount: number;
+  maxGarrison: number;
+  isVacant: boolean;
+  hasKing: boolean;
+  claimedAt: { toNumber(): number };
+  contestEndAt: { toNumber(): number };
+}
+
+const CASTLE_TIER_NAMES: Record<number, string> = {
+  0: "Outpost",
+  1: "Fort",
+  2: "Citadel",
+  3: "Bastion",
+  4: "Stronghold",
+};
+
+const CASTLE_STATUS_NAMES: Record<number, string> = {
+  0: "Vacant",
+  1: "Held",
+  2: "Contested",
+  3: "Transitioning",
+};
 
 // Minimal projection of the EncounterAccount fields we render. Pulled from
 // EncounterAccount in the SDK — we only need rarity/level/health/etc here.
@@ -1639,20 +2311,38 @@ interface PlayerSnapshot {
   operativeUnit2: { toString(): string };
   operativeUnit3: { toString(): string };
   owner: { toBase58(): string };
+  // Team affiliation — `team` is NULL_PUBKEY when the player is solo,
+  // a TeamAccount PDA otherwise.
+  team?: { toBase58(): string };
+  teamSlotIndex?: number;
+  // Cosmetics (default 0 until EXT_COSMETICS is set + an equip ix flips a slot).
+  // Optional so older PlayerSnapshot consumers still type-check.
+  equippedAvatarFrame?: number;
+  equippedNameColor?: number;
+  equippedTitle?: number;
+  equippedBadge?: number;
 }
 
 function EntityPanel({
   entity,
   city,
   worldPlayers,
+  worldCastles,
   encounters,
   myPlayerPda,
   onApproach,
   onStrike,
   strikeDisabledReason,
+  myPlayerLevel,
+  maxLevelDiff,
+  myTeamStr,
+  myTeamName,
+  teamsByPda,
+  onFocus,
   onDismiss,
 }: EntityPanelProps) {
   const isEncounter = entity.occupantType === 2;
+  const isCastle = entity.occupantType === 3;
   const ox = entity.gridLong - Math.round(city.longitude * 10000);
   const oy = entity.gridLat - Math.round(city.latitude * 10000);
   const distM = Math.round(Math.sqrt(ox * ox + oy * oy) * 11);
@@ -1661,11 +2351,18 @@ function EntityPanel({
   const bearing = bearingLabel(ox, oy);
   const shortPubkey = `${entity.pubkey.slice(0, 4)}…${entity.pubkey.slice(-4)}`;
 
-  const playerHit = !isEncounter
+  // Player resolution only when the entity actually is a player; castles
+  // and encounters skip the worldPlayers lookup entirely.
+  const playerHit = !isEncounter && !isCastle
     ? worldPlayers?.find((p) => p.pubkey.toBase58() === entity.pubkey)
     : undefined;
   const account = (playerHit?.account ?? null) as PlayerSnapshot | null;
-  const isSelf = myPlayerPda === entity.pubkey;
+  const isSelf = !isCastle && myPlayerPda === entity.pubkey;
+
+  const castleHit = isCastle
+    ? worldCastles?.find((c) => c.pubkey.toBase58() === entity.pubkey)
+    : undefined;
+  const castle = castleHit?.account ?? null;
 
   const encounterHit = isEncounter
     ? encounters?.find((e) => e.pubkey.toBase58() === entity.pubkey)
@@ -1689,15 +2386,18 @@ function EntityPanel({
   const nowSec = Math.floor(Date.now() / 1000);
   const despawnIn = enc ? enc.despawnAt.toNumber() - nowSec : 0;
 
+  // Player display name — prefer the on-chain name verbatim (custom or
+  // the chain's default `Player #N`); it's always THE player's name, so
+  // collapsing it to "You" or "Unnamed" buries identity the chain
+  // already gave us. Only fall through to the placeholder when the
+  // account itself is missing.
   const displayName = isEncounter
     ? encRarityName
       ? `${encRarityName} encounter`
       : "Wild encounter"
-    : account?.name && account.name.trim() && !account.name.startsWith("Player #")
-      ? account.name
-      : isSelf
-        ? "You"
-        : account?.name?.trim() || "Unnamed player";
+    : isCastle
+      ? castle?.name?.trim() || `Castle #${castle?.castleId ?? "?"}`
+      : account?.name?.trim() || "Unnamed player";
 
   const tierName = account ? (TIER_NAMES[account.subscriptionTier] ?? null) : null;
 
@@ -1720,9 +2420,30 @@ function EntityPanel({
   const lockedNovi: bigint = account ? BigInt(account.lockedNovi.toString()) : 0n;
   const reputation: bigint = account ? BigInt(account.reputation.toString()) : 0n;
 
+  // Cosmetic name colour — falls through `var(--ink)` until the player
+  // has equipped a colour AND the catalog has the matching entry.
+  const nameColorEntry = !isEncounter && !isCastle
+    ? getCosmeticColor(account?.equippedNameColor)
+    : null;
+  const nameColor = nameColorEntry?.hex ?? "var(--ink)";
+  // CSS class for animated colors (pulse / embered / glimmer / vesper /
+  // cinder). Null for static colors and non-player entities.
+  const nameAnimClass = cosmeticColorAnimationClass(nameColorEntry);
+  // Avatar frame — replaces the default seal border on the level pip
+  // when set. Glow halo wraps the pip when the catalog entry defines one.
+  const frameEntry = !isEncounter && !isCastle
+    ? getCosmeticFrame(account?.equippedAvatarFrame)
+    : null;
+  const pipBorderColor = isEncounter
+    ? encRarityColor
+    : frameEntry?.ring.borderColor ?? "var(--seal)";
+  const pipBorderStyle = frameEntry?.ring.borderStyle ?? "solid";
+  const pipBorderWidth = frameEntry ? frameEntry.ring.borderWidth : 2;
+  const pipGlow = frameEntry?.ring.glow;
+
   return (
     <>
-      {/* Hero — name + level pip + tier + city/bearing. */}
+      {/* Hero — name + level pip + tier/title/badge chips. */}
       <div
         style={{
           display: "grid",
@@ -1731,22 +2452,29 @@ function EntityPanel({
           alignItems: "center",
         }}
       >
-        {/* Level pip — encounters get a swords + their level under it. */}
+        {/* Level pip — encounters get a swords + their level under it.
+            Players with an equipped avatar frame swap the default seal
+            border for the frame's ring + glow, so the most-prominent
+            avatar surface in the panel surfaces frame ownership at
+            first glance. */}
         <div
+          title={frameEntry ? `${frameEntry.name}${frameEntry.flavorText ? ` — ${frameEntry.flavorText}` : ""}` : undefined}
           style={{
             width: "48px",
             height: "48px",
             borderRadius: "50%",
-            border: `2px solid ${isEncounter ? encRarityColor : "var(--seal)"}`,
+            border: `${pipBorderWidth}px ${pipBorderStyle} ${pipBorderColor}`,
             background: "var(--readout-tint)",
             display: "grid",
             placeItems: "center",
-            color: isEncounter ? encRarityColor : "var(--seal)",
+            color: isEncounter ? encRarityColor : (frameEntry?.ring.borderColor ?? "var(--seal)"),
             fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
             fontWeight: 700,
             fontSize: isEncounter ? "1.1rem" : "1.2rem",
             lineHeight: 1,
-            boxShadow: "inset 0 0 8px rgba(110,70,30,0.18)",
+            boxShadow: pipGlow
+              ? `inset 0 0 8px rgba(110,70,30,0.18), 0 0 12px ${pipGlow}`
+              : "inset 0 0 8px rgba(110,70,30,0.18)",
             position: "relative",
           }}
         >
@@ -1755,7 +2483,9 @@ function EntityPanel({
               // Encounter pip stacks: ⚔ glyph on top, level numeral below.
               <div style={{ textAlign: "center", lineHeight: 1 }}>
                 <div style={{ fontSize: "0.9rem" }}>⚔</div>
-                <div style={{ fontSize: "0.65rem", marginTop: "0.1rem", letterSpacing: "0.04em" }}>
+                <div
+                  style={{ fontSize: "0.65rem", marginTop: "0.1rem", letterSpacing: "0.04em" }}
+                >
                   lv{enc.level}
                 </div>
               </div>
@@ -1767,22 +2497,57 @@ function EntityPanel({
           )}
         </div>
         <div style={{ minWidth: 0 }}>
-          <div
-            style={{
-              fontSize: "1rem",
-              fontWeight: 700,
-              letterSpacing: "0.08em",
-              textTransform: "uppercase",
-              color: "var(--ink)",
-              lineHeight: 1.15,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-            title={displayName}
-          >
-            {displayName}
-          </div>
+          {onFocus ? (
+            // Clicking the name pans/zooms the disc onto this entity —
+            // the generic "find me on the map" affordance shared by any
+            // future navigation prompt.
+            <button
+              type="button"
+              onClick={() => onFocus(entity.gridLat, entity.gridLong)}
+              title={`Focus map on ${displayName}`}
+              className={nameAnimClass ?? undefined}
+              style={{
+                appearance: "none",
+                background: "transparent",
+                border: "none",
+                padding: 0,
+                margin: 0,
+                textAlign: "left",
+                cursor: "pointer",
+                font: "inherit",
+                fontSize: "1rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: nameColor,
+                lineHeight: 1.15,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+                width: "100%",
+              }}
+            >
+              {displayName}
+            </button>
+          ) : (
+            <div
+              className={nameAnimClass ?? undefined}
+              style={{
+                fontSize: "1rem",
+                fontWeight: 700,
+                letterSpacing: "0.08em",
+                textTransform: "uppercase",
+                color: nameColor,
+                lineHeight: 1.15,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+              title={displayName}
+            >
+              {displayName}
+            </div>
+          )}
           <div
             style={{
               marginTop: "0.2rem",
@@ -1793,24 +2558,83 @@ function EntityPanel({
             }}
           >
             {isEncounter ? "stalks" : isSelf ? "your seat in" : "stands in"} {city.name}
+            {(() => {
+              if (isEncounter) return null;
+              const theirTeam = account?.team?.toBase58?.();
+              if (!theirTeam || theirTeam === "11111111111111111111111111111111") return null;
+              const same = !!myTeamStr && theirTeam === myTeamStr;
+              const teamName = same
+                ? (myTeamName ?? "Team")
+                : (teamsByPda?.get(theirTeam)?.name?.trim() || "Rival");
+              return <> · {teamName}</>;
+            })()}
           </div>
-          {tierName && !isEncounter && (
-            <div
-              style={{
-                display: "inline-block",
-                marginTop: "0.35rem",
-                fontSize: "0.55rem",
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                padding: "0.15rem 0.45rem",
-                border: "1px solid var(--seal)",
-                color: "var(--seal)",
-                background: "var(--readout-tint)",
-              }}
-            >
-              {tierName}
-            </div>
-          )}
+          {!isEncounter &&
+            (tierName ||
+              (account?.equippedTitle ?? 0) > 0 ||
+              (account?.equippedBadge ?? 0) > 0 ||
+              (account?.team?.toBase58?.() &&
+                account.team.toBase58() !== "11111111111111111111111111111111")) && (
+              <div
+                style={{
+                  display: "flex",
+                  flexWrap: "wrap",
+                  gap: "0.35rem",
+                  marginTop: "0.35rem",
+                }}
+              >
+                {tierName && (
+                  <div
+                    style={{
+                      display: "inline-block",
+                      fontSize: "0.55rem",
+                      letterSpacing: "0.18em",
+                      textTransform: "uppercase",
+                      padding: "0.15rem 0.45rem",
+                      border: "1px solid var(--seal)",
+                      color: "var(--seal)",
+                      background: "var(--readout-tint)",
+                    }}
+                  >
+                    {tierName}
+                  </div>
+                )}
+                {/* Team chip — name + rank, color-coded by viewer's
+                 * affiliation. Falls back to "Team" while the team
+                 * account fetch is in flight so the layout doesn't
+                 * shift when it resolves. */}
+                {(() => {
+                  const theirTeam = account?.team?.toBase58?.();
+                  if (!theirTeam || theirTeam === "11111111111111111111111111111111") return null;
+                  const same = !!myTeamStr && theirTeam === myTeamStr;
+                  const teamName = same
+                    ? (myTeamName ?? "Team")
+                    : (teamsByPda?.get(theirTeam)?.name?.trim() || "Rival");
+                  const color = same
+                    ? "rgba(220, 175, 60, 0.95)"
+                    : "rgba(180, 60, 60, 0.95)";
+                  return (
+                    <div
+                      title={`${teamName} · slot ${account?.teamSlotIndex ?? 0}`}
+                      style={{
+                        display: "inline-block",
+                        fontSize: "0.55rem",
+                        letterSpacing: "0.18em",
+                        textTransform: "uppercase",
+                        padding: "0.15rem 0.45rem",
+                        border: `1px solid ${color}`,
+                        color,
+                        background: "var(--readout-tint)",
+                      }}
+                    >
+                      {teamName} #{account?.teamSlotIndex ?? 0}
+                    </div>
+                  );
+                })()}
+                <CosmeticBadgeChip id={account?.equippedBadge ?? 0} />
+                <CosmeticTitleChip id={account?.equippedTitle ?? 0} />
+              </div>
+            )}
           {isEncounter && encRarityName && (
             <div
               style={{
@@ -1861,7 +2685,33 @@ function EntityPanel({
         </span>
       </div>
 
-      {!isEncounter && (
+      {/* Cell coordinates — converted back from on-chain grid (×10,000)
+          to float degrees so they're readable as map coords. Sits below
+          the bearing pill in the same chip palette. */}
+      <div
+        style={{
+          marginTop: "0.35rem",
+          padding: "0.35rem 0.6rem",
+          background: "var(--readout-tint)",
+          border: "1px solid var(--parchment-edge)",
+          fontSize: "0.6rem",
+          letterSpacing: "0.04em",
+          color: "var(--ink-soft)",
+          display: "flex",
+          justifyContent: "space-between",
+          gap: "0.5rem",
+          fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
+          fontVariantNumeric: "tabular-nums",
+        }}
+      >
+        <span>lat</span>
+        <span>{(entity.gridLat / 10000).toFixed(4)}°</span>
+        <span style={{ color: "var(--ink-faint)" }}>·</span>
+        <span>long</span>
+        <span>{(entity.gridLong / 10000).toFixed(4)}°</span>
+      </div>
+
+      {!isEncounter && !isCastle && (
         <>
           {/* Combat row — three stats side by side. */}
           <div
@@ -1892,7 +2742,7 @@ function EntityPanel({
         </>
       )}
 
-      {!isEncounter && !account && (
+      {!isEncounter && !isCastle && !account && (
         <p
           style={{
             marginTop: "0.8rem",
@@ -1905,10 +2755,135 @@ function EntityPanel({
         </p>
       )}
 
+      {isCastle && castle && (
+        <>
+          {/* Castle row 1 — tier · status · garrison */}
+          <div
+            style={{
+              marginTop: "0.7rem",
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: "0.4rem",
+            }}
+          >
+            <StatCard
+              label="tier"
+              value={CASTLE_TIER_NAMES[castle.tier] ?? `T${castle.tier}`}
+            />
+            <StatCard
+              label="status"
+              value={CASTLE_STATUS_NAMES[castle.status] ?? `S${castle.status}`}
+              tone={castle.status === 2 ? "danger" : undefined}
+            />
+            <StatCard
+              label="garrison"
+              value={`${castle.garrisonCount}/${castle.maxGarrison}`}
+            />
+          </div>
+
+          {/* Castle row 2 — ownership chips */}
+          <div
+            style={{
+              marginTop: "0.4rem",
+              padding: "0.45rem 0.6rem",
+              background: "var(--readout-tint)",
+              border: "1px solid var(--parchment-edge)",
+              fontSize: "0.7rem",
+              letterSpacing: "0.04em",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: "0.5rem",
+            }}
+          >
+            <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
+              {castle.isVacant ? "vacant — claimable" : castle.hasKing ? "held by" : "garrisoned by"}
+            </span>
+            <span
+              style={{
+                fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
+                fontVariantNumeric: "tabular-nums",
+              }}
+            >
+              {castle.isVacant
+                ? "—"
+                : (() => {
+                    const teamStr = castle.team.toBase58();
+                    if (teamStr === "11111111111111111111111111111111") return "solo king";
+                    const same = !!myTeamStr && teamStr === myTeamStr;
+                    return same
+                      ? myTeamName ?? "Your team"
+                      : teamsByPda?.get(teamStr)?.name?.trim() || "Rival team";
+                  })()}
+            </span>
+          </div>
+        </>
+      )}
+
+      {isCastle && !castle && (
+        <p
+          style={{
+            marginTop: "0.8rem",
+            fontStyle: "italic",
+            fontSize: "0.7rem",
+            color: "var(--ink-soft)",
+          }}
+        >
+          The cartographer is fetching the castle rolls…
+        </p>
+      )}
+
       {/* Encounter stats — health bar (its own block, more visceral than a
           stat card), then defense/attackers/despawn as a 3-up. */}
       {isEncounter && enc && (
         <>
+          {/* Level gap — visible BEFORE the player commits to approach/
+           * strike, so an out-of-range fight is legible at a glance.
+           * Mirrors the chain-side check at programs/.../attack_encounter:
+           * |encounter.level - player.level| must be ≤ maxLevelDiff. */}
+          {myPlayerLevel != null && (() => {
+            const diff = Math.abs(enc.level - myPlayerLevel);
+            const overCap = maxLevelDiff != null && diff > maxLevelDiff;
+            const borderColor = overCap
+              ? "rgba(180, 30, 30, 0.6)"
+              : "var(--parchment-edge)";
+            const deltaColor = overCap
+              ? "rgba(220, 60, 60, 0.95)"
+              : "var(--ink)";
+            return (
+              <div
+                style={{
+                  marginTop: "0.7rem",
+                  padding: "0.45rem 0.6rem",
+                  background: "var(--readout-tint)",
+                  border: `1px solid ${borderColor}`,
+                  fontSize: "0.7rem",
+                  letterSpacing: "0.04em",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "baseline",
+                  gap: "0.5rem",
+                }}
+              >
+                <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
+                  lv {enc.level} vs you (lv {myPlayerLevel})
+                </span>
+                <span
+                  style={{
+                    fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
+                    fontVariantNumeric: "tabular-nums",
+                    fontWeight: 700,
+                    color: deltaColor,
+                  }}
+                >
+                  Δ {diff}
+                  {maxLevelDiff != null && ` / ${maxLevelDiff}`}
+                  {overCap && " · too wide"}
+                </span>
+              </div>
+            );
+          })()}
+
           {/* Health bar — visual first, number second. */}
           <div style={{ marginTop: "0.7rem" }}>
             <div
@@ -2036,7 +3011,7 @@ function EntityPanel({
             className={styles.seal}
             disabled={isEncounter && !!enc && encHealthPct <= 0}
           >
-            <span>{isEncounter ? "Approach & strike" : "Walk to them"}</span>
+            <span>{isEncounter ? "Approach" : "Walk to them"}</span>
             <span>
               <ChevronRight className="h-3.5 w-3.5" />
             </span>
@@ -2084,6 +3059,115 @@ function EntityPanel({
           This is you. Touch another cell to set out.
         </p>
       ) : null}
+
+      {/* Context actions — gated by entity type and chain-side rules:
+       *   Reinforce — same-team player (reinforcement/send.rs: sender +
+       *               destination must share a team).
+       *   Rally     — I have a team AND target is a non-teammate enemy
+       *               (player, encounter, or non-allied castle). Rally
+       *               creator must be on a team (rally/create.rs).
+       *   Garrison  — castle target whose team matches mine
+       *               (castle/join_garrison.rs).
+       * Encounter strike/approach stays in the prior block; this row is
+       * for composer-opening actions only. */}
+      {(() => {
+        const buttons: React.ReactNode[] = [];
+        const open = (title: string, key: string, props: Record<string, unknown>) =>
+          useRightPanelStore.getState().show(title, key, props);
+        const buttonStyle = {
+          fontSize: "0.65rem",
+          letterSpacing: "0.08em",
+          textTransform: "uppercase" as const,
+          padding: "0.4rem 0.7rem",
+          border: "1px solid var(--seal)",
+          color: "var(--seal)",
+          background: "var(--readout-tint)",
+          cursor: "pointer",
+        };
+        const theirPlayerTeam = !isEncounter && !isCastle ? account?.team?.toBase58?.() : null;
+        const theirCastleTeam = isCastle ? castle?.team?.toBase58?.() : null;
+        const onSameTeam =
+          !!myTeamStr &&
+          ((!!theirPlayerTeam &&
+            theirPlayerTeam !== "11111111111111111111111111111111" &&
+            theirPlayerTeam === myTeamStr) ||
+            (!!theirCastleTeam &&
+              theirCastleTeam !== "11111111111111111111111111111111" &&
+              theirCastleTeam === myTeamStr));
+
+        // Reinforce — same-team player only.
+        if (!isEncounter && !isCastle && !isSelf && account?.owner && onSameTeam) {
+          buttons.push(
+            <button
+              key="reinforce"
+              type="button"
+              onClick={() =>
+                open("Reinforce", "reinforce-composer", {
+                  targetWallet: account.owner.toBase58(),
+                })
+              }
+              style={buttonStyle}
+            >
+              Reinforce
+            </button>,
+          );
+        }
+
+        // Rally — I have a team, target is enemy (non-self, non-teammate).
+        const canRally =
+          !!myTeamStr &&
+          !isSelf &&
+          !onSameTeam &&
+          (isEncounter || isCastle || !!account);
+        if (canRally) {
+          const targetType = isEncounter ? 1 : isCastle ? 2 : 0;
+          const targetCityId = isCastle ? castle?.cityId ?? city.cityId : city.cityId;
+          const targetLabel = displayName;
+          buttons.push(
+            <button
+              key="rally"
+              type="button"
+              onClick={() =>
+                open("Raise Rally", "rally-composer", {
+                  targetPubkey: entity.pubkey,
+                  targetType,
+                  targetCityId,
+                  targetLabel,
+                })
+              }
+              style={buttonStyle}
+            >
+              Rally
+            </button>,
+          );
+        }
+
+        // Garrison — castle whose team matches mine.
+        if (isCastle && castle && onSameTeam) {
+          buttons.push(
+            <button
+              key="garrison"
+              type="button"
+              onClick={() =>
+                open("Join Garrison", "garrison-composer", {
+                  cityId: castle.cityId,
+                  castleId: castle.castleId,
+                })
+              }
+              style={buttonStyle}
+            >
+              Garrison
+            </button>,
+          );
+        }
+
+        if (buttons.length === 0) return null;
+        return (
+          <div style={{ marginTop: "0.7rem", display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+            {buttons}
+          </div>
+        );
+      })()}
 
       {/* Footnotes — fine print, kept out of the way. */}
       <div

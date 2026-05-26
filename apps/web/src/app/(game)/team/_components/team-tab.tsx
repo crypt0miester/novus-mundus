@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { MapPin } from "lucide-react";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -20,6 +22,7 @@ import { DomainPicker } from "@/components/shared/DomainPicker";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { NumberField } from "@/components/shared/NumberField";
+import { UnitGrid } from "@/components/shared/UnitGrid";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { formatTime, shortenAddress } from "@/lib/utils";
 import { useWorldPlayers } from "@/lib/hooks/world";
@@ -58,6 +61,7 @@ import {
   createSetTeamNameInstruction,
   createUpdateTeamNameInstruction,
   createRemoveTeamNameInstruction,
+  calculateDefensivePower,
   isTraveling,
 } from "novus-mundus-sdk";
 
@@ -74,6 +78,62 @@ const SIDEBAR_LABELS: Record<"chat" | "treasury" | "settings", string> = {
   treasury: "Treasury",
   settings: "Settings",
 };
+
+function formatStat(n: number): string {
+  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M`;
+  if (n >= 10_000) return `${(n / 1_000).toFixed(0)}k`;
+  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+  return n.toLocaleString();
+}
+
+const ACTION_TONES: Record<"primary" | "neutral" | "info" | "danger", string> = {
+  primary:
+    "border-border-gold/50 bg-accent/20 text-text-gold hover:bg-accent/40",
+  neutral:
+    "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70",
+  info:
+    "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20",
+  danger:
+    "border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20",
+};
+
+function ActionButton({
+  tone,
+  onClick,
+  children,
+  title,
+}: {
+  tone: keyof typeof ACTION_TONES;
+  onClick: () => void;
+  children: React.ReactNode;
+  title?: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      title={title}
+      className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-xs font-medium transition-colors ${ACTION_TONES[tone]}`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+  return (
+    <div className="flex flex-col items-end leading-tight">
+      <span className="text-[9px] uppercase tracking-wider text-text-muted/70">{label}</span>
+      <span
+        className={`font-mono text-xs tabular-nums ${
+          highlight ? "text-text-gold" : "text-text-secondary"
+        }`}
+      >
+        {formatStat(value)}
+      </span>
+    </div>
+  );
+}
 
 export function TeamTab() {
   const { data: playerData } = usePlayer();
@@ -111,7 +171,12 @@ export function TeamTab() {
   const upsertOtherPlayer = useAccountStore((s) => s.upsertOtherPlayer);
   const { connection } = useConnection();
 
-  // Batch-fetch player accounts for members missing from the Zustand cache
+  // Batch-fetch player accounts for members missing from the Zustand cache.
+  // `otherPlayers` must be in deps — if it's evicted (wallet disconnect /
+  // kingdom switch / explicit reset) while `members` stays referentially
+  // stable, the effect must re-fire so the missing members get refetched.
+  // Otherwise the roster would lock to blank "Lv 0" rows until the user
+  // navigates away and back.
   useEffect(() => {
     if (!members || members.length === 0) return;
     const missing = members
@@ -119,9 +184,11 @@ export function TeamTab() {
       .filter((pda) => !otherPlayers.has(pda.toBase58()));
     if (missing.length === 0) return;
 
+    let cancelled = false;
     connection
       .getMultipleAccountsInfo(missing)
       .then((infos) => {
+        if (cancelled) return;
         for (let i = 0; i < infos.length; i++) {
           const info = infos[i];
           if (!info) continue;
@@ -130,7 +197,11 @@ export function TeamTab() {
         }
       })
       .catch(() => {});
-  }, [members, connection]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [members, connection, otherPlayers, upsertOtherPlayer]);
 
   // On-demand fetch: treasury requests are PDA-derivable per (team, requester).
   // The store is otherwise only seeded by the WebSocket, so a freshly loaded
@@ -189,6 +260,44 @@ export function TeamTab() {
   const [withdrawAmount, setWithdrawAmount] = useState(0);
   const [motd, setMotd] = useState("");
   const [requestWithdrawAmount, setRequestWithdrawAmount] = useState(0);
+  const [expandedSlot, setExpandedSlot] = useState<number | null>(null);
+
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+
+  // Reinforce lives on /map now (RightPanel composer). Forward through the
+  // map's deep-link entry so the action lands where every other entity
+  // action does instead of a separate /team sub-route. We also pass city/
+  // lat/long/player so the map drills into the recipient's city and pre-
+  // selects them on the disc — landing on a blank realm and immediately
+  // opening the composer is disorienting.
+  const navigateToReinforce = (
+    targetWallet: PublicKey | null,
+    targetPlayerPda: PublicKey,
+    cityId: number,
+    lat: number,
+    long: number,
+  ) => {
+    if (!targetWallet) return;
+    const params = new URLSearchParams();
+    params.set("openPanel", "reinforce-composer");
+    params.set("targetWallet", targetWallet.toBase58());
+    params.set("city", String(cityId));
+    params.set("lat", String(lat));
+    params.set("long", String(long));
+    params.set("player", targetPlayerPda.toBase58());
+    router.push(`/map?${params.toString()}`);
+  };
+
+  const navigateToMap = (cityId: number, lat: number, long: number, playerPda: PublicKey) => {
+    const params = new URLSearchParams();
+    params.set("city", String(cityId));
+    params.set("lat", String(lat));
+    params.set("long", String(long));
+    params.set("player", playerPda.toBase58());
+    router.push(`/map?${params.toString()}`);
+  };
 
   const teamInvites = useAccountStore((s) => s.teamInvites);
   const treasuryRequests = useAccountStore((s) => s.treasuryRequests);
@@ -701,20 +810,79 @@ export function TeamTab() {
       .then((r) => r.signature);
   };
 
-  const getMemberNetworth = (playerPda: PublicKey): number => {
-    const entry = otherPlayers.get(playerPda.toBase58());
-    return entry?.account?.networth?.toNumber?.() ?? 0;
+  const getMemberAccount = (playerPda: PublicKey) =>
+    otherPlayers.get(playerPda.toBase58())?.account ?? null;
+
+  const getMemberNetworth = (playerPda: PublicKey): number =>
+    getMemberAccount(playerPda)?.networth?.toNumber?.() ?? 0;
+
+  const getMemberLevel = (playerPda: PublicKey): number =>
+    getMemberAccount(playerPda)?.level ?? 0;
+
+  const getMemberName = (playerPda: PublicKey): string =>
+    getMemberAccount(playerPda)?.name?.trim() || "";
+
+  const getMemberPower = (playerPda: PublicKey): number => {
+    const p = getMemberAccount(playerPda);
+    if (!p) return 0;
+    return calculateDefensivePower(
+      p.defensiveUnit1.toNumber(),
+      p.defensiveUnit2.toNumber(),
+      p.defensiveUnit3.toNumber(),
+    );
   };
 
-  const getMemberLevel = (playerPda: PublicKey): number => {
-    const entry = otherPlayers.get(playerPda.toBase58());
-    return entry?.account?.level ?? 0;
+  const getMemberDefensiveUnits = (playerPda: PublicKey): number => {
+    const p = getMemberAccount(playerPda);
+    if (!p) return 0;
+    return (
+      p.defensiveUnit1.toNumber() +
+      p.defensiveUnit2.toNumber() +
+      p.defensiveUnit3.toNumber()
+    );
   };
 
+  const getMemberOffensiveUnits = (playerPda: PublicKey): number => {
+    const p = getMemberAccount(playerPda);
+    if (!p) return 0;
+    return (
+      p.operativeUnit1.toNumber() +
+      p.operativeUnit2.toNumber() +
+      p.operativeUnit3.toNumber()
+    );
+  };
+
+  const getMemberReinforcements = (playerPda: PublicKey): number => {
+    const p = getMemberAccount(playerPda);
+    if (!p) return 0;
+    return (
+      p.reinforcementDef1.toNumber() +
+      p.reinforcementDef2.toNumber() +
+      p.reinforcementDef3.toNumber()
+    );
+  };
+
+  // Outstanding invites this team has sent — shown under the members list so
+  // leaders see who's been asked and can cancel.
+  const pendingInvites = useMemo(() => {
+    if (!teamPubkey) return [];
+    return Array.from(teamInvites.values()).filter((inv) =>
+      inv.account.team.equals(teamPubkey),
+    );
+  }, [teamInvites, teamPubkey]);
+
+  // Sort by combat power desc, with networth and slotIndex as stable tiebreakers
+  // so equal-power members don't reshuffle every render.
   const sortedMembers = useMemo(() => {
     if (!members) return [];
     return [...members].sort((a, b) => {
-      return getMemberNetworth(b.account.player) - getMemberNetworth(a.account.player);
+      const pa = getMemberPower(a.account.player);
+      const pb = getMemberPower(b.account.player);
+      if (pa !== pb) return pb - pa;
+      const na = getMemberNetworth(a.account.player);
+      const nb = getMemberNetworth(b.account.player);
+      if (na !== nb) return nb - na;
+      return a.account.slotIndex - b.account.slotIndex;
     });
   }, [members, otherPlayers]);
 
@@ -952,9 +1120,6 @@ export function TeamTab() {
                 <div className="text-right">
                   <div className="text-xs text-text-muted">Members</div>
                   <GoldNumber value={team.memberCount} suffix={`/${team.maxMembers}`} />
-                  {team.memberCount >= team.maxMembers && (
-                    <span className="text-xs text-danger">Full</span>
-                  )}
                 </div>
               </div>
             </div>
@@ -997,80 +1162,217 @@ export function TeamTab() {
                 <div className="space-y-2">
                   {sortedMembers.map((m) => {
                     const memberPda = m.account.player;
+                    const memberAccount = getMemberAccount(memberPda);
                     const isCurrentPlayer = publicKey
                       ? derivePlayerPda(client.gameEngine, publicKey)[0].equals(memberPda)
                       : false;
+                    const displayName = getMemberName(memberPda);
+                    const level = getMemberLevel(memberPda);
+                    const power = getMemberPower(memberPda);
+                    const du = getMemberDefensiveUnits(memberPda);
+                    const op = getMemberOffensiveUnits(memberPda);
+                    const reinf = getMemberReinforcements(memberPda);
+                    const isExpanded = expandedSlot === m.account.slotIndex;
+
+                    const canPromote = !isCurrentPlayer && myRank < m.account.rank && m.account.rank > 1;
+                    const canDemote = !isCurrentPlayer && myRank < m.account.rank && m.account.rank < 4;
+                    const canKick = isLeader && !isCurrentPlayer && m.account.rank !== 0;
+                    const canTransfer = isLeader && !isCurrentPlayer && m.account.rank !== 0;
+                    const canReinforce = !isCurrentPlayer && !!memberAccount?.owner;
 
                     return (
                       <div
                         key={m.pubkey.toBase58()}
-                        className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+                        className={`rounded-lg border transition-colors ${
+                          isExpanded
+                            ? "border-border-gold/50 bg-surface/30"
+                            : "border-zinc-800 hover:border-zinc-700"
+                        }`}
                       >
-                        <div className="flex items-center gap-3">
-                          <span
-                            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                              m.account.rank === 0
-                                ? "bg-accent/40 text-text-gold"
-                                : "bg-zinc-800 text-text-muted"
-                            }`}
-                          >
-                            {RANK_LABELS[m.account.rank] ?? `Rank ${m.account.rank}`}
-                          </span>
-                          <span className="font-mono text-sm text-text-primary">
-                            <DomainName pubkey={memberPda} chars={4} />
-                          </span>
-                          {isCurrentPlayer && <span className="text-xs text-text-gold">(you)</span>}
-                        </div>
-                        <div className="flex items-center gap-3">
-                          {getMemberLevel(memberPda) > 0 && (
-                            <span className="text-xs text-text-muted">
-                              Lv {getMemberLevel(memberPda)}
+                        {/* Collapsed header — full row is a tap target */}
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setExpandedSlot(isExpanded ? null : m.account.slotIndex)
+                          }
+                          className="flex w-full flex-col gap-2 px-3 py-2 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+                          aria-expanded={isExpanded}
+                        >
+                          {/* Identity */}
+                          <div className="flex min-w-0 flex-1 items-center gap-2">
+                            <div className="flex min-w-0 flex-col">
+                              <div className="flex flex-wrap items-center gap-2">
+                                {displayName ? (
+                                  <span className="truncate text-sm text-text-primary">
+                                    {displayName}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono text-sm text-text-primary">
+                                    <DomainName pubkey={memberPda} chars={4} />
+                                  </span>
+                                )}
+                                {level > 0 && (
+                                  <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">
+                                    Lv {level}
+                                  </span>
+                                )}
+                                <span
+                                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                                    m.account.rank === 0
+                                      ? "bg-accent/40 text-text-gold"
+                                      : "bg-zinc-800 text-text-muted"
+                                  }`}
+                                >
+                                  {RANK_LABELS[m.account.rank] ?? `Rank ${m.account.rank}`}
+                                </span>
+                                {isCurrentPlayer && (
+                                  <span className="text-xs text-text-gold">(you)</span>
+                                )}
+                              </div>
+                              {displayName && (
+                                <span className="font-mono text-[10px] text-text-muted">
+                                  <DomainName pubkey={memberPda} chars={4} />
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Stats — always visible, wraps on mobile */}
+                          <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[11px] text-text-muted">
+                            <Stat label="PWR" value={power} highlight />
+                            <Stat label="DU" value={du} />
+                            <Stat label="OP" value={op} />
+                            <Stat label="REINF" value={reinf} />
+                            <span
+                              className={`ml-1 text-text-muted transition-transform ${
+                                isExpanded ? "rotate-180" : ""
+                              }`}
+                              aria-hidden
+                            >
+                              &#9662;
                             </span>
-                          )}
-                          {getMemberNetworth(memberPda) > 0 && (
-                            <GoldNumber value={getMemberNetworth(memberPda)} size="sm" />
-                          )}
-                          {!isCurrentPlayer && myRank < m.account.rank && (
-                            <>
-                              {m.account.rank > 1 && (
-                                <button
-                                  onClick={() => handlePromote(m.account.slotIndex, m.account.rank)}
-                                  className="text-xs text-green-400 hover:text-green-300"
-                                >
-                                  Promote
-                                </button>
-                              )}
-                              {m.account.rank < 4 && (
-                                <button
-                                  onClick={() => handleDemote(m.account.slotIndex, m.account.rank)}
-                                  className="text-xs text-text-gold hover:text-text-primary"
-                                >
-                                  Demote
-                                </button>
-                              )}
-                            </>
-                          )}
-                          {isLeader && !isCurrentPlayer && m.account.rank !== 0 && (
-                            <>
-                              <button
+                          </div>
+                        </button>
+
+                        {/* Expanded body — unit breakdown + actions */}
+                        {isExpanded && memberAccount && (
+                          <div className="space-y-3 border-t border-zinc-800 px-3 py-3">
+                            <UnitGrid
+                              defense={[
+                                memberAccount.defensiveUnit1.toNumber(),
+                                memberAccount.defensiveUnit2.toNumber(),
+                                memberAccount.defensiveUnit3.toNumber(),
+                              ]}
+                              offense={[
+                                memberAccount.operativeUnit1.toNumber(),
+                                memberAccount.operativeUnit2.toNumber(),
+                                memberAccount.operativeUnit3.toNumber(),
+                              ]}
+                            />
+
+                            {reinf > 0 && (
+                              <div className="rounded-md border border-zinc-800 px-3 py-2">
+                                <div className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
+                                  Reinforcements held
+                                </div>
+                                <div className="grid grid-cols-3 gap-2 text-xs">
+                                  <span>
+                                    <span className="text-text-muted">T1 </span>
+                                    <span className="game-num">
+                                      {memberAccount.reinforcementDef1.toNumber().toLocaleString()}
+                                    </span>
+                                  </span>
+                                  <span>
+                                    <span className="text-text-muted">T2 </span>
+                                    <span className="game-num">
+                                      {memberAccount.reinforcementDef2.toNumber().toLocaleString()}
+                                    </span>
+                                  </span>
+                                  <span>
+                                    <span className="text-text-muted">T3 </span>
+                                    <span className="game-num">
+                                      {memberAccount.reinforcementDef3.toNumber().toLocaleString()}
+                                    </span>
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="flex flex-wrap gap-2 border-t border-zinc-800 pt-3">
+                              <ActionButton
+                                tone="neutral"
                                 onClick={() =>
-                                  handleTransferLeadership(memberPda, m.account.slotIndex)
+                                  navigateToMap(
+                                    memberAccount.currentCity,
+                                    memberAccount.currentLat,
+                                    memberAccount.currentLong,
+                                    memberPda,
+                                  )
                                 }
-                                className="text-xs text-blue-400 hover:text-blue-300"
+                                title="View on Map"
                               >
-                                Transfer Lead
-                              </button>
-                              <button
-                                onClick={() =>
-                                  handleKick(memberPda, m.account.slotIndex, memberPda)
-                                }
-                                className="text-xs text-red-400 hover:text-red-300"
-                              >
-                                Kick
-                              </button>
-                            </>
-                          )}
-                        </div>
+                                <MapPin className="h-3.5 w-3.5" />
+                                <span className="hidden sm:inline">View on Map</span>
+                              </ActionButton>
+                              {canReinforce && (
+                                <ActionButton
+                                  tone="primary"
+                                  onClick={() =>
+                                    navigateToReinforce(
+                                      memberAccount.owner,
+                                      memberPda,
+                                      memberAccount.currentCity,
+                                      memberAccount.currentLat,
+                                      memberAccount.currentLong,
+                                    )
+                                  }
+                                >
+                                  Reinforce
+                                </ActionButton>
+                              )}
+                                {canPromote && (
+                                  <ActionButton
+                                    tone="primary"
+                                    onClick={() =>
+                                      handlePromote(m.account.slotIndex, m.account.rank)
+                                    }
+                                  >
+                                    Promote
+                                  </ActionButton>
+                                )}
+                                {canDemote && (
+                                  <ActionButton
+                                    tone="neutral"
+                                    onClick={() =>
+                                      handleDemote(m.account.slotIndex, m.account.rank)
+                                    }
+                                  >
+                                    Demote
+                                  </ActionButton>
+                                )}
+                                {canTransfer && (
+                                  <ActionButton
+                                    tone="info"
+                                    onClick={() =>
+                                      handleTransferLeadership(memberPda, m.account.slotIndex)
+                                    }
+                                  >
+                                    Transfer Lead
+                                  </ActionButton>
+                                )}
+                                {canKick && (
+                                  <ActionButton
+                                    tone="danger"
+                                    onClick={() =>
+                                      handleKick(memberPda, m.account.slotIndex, memberPda)
+                                    }
+                                  >
+                                    Kick
+                                  </ActionButton>
+                                )}
+                              </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -1078,6 +1380,38 @@ export function TeamTab() {
                     <p className="text-sm text-text-muted">No members found</p>
                   )}
                 </div>
+
+                {/* Pending invites (visible to leader/officers who can cancel). */}
+                {pendingInvites.length > 0 && (
+                  <div className="mt-4 space-y-2">
+                    <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                      Pending Invites ({pendingInvites.length})
+                    </div>
+                    {pendingInvites.map((inv) => (
+                      <div
+                        key={inv.pubkey.toBase58()}
+                        className="flex items-center justify-between rounded-lg border border-dashed border-zinc-800 px-3 py-2"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold uppercase text-text-muted">
+                            Invited
+                          </span>
+                          <span className="font-mono text-xs text-text-primary">
+                            <DomainName pubkey={inv.account.invitee} chars={4} />
+                          </span>
+                        </div>
+                        {isOfficerPlus && (
+                          <button
+                            onClick={() => handleCancelInvite(inv.account.invitee)}
+                            className="text-xs text-red-400 hover:text-red-300"
+                          >
+                            Cancel
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
               {/* Game Parameters */}
@@ -1641,7 +1975,7 @@ function InvitePlayerPanel({
                 <TxButton
                   onClick={(rp) => onInvite(p.account.owner, rp)}
                   variant="secondary"
-                  className="shrink-0 text-xs"
+                  className="shrink-0 text-xs w-24"
                 >
                   Invite
                 </TxButton>
@@ -1707,15 +2041,31 @@ function TeamSettingsPanel({
           Team Settings
         </div>
       )}
-      <label className="flex items-center gap-3 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={isPublic}
-          onChange={(e) => setIsPublic(e.target.checked)}
-          className="rounded border-zinc-700"
-        />
-        <span className="text-sm text-text-primary">Public (anyone can join)</span>
-      </label>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={isPublic}
+        onClick={() => setIsPublic(!isPublic)}
+        className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-left transition-colors hover:border-zinc-700"
+      >
+        <span className="flex flex-col">
+          <span className="text-sm font-medium text-text-primary">Public</span>
+          <span className="text-[11px] text-text-muted">Anyone can join without an invite</span>
+        </span>
+        <span
+          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
+            isPublic
+              ? "border-border-gold/60 bg-accent/50"
+              : "border-zinc-700 bg-surface-raised"
+          }`}
+        >
+          <span
+            className={`inline-block h-4 w-4 transform rounded-full shadow transition-transform ${
+              isPublic ? "translate-x-6 bg-text-gold" : "translate-x-1 bg-text-muted"
+            }`}
+          />
+        </span>
+      </button>
       <NumberField label="Min Level" value={minLevel} onChange={setMinLevel} min={1} max={255} />
       <TxButton
         onClick={handleSave}

@@ -85,6 +85,8 @@ import { ARENA_PARTICIPANT_ACCOUNT_SIZE } from './state/arena';
 import { REINFORCEMENT_ACCOUNT_SIZE } from './state/reinforcement';
 import { parseHeroTemplate, HERO_TEMPLATE_SIZE } from './state/hero';
 import type { HeroTemplateAccount } from './state/hero';
+import { parseCastle } from './state/castle';
+import type { CastleAccount } from './state/castle';
 import { parseLocation, LOCATION_ACCOUNT_SIZE } from './state/location';
 import type { LocationAccount } from './state/location';
 import { parseEvent, parseEventParticipation, EVENT_ACCOUNT_SIZE } from './state/event';
@@ -1150,6 +1152,30 @@ export class NovusMundusClient {
     }
 
     return results;
+  }
+
+  /**
+   * Fetch every castle in this kingdom.
+   *
+   * Castle accounts are AccountKey 40 with the gameEngine pubkey at offset 1
+   * (after the discriminator). Used by the realm map to draw castles as
+   * spatial entities — each one carries its own lat/long on the account.
+   */
+  async fetchAllCastles(): Promise<BulkFetchResult<CastleAccount>[]> {
+    const keyByte = bs58.encode(Buffer.from([AccountKey.Castle]));
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { memcmp: { offset: 1, bytes: this.gameEngine.toBase58() } },
+      ],
+    });
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseCastle(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<CastleAccount> => r !== null);
   }
 
   /**

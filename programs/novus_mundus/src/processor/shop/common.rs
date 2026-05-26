@@ -5,6 +5,7 @@
 
 use pinocchio::ProgramResult;
 
+use crate::error::GameError;
 use crate::logic::safe_math::apply_bp_penalty;
 use crate::state::{PlayerAccount, ShopConfigAccount};
 
@@ -102,15 +103,61 @@ pub fn calculate_final_price(
     price.max(min_price).max(1)
 }
 
+/* Cosmetic item_type encoding — matches
+ * apps/web/src/lib/config/cosmetics-catalog.ts. The shop's u16
+ * `item_type` is the only handle the chain exposes for a purchase;
+ * cosmetic items publish under these ranges so `fulfill_item` can
+ * decode them into (kind, id) and flip the right `owned_<kind>` bit.
+ * Each kind reserves 64 IDs (u64 ownership bitmask cap).
+ *
+ * `is_inventory_item_type` reserves 1192–1383 for cosmetics regardless
+ * of which kinds are currently wired, so adding the unwired effect /
+ * pose kinds later doesn't need a parallel change there. */
+pub const COSMETIC_BADGE_BASE: u16 = 1000;
+pub const COSMETIC_TITLE_BASE: u16 = 1064;
+pub const COSMETIC_COLOR_BASE: u16 = 1128;
+pub const COSMETIC_FRAME_BASE: u16 = 1192;
+pub const COSMETIC_EFFECT_BASE: u16 = 1256; // RESERVED — wire when kind=4 ships
+pub const COSMETIC_POSE_BASE: u16 = 1320;   // RESERVED — wire when kind=5 ships
+pub const COSMETIC_RANGE: u16 = 64;
+
+/// True for any item_type that targets the player's CosmeticsSection.
+/// Callers (purchase_item / purchase_bundle / purchase_flash_sale) use this
+/// to unlock `EXT_COSMETICS` on the player account BEFORE the mutable
+/// player borrow that calls `fulfill_item`. `fulfill_item` now refuses to
+/// process a cosmetic item_type when the section is unallocated, so a
+/// misordered caller fails the whole transaction (refunding payment)
+/// instead of charging-without-delivering. Only wired ranges are reported
+/// true — unwired reserved ranges (effects / poses) stay out of the
+/// extension-unlock path until their `fulfill_item` arms land.
+pub fn is_cosmetic_item_type(item_type: u16) -> bool {
+    (item_type >= COSMETIC_BADGE_BASE && item_type < COSMETIC_COLOR_BASE + COSMETIC_RANGE)
+        || (item_type >= COSMETIC_FRAME_BASE && item_type < COSMETIC_FRAME_BASE + COSMETIC_RANGE)
+}
+
 /// Apply non-inventory item rewards directly to the player core/section fields.
 ///
 /// Item type ranges:
-///   0-99    : Equipment (3=armor handled via inventory by caller)
-///   100-199 : Consumables
-///   200-299 : Materials
-///   50-52   : Currency / resources (gems / cash / fragments)
-///   60-61   : Legacy consumables (encounter stamina / produce)
-///   Other   : No-op (caller routes to inventory)
+///   0-99       : Equipment (3=armor handled via inventory by caller)
+///   100-199    : Consumables
+///   200-299    : Materials
+///   50-52      : Currency / resources (gems / cash / fragments)
+///   60-61      : Legacy consumables (encounter stamina / produce)
+///   1000-1063  : Cosmetic badges (id = item_type - 1000)
+///   1064-1127  : Cosmetic titles (id = item_type - 1064)
+///   1128-1191  : Cosmetic name-colours (id = item_type - 1128)
+///   1192-1255  : Cosmetic avatar frames (id = item_type - 1192)
+///   1256-1383  : RESERVED for cosmetic effects/poses — rejected with
+///                `InvalidParameter` until the matching arms land.
+///   Other      : No-op (caller routes to inventory)
+///
+/// For cosmetics, the caller MUST have unlocked `EXT_COSMETICS` on the
+/// player account (via `unlock_extension_if_eligible`) before invoking
+/// this function. If the section isn't allocated, the cosmetic branches
+/// return `CosmeticsNotUnlocked` so the whole purchase tx reverts —
+/// preferable to charging the buyer and silently dropping the item.
+/// `is_cosmetic_item_type` is provided so the caller can do the unlock
+/// at the right moment in its borrow lifecycle.
 pub fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> ProgramResult {
     let amount_u16 = amount.min(u16::MAX as u64) as u16;
 
@@ -147,6 +194,50 @@ pub fn fulfill_item(player: &mut PlayerAccount, item_type: u16, amount: u64) -> 
 
         60 => player.encounter_stamina = player.encounter_stamina.saturating_add(amount),
         61 => player.produce = player.produce.saturating_add(amount),
+
+        // Cosmetics — flip the bit for the requested (kind, id). If
+        // `cosmetics_mut()` returns None the caller forgot to unlock
+        // EXT_COSMETICS; fail the tx so the buyer's payment reverts
+        // rather than completing the purchase with no cosmetic delivered.
+        x if (COSMETIC_BADGE_BASE..COSMETIC_BADGE_BASE + COSMETIC_RANGE).contains(&x) => {
+            let cos = player
+                .cosmetics_mut()
+                .ok_or(GameError::CosmeticsNotUnlocked)?;
+            let id = x - COSMETIC_BADGE_BASE;
+            cos.owned_badges |= 1u64 << id;
+        }
+        x if (COSMETIC_TITLE_BASE..COSMETIC_TITLE_BASE + COSMETIC_RANGE).contains(&x) => {
+            let cos = player
+                .cosmetics_mut()
+                .ok_or(GameError::CosmeticsNotUnlocked)?;
+            let id = x - COSMETIC_TITLE_BASE;
+            cos.owned_titles |= 1u64 << id;
+        }
+        x if (COSMETIC_COLOR_BASE..COSMETIC_COLOR_BASE + COSMETIC_RANGE).contains(&x) => {
+            let cos = player
+                .cosmetics_mut()
+                .ok_or(GameError::CosmeticsNotUnlocked)?;
+            let id = x - COSMETIC_COLOR_BASE;
+            cos.owned_colors |= 1u64 << id;
+        }
+        x if (COSMETIC_FRAME_BASE..COSMETIC_FRAME_BASE + COSMETIC_RANGE).contains(&x) => {
+            let cos = player
+                .cosmetics_mut()
+                .ok_or(GameError::CosmeticsNotUnlocked)?;
+            let id = x - COSMETIC_FRAME_BASE;
+            cos.owned_frames |= 1u64 << id;
+        }
+
+        // Reserved cosmetic ranges (effects / poses) — not wired yet.
+        // Reject loudly so a misconfigured shop item can't silently
+        // consume payment with no delivery. Remove these arms when the
+        // matching kinds ship and add the actual bit-flip branches.
+        x if (COSMETIC_EFFECT_BASE..COSMETIC_EFFECT_BASE + COSMETIC_RANGE).contains(&x) => {
+            return Err(GameError::InvalidParameter.into());
+        }
+        x if (COSMETIC_POSE_BASE..COSMETIC_POSE_BASE + COSMETIC_RANGE).contains(&x) => {
+            return Err(GameError::InvalidParameter.into());
+        }
 
         _ => {}
     }

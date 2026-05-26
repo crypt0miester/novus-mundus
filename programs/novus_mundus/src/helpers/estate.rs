@@ -327,8 +327,9 @@ pub fn hero_level_cap(estate: &EstateAccount) -> u8 {
 const SANCTUARY_PHI_NUM: u64 = 1618;
 const SANCTUARY_PHI_DENOM: u64 = 1000;
 
-/// Base XP for level 20 (1 week at 8h/day, Sanctuary Lv 10)
-/// 7 days × 8h × 200 XP/hr = 11,200 XP
+/// Base XP for level 20 (1 week at 8h/day, Sanctuary Lv 2)
+/// 7 days × 8h × 200 XP/hr = 11,200 XP — under the post-rate-bump scale a
+/// Sanctuary Lv 2 sustains that 200/hr, where the old rate needed Lv 10.
 const MEDITATION_XP_WEEK: u64 = 11_200;
 
 /// Calculate XP required to level from `from_level` to `from_level + 1`
@@ -337,9 +338,12 @@ const MEDITATION_XP_WEEK: u64 = 11_200;
 /// - Levels 1-19: Linear scaling (200 × level) - fast early/mid game
 /// - Levels 20+: Weekly base with 10% compound growth per level
 ///
-/// At Sanctuary Lv 10 (200 XP/hr), assuming 8h/day play:
-/// - Level 1:  200 XP → 1.5 hours
-/// - Level 5:  1,000 XP → 7.5 hours
+/// Pacing examples below use Sanctuary Lv 2 (200 XP/hr post-rate-bump);
+/// see `sanctuary_meditation_xp_per_hour` for higher tiers — Lv 10 now
+/// runs 5× this rate.
+/// At 200 XP/hr, assuming 8h/day play:
+/// - Level 1:  200 XP → 1 hour
+/// - Level 5:  1,000 XP → 5 hours
 /// - Level 10: 2,000 XP → 1.25 days
 /// - Level 15: 3,000 XP → 1.9 days
 /// - Level 19: 3,800 XP → 2.4 days
@@ -349,7 +353,7 @@ const MEDITATION_XP_WEEK: u64 = 11_200;
 /// - Level 26: ~18,000 XP → 1.6 weeks
 /// - Total 20-26: ~9 weeks
 ///
-/// Grand total to cap (26) at 8h/day: ~3.5 months
+/// Grand total to cap (26) at Sanctuary Lv 2, 8h/day: ~3.5 months.
 pub fn meditation_xp_for_level(from_level: u32) -> u32 {
     if from_level == 0 {
         return 200; // Level 0→1: minimal
@@ -390,17 +394,18 @@ pub const fn sanctuary_meditation_max_seconds(sanctuary_level: u8) -> i64 {
 }
 
 /// Calculate meditation XP earned per hour
-/// Formula: sanctuary_level × 20
+/// Formula: sanctuary_level × 100
 ///
 /// Simple linear scaling - higher Sanctuary = faster XP gain
 /// The slowness comes from the high XP_PER_LEVEL requirement
 ///
 /// Examples:
-/// - Sanctuary Lv 5:  100 XP/hour → 50 hours per level
-/// - Sanctuary Lv 10: 200 XP/hour → 25 hours per level
-/// - Sanctuary Lv 20: 400 XP/hour → 12.5 hours per level
+/// - Sanctuary Lv 1:  100 XP/hour
+/// - Sanctuary Lv 5:  500 XP/hour
+/// - Sanctuary Lv 10: 1,000 XP/hour
+/// - Sanctuary Lv 20: 2,000 XP/hour
 pub const fn sanctuary_meditation_xp_per_hour(sanctuary_level: u8) -> u32 {
-    (sanctuary_level as u32) * 20
+    (sanctuary_level as u32) * 100
 }
 
 /// Calculate total XP from meditation session

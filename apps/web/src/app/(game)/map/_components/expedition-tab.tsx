@@ -18,7 +18,11 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel, maxExpeditionSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
-import { TripleCountInput, OPERATIVE_UNIT_LABELS } from "@/components/shared/TripleCountInput";
+import {
+  TripleCountInput,
+  OPERATIVE_UNIT_LABELS,
+  OPERATIVE_UNIT_ICONS,
+} from "@/components/shared/TripleCountInput";
 import { bpsToPercent } from "@/lib/utils";
 import {
   deriveHeroCollectionPda,
@@ -600,6 +604,7 @@ export function ExpeditionTab() {
               </div>
               <TripleCountInput
                 labels={OPERATIVE_UNIT_LABELS}
+                icons={OPERATIVE_UNIT_ICONS}
                 available={availOps}
                 value={expeditionOps}
                 onChange={setExpeditionOps}

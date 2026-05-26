@@ -1,6 +1,7 @@
 pub mod arena;
 pub mod castle;
 pub mod combat;
+pub mod cosmetic;
 pub mod dungeon;
 pub mod economy;
 pub mod encounter;

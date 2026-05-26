@@ -152,6 +152,7 @@ describe('Pegged-Token Subscription', () => {
 
     // Subscription is active.
     const player = await fetchPlayer(ctx.svm, buyer.playerPda);
+    if (!player) throw new Error("player PDA missing after subscription purchase");
     expect(player.subscriptionTier).toBe(1);
     expect(player.subscriptionEnd.gt(new BN(0))).toBe(true);
   });

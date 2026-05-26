@@ -86,15 +86,17 @@ Once `hero.level >= cap`, meditation is blocked. The player must use fragments (
 ## XP Formula
 
 ```
-xp_per_hour = sanctuary_level × 20
+xp_per_hour = sanctuary_level × 100
 total_xp    = xp_per_hour × min(elapsed_seconds, max_duration) / 3600
 ```
 
 | MeditationChamber Lv | XP/hour | Hours per level (levels 1–19) | Hours per level (levels 20+) |
 |---------------------|---------|-------------------------------|------------------------------|
-| 5 | 100 | 2–38h (varies by level) | ~112h+ |
-| 10 | 200 | 1–19h (varies by level) | ~56h+ |
-| 20 | 400 | 0.5–9.5h (varies by level) | ~28h+ |
+| 1 | 100 | 2–38h (varies by level) | ~112h+ |
+| 2 | 200 | 1–19h (varies by level) | ~56h+ |
+| 5 | 500 | 0.4–7.6h (varies by level) | ~22.4h+ |
+| 10 | 1,000 | 0.2–3.8h (varies by level) | ~11.2h+ |
+| 20 | 2,000 | 0.1–1.9h (varies by level) | ~5.6h+ |
 
 ### XP Required per Level
 

@@ -963,6 +963,12 @@ pub fn process_instruction(
             )
         }
 
+        // Cosmetics (322)
+        322 => {
+            msg!("equip cosmetic");
+            processor::cosmetic::equip::process(program_id, accounts, instruction_data)
+        }
+
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }

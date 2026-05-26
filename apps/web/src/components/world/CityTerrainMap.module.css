@@ -121,6 +121,293 @@
   transform: rotate(-30deg);
 }
 
+/* WebGL wrap — sits inside .canvasWrap when WebGL2 is available.
+ * The renderer appends its <canvas> element here at mount; the
+ * CSS2DRenderer adds a sibling <div> for the city-name label. */
+.webglWrap {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  overflow: hidden;
+}
+.canvas3d {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* Toggle pills — same chip vocabulary as .resetBtn so the top-right
+ * cluster reads as one family. */
+.togglePill {
+  position: absolute;
+  top: 8px;
+  height: 22px;
+  min-width: 32px;
+  padding: 0 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--ink-faint, #b89a72);
+  background: var(--parchment, #efe2c4);
+  color: var(--ink-soft, #6b4a2a);
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  line-height: 1;
+  text-transform: uppercase;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 4;
+  opacity: 0.85;
+  transition:
+    opacity 0.18s ease,
+    color 0.18s ease,
+    background 0.18s ease;
+}
+.togglePill:hover {
+  opacity: 1;
+  color: var(--ink, #2e1f10);
+}
+.togglePill[aria-pressed="true"] {
+  background: var(--ink-soft, #6b4a2a);
+  color: var(--parchment, #efe2c4);
+  opacity: 1;
+}
+
+/* 2D/3D toggle sits left of the reset chip. */
+.toggle3DPill {
+  right: 44px;
+}
+/* Orbit-toggle (touch only) sits left of the 2D/3D pill. */
+.orbitTogglePill {
+  right: 90px;
+  width: 28px;
+  min-width: 0;
+  padding: 0;
+  font-size: 0.85rem;
+}
+
+/* Scale bar — bottom-right of the canvas wrap. Shown only in the
+ * WebGL path. */
+.scaleBar {
+  position: absolute;
+  bottom: 8px;
+  right: 8px;
+  z-index: 3;
+  font-size: 0.55rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft, #6b4a2a);
+  user-select: none;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  opacity: 0.85;
+}
+.scaleBarBar {
+  height: 2px;
+  background: var(--ink-soft, #6b4a2a);
+  border-radius: 1px;
+  box-shadow: 0 0 6px rgba(70, 50, 28, 0.2);
+}
+
+/* Compass — top-left of the canvas wrap. Rotates with yaw. */
+.compass {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 32px;
+  height: 32px;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  opacity: 0.85;
+}
+
+/* City-name label — CSS2DObject anchored above the highest peak.
+ * Picks up the parchment ink palette from the surrounding sheet so
+ * it reads as the same hand-drawn vocabulary. */
+.cityNameLabel {
+  white-space: nowrap;
+  text-align: center;
+  user-select: none;
+  pointer-events: none;
+}
+
+/* Tap-to-retry overlay — sits over the entire .canvasWrap when
+ * WebGL2 isn't available (or context was lost mid-session). Looks
+ * like a deliberate parchment-styled state, not a broken render. */
+.retryOverlay {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: rgba(239, 226, 196, 0.6);
+  border: none;
+  color: var(--ink-soft, #6b4a2a);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: center;
+  padding: 1rem;
+  transition: background 0.2s ease;
+}
+.retryOverlay:hover {
+  background: rgba(239, 226, 196, 0.75);
+}
+.retryOverlayLine1 {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--ink, #2e1f10);
+}
+.retryOverlayLine2 {
+  font-size: 0.6rem;
+  font-style: italic;
+  letter-spacing: 0.06em;
+  opacity: 0.85;
+}
+
+/* Out-of-bounds notice — flashes briefly when the user clicks a
+ * corner of the square mesh that's outside the inscribed gameplay
+ * disc. Bottom-centre so it doesn't compete with the toggle / reset
+ * cluster in the top-right. */
+.outOfBoundsNotice {
+  position: absolute;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 4;
+  padding: 0.25rem 0.6rem;
+  border-radius: 999px;
+  /* Hardcoded dark-pill colors — `--parchment` flips to near-black in
+   * dark-mode (`body[data-theme="dark"]` in RealmMap.module.css), which
+   * would render this notice as black-on-black. The notice is meant to
+   * read the same in both themes: cream text on a dark brown pill. */
+  background: rgba(46, 31, 16, 0.9);
+  color: #efe2c4;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  pointer-events: none;
+  user-select: none;
+  animation: noticeFadeIn 0.18s ease;
+}
+@keyframes noticeFadeIn {
+  0% { opacity: 0; transform: translate(-50%, 4px); }
+  100% { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* Dot tooltip — small bubble that floats next to the occupant under
+ * the cursor (mouse) or under the most-recent tap (touch preview).
+ * `left`/`top` are inline CSS px relative to .canvasWrap (which is
+ * position:relative). Translate up-and-right of the dot so the bubble
+ * sits at the dot's top-right corner and never under the cursor.
+ * `pointer-events: none` so it never eats clicks for the canvas
+ * underneath.
+ *
+ * Colours come from the theme variables that flip light → dark
+ * (RealmMap.module.css redefines --parchment, --ink, --ink-soft for
+ * `body[data-theme="dark"]`). Light: cream bg on dark ink. Dark: deep-
+ * brown bg on cream ink. The OUT OF BOUNDS notice intentionally
+ * hardcodes its colours because it's a high-contrast alert; the
+ * tooltip is regular chrome, so it tracks the page theme. */
+.dotTooltip {
+  position: absolute;
+  z-index: 5;
+  transform: translate(0.6rem, -120%);
+  padding: 0.32rem 0.55rem;
+  border-radius: 4px;
+  background: var(--parchment, #efe2c4);
+  /* Full border in the accent color — overrideable via inline style
+   * (`borderColor: tooltip.accent`) so encounter rarity / player tier
+   * frames the whole bubble rather than just the left edge. */
+  border: 2px solid var(--ink-soft, #6b4a2a);
+  color: var(--ink, #2e1f10);
+  pointer-events: none;
+  user-select: none;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(46, 31, 16, 0.25);
+  animation: dotTooltipFadeIn 0.12s ease;
+  max-width: 220px;
+}
+.dotTooltipPrimary {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.1;
+  color: var(--ink, #2e1f10);
+}
+.dotTooltipSecondary {
+  margin-top: 0.15rem;
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  color: var(--ink-soft, #6b4a2a);
+  font-style: italic;
+  line-height: 1.1;
+}
+@keyframes dotTooltipFadeIn {
+  0% { opacity: 0; transform: translate(0.6rem, calc(-120% + 4px)); }
+  100% { opacity: 1; transform: translate(0.6rem, -120%); }
+}
+
+/* Scale legend — cartographic scale bar in the bottom-left corner of
+ * the canvas wrap. Width is set inline from `scaleLegend.barCss`
+ * (round-meter value chosen so the bar snaps to nice intervals as the
+ * user zooms). Colours come from the theme so the legend reads on top
+ * of either parchment chrome (light) or dark vellum (dark). */
+.scaleLegend {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 3;
+  pointer-events: none;
+  user-select: none;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  /* Pill backdrop so the legend reads on every terrain — without it the
+   * label washes out over sand/parchment-coloured ground (the canvas
+   * fills under this overlay vary widely with biome). */
+  padding: 4px 7px;
+  background: rgba(20, 14, 8, 0.55);
+  border-radius: 4px;
+  font-family: var(--font-jetbrains), ui-monospace, monospace;
+  font-size: 0.55rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  /* Cream on the dark pill — high contrast in both themes. */
+  color: rgba(252, 244, 220, 0.95);
+}
+.scaleLegendBar {
+  height: 4px;
+  position: relative;
+  /* Two vertical tick caps + a horizontal rule between them, all via a
+   * single element. The caps are short borders on the left/right; the
+   * connecting line is a 1px-tall background centred vertically. */
+  border-left: 1px solid rgba(252, 244, 220, 0.95);
+  border-right: 1px solid rgba(252, 244, 220, 0.95);
+  background:
+    linear-gradient(
+      to bottom,
+      transparent calc(50% - 0.5px),
+      rgba(252, 244, 220, 0.95) calc(50% - 0.5px),
+      rgba(252, 244, 220, 0.95) calc(50% + 0.5px),
+      transparent calc(50% + 0.5px)
+    );
+}
+.scaleLegendLabel {
+  font-weight: 600;
+  line-height: 1;
+}
+
 .readout {
   margin-top: 0.5rem;
   font-size: 0.65rem;

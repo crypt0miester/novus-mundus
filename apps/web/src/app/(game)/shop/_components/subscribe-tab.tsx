@@ -22,6 +22,7 @@ import {
   deciToNovi,
   getEffectiveTier,
 } from "novus-mundus-sdk";
+import { tierPalette } from "@/lib/hooks/useTierTheme";
 import {
   Database,
   ShoppingCart,
@@ -38,20 +39,27 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-// Charter accent ramp — a metal ladder (iron to bronze to silver to gold) that
-// matches the Free/Bronze/Silver/Gold names the rest of the app uses.
-const TIER_THEME = [
-  { accent: "#71717a", bright: "#a1a1aa", glow: "rgba(113,113,122,0)" },
-  { accent: "#c87b3e", bright: "#e6a063", glow: "rgba(200,123,62,0.22)" },
-  { accent: "#9aa6b2", bright: "#d4dde6", glow: "rgba(154,166,178,0.22)" },
-  { accent: "#daa520", bright: "#f1af09", glow: "rgba(218,165,32,0.30)" },
-];
-
 // Fallback featured tier for a player with no charter — the middle paid tier
 // is the classic decoy anchor (don't push a brand-new player to the top tier).
 const ANCHOR_TIER = 2;
 
-const theme = (i: number) => TIER_THEME[i] ?? TIER_THEME[TIER_THEME.length - 1];
+// Per-tier accent for the subscribe tiles. Reads from the shared
+// `TIER_PALETTE` so the tile colour for tier N matches the global theme
+// when `data-tier=N` is active. Was previously a local copy ("iron / bronze /
+// silver / gold") that drifted from the green / blue / purple / gold ladder.
+const theme = tierPalette;
+
+// "No Charter" muted palette. Deliberately distinct from theme(0) — the
+// current-charter card uses this when sub.active is false so the box
+// reads as absence (cool zinc, no glow) instead of as a paying Rookie
+// tile, preserving the loss-aversion framing recommended elsewhere in
+// this file. theme(0) keeps its tier-0 visual signal for in-grid tiles
+// that represent the actual Rookie purchase choice.
+const NO_CHARTER_THEME = {
+  accent: "#3f3f46", // zinc-700
+  bright: "#a1a1aa", // zinc-400
+  glow: "rgba(82, 82, 91, 0)",
+} as const;
 
 /** BN | number | undefined to number */
 function num(v: unknown): number {
@@ -187,7 +195,7 @@ export function SubscribeTab() {
   };
 
   // ─── Current-charter framing ───────────────────────────────────────────
-  const curTheme = noCharter ? theme(0) : theme(effectiveTier);
+  const curTheme = noCharter ? NO_CHARTER_THEME : theme(effectiveTier);
   const cur = tiers[effectiveTier];
   // NOVI-denominated tier fields (generationMultiplier, maxLockedNovi, novi
   // grant) are stored on-chain as raw deci-NOVI (mint decimals=1). Convert

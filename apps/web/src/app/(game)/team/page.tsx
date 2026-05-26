@@ -1,25 +1,34 @@
 "use client";
 
-import { Suspense } from "react";
+import { Suspense, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import { useTabParam } from "@/lib/hooks/useTabParam";
 import { TabNav } from "@/components/shared/TabNav";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { TeamTab } from "./_components/team-tab";
-import { RallyTab } from "./_components/rally-tab";
-import { ReinforceTab } from "./_components/reinforce-tab";
 import { FeatureGate } from "@/components/shared/FeatureGate";
 import { FEATURES } from "@/lib/hooks/useFeatureGate";
 import { TeamBrowser } from "@/components/world/TeamBrowser";
 
+// Rally + Reinforce moved to /map (Forces tab + EntityPanel composers).
+// /team is now identity/admin only.
 const TABS = [
   { key: "team", label: "Team" },
-  { key: "rally", label: "Rally" },
-  { key: "reinforce", label: "Reinforce" },
   { key: "browse", label: "Browse" },
 ];
 
 function TeamContent() {
   const [tab, setTab] = useTabParam("team");
+  const router = useRouter();
+
+  // Redirect old deep-links (?tab=rally|reinforce) to /map (Forces tab).
+  // Done in an effect rather than at render so we don't fight React's
+  // tab state — useEffect runs once after the initial render.
+  useEffect(() => {
+    if (tab === "rally" || tab === "reinforce") {
+      router.replace("/map?tab=forces");
+    }
+  }, [tab, router]);
 
   return (
     <PageTransition>
@@ -34,12 +43,6 @@ function TeamContent() {
               <TeamTab />
             </FeatureGate>
           )}
-          {tab === "rally" && (
-            <FeatureGate feature={FEATURES.RALLY_CREATE}>
-              <RallyTab />
-            </FeatureGate>
-          )}
-          {tab === "reinforce" && <ReinforceTab />}
           {tab === "browse" && <TeamBrowser />}
         </div>
       </div>

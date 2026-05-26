@@ -19,11 +19,13 @@ import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel"
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
+  DEFENSIVE_UNIT_ICONS,
   WEAPON_LABELS,
+  WEAPON_ICONS,
 } from "@/components/shared/TripleCountInput";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { DomainName } from "@/components/shared/DomainName";
-import { useRightPanelStore } from "@/lib/store/right-panel";
+import { useRouter } from "next/navigation";
 import { formatTime } from "@/lib/utils";
 import {
   derivePlayerPda,
@@ -51,14 +53,34 @@ import type { PublicKey } from "@solana/web3.js";
 const RALLY_STATUS = ["Gathering", "Marching", "Combat", "Returning", "Completed", "Cancelled"];
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
 
-export function RallyTab() {
+interface RallyTabProps {
+  /**
+   * Hide the "Create Rally" form. The Forces view on /map renders this
+   * component for its in-flight rally rollup but doesn't want the create
+   * form duplicated — rally creation now lives on the EntityPanel via
+   * RallyComposerPanel.
+   */
+  hideComposer?: boolean;
+}
+
+export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const transact = useTransact();
-  const showPanel = useRightPanelStore((s) => s.show);
+  const router = useRouter();
+
+  // Joining a rally opens its detail panel on /map — the rally lives in the
+  // world, and the entity it targets is on the map. Pre-opens via the
+  // map-tab deep-link entry (?openPanel=rally-detail&rallyPubkey=…).
+  const openRallyOnMap = (rallyPubkey: string) => {
+    const params = new URLSearchParams();
+    params.set("openPanel", "rally-detail");
+    params.set("rallyPubkey", rallyPubkey);
+    router.push(`/map?${params.toString()}`);
+  };
   const { data: geData } = useGameEngine();
   const ge = geData?.account;
   const { data: cityEncounters } = useEncounters(player?.currentCity);
@@ -477,11 +499,7 @@ export function RallyTab() {
               return (
                 <button
                   key={r.pubkey.toBase58()}
-                  onClick={() =>
-                    showPanel("Team Rally", "rally-detail", {
-                      rallyPubkey: r.pubkey.toBase58(),
-                    })
-                  }
+                  onClick={() => openRallyOnMap(r.pubkey.toBase58())}
                   className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-2 text-left transition-colors hover:border-zinc-700 hover:bg-surface-raised/50"
                 >
                   <div className="min-w-0">
@@ -517,8 +535,9 @@ export function RallyTab() {
         )}
       </div>
 
-      {/* Create Rally */}
-      {!rally && (
+      {/* Create Rally — hidden when this tab is rendered inside Forces
+          (creation lives on the EntityPanel via RallyComposerPanel). */}
+      {!rally && !hideComposer && (
         <div className="card space-y-4">
           <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
             Create Rally
@@ -627,6 +646,7 @@ export function RallyTab() {
             </div>
             <TripleCountInput
               labels={DEFENSIVE_UNIT_LABELS}
+              icons={DEFENSIVE_UNIT_ICONS}
               available={ownedUnits}
               value={rallyUnits}
               onChange={setRallyUnits}
@@ -636,6 +656,7 @@ export function RallyTab() {
             </div>
             <TripleCountInput
               labels={WEAPON_LABELS}
+              icons={WEAPON_ICONS}
               available={ownedWeapons}
               value={rallyWeapons}
               onChange={setRallyWeapons}

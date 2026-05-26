@@ -5,11 +5,11 @@ import { buildingFraming } from "@/lib/narrative";
 export type BuildingCategory = "Military" | "Economy" | "Growth" | "Combat" | "Exploration";
 
 export const CATEGORY_COLORS: Record<BuildingCategory, string> = {
-  Military: "border-l-gold-300",
-  Economy: "border-l-gold-400",
-  Growth: "border-l-gold-500",
-  Combat: "border-l-gold-600",
-  Exploration: "border-l-gold-900",
+  Military: "text-gold-300",
+  Economy: "text-gold-400",
+  Growth: "text-gold-500",
+  Combat: "text-gold-600",
+  Exploration: "text-gold-900",
 };
 
 export const CATEGORY_ORDER: BuildingCategory[] = [
@@ -125,10 +125,11 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
   {
     id: BuildingId.Mansion,
     name: "Mansion",
-    desc: "Home base",
+    desc: buildingFraming(BuildingId.Mansion).role,
     tier: 1,
     category: "Growth",
-    featureHint: "Home",
+    centerView: true,
+    featureHint: "Daily claim",
   },
   {
     id: BuildingId.Academy,
@@ -167,6 +168,7 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
     tier: 3,
     category: "Combat",
     primaryFeature: FEATURES.ARENA_JOIN,
+    centerView: true,
     featureHint: "PvP",
   },
   {
@@ -176,7 +178,7 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
     tier: 3,
     category: "Combat",
     primaryFeature: FEATURES.DUNGEON_ENTER,
-    route: "/combat?tab=dungeon",
+    centerView: true,
     featureHint: "Dungeon",
   },
 

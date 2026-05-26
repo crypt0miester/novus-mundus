@@ -300,6 +300,7 @@ pub enum GameError {
     TeamNotUnlocked = 7554,             // Must join/create team first
     CosmeticsNotUnlocked = 7555,        // Must purchase cosmetic first
     ExtensionPrerequisiteNotMet = 7556, // Generic prerequisite failure
+    CosmeticNotOwned = 7557,            // Tried to equip a cosmetic not in owned_<kind>
 
     // Shop Errors (1600-1699)
     InvalidTreasury = 7600,

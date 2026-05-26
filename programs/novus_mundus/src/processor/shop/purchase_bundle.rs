@@ -7,9 +7,11 @@ use crate::{
         estate::{load_estate_for_player, market_discount_bps, require_market},
         is_inventory_item_type, process_token_payment_flow,
     },
+    processor::shop::common::is_cosmetic_item_type,
     state::{
         require_extension, unlock_extension_if_eligible, BundleAccount, BundleTier, GameEngine,
-        PlayerAccount, ShopConfigAccount, ShopItemAccount, EXT_INVENTORY, EXT_RESEARCH,
+        PlayerAccount, ShopConfigAccount, ShopItemAccount, EXT_COSMETICS, EXT_INVENTORY,
+        EXT_RESEARCH,
     },
     utils::{read_u32, read_u8},
     validation::{require_key_match, require_signer, require_writable},
@@ -141,6 +143,36 @@ pub fn process(
     }
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
 
+    // 7.5. Pre-scan: if any bundle item routes through fulfill_item's cosmetic
+    // branches, unlock EXT_COSMETICS now so `cosmetics_mut()` returns Some
+    // during fulfillment. Without this, fulfill_item would error
+    // (CosmeticsNotUnlocked) and the whole bundle purchase would revert —
+    // safe for the buyer but unusable for any bundle that contains a
+    // cosmetic. The simplified-fallback fulfillment uses item_id % 1000
+    // which can never produce a cosmetic item_type, so the scan only needs
+    // to cover the detailed (shop_item_accounts-provided) path.
+    let bundle_item_count = (bundle.item_count as usize).min(bundle.items.len());
+    if shop_item_accounts.len() >= bundle_item_count {
+        let mut any_cosmetic = false;
+        for i in 0..bundle_item_count {
+            if bundle.items[i].quantity == 0 {
+                continue;
+            }
+            // The main fulfillment loop below validates each shop_item PDA;
+            // a spoofed account here would at worst trigger a redundant
+            // EXT_COSMETICS unlock (benign — no cosmetic is granted).
+            let shop_item_data = shop_item_accounts[i].try_borrow()?;
+            let shop_item = unsafe { ShopItemAccount::load(&shop_item_data) };
+            if is_cosmetic_item_type(shop_item.item_type) {
+                any_cosmetic = true;
+                break;
+            }
+        }
+        if any_cosmetic {
+            unlock_extension_if_eligible(player_account, buyer, EXT_COSMETICS)?;
+        }
+    }
+
     // 8. Load Player mutably for remaining operations
     let mut player_data_ref = player_account.try_borrow_mut()?;
     let player = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
@@ -269,7 +301,7 @@ pub fn process(
                     add_to_inventory(
                         program_id,
                         buyer,
-                        buyer.address(),
+                        player_account.address(),
                         inventory_account,
                         system_program,
                         shop_item.item_type,
@@ -302,7 +334,7 @@ pub fn process(
                     add_to_inventory(
                         program_id,
                         buyer,
-                        buyer.address(),
+                        player_account.address(),
                         inventory_account,
                         system_program,
                         item_type,

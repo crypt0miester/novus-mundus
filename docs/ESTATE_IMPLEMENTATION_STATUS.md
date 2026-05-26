@@ -176,20 +176,23 @@ All daily activity buffs are consumed by their target instructions:
 | Hero meditation | Passive leveling (φ-based) | ✅ sanctuary processor (ID: 137, 138) |
 
 **Two-Phase Hero Progression:**
-1. **Phase 1 (Meditation)**: Free but extremely slow leveling
-   - XP per hour = sanctuary_level × 20
-   - XP per level: Quadratic (1-19), then Monthly (20+)
-   - Cap = 10 × φ^(sanctuary_level/5) ≈ 26 at Lv 10
+1. **Phase 1 (Meditation)**: Free, slow passive leveling
+   - XP per hour = sanctuary_level × 100 (5× the original rate; bumped
+     alongside the Sanctuary-rebalance pass — see
+     `helpers/estate.rs::sanctuary_meditation_xp_per_hour`)
+   - XP per level: Linear 200×level (1-19), then 11,200 × 1.1^(level-20)
+   - Cap = floor(10 × φ^(sanctuary_level/5)); examples: Lv 5 ≈ 16,
+     Lv 10 ≈ 26, Lv 15 ≈ 42, Lv 20 ≈ 69 (helpers/estate.rs::meditation_level_cap)
 
 2. **Phase 2 (Fragments)**: Beyond meditation cap, use level_up.rs
    - Fragment cost: 10 × 1.5^level (exponential)
    - Faster but costs resources
 
-**Meditation XP Scaling (at Sanctuary Lv 10, 8h/day play):**
+**Meditation XP Scaling (at Sanctuary Lv 2 — 200 XP/hr, 8h/day play):**
 | Hero Level | XP Required | Time |
 |------------|-------------|------|
-| 1 | 200 | 1.5 hours |
-| 5 | 1,000 | 7.5 hours |
+| 1 | 200 | 1 hour |
+| 5 | 1,000 | 5 hours |
 | 10 | 2,000 | 1.25 days |
 | 15 | 3,000 | 1.9 days |
 | 19 | 3,800 | 2.4 days |
@@ -197,6 +200,9 @@ All daily activity buffs are consumed by their target instructions:
 | 20 | 11,200 | **1 week** |
 | 21 | 12,320 | 1.1 weeks |
 | 26 | ~18,000 | 1.6 weeks |
+
+At higher Sanctuary tiers the same table compresses linearly: Lv 10
+runs 5× this rate, Lv 20 runs 10×.
 
 **Formula:**
 - Levels 1-19: `200 × level` (linear, fast early game)

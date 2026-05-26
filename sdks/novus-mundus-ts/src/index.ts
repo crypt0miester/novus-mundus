@@ -75,6 +75,7 @@ export * from './instructions/estate';
 export * from './instructions/forge';
 export * from './instructions/dungeon';
 export * from './instructions/castle';
+export * from './instructions/cosmetic';
 
 // Event exports
 export * from './events/index';

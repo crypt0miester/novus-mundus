@@ -295,6 +295,20 @@ export interface PlayerCore {
   // Rally
   rallyCaps: PlayerRallyCaps;
   rallyStats: RallyStats;
+
+  // Cosmetics (display only — ID slots + ownership bitmasks)
+  equippedAvatarFrame: number;
+  equippedNameColor: number;
+  equippedTitle: number;
+  equippedBadge: number;
+  equippedAttackEffect: number;
+  equippedVictoryPose: number;
+  ownedFrames: BN;
+  ownedColors: BN;
+  ownedTitles: BN;
+  ownedBadges: BN;
+  ownedEffects: BN;
+  ownedPoses: BN;
 }
 
 export type PlayerAccount = PlayerCore;
@@ -612,6 +626,64 @@ function defaultHeroesProjection() {
   };
 }
 
+// Cosmetics section — 80 bytes. Mirrors programs/novus_mundus/src/state/player.rs::CosmeticsSection.
+// Layout: 6 × u16 (equipped slots), 4 B padding, 6 × u64 (owned bitmasks), 16 B reserved.
+
+export interface CosmeticsSection {
+  equippedAvatarFrame: number;
+  equippedNameColor: number;
+  equippedTitle: number;
+  equippedBadge: number;
+  equippedAttackEffect: number;
+  equippedVictoryPose: number;
+  ownedFrames: BN;
+  ownedColors: BN;
+  ownedTitles: BN;
+  ownedBadges: BN;
+  ownedEffects: BN;
+  ownedPoses: BN;
+}
+
+function deserializeCosmeticsSection(buf: Uint8Array | Buffer): CosmeticsSection {
+  const reader = new BufferReader(buf);
+  const equippedAvatarFrame = reader.readU16();
+  const equippedNameColor = reader.readU16();
+  const equippedTitle = reader.readU16();
+  const equippedBadge = reader.readU16();
+  const equippedAttackEffect = reader.readU16();
+  const equippedVictoryPose = reader.readU16();
+  reader.skip(4); // _padding
+  const ownedFrames = reader.readU64();
+  const ownedColors = reader.readU64();
+  const ownedTitles = reader.readU64();
+  const ownedBadges = reader.readU64();
+  const ownedEffects = reader.readU64();
+  const ownedPoses = reader.readU64();
+  // _reserved[16] — not read.
+  return {
+    equippedAvatarFrame, equippedNameColor, equippedTitle, equippedBadge,
+    equippedAttackEffect, equippedVictoryPose,
+    ownedFrames, ownedColors, ownedTitles, ownedBadges, ownedEffects, ownedPoses,
+  };
+}
+
+function defaultCosmeticsProjection() {
+  return {
+    equippedAvatarFrame: 0,
+    equippedNameColor: 0,
+    equippedTitle: 0,
+    equippedBadge: 0,
+    equippedAttackEffect: 0,
+    equippedVictoryPose: 0,
+    ownedFrames: BN0.clone(),
+    ownedColors: BN0.clone(),
+    ownedTitles: BN0.clone(),
+    ownedBadges: BN0.clone(),
+    ownedEffects: BN0.clone(),
+    ownedPoses: BN0.clone(),
+  };
+}
+
 function defaultTeamProjection() {
   return {
     team: NULL_PUBKEY, teamSlotIndex: 0,
@@ -745,6 +817,7 @@ export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
   const hasTeam = (extensions & ExtensionFlags.TEAM) !== 0 && buf.length >= TEAM_OFFSET + TEAM_SIZE;
   const hasRally = (extensions & ExtensionFlags.RALLY) !== 0 && buf.length >= RALLY_OFFSET + RALLY_SIZE;
   const hasHeroes = (extensions & ExtensionFlags.HEROES) !== 0 && buf.length >= HEROES_OFFSET + HEROES_SIZE;
+  const hasCosmetics = (extensions & ExtensionFlags.COSMETICS) !== 0 && buf.length >= COSMETICS_OFFSET + COSMETICS_SIZE;
 
   const research = hasResearch
     ? deserializeResearchSection(buf.subarray(RESEARCH_OFFSET, RESEARCH_OFFSET + RESEARCH_SIZE))
@@ -761,6 +834,9 @@ export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
   const heroes = hasHeroes
     ? deserializeHeroesSection(buf.subarray(HEROES_OFFSET, HEROES_OFFSET + HEROES_SIZE))
     : null;
+  const cosmetics = hasCosmetics
+    ? deserializeCosmeticsSection(buf.subarray(COSMETICS_OFFSET, COSMETICS_OFFSET + COSMETICS_SIZE))
+    : null;
 
   // Section fields are named to match the flat PlayerCore shape — spread directly.
   const researchProj = research ?? defaultResearchProjection();
@@ -768,6 +844,7 @@ export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
   const teamProj = teamSec ?? defaultTeamProjection();
   const inventoryProj = inventory ?? defaultInventoryProjection();
   const rallyProj = rally ?? defaultRallyProjection();
+  const cosmeticsProj = cosmetics ?? defaultCosmeticsProjection();
 
   return {
     // Core
@@ -794,6 +871,7 @@ export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
     ...teamProj,
     ...inventoryProj,
     ...rallyProj,
+    ...cosmeticsProj,
   };
 }
 

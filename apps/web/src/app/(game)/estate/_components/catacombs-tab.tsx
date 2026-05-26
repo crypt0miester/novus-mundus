@@ -5,8 +5,7 @@ import type { PublicKey } from "@solana/web3.js";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useConnection } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
@@ -36,7 +35,7 @@ import { useRightPanelStore } from "@/lib/store/right-panel";
 import { useDungeonTemplate } from "@/lib/hooks/useDungeonTemplate";
 import { useDungeonTemplates } from "@/lib/hooks/useDungeonTemplates";
 import { THEMES } from "@/lib/dungeon-lore";
-import { RunView } from "./dungeon/RunView";
+import { RunView } from "./catacombs/RunView";
 
 // Hero specialization is chosen per run — it drives the run's combat bonuses
 // on-chain (see HeroSpecialization in the program). No hero NFT carries it.
@@ -47,7 +46,7 @@ const SPECS: { id: HeroSpecialization; label: string; perk: string }[] = [
   { id: HeroSpecialization.Tactician, label: "Tactician", perk: "+30% relic power" },
 ];
 
-export function DungeonTab() {
+export function CatacombsTab() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
   const { data: geData } = useGameEngine();
   const client = useNovusMundusClient();
@@ -58,7 +57,6 @@ export function DungeonTab() {
 
   const player = playerData?.account;
 
-  // Fetch active dungeon run
   const { data: runData, isSuccess: runReady } = useQuery({
     queryKey: ["dungeonRun", publicKey?.toBase58()],
     queryFn: async () => {
@@ -72,8 +70,6 @@ export function DungeonTab() {
     },
     enabled: !!publicKey && playerReady,
     staleTime: 2_000,
-    // A run advances room-by-room; poll so the UI self-heals if a post-action
-    // refetch raced the RPC and cached a stale room state.
     refetchInterval: (query) => (query.state.data?.exists ? 4_000 : false),
   });
 
@@ -82,13 +78,9 @@ export function DungeonTab() {
 
   const [selectedDungeon, setSelectedDungeon] = useState(0);
   const [heroSpec, setHeroSpec] = useState<HeroSpecialization>(HeroSpecialization.Warrior);
-  // Every dungeon that exists on-chain — drives the selector. Names, floors,
-  // entry cost and the level gate all come from the template; nothing here is
-  // hardcoded.
   const { data: dungeons } = useDungeonTemplates();
   const selectedTemplate = dungeons?.find((d) => d.id === selectedDungeon)?.template;
 
-  // Snap the selection to a real dungeon once the list loads.
   useEffect(() => {
     if (!dungeons || dungeons.length === 0) return;
     if (!dungeons.some((d) => d.id === selectedDungeon)) {
@@ -96,10 +88,6 @@ export function DungeonTab() {
     }
   }, [dungeons, selectedDungeon]);
 
-  // A dungeon run escrows a wallet-held hero for its duration, so the
-  // champion is drawn from the player's unlocked (wallet-owned) heroes. The
-  // pick comes from the DungeonHeroPanel; it falls back to the first owned
-  // hero, and to that too if the chosen hero is no longer held.
   const unlockedHeroes = useUnlockedHeroes();
   const selectedMint = useDungeonHeroStore((s) => s.selectedMint);
   const showPanel = useRightPanelStore((s) => s.show);
@@ -107,7 +95,6 @@ export function DungeonTab() {
     unlockedHeroes.find((h) => h.mint.toBase58() === selectedMint) ?? unlockedHeroes[0] ?? null;
   const heroMint: PublicKey | null = champion?.mint ?? null;
 
-  // A finished run's recap + claim live in the DungeonClaimPanel (RightPanel).
   const runEnded =
     !!run &&
     (run.status === DungeonStatus.Completed ||
@@ -119,32 +106,22 @@ export function DungeonTab() {
     if (runEnded) showPanel(runEndedTitle, "dungeon-claim");
   }, [runEnded, runEndedTitle, showPanel]);
 
-  // Traveling check
   const playerTraveling = player ? isTraveling(player) : false;
 
-  // Stamina info
   const playerStamina = player?.encounterStamina?.toNumber?.() ?? 0;
   const playerMaxStamina = player?.maxEncounterStamina?.toNumber?.() ?? 100;
 
-  // Entry cost comes straight off the chosen dungeon's template.
   const dungeonStaminaCost = selectedTemplate?.staminaCost ?? 0;
   const hasStamina = playerStamina >= dungeonStaminaCost;
 
-  // The selected dungeon's minimum player level — entry is rejected on-chain
-  // (InsufficientLevel) below it, so gate the button and say so up front.
   const minLevel = selectedTemplate?.minPlayerLevel ?? 0;
   const meetsLevel = !player || player.level >= minLevel;
 
-  // Per-room stamina cost (each room in a dungeon costs 1 encounter worth)
   const roomStaminaCost = useMemo(() => ENCOUNTER_STAMINA_COSTS[0] ?? 10, []);
 
-  // Time-of-day indicator — chain-anchored so the previewed loot multiplier
-  // matches what the program computes from `Clock::unix_timestamp`.
   const now = useChainNow();
   const timeOfDayInfo = useMemo(() => {
     if (!player) return null;
-    // `PlayerCore.currentLong` is f64 degrees (`state/player.rs:104`), NOT
-    // the ×10000 grid form. Pass straight through.
     const longitude = player.currentLong ?? 0;
     const tod = getCurrentTimeOfDay(now, longitude);
     const mult = getActivityMultiplier("loot_drop" as any, tod);
@@ -154,9 +131,8 @@ export function DungeonTab() {
   const handleEnter = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!heroMint) {
-      throw new Error("Mint or unlock a hero in the Heroes tab first");
+      throw new Error("Mint or unlock a hero in the Sanctuary's Heroes tab first");
     }
-    // The program rejects an entry that is not game_authority-co-signed.
     const versionedTx = await requestCoSign("/api/cosign/dungeon/enter", {
       dungeonId: selectedDungeon,
       heroMint: heroMint.toBase58(),
@@ -175,9 +151,8 @@ export function DungeonTab() {
   const handleStaminaAndEnter = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!heroMint) {
-      throw new Error("Mint or unlock a hero in the Heroes tab first");
+      throw new Error("Mint or unlock a hero in the Sanctuary's Heroes tab first");
     }
-    // buyStamina bundles a stamina top-up into the same co-signed entry tx.
     const versionedTx = await requestCoSign("/api/cosign/dungeon/enter", {
       dungeonId: selectedDungeon,
       heroMint: heroMint.toBase58(),
@@ -196,14 +171,12 @@ export function DungeonTab() {
 
   return (
     <div className="space-y-6">
-      {/* Traveling Warning */}
       {playerTraveling && (
         <div className="rounded-lg border border-border-gold/50 bg-accent/20 p-3 text-sm text-danger">
           You are currently traveling. Complete or cancel travel before entering a dungeon.
         </div>
       )}
 
-      {/* Stamina Display — outside a run, or once one has ended */}
       {player && (!run || runEnded) && (
         <div className="card">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -246,7 +219,6 @@ export function DungeonTab() {
         </div>
       )}
 
-      {/* No active run (or one just ended) — pick a dungeon and enter */}
       {(!runData?.exists || runEnded) && runReady && (
         <div className="card accent-border">
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -298,7 +270,6 @@ export function DungeonTab() {
             </div>
           )}
 
-          {/* Stamina cost + insufficient warning */}
           <div className="mt-3 text-center text-xs text-text-muted">
             Stamina cost:{" "}
             <span className={hasStamina ? "text-text-secondary" : "text-red-400"}>
@@ -339,12 +310,11 @@ export function DungeonTab() {
             </div>
           ) : (
             <div className="mt-1 text-center text-[11px] text-danger">
-              No hero available — mint or unlock one in the Heroes tab. A dungeon run escrows a
-              wallet-held hero.
+              No hero available — mint or unlock one in the Sanctuary's Heroes tab. A dungeon run
+              escrows a wallet-held hero.
             </div>
           )}
 
-          {/* Hero specialization — chosen per run, locked in for its duration */}
           <div className="mt-4">
             <div className="mb-2 text-center text-xs font-semibold uppercase tracking-wider text-text-muted">
               Hero Specialization
@@ -369,8 +339,6 @@ export function DungeonTab() {
 
           <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
             {runEnded ? (
-              // A finished run must be claimed (it owns the run PDA) before a
-              // new one can start — this reopens the recap/claim panel.
               <button
                 type="button"
                 onClick={() => showPanel(runEndedTitle, "dungeon-claim")}
@@ -401,8 +369,6 @@ export function DungeonTab() {
         </div>
       )}
 
-      {/* Active run — the full run experience. A finished run falls back to
-          the entry screen above; its recap + claim live in the RightPanel. */}
       {run && !runEnded && (
         <RunView
           run={run}
@@ -412,7 +378,6 @@ export function DungeonTab() {
         />
       )}
 
-      {/* Game Parameters */}
       {geData?.account &&
         (() => {
           const dc = geData.account.dungeonConfig;

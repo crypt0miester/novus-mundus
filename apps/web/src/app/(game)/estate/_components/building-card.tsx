@@ -30,6 +30,13 @@ interface BuildingCardProps {
 export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   const { config, phase, status, level, constructing, remainingSec, ready, lockReason } = data;
   const categoryColor = CATEGORY_COLORS[config.category];
+  const eyebrow = (
+    <span
+      className={`shrink-0 text-[9px] font-medium uppercase tracking-[0.18em] ${categoryColor} opacity-70`}
+    >
+      {config.category}
+    </span>
+  );
 
   // Time display for constructing buildings
   const timeStr = formatTime(remainingSec, "compact");
@@ -47,14 +54,15 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   // Locked state
   if (status === "locked") {
     return (
-      <div
-        className={`rounded-lg border-l-2 ${categoryColor} border border-zinc-800/50 p-3 opacity-40`}
-      >
+      <div className="rounded-lg border border-zinc-800/50 p-3 opacity-40">
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-600">{config.name}</span>
           <span className="text-[10px] text-zinc-700">T{config.tier}</span>
         </div>
-        <div className="text-[11px] text-zinc-700">{lockReason || config.desc}</div>
+        <div className="flex items-baseline justify-between gap-2">
+          <span className="text-[11px] text-zinc-700">{lockReason || config.desc}</span>
+          {eyebrow}
+        </div>
       </div>
     );
   }
@@ -63,7 +71,7 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   if (constructing) {
     return (
       <div
-        className={`relative overflow-hidden rounded-lg border-l-2 ${categoryColor} border ${
+        className={`relative overflow-hidden rounded-lg border ${
           selected ? "border-border-gold bg-accent/20" : "border-border-gold/60"
         } bg-surface-raised p-3 cursor-pointer`}
         onClick={onClick}
@@ -85,8 +93,11 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
               {config.featureHint ?? "In use"} · still open
             </div>
           )}
-          <div className="mt-2 text-[11px] text-text-muted">
-            {ready ? "tap to complete" : "tap to speed up"}
+          <div className="mt-2 flex items-baseline justify-between gap-2">
+            <span className="text-[11px] text-text-muted">
+              {ready ? "tap to complete" : "tap to speed up"}
+            </span>
+            {eyebrow}
           </div>
         </div>
       </div>
@@ -98,7 +109,7 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
     return (
       <button
         onClick={onClick}
-        className={`rounded-lg border-l-2 ${categoryColor} border p-3 text-left transition-colors ${
+        className={`rounded-lg border p-3 text-left transition-colors ${
           selected
             ? "border-border-gold bg-accent/20"
             : "border-border-default hover:border-border-gold/40"
@@ -113,11 +124,16 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
         {config.featureHint && (
           <div className="text-[11px] text-text-muted mt-0.5">{config.featureHint}</div>
         )}
-        {data.slot?.totalNoviInvested && (
-          <div className="mt-1 text-[11px] text-text-muted tabular-nums">
-            {(data.slot.totalNoviInvested.toNumber?.() ?? 0).toLocaleString()} invested
-          </div>
-        )}
+        <div className="mt-1 flex items-baseline justify-between gap-2">
+          {data.slot?.totalNoviInvested ? (
+            <span className="text-[11px] text-text-muted tabular-nums">
+              {(data.slot.totalNoviInvested.toNumber?.() ?? 0).toLocaleString()} invested
+            </span>
+          ) : (
+            <span />
+          )}
+          {eyebrow}
+        </div>
       </button>
     );
   }
@@ -126,7 +142,7 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   return (
     <button
       onClick={onClick}
-      className={`rounded-lg border-l-2 ${categoryColor} border border-dashed p-3 text-left transition-colors ${
+      className={`rounded-lg border border-dashed p-3 text-left transition-colors ${
         selected
           ? "border-border-gold bg-accent/20"
           : "border-border-default opacity-60 hover:opacity-80 hover:border-border-default"
@@ -147,8 +163,11 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
         </span>
       </div>
       <div className="text-xs text-text-muted">{config.desc}</div>
-      <div className="mt-1 text-[11px] font-semibold text-text-muted">
-        {config.tier === 1 ? "1k" : config.tier === 2 ? "2k" : "3k"} NOVI
+      <div className="mt-1 flex items-baseline justify-between gap-2">
+        <span className="text-[11px] font-semibold text-text-muted">
+          {config.tier === 1 ? "1k" : config.tier === 2 ? "2k" : "3k"} NOVI
+        </span>
+        {eyebrow}
       </div>
     </button>
   );

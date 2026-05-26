@@ -39,7 +39,20 @@ const GRID_PRECISION = 10000;
 const CELL_OCCUPIED = 6413;
 const CITY_ENCOUNTER_LIMIT = 6412;
 const WRONG_TIME = 6514;
-const MAX_PLACEMENT_RETRIES = 10;
+const TERRAIN_IMPASSABLE = 6430;
+const OUT_OF_RANGE = 6411;
+const MAX_PLACEMENT_RETRIES = 80;
+
+// Spatial-rejection error codes that mean "the random cell I picked is no
+// good — try a different one". Anything else (encounter limit, wrong time,
+// or non-spatial errors) should break out so we don't burn retries on a
+// guaranteed-fail signature. Keep this list in sync with new spawn-time
+// rejections added on chain.
+const RETRYABLE_SPAWN_ERRORS = new Set<number>([
+  CELL_OCCUPIED,
+  TERRAIN_IMPASSABLE,
+  OUT_OF_RANGE,
+]);
 
 // Candidate cells for --near spawns, nearest first. One grid cell ≈ 8–11 m, so
 // the player's own cell and its immediate neighbours all sit inside the 16 m
@@ -156,12 +169,17 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       for (let attempt = 0; attempt < attemptCount; attempt++) {
         // --near: walk out from the player's own cell, nearest first;
         // otherwise a random cell within ~50 grid cells of the city centre.
+        /* Random spawn range — widened from ±50 to ±300 grid units
+         * (roughly 3.3 km radius). For city radii of 30-55 km the
+         * old ±50 region only covered ~5% of the disc area; if it
+         * was mostly water/peak the spawn loop would exhaust all
+         * attempts without ever finding passable land. */
         const gridLat = nearGrid
           ? nearGrid.lat + NEAR_OFFSETS[attempt][0]
-          : baseLat + Math.floor(Math.random() * 100) - 50;
+          : baseLat + Math.floor(Math.random() * 600) - 300;
         const gridLong = nearGrid
           ? nearGrid.long + NEAR_OFFSETS[attempt][1]
-          : baseLong + Math.floor(Math.random() * 100) - 50;
+          : baseLong + Math.floor(Math.random() * 600) - 300;
 
         const ix = createSpawnEncounterInstruction(
           {
@@ -185,7 +203,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
           break;
         } catch (e: any) {
           const errCode = extractCustomError(e);
-          if (errCode === CELL_OCCUPIED) {
+          if (errCode != null && RETRYABLE_SPAWN_ERRORS.has(errCode)) {
             continue; // Retry with different coordinates
           }
           if (errCode === CITY_ENCOUNTER_LIMIT) {

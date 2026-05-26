@@ -25,6 +25,9 @@ import { MineTab } from "./mine-tab";
 import { FarmTab } from "./farm-tab";
 import { DockTab } from "./dock-tab";
 import { VaultTab } from "./vault-tab";
+import { MansionTab } from "./mansion-tab";
+import { ArenaTab } from "./arena-tab";
+import { CatacombsTab } from "./catacombs-tab";
 import { DailyActivityPanel } from "./daily-activity/DailyActivityPanel";
 
 /** Map building IDs to their feature tab component and gate feature. */
@@ -48,7 +51,6 @@ const FEATURE_VIEWS: Record<
   },
   [BuildingId.Sanctuary]: {
     component: SanctuaryTab,
-    feature: FEATURES.SANCTUARY_MEDITATE,
     label: "Sanctuary",
   },
   [BuildingId.Infirmary]: {
@@ -85,6 +87,20 @@ const FEATURE_VIEWS: Record<
   [BuildingId.Vault]: {
     component: VaultTab,
     label: "Vault",
+  },
+  [BuildingId.Mansion]: {
+    component: MansionTab,
+    label: "Mansion",
+  },
+  [BuildingId.Arena]: {
+    component: ArenaTab,
+    feature: FEATURES.ARENA_JOIN,
+    label: "Arena",
+  },
+  [BuildingId.Catacombs]: {
+    component: CatacombsTab,
+    feature: FEATURES.DUNGEON_ENTER,
+    label: "Dungeon",
   },
   [BuildingId.Observatory]: {
     component: ObservatoryActivity,
@@ -128,8 +144,10 @@ export function FeatureView({ buildingId }: FeatureViewProps) {
     return (
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3">
         <BuildingStrip buildingId={buildingId} />
-        <div className="card text-center">
-          <p className="text-sm text-text-muted">No feature view available for {buildingName}.</p>
+        <div className="min-h-0 flex-1 overflow-y-auto pb-24 md:pb-0">
+          <div className="card text-center">
+            <p className="text-sm text-text-muted">No feature view available for {buildingName}.</p>
+          </div>
         </div>
       </div>
     );
@@ -140,13 +158,15 @@ export function FeatureView({ buildingId }: FeatureViewProps) {
   return (
     <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3">
       <BuildingStrip buildingId={buildingId} />
-      {feature ? (
-        <FeatureGate feature={feature}>
+      <div className="min-h-0 flex-1 overflow-y-auto">
+        {feature ? (
+          <FeatureGate feature={feature}>
+            <Component />
+          </FeatureGate>
+        ) : (
           <Component />
-        </FeatureGate>
-      ) : (
-        <Component />
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -174,7 +194,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
 
   const name = config?.name ?? BuildingName[buildingId] ?? `Building #${buildingId}`;
   const level = slot?.level ?? 0;
-  const accent = config ? CATEGORY_COLORS[config.category] : "border-l-border-default";
+  const categoryColor = config ? CATEGORY_COLORS[config.category] : "text-text-muted";
 
   const startedAt = slot?.constructionStarted?.toNumber?.() ?? 0;
   const endsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
@@ -206,9 +226,7 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
       : "Upgrade";
 
   return (
-    <header
-      className={`relative overflow-hidden rounded-lg border border-border-default border-l-2 ${accent} bg-surface-raised px-4 py-3 animate-in fade-in duration-300`}
-    >
+    <header className="relative shrink-0 overflow-hidden rounded-lg border border-border-default bg-surface-raised px-4 py-3 animate-in fade-in duration-300">
       <Link
         href="/estate"
         className="inline-flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text-gold"
@@ -217,22 +235,29 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
         Estate
       </Link>
 
-      <div className="mt-1 flex items-center justify-between gap-4">
+      <div className="mt-1 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
         <div className="min-w-0">
           <h2 className="tier-title font-display text-xl font-bold tracking-wide">{name}</h2>
           <p
-            className={`mt-0.5 font-mono text-[11px] tabular-nums ${
+            className={`mt-0.5 flex items-baseline justify-between gap-3 font-mono text-[11px] tabular-nums ${
               phase === "improved" ? "text-text-gold" : "text-text-muted"
             }`}
           >
-            {status}
+            <span>{status}</span>
+            {config && (
+              <span
+                className={`shrink-0 text-[10px] font-medium uppercase tracking-[0.18em] ${categoryColor} opacity-70`}
+              >
+                {config.category}
+              </span>
+            )}
           </p>
         </div>
 
         {phase === "standing" && (
           <button
             onClick={() => show(name, "building-detail", { buildingId })}
-            className="shrink-0 rounded-md border border-border-gold bg-surface-raised px-4 py-1.5 text-xs font-semibold text-text-gold transition-colors hover:bg-surface-overlay"
+            className="w-full shrink-0 rounded-md border border-border-gold bg-surface-raised px-4 py-2 text-xs font-semibold text-text-gold transition-colors hover:bg-surface-overlay sm:w-auto sm:py-1.5"
           >
             {upgradeLabel}
           </button>
@@ -240,16 +265,16 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
         {phase === "improving" && (
           <button
             onClick={() => show(name, "building-detail", { buildingId })}
-            className="shrink-0 rounded-md border border-border-default px-3.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-border-gold hover:text-text-gold"
+            className="w-full shrink-0 rounded-md border border-border-default px-3.5 py-2 text-xs font-medium text-text-secondary transition-colors hover:border-border-gold hover:text-text-gold sm:w-auto sm:py-1.5"
           >
             Speed up
           </button>
         )}
         {phase === "improved" && (
-          <div className="shrink-0">
+          <div className="w-full shrink-0 sm:w-auto">
             <TxButton
               onClick={(rp) => handleCompleteBuilding(buildingId, rp)}
-              className="w-auto px-4 py-1.5 text-xs"
+              className="w-full px-4 py-2 text-xs sm:w-auto sm:py-1.5"
             >
               Complete upgrade
             </TxButton>

@@ -7,11 +7,13 @@ import { PageTransition } from "@/components/shared/PageTransition";
 import { MapTab } from "./_components/map-tab";
 import { ExpeditionTab } from "./_components/expedition-tab";
 import { CastleTab } from "./_components/castle-tab";
+import { ForcesTab } from "./_components/forces-tab";
 import { FeatureGate } from "@/components/shared/FeatureGate";
 import { FEATURES } from "@/lib/hooks/useFeatureGate";
 
 const TABS = [
   { key: "realm", label: "Realm" },
+  { key: "forces", label: "Forces" },
   { key: "expedition", label: "Expedition" },
   { key: "castle", label: "Castle" },
 ];
@@ -33,6 +35,7 @@ function MapContent() {
               and gating the tab caused a blank page while player data loaded.
               The in-panel Travel/Teleport CTAs gate themselves. */}
           {activeTab === "realm" && <MapTab />}
+          {activeTab === "forces" && <ForcesTab />}
           {activeTab === "expedition" && (
             <FeatureGate feature={FEATURES.EXPEDITION_MINING}>
               <ExpeditionTab />

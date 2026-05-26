@@ -8,10 +8,11 @@ use crate::{
         estate::{load_estate_for_player, market_discount_bps, require_market},
         is_inventory_item_type, process_token_payment_flow,
     },
+    processor::shop::common::is_cosmetic_item_type,
     state::{
         require_extension, unlock_extension_if_eligible, DailyDealAccount, GameEngine,
         PlayerAccount, PlayerPurchaseAccount, ShopConfigAccount, ShopItemAccount,
-        WeeklySaleAccount, EXT_INVENTORY, EXT_RESEARCH,
+        WeeklySaleAccount, EXT_COSMETICS, EXT_INVENTORY, EXT_RESEARCH,
     },
     utils::{read_u16, read_u32, read_u8},
     validation::{require_key_match, require_owner, require_signer, require_writable},
@@ -182,6 +183,15 @@ pub fn process(
         require_extension(player, EXT_RESEARCH)?;
     }
     unlock_extension_if_eligible(player_account, buyer, EXT_INVENTORY)?;
+
+    // Cosmetic items target the player's CosmeticsSection; unlock it
+    // here (before the player mut borrow) so `fulfill_item` can flip
+    // the right `owned_<kind>` bit. `unlock_extension_if_eligible`
+    // cascades through the prerequisite chain, so EXT_HEROES etc. get
+    // allocated as empty sections along the way.
+    if is_cosmetic_item_type(shop_item.item_type) {
+        unlock_extension_if_eligible(player_account, buyer, EXT_COSMETICS)?;
+    }
 
     // 9. Load Player and Calculate Discounts (kingdom-scoped)
     let player = PlayerAccount::load_checked_mut(
@@ -368,7 +378,7 @@ pub fn process(
             add_to_inventory(
                 program_id,
                 buyer,
-                buyer.address(),
+                player_account.address(),
                 inventory_account,
                 system_program,
                 shop_item.item_type,

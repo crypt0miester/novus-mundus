@@ -427,3 +427,52 @@ body[data-theme="dark"] .cairn-orb {
   box-shadow: 0 0 0 1px var(--tier-accent), 0 0 0 5px var(--tier-accent-glow);
 }
 
+/* ─── Cosmetic name-color animations ─── *
+ * Keyed off `CosmeticColorEntry.animation` in lib/config/cosmetics-catalog.ts.
+ * Applied on top of an inline `color: <hex>` set from the catalog. `aurora`
+ * cycles through colors and will override the inline color; the rest layer
+ * opacity / text-shadow / filter modulation on top so the base hex still
+ * reads. */
+
+@keyframes cosmetic-anim-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+.cosmetic-color-anim-pulse {
+  animation: cosmetic-anim-pulse 1.8s ease-in-out infinite;
+}
+
+@keyframes cosmetic-anim-embered {
+  0%, 100% { text-shadow: 0 0 0 rgba(255, 180, 80, 0); }
+  20%      { text-shadow: 0 0 6px rgba(255, 180, 80, 0.85); }
+  40%      { text-shadow: 0 0 0 rgba(255, 180, 80, 0); }
+}
+.cosmetic-color-anim-embered {
+  animation: cosmetic-anim-embered 3.2s ease-in-out infinite;
+}
+
+@keyframes cosmetic-anim-glimmer {
+  0%, 100% { filter: brightness(1); text-shadow: 0 0 0 rgba(218, 165, 32, 0); }
+  50%      { filter: brightness(1.18); text-shadow: 0 0 7px rgba(218, 165, 32, 0.55); }
+}
+.cosmetic-color-anim-glimmer {
+  animation: cosmetic-anim-glimmer 4s ease-in-out infinite;
+}
+
+@keyframes cosmetic-anim-vesper {
+  0%, 100% { color: #CD7F32; }
+  33%      { color: #daa520; }
+  66%      { color: #8B1A1A; }
+}
+.cosmetic-color-anim-vesper {
+  animation: cosmetic-anim-vesper 6s linear infinite;
+}
+
+@keyframes cosmetic-anim-cinder {
+  0%, 100% { text-shadow: 0 0 3px rgba(217, 119, 6, 0.35); }
+  50%      { text-shadow: 0 0 9px rgba(217, 119, 6, 0.75); }
+}
+.cosmetic-color-anim-cinder {
+  animation: cosmetic-anim-cinder 2.8s ease-in-out infinite;
+}
+

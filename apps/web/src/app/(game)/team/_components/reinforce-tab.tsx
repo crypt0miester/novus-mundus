@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
@@ -19,7 +20,9 @@ import { DomainName } from "@/components/shared/DomainName";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
+  DEFENSIVE_UNIT_ICONS,
   WEAPON_LABELS,
+  WEAPON_ICONS,
 } from "@/components/shared/TripleCountInput";
 import {
   derivePlayerPda,
@@ -47,7 +50,16 @@ interface ReinforcementRow {
   destinationWallet: PublicKey | null;
 }
 
-export function ReinforceTab() {
+interface ReinforceTabProps {
+  /**
+   * Hide the "Send Reinforcements" form. Forces view renders this for the
+   * in-flight rollup but doesn't want the send form — sending now lives on
+   * the EntityPanel via ReinforceComposerPanel.
+   */
+  hideComposer?: boolean;
+}
+
+export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
   const { data: geData } = useGameEngine();
@@ -82,6 +94,15 @@ export function ReinforceTab() {
   const [targetAddress, setTargetAddress] = useState("");
   const [reinUnits, setReinUnits] = useState<[number, number, number]>([0, 0, 0]);
   const [reinWeapons, setReinWeapons] = useState<[number, number, number]>([0, 0, 0]);
+
+  // Allow deep-link from the team members panel: ?tab=reinforce&target=<wallet>
+  // seeds the target on first mount only — manual edits aren't overwritten.
+  const searchParams = useSearchParams();
+  useEffect(() => {
+    const t = searchParams.get("target");
+    if (t) setTargetAddress(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // In-flight reinforcements — fetched both directions (sent + received).
   // The store only keeps a single reinforcement singleton, so the list of all
@@ -324,7 +345,9 @@ export function ReinforceTab() {
         </div>
       )}
 
-      {/* Send Reinforcements */}
+      {/* Send Reinforcements — hidden when this tab is rendered inside Forces
+          (sending lives on the EntityPanel via ReinforceComposerPanel). */}
+      {!hideComposer && (
       <div className="card">
         <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
           Send Reinforcements
@@ -352,6 +375,7 @@ export function ReinforceTab() {
             </div>
             <TripleCountInput
               labels={DEFENSIVE_UNIT_LABELS}
+              icons={DEFENSIVE_UNIT_ICONS}
               available={ownedUnits}
               value={reinUnits}
               onChange={setReinUnits}
@@ -361,30 +385,51 @@ export function ReinforceTab() {
             </div>
             <TripleCountInput
               labels={WEAPON_LABELS}
+              icons={WEAPON_ICONS}
               available={ownedWeapons}
               value={reinWeapons}
               onChange={setReinWeapons}
             />
           </div>
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              Hero (optional)
+          {/* Hero picker — only rendered when the player has at least one
+              locked hero. Buttons (one per filled slot) instead of a select
+              so common cases (1 hero) are a single tap. */}
+          {lockedHeroes.some((h) => h !== null) && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Hero (optional)
+              </div>
+              <div className="mt-1 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setReinHeroSlot(NO_HERO_SLOT)}
+                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                    reinHeroSlot === NO_HERO_SLOT
+                      ? "border-border-gold/50 bg-accent/30 text-text-gold"
+                      : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
+                  }`}
+                >
+                  None
+                </button>
+                {lockedHeroes.map((h, i) =>
+                  h ? (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => setReinHeroSlot(i)}
+                      className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                        reinHeroSlot === i
+                          ? "border-border-gold/50 bg-accent/30 text-text-gold"
+                          : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
+                      }`}
+                    >
+                      {h.name}
+                    </button>
+                  ) : null,
+                )}
+              </div>
             </div>
-            <select
-              value={reinHeroSlot}
-              onChange={(e) => setReinHeroSlot(Number(e.target.value))}
-              className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
-            >
-              <option value={NO_HERO_SLOT}>No hero</option>
-              {lockedHeroes.map((h, i) =>
-                h ? (
-                  <option key={i} value={i}>
-                    Slot {i}: {h.name}
-                  </option>
-                ) : null,
-              )}
-            </select>
-          </div>
+          )}
           <div className="flex flex-wrap gap-3">
             <TxButton
               onClick={handleSend}
@@ -399,6 +444,7 @@ export function ReinforceTab() {
           </div>
         </div>
       </div>
+      )}
 
       {/* In-Flight Reinforcements */}
       <div className="card">
@@ -420,32 +466,65 @@ export function ReinforceTab() {
               const arrivesAt = row.account.arrivesAt?.toNumber?.() ?? 0;
               const gemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
               const remaining = Math.max(0, arrivesAt - Math.floor(Date.now() / 1000));
+              const directionChip = (
+                <span
+                  className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
+                    row.direction === "sent"
+                      ? "bg-accent/40 text-text-gold"
+                      : "bg-zinc-800 text-text-muted"
+                  }`}
+                >
+                  {row.direction}
+                </span>
+              );
+              const statusChip = (
+                <span className="text-xs text-text-secondary">
+                  {REINFORCEMENT_STATUS_LABEL[status] ?? `Status ${status}`}
+                </span>
+              );
+
               return (
                 <div
                   key={row.pubkey.toBase58()}
                   className="rounded-lg border border-zinc-800 px-3 py-2"
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <span
-                        className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
-                          row.direction === "sent"
-                            ? "bg-accent/40 text-text-gold"
-                            : "bg-zinc-800 text-text-muted"
-                        }`}
-                      >
-                        {row.direction}
+                  {/* Mobile: stacked header (direction+status on top, counterparty + units on labelled rows). */}
+                  <div className="space-y-1 sm:hidden">
+                    <div className="flex items-center justify-between">
+                      {directionChip}
+                      {statusChip}
+                    </div>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                        {row.direction === "sent" ? "To" : "From"}
                       </span>
                       <span className="font-mono text-sm text-text-primary">
                         <DomainName pubkey={counterparty} chars={4} />
                       </span>
-                      <span className="text-xs text-text-muted">{totalUnits} units</span>
                     </div>
-                    <span className="text-xs text-text-secondary">
-                      {REINFORCEMENT_STATUS_LABEL[status] ?? `Status ${status}`}
-                    </span>
+                    <div className="flex items-baseline justify-between">
+                      <span className="text-[10px] uppercase tracking-wider text-text-muted">
+                        Units
+                      </span>
+                      <span className="font-mono text-sm text-text-primary tabular-nums">
+                        {totalUnits.toLocaleString()}
+                      </span>
+                    </div>
                   </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-3">
+
+                  {/* Desktop: single row. */}
+                  <div className="hidden items-center gap-3 sm:flex">
+                    {directionChip}
+                    <span className="font-mono text-sm text-text-primary">
+                      <DomainName pubkey={counterparty} chars={4} />
+                    </span>
+                    <span className="text-xs text-text-muted">
+                      {totalUnits.toLocaleString()} units
+                    </span>
+                    <span className="ml-auto">{statusChip}</span>
+                  </div>
+
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
                     {status === 0 && arrivesAt > 0 && (
                       <GoldCountdown
                         endsAt={arrivesAt}

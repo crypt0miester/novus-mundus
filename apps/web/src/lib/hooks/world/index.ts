@@ -5,4 +5,5 @@ export { useWorldTeams } from "./useWorldTeams";
 export { useWorldTeam } from "./useWorldTeam";
 export { useWorldTeamMembers } from "./useWorldTeamMembers";
 export { useWorldCities } from "./useWorldCities";
+export { useWorldCastles } from "./useWorldCastles";
 export { useCitizenStatus } from "./useCitizenStatus";

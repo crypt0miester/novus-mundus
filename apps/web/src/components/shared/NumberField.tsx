@@ -27,6 +27,12 @@ interface NumberFieldProps {
   /** Render the tappable "max N" shortcut. Default true. */
   showMax?: boolean;
   /**
+   * "sm" tightens the row: 32px steppers instead of 40px and a smaller field
+   * line-height. Use inside narrow panels (RightPanel sidebar / composers)
+   * where the default 40px controls dominate the column.
+   */
+  size?: "md" | "sm";
+  /**
    * Optional override for the Fibonacci-highlight check. The chain's
    * Fibonacci bonus applies to the value the instruction *carries* — for NOVI
    * fields that's `display × 10` raw, so callers should pass the raw value
@@ -37,11 +43,13 @@ interface NumberFieldProps {
   className?: string;
 }
 
-const STEPPER_CLASS =
-  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border " +
+const STEPPER_BASE =
+  "flex shrink-0 items-center justify-center rounded-lg border " +
   "border-border-default bg-surface-raised text-text-secondary transition-colors " +
   "hover:bg-surface-overlay hover:text-text-primary " +
   "disabled:opacity-40 disabled:hover:bg-surface-raised disabled:hover:text-text-secondary";
+const STEPPER_MD = `${STEPPER_BASE} h-10 w-10`;
+const STEPPER_SM = `${STEPPER_BASE} h-8 w-8`;
 
 /**
  * Fibonacci values at or below this are dropped — 1, 2, 3, 5, 8, 13, 21, 34,
@@ -79,11 +87,14 @@ export function NumberField({
   label,
   suffix,
   disabled = false,
+  size = "md",
   showSlider = true,
   showMax = true,
   fibonacciCheckValue,
   className,
 }: NumberFieldProps) {
+  const stepperClass = size === "sm" ? STEPPER_SM : STEPPER_MD;
+  const fieldHeightClass = size === "sm" ? "h-8" : "h-10";
   const fieldId = useId();
   const lo = min;
   const hi = Math.max(min, max);
@@ -151,14 +162,14 @@ export function NumberField({
           aria-label="Decrease"
           disabled={inert || atMin}
           onClick={() => commit(current - step)}
-          className={STEPPER_CLASS}
+          className={stepperClass}
         >
           <Minus className="h-4 w-4" />
         </button>
 
         <div
           className={cn(
-            "flex h-10 min-w-0 flex-1 items-center rounded-lg border border-border-default bg-surface transition-colors focus-within:border-[var(--tier-accent)]",
+            `flex ${fieldHeightClass} min-w-0 flex-1 items-center rounded-lg border border-border-default bg-surface transition-colors focus-within:border-[var(--tier-accent)]`,
             inert && "opacity-50",
           )}
         >
@@ -201,7 +212,7 @@ export function NumberField({
           aria-label="Increase"
           disabled={inert || atMax}
           onClick={() => commit(current + step)}
-          className={STEPPER_CLASS}
+          className={stepperClass}
         >
           <Plus className="h-4 w-4" />
         </button>

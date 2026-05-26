@@ -13,7 +13,6 @@ export interface NavItem {
 export const PRIMARY = [
   { href: "/dashboard", label: "Home" },
   { href: "/estate", label: "Estate" },
-  { href: "/combat", label: "Combat" },
   { href: "/team", label: "Team" },
   { href: "/shop", label: "Shop" },
   { href: "/map", label: "Map" },
@@ -22,14 +21,26 @@ export const PRIMARY = [
 // Order is left-to-right in the nav; the rightmost entries sit nearest the
 // `+` toggle, so the most-reached items come last. Section sub-tabs — also
 // reachable from each page's own tab bar — lead; standalone screens follow,
-// climbing to Inventory.
+// climbing to Inventory. Heroes/Dungeon/Arena now live inside the estate
+// (Sanctuary's Heroes sub-tab, Catacombs feature view, Arena feature view).
 export const SECONDARY: NavItem[] = [
-  { section: "Combat", href: "/combat?tab=heroes", label: "Heroes", feature: "hero_mint" },
-  { section: "Combat", href: "/combat?tab=dungeon", label: "Dungeon", feature: "dungeon_enter" },
-  { section: "Combat", href: "/combat?tab=arena", label: "Arena", feature: "arena_join" },
+  {
+    section: "Estate",
+    href: "/estate?building=sanctuary&subtab=heroes",
+    label: "Heroes",
+    feature: "hero_mint",
+  },
+  {
+    section: "Estate",
+    href: "/estate?building=catacombs",
+    label: "Dungeon",
+    feature: "dungeon_enter",
+  },
+  { section: "Estate", href: "/estate?building=arena", label: "Arena", feature: "arena_join" },
   { section: "Team", href: "/team?tab=rally", label: "Rally", feature: "rally_join" },
   { section: "Shop", href: "/shop?tab=subscribe", label: "Subscription", feature: "subscription" },
 
+  { href: "/cosmetics", label: "Wardrobe" },
   { href: "/settings", label: "Settings" },
   { href: "/world/leaderboard", label: "Leaderboard" },
   { href: "/events", label: "Events" },
@@ -47,7 +58,6 @@ export function computePageLocks(
 ): Record<string, boolean> {
   if (!hasPlayer) return {};
   return {
-    "/combat": !hasEstate,
     "/team": !(extensions & (1 << 2)),
     "/shop": !(extensions & (1 << 0)),
   };

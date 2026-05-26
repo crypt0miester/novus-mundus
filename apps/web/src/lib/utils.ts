@@ -58,3 +58,33 @@ export function bpsToMultiplier(bps: number): string {
 /** True when n is a Fibonacci number — re-exported from the SDK, the canonical
  *  port of the on-chain `is_fibonacci`. */
 export { isFibonacci } from "novus-mundus-sdk";
+
+/**
+ * Coerce a BN (or BN-like) to a JS number, clamped to `Number.MAX_SAFE_INTEGER`.
+ *
+ * On-chain u64 fields (unit pools, treasuries, lifetime spend) can exceed 2^53
+ * for endgame whales; `BN.prototype.toNumber()` throws once that boundary is
+ * crossed, which would otherwise crash inputs / displays mid-render. Clamping
+ * is the right choice for UI bounds (the cap is "all you have" and the chain
+ * does the real arithmetic), but never use this for values that need to round-
+ * trip to the chain — pass the BN itself.
+ */
+interface BNLike {
+  toNumber?: () => number;
+  bitLength?: () => number;
+  toString?: (base?: number) => string;
+}
+export function bnToSafeNumber(bn: BNLike | null | undefined): number {
+  if (!bn) return 0;
+  // Fast path: anything that fits in 53 bits is safe.
+  if (typeof bn.bitLength === "function" && bn.bitLength() <= 53) {
+    return bn.toNumber?.() ?? 0;
+  }
+  // Past the safe-integer ceiling — clamp without throwing.
+  if (typeof bn.toString === "function") {
+    const s = bn.toString();
+    const asNum = Number(s);
+    return Number.isFinite(asNum) ? Math.min(asNum, Number.MAX_SAFE_INTEGER) : 0;
+  }
+  return 0;
+}

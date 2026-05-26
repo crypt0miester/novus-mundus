@@ -7,7 +7,7 @@ import {
   toGrid,
   type CityAccount,
 } from "novus-mundus-sdk";
-import { GameIcon } from "@/components/shared/GameIcon";
+import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 
 interface CellAffinityPanelProps {
   cityAccount: CityAccount;
@@ -16,7 +16,7 @@ interface CellAffinityPanelProps {
 
 interface Chip {
   key: string;
-  iconId: string;
+  iconId: GameIconId;
   value: string;
   label: string;
   tone: "boon" | "penalty";

@@ -17,6 +17,13 @@ import { BufferReader, isNullPubkey } from '../utils/deserialize';
 export const OCCUPANT_NONE = 0;
 export const OCCUPANT_PLAYER = 1;
 export const OCCUPANT_ENCOUNTER = 2;
+/**
+ * Castles aren't stored in Location PDAs (their lat/long lives directly on
+ * the CastleAccount), but the disc renderer treats them as a third occupant
+ * kind so the entity-selection pipeline can dispatch one set of clicks.
+ * UI-only — the chain never sees this value.
+ */
+export const OCCUPANT_CASTLE = 3;
 
 // Location Account Interface
 

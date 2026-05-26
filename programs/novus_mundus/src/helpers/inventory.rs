@@ -19,7 +19,14 @@
 /// consistent routing of fulfillment between direct-player fields and the
 /// separate PlayerInventoryAccount.
 pub fn is_inventory_item_type(item_type: u16) -> bool {
-    matches!(item_type, 3 | 300..=399 | 1000..)
+    // Cosmetic item_types (1000-1383) are NOT inventory items — they route
+    // through fulfill_item's cosmetic branches, which flip the matching
+    // `owned_<kind>` bit on PlayerAccount.CosmeticsSection. The block
+    // 1192-1383 is reserved for cosmetics (frames wired now; effects + poses
+    // reserved) even when those kinds aren't decoded yet, so wiring them
+    // later doesn't require touching this helper. Anything past 1384 is
+    // available for future "true inventory" item types.
+    matches!(item_type, 3 | 300..=399 | 1384..)
 }
 
 use crate::{
@@ -39,7 +46,9 @@ use pinocchio_system::instructions::CreateAccount;
 /// # Arguments
 /// * `program_id` - The program ID
 /// * `payer` - Account paying for creation/expansion (must be signer, writable)
-/// * `owner` - The player who owns this inventory
+/// * `owner` - The player PDA (NOT the buyer wallet) — this is the seed used by
+///   `PlayerInventoryHeader::derive_pda`. The SDK derives from the player PDA, so chain
+///   callers must pass `player_account.address()`, not `buyer.address()`.
 /// * `inventory_account` - The inventory PDA (writable)
 /// * `system_program` - System program
 ///
@@ -80,7 +89,7 @@ pub fn get_or_create_inventory(
 /// # Arguments
 /// * `program_id` - The program ID
 /// * `payer` - Account paying for expansion if needed (must be signer, writable)
-/// * `owner` - The player who owns this inventory
+/// * `owner` - The player PDA (see `get_or_create_inventory` doc); not the wallet
 /// * `inventory_account` - The inventory PDA (writable)
 /// * `system_program` - System program
 /// * `item_type` - Type of item to add

@@ -33,10 +33,13 @@ import { DomainName } from "@/components/shared/DomainName";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
+  DEFENSIVE_UNIT_ICONS,
   WEAPON_LABELS,
+  WEAPON_ICONS,
 } from "@/components/shared/TripleCountInput";
-import { formatTime } from "@/lib/utils";
+import { formatTime, bnToSafeNumber } from "@/lib/utils";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import { useIsMountedRef } from "@/lib/hooks/useIsMountedRef";
 
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
 const ENCOUNTER_RARITY = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "World Event"];
@@ -59,6 +62,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
   const close = useRightPanelStore((s) => s.close);
+  const isMounted = useIsMountedRef();
 
   const rallyKey = useMemo(() => new PublicKey(rallyPubkey), [rallyPubkey]);
 
@@ -82,14 +86,14 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   const [nextOpen, setNextOpen] = useState(false);
 
   const ownedUnits: [number, number, number] = [
-    player?.defensiveUnit1?.toNumber?.() ?? 0,
-    player?.defensiveUnit2?.toNumber?.() ?? 0,
-    player?.defensiveUnit3?.toNumber?.() ?? 0,
+    bnToSafeNumber(player?.defensiveUnit1),
+    bnToSafeNumber(player?.defensiveUnit2),
+    bnToSafeNumber(player?.defensiveUnit3),
   ];
   const ownedWeapons: [number, number, number] = [
-    player?.meleeWeapons?.toNumber?.() ?? 0,
-    player?.rangedWeapons?.toNumber?.() ?? 0,
-    player?.siegeWeapons?.toNumber?.() ?? 0,
+    bnToSafeNumber(player?.meleeWeapons),
+    bnToSafeNumber(player?.rangedWeapons),
+    bnToSafeNumber(player?.siegeWeapons),
   ];
 
   // The target encounter, when this rally hunts one — matched out of the
@@ -136,7 +140,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         onPhase: reportPhase,
       })
       .then((r) => {
-        close();
+        if (isMounted.current) close();
         return r.signature;
       });
   };
@@ -168,7 +172,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         onPhase: reportPhase,
       })
       .then((r) => {
-        close();
+        if (isMounted.current) close();
         return r.signature;
       });
   };
@@ -242,49 +246,42 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         onPhase: reportPhase,
       })
       .then((r) => {
-        if (willClose) close();
+        if (willClose && isMounted.current) close();
         return r.signature;
       });
   };
 
-  if (isLoading) {
-    return <p className="text-sm text-text-muted">Loading rally…</p>;
-  }
-  if (!rally) {
-    return <p className="text-sm text-text-muted">This rally is no longer available.</p>;
-  }
-
+  // Derive lifecycle + morph-bar actions ABOVE any early return.
+  // React's hook order must be stable across renders; useMorphActions used
+  // to live after `if (isLoading) return …`, which would crash when the
+  // query resolved (hook count delta between "loading" and "loaded"
+  // renders). The derivations below tolerate rally === null so we can run
+  // them unconditionally.
   const nowSec = Math.floor(Date.now() / 1000);
-  const gatherAt = rally.gatherAt?.toNumber?.() ?? 0;
-  const createdAt = rally.createdAt?.toNumber?.() ?? 0;
+  const gatherAt = rally?.gatherAt?.toNumber?.() ?? 0;
+  const createdAt = rally?.createdAt?.toNumber?.() ?? 0;
   const gatherDone = gatherAt > 0 && nowSec >= gatherAt;
-  const marchDuration = rally.marchDuration ?? 0;
+  const marchDuration = rally?.marchDuration ?? 0;
   const traveling = player ? isTraveling(player) : false;
-  const full = (rally.participantCount ?? 0) >= (rally.maxParticipants ?? 0);
+  const full = (rally?.participantCount ?? 0) >= (rally?.maxParticipants ?? 0);
   const noCommit = units.every((n) => n === 0) && weapons.every((n) => n === 0);
-  const isCreator = !!publicKey && rally.creator.equals(publicKey);
-  const minParticipants = rally.minParticipants || 2;
-  const joinedCount = rally.participantCount ?? 0;
+  const isCreator = !!rally && !!publicKey && rally.creator.equals(publicKey);
+  const minParticipants = rally?.minParticipants || 2;
+  const joinedCount = rally?.participantCount ?? 0;
   const enoughForMarch = joinedCount >= minParticipants;
 
-  // Rally lifecycle — every section below keys off this.
-  const status = rally.status ?? RallyStatus.Gathering;
-  const isGathering = status === RallyStatus.Gathering;
+  const status = rally?.status ?? RallyStatus.Gathering;
+  const isGathering = !!rally && status === RallyStatus.Gathering;
   const isReturning = status === RallyStatus.Returning;
   const isCompleted = status === RallyStatus.Completed;
   const isCancelled = status === RallyStatus.Cancelled;
   const inFlight = status === RallyStatus.Marching || status === RallyStatus.Combat;
 
-  // March only while gathering, once enough members joined and the gather
-  // window (== execute_at on-chain) has elapsed.
   const canMarch = isGathering && gatherDone && enoughForMarch && !traveling;
-  // Close only after the rally has ended and all participants returned.
-  const closeable = canCloseRally(rally);
+  const closeable = rally ? canCloseRally(rally) : false;
 
-  // Join is omitted from the morph bar — the sheet still needs the troop/weapon
-  // /hero inputs visible above the bar, and committing zero is the most common
-  // failure mode.
   const morphActions = (() => {
+    if (!rally) return null;
     if (isGathering && isCreator) {
       return [
         {
@@ -323,6 +320,13 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
     return null;
   })();
   useMorphActions(morphActions);
+
+  if (isLoading) {
+    return <p className="text-sm text-text-muted">Loading rally…</p>;
+  }
+  if (!rally) {
+    return <p className="text-sm text-text-muted">This rally is no longer available.</p>;
+  }
 
   // Post-gathering status line, shown in place of the gather window.
   const statusBanner = isCancelled
@@ -530,6 +534,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             </div>
             <TripleCountInput
               labels={DEFENSIVE_UNIT_LABELS}
+              icons={DEFENSIVE_UNIT_ICONS}
               available={ownedUnits}
               value={units}
               onChange={setUnits}
@@ -539,6 +544,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             </div>
             <TripleCountInput
               labels={WEAPON_LABELS}
+              icons={WEAPON_ICONS}
               available={ownedWeapons}
               value={weapons}
               onChange={setWeapons}

@@ -1,9 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { toGrid } from "novus-mundus-sdk";
+import { toGrid, OCCUPANT_CASTLE } from "novus-mundus-sdk";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useWorldCastles } from "@/lib/hooks/world/useWorldCastles";
+import {
+  getCosmeticColor,
+  type CosmeticColorAnimation,
+} from "@/lib/config/cosmetics-catalog";
 
 export interface OccupiedCell {
   gridLat: number;
@@ -11,6 +16,22 @@ export interface OccupiedCell {
   occupantType: number;
   /* base58 pubkey of the player/encounter occupying the cell */
   occupant: string;
+  /* Catalog-resolved player name color. Pushed onto the dot/tile fill so
+   * paid cosmetics are visible at every zoom; renderers fall through to
+   * their canonical PLAYER_FILL palette when this is undefined. Only set
+   * for player occupants whose account is available in the store. */
+  nameColorHex?: string;
+  /* Catalog-keyed animation when the color is animated (pulse / embered /
+   * glimmer / vesper / cinder). Renderers drive per-frame modulation
+   * against `nameColorHex`. */
+  nameColorAnim?: CosmeticColorAnimation;
+  /* Equipped cosmetic IDs — raw on-chain u16 slot values. Resolved
+   * through the catalog by renderers (the dot reads frame for its
+   * stroke/glow, the label reads title for the suffix, the tooltip
+   * composes all four). 0 = nothing equipped. */
+  equippedBadge?: number;
+  equippedFrame?: number;
+  equippedTitle?: number;
 }
 
 /*
@@ -54,9 +75,25 @@ export function useCityOccupied(cityId: number | null | undefined) {
   const otherPlayers = useAccountStore((s) => s.otherPlayers);
   const client = useNovusMundusClient();
   const ge = client.gameEngine;
+  /* Castles aren't in Location PDAs (their lat/long is on the CastleAccount
+   * directly), so we fold them in here as synthesised occupants — that way
+   * one downstream consumer (CityTerrainMap, EntityPanel selection, etc.)
+   * sees a single entity stream regardless of how the chain stores them. */
+  const { data: worldCastles } = useWorldCastles();
 
   const [seededFor, setSeededFor] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // 1 Hz wall-clock tick so the despawnAt filter below recomputes once
+  // per second even when no other store mutation hits the memo deps.
+  // Without this, an encounter whose despawnAt crosses while the disc
+  // is idle stays painted until something else upserts.
+  const [nowTick, setNowTick] = useState(() => Math.floor(Date.now() / 1000));
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setNowTick(Math.floor(Date.now() / 1000));
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, []);
 
   useEffect(() => {
     if (cityId == null) return;
@@ -88,6 +125,7 @@ export function useCityOccupied(cityId: number | null | undefined) {
 
   const data = useMemo<OccupiedCell[]>(() => {
     if (cityId == null) return [];
+    const nowSec = nowTick;
     /* Build a "live position" map keyed by player PDA. Any player location
      * whose grid coords don't match the player's chain `currentLat/Long`
      * is either (a) a stale entry from a closed PDA that the WS swallowed
@@ -95,17 +133,58 @@ export function useCityOccupied(cityId: number | null | undefined) {
      * because the walk-line / travel marker covers the reservation case
      * and the player's actual position is the one we want to render. */
     const liveByPlayer = new Map<string, { gridLat: number; gridLong: number }>();
+    // Per-player cosmetic snapshot, resolved through the catalog. Pushed
+    // onto each cell below so the renderer doesn't have to re-do the lookup.
+    interface CellCosmetics {
+      hex?: string;
+      anim?: CosmeticColorAnimation;
+      badgeId: number;
+      frameId: number;
+      titleId: number;
+    }
+    const cosmeticsByPlayer = new Map<string, CellCosmetics>();
+    const collectCosmetics = (
+      key: string,
+      equippedNameColor: number,
+      equippedBadge: number,
+      equippedAvatarFrame: number,
+      equippedTitle: number,
+    ) => {
+      const entry = getCosmeticColor(equippedNameColor);
+      cosmeticsByPlayer.set(key, {
+        hex: entry?.hex,
+        anim: entry?.animation,
+        badgeId: equippedBadge,
+        frameId: equippedAvatarFrame,
+        titleId: equippedTitle,
+      });
+    };
     if (localPlayer) {
-      liveByPlayer.set(localPlayer.pubkey.toBase58(), {
+      const key = localPlayer.pubkey.toBase58();
+      liveByPlayer.set(key, {
         gridLat: toGrid(localPlayer.account.currentLat),
         gridLong: toGrid(localPlayer.account.currentLong),
       });
+      collectCosmetics(
+        key,
+        localPlayer.account.equippedNameColor,
+        localPlayer.account.equippedBadge,
+        localPlayer.account.equippedAvatarFrame,
+        localPlayer.account.equippedTitle,
+      );
     }
     for (const [key, entry] of otherPlayers) {
       liveByPlayer.set(key, {
         gridLat: toGrid(entry.account.currentLat),
         gridLong: toGrid(entry.account.currentLong),
       });
+      collectCosmetics(
+        key,
+        entry.account.equippedNameColor,
+        entry.account.equippedBadge,
+        entry.account.equippedAvatarFrame,
+        entry.account.equippedTitle,
+      );
     }
 
     const out: OccupiedCell[] = [];
@@ -113,14 +192,30 @@ export function useCityOccupied(cityId: number | null | undefined) {
       if (account.cityId !== cityId) continue;
       if (account.occupantType === 0) continue;
       if (!account.gameEngine.equals(ge)) continue;
-      /* Encounter occupant (type=2) — skip if the corresponding
-       * EncounterAccount in the store reports health=0. The chain has
-       * already closed this location, we just need to stop drawing it
-       * until the subscription manager catches up (which currently it
-       * doesn't, see comment above the hook). */
+      /* Encounter occupant (type=2) — skip the cell unless we have a
+       * matching live EncounterAccount in the store.
+       *
+       * useEncounters fetches with `aliveOnly: true`, so the encounters
+       * store is the canonical "what's actually alive" view. A Location
+       * PDA whose encounter is missing from the store is either:
+       *   (a) already dead/despawned — the chain may close the Location
+       *       PDA shortly via a follow-up tx, but until the WS delivers
+       *       the close, the Location lingers as a stale entry; or
+       *   (b) freshly spawned and the encounter account hasn't seeded
+       *       yet (brief race window).
+       *
+       * Hiding both keeps the disc honest: stale dots can't pull users
+       * into Strike flows the chain will reject. The cost is a brief
+       * missing dot during (b); useEncounters seeds in the same render
+       * cycle for visible cities, so the gap is sub-second.
+       *
+       * If the entry IS present, defend further against the chain-not-
+       * yet-closed window by checking health=0 and despawnAt elapsed. */
       if (account.occupantType === 2) {
         const encEntry = encounters.get(account.occupant.toBase58());
-        if (encEntry && encEntry.account.health.isZero()) continue;
+        if (!encEntry) continue;
+        if (encEntry.account.health.isZero()) continue;
+        if (encEntry.account.despawnAt.toNumber() <= nowSec) continue;
       }
       /* Player occupant (type=1) — only keep the cell that matches the
        * player's chain-state `currentLat/Long`. Other cells with the
@@ -132,15 +227,36 @@ export function useCityOccupied(cityId: number | null | undefined) {
           continue;
         }
       }
+      const occupantKey = account.occupant.toBase58();
+      const cosmetic = cosmeticsByPlayer.get(occupantKey);
       out.push({
         gridLat: account.gridLat,
         gridLong: account.gridLong,
         occupantType: account.occupantType,
-        occupant: account.occupant.toBase58(),
+        occupant: occupantKey,
+        nameColorHex: cosmetic?.hex,
+        nameColorAnim: cosmetic?.anim,
+        equippedBadge: cosmetic?.badgeId,
+        equippedFrame: cosmetic?.frameId,
+        equippedTitle: cosmetic?.titleId,
       });
     }
+    /* Fold castles in. CastleAccount stores lat/long as i32 microdegrees
+     * (×1e6); the disc grid is ten-thousandths of a degree, so the scale
+     * collapses to /100. Only the castles in this city show. */
+    if (worldCastles) {
+      for (const c of worldCastles) {
+        if (c.account.cityId !== cityId) continue;
+        out.push({
+          gridLat: Math.round(c.account.latitude / 100),
+          gridLong: Math.round(c.account.longitude / 100),
+          occupantType: OCCUPANT_CASTLE,
+          occupant: c.pubkey.toBase58(),
+        });
+      }
+    }
     return out;
-  }, [locations, cityId, ge, encounters, localPlayer, otherPlayers]);
+  }, [locations, cityId, ge, encounters, localPlayer, otherPlayers, nowTick, worldCastles]);
 
   return {
     data,

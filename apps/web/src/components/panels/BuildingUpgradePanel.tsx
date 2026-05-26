@@ -13,7 +13,7 @@ import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { cn, formatNumber } from "@/lib/utils";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
 import { findBuilding, formatNoviAmount } from "novus-mundus-sdk";
-import { buildingPhase } from "@/lib/narrative";
+import { buildingFraming, buildingPhase } from "@/lib/narrative";
 import { GameIcon } from "../shared/GameIcon";
 
 /** Hours to compact "4h" / "10.5h" string. */
@@ -204,7 +204,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
         {ready ? (
           <TxButton
             onClick={(rp) => handleCompleteBuilding(buildingId, rp)}
-            className="hidden px-6 w-full lg:block"
+            className="w-full px-6"
           >
             Complete {config.name}
           </TxButton>
@@ -256,6 +256,11 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       {config.desc && (
         <div className="-mt-1 text-xs leading-snug text-text-muted">{config.desc}</div>
       )}
+
+      {/* Lore — the building as a place, not a stat source */}
+      <p className="text-xs italic leading-snug text-text-muted">
+        {buildingFraming(buildingId).line}
+      </p>
 
       {/* NOVI balance */}
       <div className="rounded-lg bg-surface/60 px-3 py-2">
@@ -330,7 +335,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       ) : (
         <TxButton
           onClick={(rp: (p: TxPhase) => void) => handleBuildOrUpgrade(buildingId, rp)}
-          className="hidden w-full lg:block"
+          className="w-full"
           disabled={!hasEnough}
         >
           {!hasEnough ? "Insufficient NOVI" : isUpgrade ? `Upgrade` : `Build`}

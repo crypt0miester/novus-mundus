@@ -67,6 +67,72 @@ export const TIER_NAMES = ["Rookie", "Expert", "Epic", "Legendary"] as const;
 const TIER_BADGES = ["I", "II", "III", "IV"] as const;
 
 /**
+ * Single source of truth for the per-tier visual palette. The CSS
+ * `body[data-tier="N"]` block in `globals.css` MUST keep `--tier-accent` and
+ * `--tier-accent-bright` in lockstep with `accent`/`bright` here — they're
+ * effectively duplicates because CSS variables can't be read at module-eval
+ * time, but anything that needs a non-active tier's colour (the subscribe
+ * tab tile for tier 2 while the body is on tier 0, the profile page rendering
+ * someone else's tier) imports this table instead of re-defining its own.
+ *
+ * Palette: amber (Rookie) → bronze (Expert) → gold (Epic) → crimson (Legendary).
+ * Mirrors the on-chain ladder; bright is the highlighted cousin of accent.
+ */
+export interface TierPalette {
+  /** Solid accent — borders, rings, level number. */
+  accent: string;
+  /** Brighter variant — chip text, highlighted titles. */
+  bright: string;
+  /** Glow tint — corner gradient, boxShadow. */
+  glow: string;
+  /** Translucent fill — chip background. */
+  chipBg: string;
+  /** Translucent line — chip border. */
+  chipBorder: string;
+}
+
+export const TIER_PALETTE: readonly TierPalette[] = [
+  // 0 — Rookie (amber). :root defaults; paper theme.
+  {
+    accent: "#92400e",
+    bright: "#b45309",
+    glow: "rgba(146, 64, 14, 0.55)",
+    chipBg: "rgba(146, 64, 14, 0.10)",
+    chipBorder: "rgba(146, 64, 14, 0.40)",
+  },
+  // 1 — Expert (bronze). Paper theme.
+  {
+    accent: "#CD7F32",
+    bright: "#D4944A",
+    glow: "rgba(205, 127, 50, 0.55)",
+    chipBg: "rgba(205, 127, 50, 0.10)",
+    chipBorder: "rgba(205, 127, 50, 0.45)",
+  },
+  // 2 — Epic (gold). Dark theme.
+  {
+    accent: "#daa520",
+    bright: "#f1af09",
+    glow: "rgba(218, 165, 32, 0.55)",
+    chipBg: "rgba(218, 165, 32, 0.10)",
+    chipBorder: "rgba(218, 165, 32, 0.45)",
+  },
+  // 3 — Legendary (crimson). Dark theme.
+  {
+    accent: "#8B1A1A",
+    bright: "#9a2222",
+    glow: "rgba(139, 26, 26, 0.65)",
+    chipBg: "rgba(139, 26, 26, 0.15)",
+    chipBorder: "rgba(139, 26, 26, 0.50)",
+  },
+] as const;
+
+/** Resolve a tier index to its palette, clamping out-of-range to Rookie. */
+export function tierPalette(tier: number): TierPalette {
+  const safe = Math.min(Math.max(tier, 0), TIER_PALETTE.length - 1);
+  return TIER_PALETTE[safe]!;
+}
+
+/**
  * Tier info for the layout chrome.
  *
  * `active` is the subscription's expiry state — `subscription_end > now`. A

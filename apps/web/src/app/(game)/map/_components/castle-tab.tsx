@@ -21,7 +21,9 @@ import { InfoGrid } from "@/components/shared/InfoGrid";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
+  DEFENSIVE_UNIT_ICONS,
   WEAPON_LABELS,
+  WEAPON_ICONS,
 } from "@/components/shared/TripleCountInput";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransitionStore } from "@/lib/store/transition";
@@ -802,6 +804,7 @@ export function CastleTab() {
               </div>
               <TripleCountInput
                 labels={DEFENSIVE_UNIT_LABELS}
+                icons={DEFENSIVE_UNIT_ICONS}
                 available={availUnits}
                 value={garrisonUnits}
                 onChange={setGarrisonUnits}
@@ -811,6 +814,7 @@ export function CastleTab() {
               </div>
               <TripleCountInput
                 labels={WEAPON_LABELS}
+                icons={WEAPON_ICONS}
                 available={availWeapons}
                 value={garrisonWeapons}
                 onChange={setGarrisonWeapons}

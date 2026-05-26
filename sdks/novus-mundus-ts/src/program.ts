@@ -370,6 +370,9 @@ export const DISCRIMINATORS = {
   // Token Operations Extended (320-329)
   DEPOSIT_NOVI: 320,
   TREASURY_SWEEP_UNTRACKED_NOVI: 321,
+
+  // Cosmetics (322)
+  COSMETIC_EQUIP: 322,
 } as const;
 
 /** Type for discriminator values */

@@ -73,7 +73,7 @@ export const BUILDING_FRAMING: Readonly<Record<number, BuildingFraming>> = {
   },
   [BuildingId.Barracks]: {
     role: "Where soldiers are taken in",
-    line: "Walls for the people who fight. They come up the road on a rumor; here is where they are kept.",
+    line: "Walls for the people who fight. They come up the road on a rumor.",
   },
   [BuildingId.Workshop]: {
     role: "Where broken things are mended",

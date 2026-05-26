@@ -106,6 +106,11 @@ interface AccountsState {
 
   // Optional accounts (player may not have these)
   team: AccountEntry<TeamAccount> | null;
+  /* Multi-team cache, keyed by base58 pubkey. Distinct from the single
+   * `team` slot above (which scopes to the local player's team via
+   * useTeam). Populated by `useTeams(pubkeys[])` for map-side rival
+   * lookups, EntityPanel team chips, etc. */
+  teamsByPda: Map<string, AccountEntry<TeamAccount>>;
   expedition: AccountEntry<ExpeditionAccount> | null;
   arenaSeason: AccountEntry<ArenaSeasonAccount> | null;
   arenaParticipant: AccountEntry<ArenaParticipantAccount> | null;
@@ -134,6 +139,8 @@ interface AccountsState {
   setUser: (pubkey: PublicKey, account: UserAccount) => void;
   setGameEngine: (pubkey: PublicKey, account: GameEngine) => void;
   setTeam: (pubkey: PublicKey, account: TeamAccount) => void;
+  /** Bulk-upsert into the multi-team cache (`teamsByPda`). */
+  upsertTeams: (entries: { pubkey: PublicKey; account: TeamAccount }[]) => void;
   setExpedition: (pubkey: PublicKey, account: ExpeditionAccount) => void;
   setArenaSeason: (pubkey: PublicKey, account: ArenaSeasonAccount) => void;
   setArenaParticipant: (pubkey: PublicKey, account: ArenaParticipantAccount) => void;
@@ -237,6 +244,7 @@ const initialState = {
   daoPromotions: new Map() as Map<string, AccountEntry<DAOPromotionAccount>>,
   allowedTokens: new Map() as Map<string, AccountEntry<AllowedTokenAccount>>,
   team: null,
+  teamsByPda: new Map() as Map<string, AccountEntry<TeamAccount>>,
   expedition: null,
   arenaSeason: null,
   arenaParticipant: null,
@@ -267,6 +275,15 @@ export const useAccountStore = create<AccountsState>()(
     setUser: (pubkey, account) => set({ user: { pubkey, account } }),
     setGameEngine: (pubkey, account) => set({ gameEngine: { pubkey, account } }),
     setTeam: (pubkey, account) => set({ team: { pubkey, account } }),
+    upsertTeams: (entries) =>
+      set((s) => {
+        if (entries.length === 0) return {};
+        const next = new Map(s.teamsByPda);
+        for (const e of entries) {
+          next.set(e.pubkey.toBase58(), { pubkey: e.pubkey, account: e.account });
+        }
+        return { teamsByPda: next };
+      }),
     setExpedition: (pubkey, account) => set({ expedition: { pubkey, account } }),
     setArenaSeason: (pubkey, account) => set({ arenaSeason: { pubkey, account } }),
     setArenaParticipant: (pubkey, account) => set({ arenaParticipant: { pubkey, account } }),

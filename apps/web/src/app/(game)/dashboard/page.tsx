@@ -12,24 +12,18 @@ import {
   useCombatPower,
   useTravelProgress,
   useSubscriptionStatus,
-  useDailyRewards,
 } from "@/lib/hooks/useDerived";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
 import { ProgressRing } from "@/components/shared/ProgressRing";
 import { useNoviGenerator } from "@/lib/hooks/useNoviGenerator";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
-import { TxButton } from "@/components/shared/TxButton";
-import type { TxPhase } from "@/components/shared/TxButton";
 import { UnitGrid } from "@/components/shared/UnitGrid";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
 import { NoviRewards } from "@/components/shared/NoviRewards";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { LoadingSequence, getLoadingSteps } from "@/components/loading/LoadingSequence";
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useTransact } from "@/lib/hooks/useTransact";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
@@ -38,7 +32,6 @@ import { bpsToMultiplier, formatTime, formatNumber } from "@/lib/utils";
 import {
   xpRequiredForLevel,
   levelProgressPercent,
-  createClaimDailyRewardInstruction,
   deciToNovi,
 } from "novus-mundus-sdk";
 
@@ -52,7 +45,6 @@ export default function DashboardPage() {
   const power = useCombatPower();
   const travel = useTravelProgress();
   const sub = useSubscriptionStatus();
-  const daily = useDailyRewards();
   const stamina = useStamina(player);
   const novi = useNoviBalance();
   const noviGen = useNoviGenerator();
@@ -373,9 +365,6 @@ export default function DashboardPage() {
                   <div className="order-5 lg:order-none">
                     <NoviRewards />
                   </div>
-                  <div className="order-1 lg:order-none">
-                    <DailyRewardCard daily={daily} />
-                  </div>
                 </div>
               </div>
             </>
@@ -383,77 +372,5 @@ export default function DashboardPage() {
         </div>
       </PageTransition>
     </LoadingSequence>
-  );
-}
-
-// Daily Reward
-function DailyRewardCard({ daily }: { daily: ReturnType<typeof useDailyRewards> }) {
-  const { publicKey } = useWallet();
-  const client = useNovusMundusClient();
-  const transact = useTransact();
-
-  if (!daily.hasDailyRewards) return null;
-
-  const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createClaimDailyRewardInstruction({
-      owner: publicKey,
-      gameEngine: client.gameEngine,
-    });
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: "Daily reward claimed!",
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  // Fill the ring across the window between the last claim and the next one.
-  const cooldownPct = (() => {
-    if (daily.available) return 100;
-    const span = daily.cooldownEnds - daily.cooldownStartedAt;
-    if (span <= 0) return 0;
-    const elapsed = Math.floor(Date.now() / 1000) - daily.cooldownStartedAt;
-    return Math.max(0, Math.min(100, (elapsed / span) * 100));
-  })();
-
-  return (
-    <div className="card accent-border">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-        Daily Reward
-      </h3>
-      <div className="flex items-center gap-4">
-        <ProgressRing percent={cooldownPct} size={76}>
-          {daily.available ? (
-            <span className="text-[10px] font-bold uppercase tracking-wider text-text-gold">
-              Ready
-            </span>
-          ) : (
-            <span className="font-mono text-sm font-bold tabular-nums text-text-gold">
-              {Math.floor(cooldownPct)}%
-            </span>
-          )}
-        </ProgressRing>
-        <div className="min-w-0 flex-1">
-          {daily.available ? (
-            <>
-              <p className="mb-2 text-sm text-text-secondary">
-                Your daily reward is ready to claim.
-              </p>
-              <TxButton onClick={handleClaim} className="w-full">
-                Claim Daily Reward
-              </TxButton>
-            </>
-          ) : (
-            <>
-              <div className="text-xs text-text-muted">Next reward in</div>
-              <GoldCountdown endsAt={daily.cooldownEnds} format="compact" size="sm" />
-            </>
-          )}
-        </div>
-      </div>
-    </div>
   );
 }

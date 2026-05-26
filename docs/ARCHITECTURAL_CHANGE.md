@@ -1045,30 +1045,51 @@ Discounts apply **multiplicatively** across layers. Each layer reduces the remai
 **Total Savings:** 10,000 - 3,917 = **6,083 NOVI (60.8% off)**
 
 ```rust
-// Discount calculation (on-chain)
+// Discount calculation (on-chain) — programs/.../shop/common.rs
 pub fn calculate_final_price(
     base_price: u64,
-    base_discount_bps: u16,      // Layer 1 (best of sale types)
-    bundle_discount_bps: u16,    // Layer 2
-    fib_discount_bps: u16,       // Layer 3
-    sub_discount_bps: u16,       // Layer 4
-    milestone_discount_bps: u16, // Layer 5
-    loyalty_discount_bps: u16,   // Layer 6
+    base_discount_bps: u16,         // Layer 1 (best of sale types)
+    bundle_discount_bps: u16,       // Layer 2
+    fib_discount_bps: u16,          // Layer 3
+    sub_discount_bps: u16,          // Layer 4
+    milestone_discount_bps: u16,    // Layer 5
+    loyalty_discount_bps: u16,      // Layer 6
+    market_discount_bps: u16,       // Layer 7 (Market building + daily mini-game bonus)
+    max_total_discount_bps: u16,    // Floor — final price ≥ base × (1 - this)
 ) -> u64 {
     let mut price = base_price;
 
     // Apply each layer multiplicatively
     // discount_bps = 1000 means 10% off → multiply by 0.90 → (10000 - 1000) / 10000
+    // Uses apply_bp_penalty (safe-math) on chain; spelled out here for clarity.
     price = price * (10000 - base_discount_bps as u64) / 10000;
     price = price * (10000 - bundle_discount_bps as u64) / 10000;
     price = price * (10000 - fib_discount_bps as u64) / 10000;
     price = price * (10000 - sub_discount_bps as u64) / 10000;
     price = price * (10000 - milestone_discount_bps as u64) / 10000;
     price = price * (10000 - loyalty_discount_bps as u64) / 10000;
+    price = price * (10000 - market_discount_bps as u64) / 10000;
 
-    price
+    // Cap savings at max_total_discount_bps and never let an item be free.
+    let min_price = base_price * (10000 - max_total_discount_bps as u64) / 10000;
+    price.max(min_price).max(1)
 }
 ```
+
+**Subscription discount table (hardcoded, not from ShopConfig):**
+
+| Tier | sub_discount_bps |
+|------|-----------------:|
+| 0 (No Charter) | 0 |
+| 1 (Rookie)     | 500 |
+| 2 (Expert)     | 1,000 |
+| 3 (Epic)       | 1,500 |
+| 4 (Legendary)  | 2,500 |
+
+Source: `calculate_subscription_discount` in `processor/shop/common.rs`.
+The web mirror lives in `sdks/novus-mundus-ts/src/calculators/costs.ts`
+as `SUBSCRIPTION_DISCOUNT_BPS` + `calculateFinalShopPrice`, used by the
+shop tab's strike-through preview so the UI matches what the chain charges.
 
 **Maximum theoretical discount:** ~75% off (all layers at max values)
 - Note: This requires Flash Sale + premium subscription + Diamond milestone + 7-day streak + Fibonacci alignment

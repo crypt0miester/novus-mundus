@@ -361,6 +361,12 @@ export function calculateAttackTax(lootedAmount: number, taxBps: number): number
  * @param subscriptionTier - Player's subscription tier (0-3)
  * @param tierDiscountBps - Discount per tier in basis points
  * @returns Final price
+ *
+ * @deprecated Use {@link calculateFinalShopPrice} instead — this helper
+ * only applies one layer of discount, while the chain stacks subscription,
+ * milestone, streak, fib, and market discounts multiplicatively. Kept for
+ * backwards-compat with older call sites; new code should pass the full
+ * layered context.
  */
 export function calculateShopPrice(
   basePrice: number,
@@ -369,6 +375,143 @@ export function calculateShopPrice(
 ): number {
   const discount = tierDiscountBps[Math.min(subscriptionTier, tierDiscountBps.length - 1)];
   return discount ? applyBpsPenalty(basePrice, discount) : basePrice;
+}
+
+/**
+ * Subscription-tier discount basis points. Mirrors the hardcoded table in
+ * `programs/novus_mundus/src/processor/shop/common.rs::calculate_subscription_discount`.
+ * Index by tier: 0=No Charter, 1=Rookie, 2=Expert, 3=Epic, 4=Legendary.
+ */
+export const SUBSCRIPTION_DISCOUNT_BPS = [0, 500, 1000, 1500, 2500] as const;
+
+export function subscriptionDiscountBps(tier: number): number {
+  if (tier < 0 || tier >= SUBSCRIPTION_DISCOUNT_BPS.length) return 0;
+  return SUBSCRIPTION_DISCOUNT_BPS[tier]!;
+}
+
+/**
+ * ShopConfig-derived milestone tier bps for a given lifetime spend.
+ * Mirrors `calculate_milestone_discount` in
+ * programs/novus_mundus/src/processor/shop/common.rs.
+ *
+ * Thresholds are u64 on chain and arrive here as BN values. We use BN's
+ * own `gte` for comparison so the chain-side bucketing matches exactly
+ * regardless of value magnitude (no JS Number truncation).
+ */
+import type BN from 'bn.js';
+
+export interface ShopConfigForMilestone {
+  bronzeThreshold: BN;
+  silverThreshold: BN;
+  goldThreshold: BN;
+  platinumThreshold: BN;
+  diamondThreshold: BN;
+  bronzeDiscountBps: number;
+  silverDiscountBps: number;
+  goldDiscountBps: number;
+  platinumDiscountBps: number;
+  diamondDiscountBps: number;
+}
+
+export function milestoneDiscountBps(
+  totalSpent: BN,
+  config: ShopConfigForMilestone,
+): number {
+  if (totalSpent.gte(config.diamondThreshold)) return config.diamondDiscountBps;
+  if (totalSpent.gte(config.platinumThreshold)) return config.platinumDiscountBps;
+  if (totalSpent.gte(config.goldThreshold)) return config.goldDiscountBps;
+  if (totalSpent.gte(config.silverThreshold)) return config.silverDiscountBps;
+  if (totalSpent.gte(config.bronzeThreshold)) return config.bronzeDiscountBps;
+  return 0;
+}
+
+/**
+ * ShopConfig-derived loyalty-streak bps. Mirrors `calculate_streak_discount`
+ * in shop/common.rs (streak buckets: 7+, 5-6, 3-4, 2, <2).
+ */
+export interface ShopConfigForStreak {
+  streakDay2Bps: number;
+  streakDay3Bps: number;
+  streakDay5Bps: number;
+  streakDay7Bps: number;
+}
+export function streakDiscountBps(streak: number, config: ShopConfigForStreak): number {
+  if (streak >= 7) return config.streakDay7Bps;
+  if (streak >= 5) return config.streakDay5Bps;
+  if (streak >= 3) return config.streakDay3Bps;
+  if (streak >= 2) return config.streakDay2Bps;
+  return 0;
+}
+
+/**
+ * ShopConfig-derived fibonacci-bonus bps for consecutive same-day purchases.
+ * Mirrors `calculate_fib_bonus` in shop/common.rs.
+ */
+export interface ShopConfigForFib {
+  maxFibDiscountBps: number;
+}
+export function fibDiscountBps(
+  dailyPurchaseCount: number,
+  config: ShopConfigForFib,
+): number {
+  let base: number;
+  if (dailyPurchaseCount >= 6) base = 800;
+  else if (dailyPurchaseCount === 5) base = 500;
+  else if (dailyPurchaseCount === 4) base = 300;
+  else if (dailyPurchaseCount === 3) base = 200;
+  else if (dailyPurchaseCount === 2) base = 100;
+  else base = 0;
+  return Math.min(base, config.maxFibDiscountBps);
+}
+
+export interface ShopPriceContext {
+  /** Base discount applied first — usually a flash-sale or daily-deal discount. */
+  baseDiscountBps?: number;
+  /** Bundle-specific discount (only for bundle purchases). */
+  bundleDiscountBps?: number;
+  /** Fibonacci same-day-purchase bonus from ShopConfig. */
+  fibDiscountBps?: number;
+  /** Subscription tier (0-4) — looked up via {@link subscriptionDiscountBps}. */
+  subscriptionTier?: number;
+  /** Milestone tier bps (cumulative-spend bucket from ShopConfig). */
+  milestoneDiscountBps?: number;
+  /** Loyalty streak bps from ShopConfig. */
+  loyaltyDiscountBps?: number;
+  /** Market building + daily-mini-game bonus, summed. */
+  marketDiscountBps?: number;
+  /** ShopConfig.max_total_discount_bps — caps how far the layers can stack. */
+  maxTotalDiscountBps?: number;
+}
+
+/**
+ * Mirror of `programs/novus_mundus/src/processor/shop/common.rs::calculate_final_price`.
+ *
+ * Stacks discount layers multiplicatively (each `value × (1 - bps/10000)`)
+ * in the same order as chain — subscription, milestone, etc. are NOT
+ * additive, so a 10% sub + 6% milestone is not 16% off, it's
+ * (1 - 0.10) × (1 - 0.06) = 15.4% off. The final price is floored at
+ * `basePrice × (1 - maxTotalDiscountBps/10000)`, then `max(1)`.
+ *
+ * Use for any UI preview that wants to match what the chain will actually
+ * charge — strike-through prices, "you save X" labels, etc.
+ */
+export function calculateFinalShopPrice(
+  basePrice: number,
+  ctx: ShopPriceContext,
+): number {
+  let price = basePrice;
+  price = applyBpsPenalty(price, ctx.baseDiscountBps ?? 0);
+  price = applyBpsPenalty(price, ctx.bundleDiscountBps ?? 0);
+  price = applyBpsPenalty(price, ctx.fibDiscountBps ?? 0);
+  price = applyBpsPenalty(price, subscriptionDiscountBps(ctx.subscriptionTier ?? 0));
+  price = applyBpsPenalty(price, ctx.milestoneDiscountBps ?? 0);
+  price = applyBpsPenalty(price, ctx.loyaltyDiscountBps ?? 0);
+  price = applyBpsPenalty(price, ctx.marketDiscountBps ?? 0);
+  const minPrice =
+    ctx.maxTotalDiscountBps != null
+      ? applyBpsPenalty(basePrice, ctx.maxTotalDiscountBps)
+      : 0;
+  return Math.max(price, minPrice, 1);
 }
 
 // Cost Display Helpers

@@ -43,6 +43,7 @@ import { handleDeploy } from './lib/commands/deploy';
 import { handlePlayer } from './lib/commands/player';
 import { handleSnapshot } from './lib/commands/snapshot';
 import { handleNuke } from './lib/commands/nuke';
+import { handleTeam } from './lib/commands/team';
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -118,6 +119,9 @@ async function main(): Promise<void> {
       break;
     case 'nuke':
       await handleNuke(ctx, args);
+      break;
+    case 'team':
+      await handleTeam(ctx, args);
       break;
     default:
       log.error(`Unknown command: ${args.command}`);
@@ -211,6 +215,9 @@ Commands:
   snapshot load <name>      Restore from snapshot
   snapshot list             List saved snapshots
   snapshot delete <name>    Delete a snapshot
+  team join                 Have test players join a public team
+                            --team-id <id> --count <n>
+                            [--start-slot <s>]  (default: 0)
   nuke                      Full reset + init + populate
                             --tier <tier>  (default: advanced)
                             --count <n>    (default: 10)

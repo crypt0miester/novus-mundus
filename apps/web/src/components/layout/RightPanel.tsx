@@ -12,6 +12,9 @@ import { PvpDetailPanel } from "@/components/panels/PvpDetailPanel";
 import { DungeonHeroPanel } from "@/components/panels/DungeonHeroPanel";
 import { DungeonClaimPanel } from "@/components/panels/DungeonClaimPanel";
 import { InventoryPanel } from "@/components/panels/InventoryPanel";
+import { ReinforceComposerPanel } from "@/components/panels/ReinforceComposerPanel";
+import { RallyComposerPanel } from "@/components/panels/RallyComposerPanel";
+import { GarrisonComposerPanel } from "@/components/panels/GarrisonComposerPanel";
 import { BottomSheet } from "@/components/shared/BottomSheet";
 
 // ── Panel component registry ──
@@ -27,6 +30,9 @@ const PANELS: Record<string, ComponentType<any>> = {
   "dungeon-hero": DungeonHeroPanel,
   "dungeon-claim": DungeonClaimPanel,
   "inventory": InventoryPanel,
+  "reinforce-composer": ReinforceComposerPanel,
+  "rally-composer": RallyComposerPanel,
+  "garrison-composer": GarrisonComposerPanel,
 };
 
 /** Register a panel component for a given key. Call at module scope. */

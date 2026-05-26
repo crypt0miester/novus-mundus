@@ -236,7 +236,7 @@ const EXT_GUIDANCE: Record<number, { label: string; href: string; narrative: str
   },
   [Ext.HEROES]: {
     label: "Lock your first hero",
-    href: "/combat?tab=heroes",
+    href: "/estate?building=sanctuary&subtab=heroes",
     narrative: "Binding your first hero to a slot opens the rest of the hero arts.",
   },
 };

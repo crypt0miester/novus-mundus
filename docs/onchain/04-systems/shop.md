@@ -394,17 +394,27 @@ When fulfilling a purchase, the program routes items based on `item_type`:
 ```rust
 // Item types routed to PlayerInventoryAccount (separate PDA)
 fn is_inventory_item_type(item_type: u16) -> bool {
-    matches!(item_type, 3 | 300..=399 | 1000..)
+    matches!(item_type, 3 | 300..=399 | 1384..)
 }
-// All other types → direct PlayerAccount fields (counters/totals)
+// 1000–1383 falls through to fulfill_item's cosmetic branches (badge/title/
+// color/frame for 1000–1255; reserved + rejected for 1256–1383).
+// All other types → direct PlayerAccount fields (counters/totals).
 ```
 
 - `item_type == 3`: armor pieces (tracked individually for stat variations)
-- `item_type 300–399`: cosmetics
-- `item_type 1000+`: event items
+- `item_type 300–399`: legacy inventory items
+- `item_type 1000–1255`: cosmetics — routed through `fulfill_item` →
+  `CosmeticsSection.owned_<kind> |= 1 << id`, NOT the separate inventory PDA
+- `item_type 1256–1383`: reserved cosmetic effects/poses — currently
+  rejected with `InvalidParameter` until wired
+- `item_type 1384+`: future "true inventory" event items
 - All other types (weapons, consumables, materials, currencies) → PlayerAccount counters
 
-The `PlayerInventoryAccount` auto-creates and auto-expands (16 slots initial, +16 per expansion) if the player hasn't purchased an inventory item before.
+The `PlayerInventoryAccount` PDA is derived from the player PDA (NOT the
+buyer wallet) — `PlayerInventoryHeader::derive_pda(player_pda)` — and
+auto-creates / auto-expands (16 slots initial, +16 per expansion) when the
+first inventory item lands. Chain callers must pass `player_account.address()`,
+not `buyer.address()`, to `add_to_inventory`.
 
 [Source: helpers/inventory.rs](../../../programs/novus_mundus/src/helpers/inventory.rs)
 
