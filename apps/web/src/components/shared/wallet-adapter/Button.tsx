@@ -20,7 +20,7 @@ export type ButtonProps = PropsWithChildren<{
 export const Button: FC<ButtonProps> = (props) => {
   return (
     <button
-      className={`flex items-center my-1 mx-1 py-2 px-2 cursor-pointer ${props.className || ""}`}
+      className={`flex items-center my-1 mx-1 py-2 px-1 md:px-2 cursor-pointer ${props.className || ""}`}
       disabled={props.disabled}
       style={props.style}
       onClick={props.onClick}

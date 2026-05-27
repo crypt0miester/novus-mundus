@@ -57,7 +57,7 @@ const MIN_LOGICAL_SIZE = 1;
 // terrain crisply, so we can push the max much higher than CSS-scale would
 // allow. At 200× a single 11 m grid cell is ~7 CSS px — easily visible as a
 // discrete tile, which is what the proximity-grid overlay needs.
-const MIN_VIEW_SCALE = 1;
+const MIN_VIEW_SCALE = 5;
 const MAX_VIEW_SCALE = 500;
 const PAN_THRESHOLD_PX = 4;
 
@@ -393,8 +393,22 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
   }, []);
 
   // View state — panOx/panOy: grid offset of the canvas centre from the
-  // city centre. scale: zoom factor (1 = full disc, higher = closer).
-  const [view, setView] = useState({ scale: 1, panOx: 0, panOy: 0 });
+  // city centre. scale: zoom factor (MIN_VIEW_SCALE = whole disc visible,
+  // MAX_VIEW_SCALE = max closeup). Initial scale matches the user-clamp
+  // floor so the first frame doesn't render below what the user could
+  // ever pinch back to; the auto-focus effect below overrides this on
+  // the home city.
+  const [view, setView] = useState({ scale: MIN_VIEW_SCALE, panOx: 0, panOy: 0 });
+
+  // Reset the view whenever the underlying city changes. Without this
+  // the prior city's pan/zoom persists into the new one (same React
+  // component instance, just different `cityAccount` prop). The auto-
+  // focus effect further down then animates from this baseline for
+  // the home city; non-home cities stay at MIN_VIEW_SCALE so the
+  // player sees the whole disc on arrival.
+  useEffect(() => {
+    setView({ scale: MIN_VIEW_SCALE, panOx: 0, panOy: 0 });
+  }, [cityAccount.cityId]);
 
   // Animation tick — bumps once per rAF when at least one occupant has an
   // animated cosmetic name color, otherwise stays at 0. The paint effect
@@ -509,7 +523,12 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     return { scale: newScale, panOx: nextPan.panOx, panOy: nextPan.panOy };
   };
 
-  const resetView = () => animateView({ scale: 1, panOx: 0, panOy: 0 });
+  // Reset goes to MIN_VIEW_SCALE, not 1 — the user can't pan/zoom below
+  // MIN_VIEW_SCALE, so "reset" should land at the same most-zoomed-out
+  // state they could reach themselves. The visibility guard below only
+  // shows the chip when the user is ABOVE MIN_VIEW_SCALE, so reset is
+  // never a no-op.
+  const resetView = () => animateView({ scale: MIN_VIEW_SCALE, panOx: 0, panOy: 0 });
 
   /* Shared focus helper — used by both the mount-time auto-focus
    * effect (autoFocusCell prop) and the imperative `focusCell` handle
@@ -543,15 +562,23 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     [focusCell],
   );
 
-  /* Auto-focus is now driven from the parent (map-tab) via
-   * mapRef.focusCell + the same tryFocus polling the deep-link path
-   * uses. Keeping the snap logic out of this component avoids the
-   * race where an internal effect stamps a once-per-cityId guard
-   * before the canvas has measured and then silently no-ops.
-   * `autoFocusCell` is kept on the prop surface as a declarative
-   * "where the parent wants to land", but the parent is the one
-   * that calls focusCell — see the home-drill effect in map-tab. */
-  void autoFocusCell;
+  const autoFocusedForCityRef = useRef<number | null>(null);
+  useEffect(() => {
+    const lat = autoFocusCell?.gridLat;
+    const long = autoFocusCell?.gridLong;
+    if (lat == null || long == null) return;
+    if (size.w <= MIN_LOGICAL_SIZE || size.h <= MIN_LOGICAL_SIZE) return;
+    if (autoFocusedForCityRef.current === cityAccount.cityId) return;
+    autoFocusedForCityRef.current = cityAccount.cityId;
+    focusCell(lat, long);
+  }, [
+    autoFocusCell?.gridLat,
+    autoFocusCell?.gridLong,
+    cityAccount.cityId,
+    size.w,
+    size.h,
+    focusCell,
+  ]);
 
 
   /*
@@ -691,11 +718,7 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
 
   /* Occupancy: zustand-backed (lib/store/subscriptions.ts streams every
    * LocationAccount over WS). Hook seeds the store on cityId change. */
-  const {
-    data: occupied,
-    isLoading: occupancyLoading,
-    error: occupancyError,
-  } = useCityOccupied(cityAccount.cityId);
+  const { data: occupied } = useCityOccupied(cityAccount.cityId);
 
   // Drive `animationTick` at frame rate while any visible occupant has an
   // animated cosmetic name color. When none are visible, no rAF runs and
@@ -1790,9 +1813,6 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     view.panOy,
   ]);
 
-  const playerCount = occupied.filter((c) => c.occupantType === OCCUPANT_PLAYER).length;
-  const encounterCount = occupied.filter((c) => c.occupantType === OCCUPANT_ENCOUNTER).length;
-  const terrainEmpty = cityAccount.anchorCount === 0;
   // Scale legend — cartographic "nice round number" scale bar derived from
   // the current view. Picks the round-meter value that fills ~80 CSS px,
   // so the bar feels stable as the user zooms (it snaps between values
@@ -1811,29 +1831,6 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
 
   return (
     <div className={styles.root}>
-      <div className={styles.label}>
-        <span>The land · {cityAccount.name}</span>
-        {occupancyLoading && <span className={styles.scouting}> · scouting…</span>}
-        {!occupancyLoading && !occupancyError && (
-          <span className={styles.scouting}>
-            {" · "}
-            {playerCount} {playerCount === 1 ? "player" : "players"} · {encounterCount} wild
-          </span>
-        )}
-        {occupancyError && (
-          <span className={styles.scouting} title={occupancyError}>
-            {" · scouting blocked"}
-          </span>
-        )}
-        {terrainEmpty && (
-          <span
-            className={styles.scouting}
-            title="Terrain anchors are not yet set on this city (set_terrain not run)."
-          >
-            {" · terrain unset"}
-          </span>
-        )}
-      </div>
       <div
         ref={wrapRef}
         role="application"
@@ -1866,7 +1863,7 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
             aria-hidden
           />
         </div>
-        {view.scale > 1.001 && (
+        {view.scale > MIN_VIEW_SCALE * 1.001 && (
           <button
             type="button"
             className={styles.resetBtn}
@@ -1997,22 +1994,6 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
         ) : (
           <span>click a player or wild to inspect, or pick an empty cell to land.</span>
         )}
-      </div>
-      <div className={styles.legend}>
-        {myPlayerPubkey && (
-          <span>
-            <span className={`${styles.swatch} ${styles.swMe}`} /> you
-          </span>
-        )}
-        <span>
-          <span className={`${styles.swatch} ${styles.swPlayer}`} /> player
-        </span>
-        <span>
-          <span className={`${styles.swatch} ${styles.swEnc}`} /> wild
-        </span>
-        <span>
-          <span className={`${styles.swatch} ${styles.swSel}`} /> chosen
-        </span>
       </div>
     </div>
   );

@@ -55,14 +55,15 @@ export function TripleCountInput({ labels, available, value, onChange, icons, de
   };
 
   return (
-    // Mobile (or dense=true at any width): vertical list (icon stacked above
-    // label on the left, controls on the right; thin 50%-width centred
-    // divider between rows). Otherwise sm+ uses the 3-column grid.
+    // List mode (dense at all widths; default mode on mobile): each
+    // slot is ONE horizontal row [icon][label][NumberField][/ avail].
+    // sm+ in non-dense mode upgrades to the legacy 3-column grid where
+    // the header (icon+label + avail chip) sits above a md-size field.
     <div
       className={
         dense
-          ? "mt-1 flex flex-col gap-1.5"
-          : "mt-1 flex flex-col gap-3 sm:grid sm:grid-cols-3 sm:gap-2"
+          ? "mt-1 flex flex-col gap-1"
+          : "mt-1 flex flex-col gap-1 sm:grid sm:grid-cols-3 sm:gap-2"
       }
     >
       {labels.map((label, i) => {
@@ -74,7 +75,7 @@ export function TripleCountInput({ labels, available, value, onChange, icons, de
             disabled={disabled}
             onClick={() => setIndex(i, avail)}
             title={disabled ? "None available" : `Use max (${avail.toLocaleString()})`}
-            className="rounded px-1 font-mono text-[10px] tabular-nums text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-gold disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+            className="shrink-0 rounded px-1 font-mono text-[10px] tabular-nums text-text-secondary transition-colors hover:bg-surface-overlay hover:text-text-gold disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
           >
             / {avail.toLocaleString()}
           </button>
@@ -82,20 +83,31 @@ export function TripleCountInput({ labels, available, value, onChange, icons, de
 
         return (
           <div key={label}>
-            {/* List row (mobile, or any time dense=true): icon stacked
-                above label on the left, controls stacked on the right.
-                The grid path stays the legacy block layout. */}
-            <div className={dense ? "flex items-center gap-3" : "flex items-center gap-3 sm:block"}>
+            {/* List row: single line. The grid path (sm+, non-dense)
+                falls through to the legacy block layout below via the
+                `sm:flex-col sm:items-stretch` reset. */}
+            <div
+              className={
+                dense
+                  ? "flex items-center gap-2"
+                  : "flex items-center gap-2 sm:flex-col sm:items-stretch sm:gap-1"
+              }
+            >
+              {/* Inline icon + label (list mode). Hidden in the sm+
+                  grid path where the header below carries them. */}
               <span
                 className={
                   dense
-                    ? "my-auto flex w-12 shrink-0 flex-col items-center gap-0.5 self-center text-center text-[9px] text-text-muted"
-                    : "my-auto flex w-16 shrink-0 flex-col items-center gap-1 self-center text-center text-[10px] text-text-muted sm:hidden"
+                    ? "flex shrink-0 items-center gap-1 text-[10px] text-text-muted"
+                    : "flex shrink-0 items-center gap-1 text-[10px] text-text-muted sm:hidden"
                 }
               >
-                {icons && <GameIcon id={icons[i]} size={dense ? 16 : 24} title={label} />}
-                <span className="truncate">{label}</span>
+                {icons && <GameIcon id={icons[i]} size={14} title={label} />}
+                <span className="w-14 truncate">{label}</span>
               </span>
+
+              {/* Grid-mode header (sm+, non-dense): icon + label + the
+                  avail chip on one line above the field. */}
               {!dense && (
                 <div className="hidden text-[10px] text-text-muted sm:flex sm:items-center sm:justify-between sm:gap-1">
                   <span className="flex items-center gap-1 truncate">
@@ -105,31 +117,22 @@ export function TripleCountInput({ labels, available, value, onChange, icons, de
                   {availButton}
                 </div>
               )}
-              <div className={dense ? "min-w-0 flex-1" : "min-w-0 flex-1 sm:mt-1"}>
-                <div className={dense ? "mb-1 flex justify-end" : "mb-1 flex justify-end sm:hidden"}>
-                  {availButton}
-                </div>
+
+              <div className="min-w-0 flex-1">
                 <NumberField
                   showMax={false}
                   min={0}
                   max={avail}
                   value={value[i]}
                   onChange={(n) => setIndex(i, n)}
-                  size={dense ? "sm" : "md"}
+                  size="sm"
                 />
               </div>
+
+              {/* Avail chip at the right end of the list row. Hidden in
+                  the sm+ grid path (the header above carries it). */}
+              <span className={dense ? "" : "sm:hidden"}>{availButton}</span>
             </div>
-            {/* Divider — 50% width, centred — between rows. Mobile-only
-                in responsive mode; always in dense mode. */}
-            {i < labels.length - 1 && (
-              <div
-                className={
-                  dense
-                    ? "mx-auto mt-1.5 h-px w-1/2 bg-zinc-800/60"
-                    : "mx-auto mt-3 h-px w-1/2 bg-zinc-800/60 sm:hidden"
-                }
-              />
-            )}
           </div>
         );
       })}

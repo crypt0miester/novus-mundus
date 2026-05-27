@@ -88,9 +88,14 @@ export function MorphTabBar() {
 
   // While a bottom sheet is open the bar always carries a ✕ that closes it,
   // appended as a `kind: "dismiss"` action so it renders as the standalone
-  // circle — the same slot the `+` toggle occupies.
+  // circle — the same slot the `+` toggle occupies. We only append the
+  // sheet-close when the panel hasn't registered its own dismiss already;
+  // otherwise both dismisses end up in `actions`, only the first is
+  // pulled out to the standalone circle, and the second renders as a
+  // stray inline ✕ pill inside the action row.
   const topSheet = useSheetStore((s) => s.openSheets[s.openSheets.length - 1]);
-  const actions: PanelAction[] = topSheet
+  const panelHasDismiss = panelActions.some((a) => a.kind === "dismiss");
+  const actions: PanelAction[] = topSheet && !panelHasDismiss
     ? [
         ...panelActions,
         {

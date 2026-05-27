@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { ChevronRight, Map as MapIcon } from "lucide-react";
+import { ChevronRight, Map as MapIcon, X } from "lucide-react";
+import { BottomSheet } from "@/components/shared/BottomSheet";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
 import {
@@ -178,6 +179,27 @@ export interface RealmMapProps {
    *  destination and a marker at the current progress. Omit (or pass null)
    *  for no line. `pct` is 0–100. */
   travel?: { fromCityId: number; toCityId: number; pct: number } | null;
+  /** A stable identifier for whatever the player is acting on right now
+   *  (picked cell, selected entity, in-flight travel). When fullscreen is
+   *  on, every transition to a NEW non-null value auto-opens the floating
+   *  panel so the action surface lands in view. Plain city selection is
+   *  handled separately (selecting a city always opens the panel too). */
+  actionId?: string | null;
+  /** When true the map takes the viewport (escapes its document-flow
+   *  container) and the detail panel floats over the right edge of the
+   *  map — Civ-style. On phones the same floating panel is used (no
+   *  bottom sheet, no backdrop), with an X close button. Stamps
+   *  `data-fullscreen="true"` on the root so the CityTerrainMap CSS
+   *  module (separate scope) can hook off the same contract via
+   *  `:global([data-fullscreen="true"])` selectors. Caller-side: /map
+   *  turns this on; /world and /arrival keep the default false so their
+   *  existing inline layout is untouched. */
+  fullscreen?: boolean;
+  /** Called when the user X-closes the floating detail panel. Parent
+   *  owns what gets cleared — typical wiring drops selectedEntity +
+   *  destCell so the player deselects without leaving the city disc.
+   *  Omit if no cleanup is needed beyond closing the panel. */
+  onCloseRequest?: () => void;
 }
 
 export function RealmMap({
@@ -190,6 +212,9 @@ export function RealmMap({
   recommendedId,
   hideCartouche,
   travel,
+  actionId,
+  fullscreen,
+  onCloseRequest,
 }: RealmMapProps = {}) {
   const { data: cities, isLoading: citiesLoading } = useWorldCities();
   const { data: players } = useWorldPlayers();
@@ -450,22 +475,61 @@ export function RealmMap({
 
   const totalPlayers = toNum(eng?.totalPlayers) || players?.length || 0;
 
+  // Fullscreen-only panel state. Desktop renders a floating card on
+  // the right edge of the disc, mounted only when there's something
+  // to show (city pick, cell pick, entity, in-flight travel). Mobile
+  // uses a BottomSheet that auto-opens on the same transitions but
+  // can also be opened by the bottom-centre pill so the player can
+  // surface the default realm overview without first selecting a
+  // city. Both are user-dismissable; a new transition re-opens.
+  //
+  // Priority: actionId > selectedId. Once the player is drilled into
+  // a city (selectedId set), clicking a rival / picking a cell /
+  // starting travel changes actionId, and the panel should re-open
+  // on that — NOT stay stuck on "city:${selectedId}". Falling back
+  // to the city key when no action is queued keeps the panel open
+  // on plain city selection too.
+  const panelOpenKey = actionId ?? (selectedId != null ? `city:${selectedId}` : null);
+  const [panelOpen, setPanelOpen] = useState(false);
+  const lastPanelKeyRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!fullscreen) return;
+    if (panelOpenKey && panelOpenKey !== lastPanelKeyRef.current) {
+      setPanelOpen(true);
+    }
+    lastPanelKeyRef.current = panelOpenKey;
+  }, [fullscreen, panelOpenKey]);
+  // Viewport — desktop ≥ 768 renders the floating card; below renders
+  // the mobile chrome (BottomSheet + status pill).
+  const [isDesktop, setIsDesktop] = useState(true);
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mql = window.matchMedia("(min-width: 768px)");
+    const sync = () => setIsDesktop(mql.matches);
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
+  // Desktop floating card shows only when there's a target. Mobile
+  // sheet shows whenever panelOpen — pill can open default state.
+  const desktopPanelShown = !!fullscreen && isDesktop && panelOpen && panelOpenKey != null;
+  const mobileSheetOpen = !!fullscreen && !isDesktop && panelOpen;
+
   if (citiesLoading) {
     return (
-      <div className={styles.root}>
+      <div className={styles.root} data-fullscreen={fullscreen ? "true" : undefined}>
         <div className={styles.center}>the cartographer is at work…</div>
       </div>
     );
   }
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} data-fullscreen={fullscreen ? "true" : undefined}>
       {!hideCartouche && (
         <header className={styles.cartouche}>
           <h1 className={styles.kingdom}>{kingdomName}</h1>
         </header>
       )}
-
       <div className={styles.shell}>
         <div
           ref={zoom.containerRef}
@@ -706,35 +770,64 @@ export function RealmMap({
           )}
         </div>
 
-        <aside className={styles.scroll}>
-          <div className={styles.scrollHead}>
-            {scrollHead ?? (selected ? "the city" : "the chart")}
-          </div>
-          {selected ? (
-            renderSelected ? (
-              renderSelected({
-                node: selected,
-                isHome: selected.city.cityId === homeCity,
-              })
-            ) : (
-              <DefaultSelectedPanel node={selected} isHome={selected.city.cityId === homeCity} />
-            )
-          ) : renderDefault ? (
-            renderDefault({
+        {/* Non-fullscreen: inline `.scroll` aside, same as the page's
+         *  always-visible detail panel. Stacks below the sheet at narrow
+         *  widths via the .shell grid rules. */}
+        {!fullscreen && (
+          <aside className={styles.scroll}>
+            <div className={styles.scrollHead}>
+              {scrollHead ?? (selected ? "the city" : "the chart")}
+            </div>
+            {renderPanelBody({
+              selected,
+              homeCity,
+              renderSelected,
+              renderDefault,
               typeCounts,
-              kingdom: kingdomName,
+              kingdomName,
               theme,
-              start: toNum(eng?.kingdomStartTime),
-            })
-          ) : (
-            <DefaultRealmPanel
-              typeCounts={typeCounts}
-              kingdom={kingdomName}
-              theme={theme}
-              start={toNum(eng?.kingdomStartTime)}
-            />
-          )}
-        </aside>
+              kingdomStart: toNum(eng?.kingdomStartTime),
+            })}
+          </aside>
+        )}
+        {/* Desktop fullscreen: floating card on the right edge of the
+         *  disc. Mounts only when there's something to show; X close
+         *  dismisses; next selection / action transition reopens. No
+         *  slide animation — fades in/out only. */}
+        {desktopPanelShown && (
+          <aside id="realm-map-panel" className={`${styles.scroll} ${styles.panelFloating}`}>
+            <button
+              type="button"
+              className={styles.panelClose}
+              onClick={() => {
+                // X deselects (entity / landing cell) via the parent's
+                // onCloseRequest, then closes the panel. Crucially does
+                // NOT clear the city selection — the disc stays mounted
+                // so the player is still inside the city they were
+                // looking at.
+                onCloseRequest?.();
+                setPanelOpen(false);
+              }}
+              aria-label="Close details panel"
+              title="Close"
+            >
+              <X className={styles.panelCloseIcon} aria-hidden />
+            </button>
+            <div className={styles.scrollHead}>
+              {scrollHead ?? (selected ? "the city" : "the chart")}
+            </div>
+            {renderPanelBody({
+              selected,
+              homeCity,
+              renderSelected,
+              renderDefault,
+              typeCounts,
+              kingdomName,
+              theme,
+              kingdomStart: toNum(eng?.kingdomStartTime),
+            })}
+          </aside>
+        )}
         <div className={styles.readouts}>
           <span className={styles.readout}>
             Citizens <span className={styles.readoutVal}>{totalPlayers.toLocaleString()}</span>
@@ -748,8 +841,79 @@ export function RealmMap({
           </span>
         </div>
       </div>
+
+        <>
+          <button
+            type="button"
+            className={styles.mobileStatusPill}
+            onClick={() => setPanelOpen(true)}
+            aria-label={selected ? `Show ${selected.city.name} details` : "Show realm details"}
+          >
+            <span className={styles.mobileStatusLabel}>
+              {selected ? selected.city.name : kingdomName}
+            </span>
+            {!selected && (
+              <span className={styles.mobileStatusMeta}>
+                · {totalPlayers.toLocaleString()} citizens · {nodes.length} cities
+              </span>
+            )}
+          </button>
+          <BottomSheet
+            open={mobileSheetOpen}
+            onClose={() => setPanelOpen(false)}
+            title={scrollHead ?? (selected ? "the city" : "the chart")}
+          >
+            {renderPanelBody({
+              selected,
+              homeCity,
+              renderSelected,
+              renderDefault,
+              typeCounts,
+              kingdomName,
+              theme,
+              kingdomStart: toNum(eng?.kingdomStartTime),
+            })}
+          </BottomSheet>
+        </>
     </div>
   );
+}
+
+interface PanelBodyArgs {
+  selected: RealmCityNode | null;
+  homeCity: number | undefined;
+  renderSelected?: (ctx: RealmMapSelectedContext) => ReactNode;
+  renderDefault?: (ctx: RealmMapDefaultContext) => ReactNode;
+  typeCounts: number[];
+  kingdomName: string;
+  theme: string;
+  kingdomStart: number;
+}
+
+function renderPanelBody({
+  selected,
+  homeCity,
+  renderSelected,
+  renderDefault,
+  typeCounts,
+  kingdomName,
+  theme,
+  kingdomStart,
+}: PanelBodyArgs): ReactNode {
+  if (selected) {
+    const ctx: RealmMapSelectedContext = {
+      node: selected,
+      isHome: selected.city.cityId === homeCity,
+    };
+    return renderSelected ? renderSelected(ctx) : <DefaultSelectedPanel {...ctx} />;
+  }
+  const ctx: RealmMapDefaultContext = {
+    typeCounts,
+    kingdom: kingdomName,
+    theme,
+    start: kingdomStart,
+  };
+  return renderDefault ? renderDefault(ctx) : <DefaultRealmPanel {...ctx} />;
 }
 
 export function DefaultSelectedPanel({ node, isHome }: RealmMapSelectedContext) {

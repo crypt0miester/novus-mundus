@@ -49,6 +49,10 @@ interface RallyComposerPanelProps {
   targetCityId: number;
   /** Display label for the target (e.g. "Wild encounter", "Player #42"). */
   targetLabel?: string;
+  /** Optional close handler — when provided, takes precedence over the
+   *  global RightPanel store's close. Set by callers that mount this
+   *  panel outside the RightPanel store. */
+  onClose?: () => void;
 }
 
 /**
@@ -62,6 +66,7 @@ export function RallyComposerPanel({
   targetType,
   targetCityId,
   targetLabel,
+  onClose,
 }: RallyComposerPanelProps) {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
@@ -69,7 +74,8 @@ export function RallyComposerPanel({
   const transact = useTransact();
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
-  const close = useRightPanelStore((s) => s.close);
+  const storeClose = useRightPanelStore((s) => s.close);
+  const close = onClose ?? storeClose;
   const isMounted = useIsMountedRef();
 
   const targetKey = useMemo(() => new PublicKey(targetPubkey), [targetPubkey]);

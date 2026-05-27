@@ -33,6 +33,12 @@
   margin: 0 auto;
 }
 
+/* Phones (≤767px) inside a non-fullscreen caller (/world, /arrival)
+ * keep the regular document flow — the sheet stacks above the inline
+ * `.scroll` panel just like the tablet single-column layout below. The
+ * fullscreen viewport-fill mode is opt-in via the `fullscreen` prop
+ * (see `.root[data-fullscreen="true"]` further down). */
+
 .numeral {
   font-family: var(--font-jetbrains), ui-monospace, "SF Mono", monospace;
   font-variant-numeric: tabular-nums;
@@ -61,8 +67,10 @@
   letter-spacing: 0.08em;
   color: var(--ink-soft);
 }
-/* Mobile: trim header chrome so the sheet has more vertical real estate. */
-@media (max-width: 960px) {
+/* Tablet + narrow desktop (768–960px): trim header chrome so the sheet
+ * has more vertical real estate. Pre-existing rules; preserved verbatim
+ * so this band looks the same as it always did. */
+@media (min-width: 768px) and (max-width: 960px) {
   .cartouche {
     padding: 0 0 0.55rem;
   }
@@ -75,6 +83,9 @@
     font-size: 0.66rem;
   }
 }
+/* Phones (≤767px): keep the cartouche unless `hideCartouche` is set by
+ * the caller. Fullscreen mode hides it via the `[data-fullscreen]` rule
+ * below so the floating chrome takes over. */
 .tagline .rule {
   display: inline-block;
   width: 36px;
@@ -93,7 +104,19 @@
   gap: 1rem;
   align-items: start;
 }
-@media (max-width: 960px) {
+/* Tablet + narrow desktop (768–960px): pre-existing single-column stack
+ * — the sheet sits above its inline `.scroll` panel. Preserved so the
+ * tablet layout matches what it was before the phone full-screen pass. */
+@media (min-width: 768px) and (max-width: 960px) {
+  .shell {
+    grid-template-columns: 1fr;
+    gap: 0.85rem;
+  }
+}
+/* Phones (≤767px) in non-fullscreen mode: collapse to a single column
+ * so the inline `.scroll` panel stacks below the sheet (same pattern
+ * as the 768–960 tablet band). */
+@media (max-width: 767px) {
   .shell {
     grid-template-columns: 1fr;
     gap: 0.85rem;
@@ -134,14 +157,24 @@
   cursor: grabbing;
 }
 
-/* On mobile, ditch the 7:5 letterbox — the map IS the primary surface, so it
- * should take the available viewport height. Cap at ~85vw so very tall
- * screens don't stretch the parchment to a sliver. */
-@media (max-width: 960px) {
+/* Tablet + narrow desktop (768–960px): pre-existing height cap so the
+ * sheet doesn't run full-height when it's stacked with the scroll panel
+ * below. */
+@media (min-width: 768px) and (max-width: 960px) {
   .sheet {
     aspect-ratio: auto;
     height: min(72vh, 92vw);
     min-height: 380px;
+  }
+}
+/* Phones (≤767px) in non-fullscreen mode: cap the sheet height so the
+ * inline `.scroll` panel beneath it can scroll into view; same shape as
+ * the tablet rule above. */
+@media (max-width: 767px) {
+  .sheet {
+    aspect-ratio: auto;
+    height: min(60vh, 100vw);
+    min-height: 280px;
   }
 }
 
@@ -152,7 +185,6 @@
   height: 100%;
   display: block;
 }
-
 /* When a drill-in view (e.g. CityTerrainMap) takes the sheet, the SVG is
  * pulled from layout — it stays mounted so React can re-show it instantly
  * on dismiss. The cityGroup entrance animations (`ink` etc.) run once on
@@ -175,20 +207,29 @@
   padding: 44px 56px;
   z-index: 2;
 }
-@media (max-width: 960px) {
-  /* Mobile: shrink padding so the terrain disc takes the full mobile sheet
-   * (no corner ornaments to dodge — they're hidden under the override too). */
+/* Tablet + narrow desktop (768–960px): pre-existing trim so the disc
+ * has room without the corner ornaments fighting it. */
+@media (min-width: 768px) and (max-width: 960px) {
   .sheetOverride {
     padding: 20px 20px 28px;
+  }
+}
+/* Phones (≤767px): the disc IS the screen — zero padding so the
+ * parchment edge sits flush against the viewport on every side. The
+ * bottom strip below the disc would otherwise hold a thin parchment
+ * frame, which read as a wasted border on full-screen mobile. */
+@media (max-width: 767px) {
+  .sheetOverride {
+    padding: 0;
   }
 }
 
 .sheetBackBtn {
   position: absolute;
-  bottom: 14px;
-  right: 14px;
-  width: 32px;
-  height: 32px;
+  bottom: 30px;
+  right: 8px;
+  width: 2.5rem;
+  height: 2.5rem;
   border-radius: 999px;
   border: 1px solid var(--ink-faint, #b89a72);
   background: var(--parchment, #efe2c4);
@@ -214,6 +255,14 @@
   outline: 2px solid var(--seal, #b45309);
   outline-offset: 2px;
 }
+
+@media (max-width: 767px) {
+  .sheetBackBtn {
+    bottom: 30px;
+    right: 8px;
+  }
+}
+
 .sheetBackIcon {
   width: 16px;
   height: 16px;
@@ -559,7 +608,7 @@
 .compass {
   position: absolute;
   top: 16px;
-  right: 18px;
+  left: 18px;
   width: 84px;
   height: 84px;
   pointer-events: none;
@@ -567,12 +616,13 @@
   color: var(--ink);
 }
 
-/* Reset-zoom button — only rendered when zoomed > 1. Top-left mirrors the
- * compass; same parchment chip vocabulary. */
+/* Reset-zoom button — only rendered when zoomed > 1. Bottom-right is
+ * the only free corner of the sheet (compass=TR, scale=BL). Same
+ * parchment chip vocabulary as the city-disc reset. */
 .resetBtn {
   position: absolute;
-  top: 16px;
-  left: 18px;
+  bottom: 16px;
+  right: 8px;
   width: 34px;
   height: 34px;
   border-radius: 50%;
@@ -644,12 +694,7 @@
 
 .scroll {
   position: relative;
-  background: radial-gradient(
-    120% 60% at 50% 0%,
-    var(--parchment) 0%,
-    var(--parchment-warm) 70%,
-    var(--parchment-deep) 100%
-  );
+  background: var(--parchment);
   border: 1px solid var(--parchment-edge);
   box-shadow:
     inset 0 0 50px rgba(110, 70, 30, 0.16),
@@ -657,6 +702,11 @@
   padding: 1.05rem 1rem 1.1rem;
   color: var(--ink);
 }
+/* Phones (≤767px) in non-fullscreen mode: the panel stacks below the
+ * sheet in a single column (handled by the `.shell` rule above). In
+ * fullscreen mode the panel is repositioned as a floating right-edge
+ * overlay — see the `.root[data-fullscreen="true"] .scroll` rules
+ * further down. */
 .scrollHead {
   font-size: 0.7rem;
   letter-spacing: 0.22em;
@@ -807,7 +857,16 @@
   justify-content: center;
   margin-bottom: 0.9rem;
 }
-@media (max-width: 960px) {
+/* Tablet + narrow desktop (768–960px): pre-existing readouts trim. */
+@media (min-width: 768px) and (max-width: 960px) {
+  .readouts {
+    gap: 0.35rem;
+    margin-bottom: 0.55rem;
+  }
+}
+/* Phones (≤767px) in non-fullscreen mode: tighter spacing. Fullscreen
+ * hides the readouts row entirely via the `[data-fullscreen]` rule. */
+@media (max-width: 767px) {
   .readouts {
     gap: 0.35rem;
     margin-bottom: 0.55rem;
@@ -825,7 +884,17 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
 }
-@media (max-width: 960px) {
+/* Tablet + narrow desktop (768–960px): pre-existing trim. */
+@media (min-width: 768px) and (max-width: 960px) {
+  .readout {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    gap: 0.3rem;
+  }
+}
+/* Phones (≤767px): same tighter trim as the tablet rule above. */
+@media (max-width: 767px) {
   .readout {
     padding: 0.2rem 0.45rem;
     font-size: 0.6rem;
@@ -950,3 +1019,181 @@
   stroke: var(--ink);
   opacity: 0.7;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Fullscreen mode — opt-in via the `fullscreen` prop on RealmMap,
+   which stamps `data-fullscreen="true"` on .root. /map turns this
+   on; /world and /arrival keep their original document-flow layout.
+
+   The attribute is also used as the cross-module contract for
+   CityTerrainMap.module.css, which keys off `:global([data-fullscreen
+   ="true"])` to lift its own mobile rules to desktop. Keep selectors
+   here at `.root[data-fullscreen="true"]` (attribute on the .root
+   element itself) and let descendant rules use that as a prefix.
+   ═══════════════════════════════════════════════════════════════ */
+
+/* .root: pin to the viewport. On phones the TopBar is `hidden md:grid`
+ * so we only need to leave room for the LeftPanelMobile strip and the
+ * MorphTabBar at the bottom. On tablet (768–1023) the TopBar + the
+ * same LeftPanelMobile strip both render. On desktop (≥1024) just the
+ * TopBar at the top and the LeftPanel sidebar at the left. */
+.root[data-fullscreen="true"] {
+  max-width: none;
+  margin: 0;
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+}
+@media (max-width: 767px) {
+  .root[data-fullscreen="true"] {
+    top: calc(2.5rem + 1px); /* LeftPanelMobile (h-10 + 1px border) */
+    bottom: calc(5rem + env(safe-area-inset-bottom)); /* MorphTabBar */
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .root[data-fullscreen="true"] {
+    /* TopBar (h-10 + 1px) + LeftPanelMobile (h-10 + 1px). */
+    top: calc(5rem + 2px);
+  }
+}
+@media (min-width: 1024px) {
+  .root[data-fullscreen="true"] {
+    top: calc(2.5rem + 1px); /* TopBar */
+    left: 18rem; /* LeftPanel sidebar (lg:w-72) */
+  }
+}
+
+/* Header chrome — fold into the floating chrome / panel content. */
+.root[data-fullscreen="true"] .cartouche,
+.root[data-fullscreen="true"] .readouts {
+  display: none;
+}
+
+/* Shell: single column stretched to fill the fixed root. */
+.root[data-fullscreen="true"] .shell {
+  display: block;
+  grid-template-columns: none;
+  gap: 0;
+  height: 100%;
+  position: relative;
+}
+
+/* Sheet fills the shell — drop the 7:5 letterbox + bordered card look. */
+.root[data-fullscreen="true"] .sheet {
+  aspect-ratio: auto;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+}
+
+/* Drill-in container: zero padding so the disc sits flush against the
+ * edges; the corner ornaments are already hidden by the override. */
+.root[data-fullscreen="true"] .sheetOverride {
+  padding: 0;
+}
+
+/* ── Desktop fullscreen floating panel (Option B) ────────────────
+ *
+ * The .scroll aside, when given the .panelFloating modifier, floats
+ * over the map at the right edge with breathing room from the disc's
+ * corners. Mounted only when there's something to show (city pick,
+ * cell pick, entity, in-flight travel) — no chevron, no slide; the
+ * panel is here when relevant and gone when it isn't. Map stays fully
+ * interactive behind it (no backdrop scrim). */
+.panelFloating {
+  position: absolute;
+  top: 1rem;
+  right: 3.5rem;
+  width: min(360px, calc(100vw - 2rem));
+  max-height: calc(100% - 2rem);
+  overflow-y: auto;
+  z-index: 20;
+  border-radius: 0.5rem;
+  animation: panelFloatIn 160ms ease-out;
+}
+@keyframes panelFloatIn {
+  from {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* X close button inside the floating panel — top-right of the card.
+ * Always visible whenever the .panelFloating modifier is on. */
+.panelClose {
+  display: grid;
+  place-items: center;
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  width: 2rem;
+  height: 2rem;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  color: var(--ink-soft, #6b4a2a);
+  cursor: pointer;
+  z-index: 2;
+  transition:
+    background-color 0.15s ease,
+    color 0.15s ease;
+}
+.panelClose:hover,
+.panelClose:focus-visible {
+  background: rgba(110, 70, 30, 0.12);
+  color: var(--ink, #2e1f10);
+}
+.panelCloseIcon {
+  width: 18px;
+  height: 18px;
+  stroke-width: 2;
+  display: block;
+}
+
+.mobileStatusPill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    position: absolute;
+    bottom: 2rem;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 25;
+    max-width: calc(100% - 2rem);
+    padding: 0.4rem 0.85rem;
+    background: var(--readout-tint);
+    border: 1px solid var(--parchment-edge);
+    border-radius: 999px;
+    color: var(--ink);
+    font-family: var(--font-cinzel), Cinzel, serif;
+    font-size: 0.72rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    cursor: pointer;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background-color 0.15s ease;
+  }
+
+.mobileStatusLabel {
+  font-weight: 600;
+}
+.mobileStatusMeta {
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  color: var(--ink-soft);
+  font-size: 0.62rem;
+}
+

@@ -32,6 +32,10 @@ interface GarrisonComposerPanelProps {
   cityId: number;
   /** Castle ID within that city. */
   castleId: number;
+  /** Optional close handler — when provided, takes precedence over the
+   *  global RightPanel store's close. Set by callers that mount this
+   *  panel outside the RightPanel store. */
+  onClose?: () => void;
 }
 
 /**
@@ -40,13 +44,14 @@ interface GarrisonComposerPanelProps {
  * programs/.../castle/join_garrison.rs requires `player.team == castle.team`,
  * so this panel refuses to render the form when the team check fails.
  */
-export function GarrisonComposerPanel({ cityId, castleId }: GarrisonComposerPanelProps) {
+export function GarrisonComposerPanel({ cityId, castleId, onClose }: GarrisonComposerPanelProps) {
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
   const transact = useTransact();
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
-  const close = useRightPanelStore((s) => s.close);
+  const storeClose = useRightPanelStore((s) => s.close);
+  const close = onClose ?? storeClose;
   const isMounted = useIsMountedRef();
 
   const { data: castleData } = useCastle(cityId, castleId);

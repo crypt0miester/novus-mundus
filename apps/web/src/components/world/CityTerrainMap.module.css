@@ -20,6 +20,10 @@
   -webkit-user-select: none;
 }
 
+/* The disc stretches to fill its `.sheetOverride` parent on every
+ * breakpoint; the RealmMap root handles fullscreen viewport-fill, so
+ * this module doesn't need a separate mobile fixed-positioning pass. */
+
 .label {
   font-size: 0.6rem;
   font-weight: 600;
@@ -29,7 +33,6 @@
   margin-bottom: 0.45rem;
   text-align: center;
 }
-
 .scouting {
   font-style: italic;
   font-weight: 400;
@@ -49,12 +52,6 @@
   }
 }
 
-/* The disc is a chain-level truth, but visually we render it onto the full
- * map page so it reads like the realm-map sheet (parchment + foxing + grain
- * provided by the enclosing .sheet) rather than a medallion. The canvas
- * stretches to fill the available area; the renderer paints isotropically
- * so the disc stays round, then feathers alpha past the city radius so the
- * inked area melts into the surrounding parchment. */
 .canvasWrap {
   position: relative;
   flex: 1 1 auto;
@@ -66,6 +63,7 @@
   overflow: hidden;
   background: transparent;
 }
+
 .canvasWrap:active {
   cursor: grabbing;
 }
@@ -91,18 +89,23 @@
   inset: 0;
 }
 
-/* Zoom reset chip — appears top-right of the disc when zoomed in. Same
- * vocabulary as the realm map's reset button. */
+/* Zoom reset chip — bottom-right of the disc when zoomed in. The
+ * canvas wrap's BR corner is free (compass=TL, togglePills=TR,
+ * scaleLegend=BL) and the RealmMap root in fullscreen mode already
+ * lifts the canvas above the MorphTabBar on mobile, so a flat 1rem
+ * inset works at every breakpoint. Same parchment-chip vocabulary
+ * as the realm map's reset button. */
 .resetBtn {
   position: absolute;
-  top: 8px;
+  bottom: 3.5rem;
   right: 8px;
-  width: 28px;
-  height: 28px;
-  border-radius: 50%;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 999px;
   border: 1px solid var(--ink-faint, #b89a72);
   background: var(--parchment, #efe2c4);
-  color: var(--ink-soft, #6b4a2a);
+  color: var(--ink, #2e1f10);
+  font-family: inherit;
   font-size: 0.85rem;
   line-height: 1;
   cursor: pointer;

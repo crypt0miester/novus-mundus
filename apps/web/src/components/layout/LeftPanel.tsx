@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
@@ -207,9 +208,13 @@ export function LeftPanelMobile() {
 
   const [expanded, setExpanded] = useState(false);
 
-  // A bottom sheet drops a full-screen backdrop; lift this bar above it for as
-  // long as the sheet is painted so it never flashes dark behind the overlay.
-  const sheetMounted = useSheetStore((s) => s.mounted > 0);
+  // /map turns the page into a fullscreen disc (z-30) with its own
+  // floating chrome — lift the data bar above the parchment so the
+  // player's identity strip stays readable. Other routes keep the
+  // default stacking so the bar doesn't poke through the wallet
+  // modal scrim (z-50).
+  const pathname = usePathname();
+  const mapFullscreen = pathname === "/map" || pathname?.startsWith("/map/");
 
   // Open intent drops the instant a sheet is dismissed (before its close
   // animation): drop the full data panel down while a detail sheet is open —
@@ -243,10 +248,14 @@ export function LeftPanelMobile() {
   if (!player) return null;
 
   return (
+    // On /map the bar sits above the fullscreen disc (z-30) so the
+    // player identity stays readable; elsewhere we keep the default
+    // stacking so the bar doesn't poke through wallet/auth modals
+    // (z-50).
     <div
       className={cn(
         "border-b border-border-default bg-[var(--nm-bg-bar)]",
-        sheetMounted && "relative z-[55]",
+        mapFullscreen && "relative z-[55]",
       )}
     >
       <div className="flex h-10 w-full items-center gap-2 px-4 text-xs">

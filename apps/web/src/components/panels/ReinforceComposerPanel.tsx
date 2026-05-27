@@ -34,6 +34,11 @@ import { useIsMountedRef } from "@/lib/hooks/useIsMountedRef";
 interface ReinforceComposerPanelProps {
   /** Recipient wallet (base58) — preselected from the EntityPanel. */
   targetWallet: string;
+  /** Optional close handler — when provided, takes precedence over the
+   *  global RightPanel store's close. Set by callers that mount this
+   *  panel outside the RightPanel store (e.g. the in-place swap inside
+   *  the realm map's floating detail panel). */
+  onClose?: () => void;
 }
 
 /**
@@ -50,14 +55,15 @@ interface ReinforceComposerPanelProps {
  * render an explanatory state instead of the form — the chain would
  * reject the tx anyway and we'd rather say so upfront.
  */
-export function ReinforceComposerPanel({ targetWallet }: ReinforceComposerPanelProps) {
+export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceComposerPanelProps) {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const client = useNovusMundusClient();
   const transact = useTransact();
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
-  const close = useRightPanelStore((s) => s.close);
+  const storeClose = useRightPanelStore((s) => s.close);
+  const close = onClose ?? storeClose;
   const isMounted = useIsMountedRef();
 
   const targetKey = useMemo(() => new PublicKey(targetWallet), [targetWallet]);

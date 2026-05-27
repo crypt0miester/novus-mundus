@@ -104,7 +104,6 @@ pub fn process(
     require_stables(estate, 10)?;
 
     // 6. Validate Not Currently Traveling
-
     if player_data.is_traveling_any() {
         return Err(GameError::AlreadyTraveling.into());
     }
@@ -114,36 +113,12 @@ pub fn process(
         return Err(GameError::InActiveRally.into());
     }
 
-    // M-09: Teleport cooldown gap.
-    //
-    // Teleport is fully instant: it does NOT set `player_data.arrival_time`,
-    // `departure_time`, or `travel_type` (see step 17 below — only current_city /
-    // current_lat / current_long are mutated). The `is_traveling_any()` check above
-    // therefore does not protect against rapid back-to-back teleports within the
-    // same slot/second window.
-    //
-    // A 60-second cooldown between teleports cannot be enforced here without a
-    // dedicated `last_teleport_at: i64` field on PlayerCore. Adding new state fields
-    // is intentionally avoided per project policy. Reusing `arrival_time` /
-    // `departure_time` is unsafe — those are interpreted by travel arrival logic and
-    // would corrupt non-teleport travel paths.
-    //
-    // Mitigation gating already in place: EXT_INVENTORY extension (premium),
-    // Stables Lv10+ estate gate, and `locked_novi` cost per segment provide an
-    // economic throttle, but they do not constitute a true time-based cooldown.
-    //
-    // TODO(M-09): Add `last_teleport_at: i64` to PlayerCore and gate this entry
-    // point with `now - player_data.last_teleport_at >= 60` to close the audit
-    // finding.
-
     // 7. Validate Origin City Matches
-
     if player_data.current_city != origin_city_data.city_id {
         return Err(GameError::PlayerNotInCity.into());
     }
 
     // 8. Validate Destination City
-
     if destination_city_id == player_data.current_city {
         return Err(GameError::InvalidParameter.into()); // Already in that city
     }
@@ -176,7 +151,7 @@ pub fn process(
         )
         .ok_or(GameError::MathOverflow)?;
 
-    // Apply DAO cost multiplier (basis points: 10000 = 1.0x, no u128!)
+    // Apply DAO cost multiplier (basis points: 10000 = 1.0x)
     let adjusted_cost = apply_bp(
         base_cost,
         game_engine_data.economic_config.cost_multiplier as u64,
@@ -184,24 +159,20 @@ pub fn process(
     .ok_or(GameError::MathOverflow)?;
 
     // 10. Validate Sufficient Locked Novi
-
     if player_data.locked_novi < adjusted_cost {
         return Err(GameError::InsufficientTeleportFunds.into());
     }
 
     // 11. Deduct Cost
-
     player_data.locked_novi = player_data
         .locked_novi
         .checked_sub(adjusted_cost)
         .ok_or(GameError::MathOverflow)?;
 
     // 12. Get Current Timestamp
-
     let now = Clock::get()?.unix_timestamp;
 
     // 13. Vacate Origin Location Cell
-
     let origin_grid_lat = LocationAccount::to_grid(player_data.current_lat);
     let origin_grid_long = LocationAccount::to_grid(player_data.current_long);
 

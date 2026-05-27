@@ -58,6 +58,7 @@ import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useStamina } from "@/lib/hooks/useStamina";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import { useAccountStore } from "@/lib/store/accounts";
 import type { PanelAction } from "@/lib/store/right-panel";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/buildings";
@@ -71,6 +72,10 @@ import {
   type RealmCityNode,
   type RealmMapSelectedContext,
 } from "@/components/world/RealmMap";
+import { ReinforceComposerPanel } from "@/components/panels/ReinforceComposerPanel";
+import { RallyComposerPanel } from "@/components/panels/RallyComposerPanel";
+import { GarrisonComposerPanel } from "@/components/panels/GarrisonComposerPanel";
+import { ChevronLeft } from "lucide-react";
 import {
   CityTerrainMap,
   type CityTerrainEntity,
@@ -169,6 +174,12 @@ export function MapTab() {
   const ge = geData?.account;
 
   const [destinationCity, setDestinationCity] = useState<number | null>(null);
+  /* Composer state — when set, the realm map's detail panel swaps from
+   * the EntityPanel to the corresponding composer (Reinforce/Rally/
+   * Garrison) with a Back arrow. Cleared on entity change, city change,
+   * the composer's own success path, and the back arrow. Type lives at
+   * module scope so EntityPanel can reference it via its props. */
+  const [composer, setComposer] = useState<ComposerSpec | null>(null);
   /* Default the /map view to the home-city terrain disc once the player's
    * currentCity is known. Tracked with a ref so the user can dismiss the
    * drill-in (bottom-right back button → setDestinationCity(null)) and stay
@@ -182,38 +193,19 @@ export function MapTab() {
   // click handler today; intended as the generic "navigate the map"
   // entry point for future prompts (search hits, deep-link routes, etc.).
   const mapRef = useRef<CityTerrainMapHandle | null>(null);
+
   useEffect(() => {
     if (hasInitDestinationRef.current) return;
     if (player?.currentCity == null) return;
     hasInitDestinationRef.current = true;
     setDestinationCity(player.currentCity);
-    // Snap the disc onto the player's cell once the disc mounts. Mirrors
-    // the deep-link path's tryFocus: the disc isn't ready on the same
-    // tick (mapRef wires through CityTerrainMap → 2D fallback after the
-    // ResizeObserver runs), so poll until the imperative handle exists.
-    // Track the pending timeout so unmount (StrictMode re-mount, navigation)
-    // can cancel — otherwise two chains can run concurrently for 3 s, each
-    // calling focusCell with stale targetLat/targetLong captured at first
-    // effect invocation.
-    const targetLat = Math.round(player.currentLat * 10000);
-    const targetLong = Math.round(player.currentLong * 10000);
-    let tries = 30;
-    let timeoutId: ReturnType<typeof setTimeout> | null = null;
-    let cancelled = false;
-    const tryFocus = () => {
-      if (cancelled) return;
-      if (mapRef.current) {
-        mapRef.current.focusCell(targetLat, targetLong);
-      } else if (tries-- > 0) {
-        timeoutId = setTimeout(tryFocus, 100);
-      }
-    };
-    tryFocus();
-    return () => {
-      cancelled = true;
-      if (timeoutId != null) clearTimeout(timeoutId);
-    };
-  }, [player?.currentCity, player?.currentLat, player?.currentLong]);
+    // The actual snap onto the player's cell is handled by the disc's
+    // own auto-focus effect: it waits for the wrap to measure, then
+    // fires focusCell on the `autoFocusCell` prop below. That gates on
+    // the canvas being in real geometry — the polling approach this
+    // replaces would expire after 3 s of retries when useAllCities was
+    // slow on a cold start, leaving the disc parked at scale 1.
+  }, [player?.currentCity]);
 
   // Deep-link entry — two independent payloads, consumed together so back/
   // refresh doesn't replay them:
@@ -364,6 +356,13 @@ export function MapTab() {
   // right-hand scroll panel from "city detail" to "entity detail" (player
   // profile or encounter target). Cleared by clicking empty terrain.
   const [selectedEntity, setSelectedEntity] = useState<CityTerrainEntity | null>(null);
+
+  // Composer state must follow the entity / city it was opened against —
+  // changing either invalidates the in-flight form. Cheaper than wiring
+  // setComposer(null) into every selection setter.
+  useEffect(() => {
+    setComposer(null);
+  }, [selectedEntity?.pubkey, destinationCity]);
 
   /* Local team affiliation — base58 of `player.team` if the local
    * player has joined a team, else null. Drives the same-team dot
@@ -628,19 +627,22 @@ export function MapTab() {
     const returningHome = player.destinationCity === player.currentCity;
     const homeCity = currentCityData?.account;
     if (returningHome && !homeCity) throw new Error("Origin city not loaded");
+    const destCityId = player.destinationCity;
+    const destLat = returningHome ? homeCity!.latitude : player.travelingToLat;
+    const destLong = returningHome ? homeCity!.longitude : player.travelingToLong;
     const ix = createIntercityCompleteInstruction({
       owner: publicKey,
       gameEngine: geKey,
       originCityId: player.currentCity,
-      destinationCityId: player.destinationCity,
+      destinationCityId: destCityId,
       destinationLocation: deriveLocationPda(
         geKey,
-        player.destinationCity,
-        toGrid(returningHome ? homeCity!.latitude : player.travelingToLat),
-        toGrid(returningHome ? homeCity!.longitude : player.travelingToLong),
+        destCityId,
+        toGrid(destLat),
+        toGrid(destLong),
       )[0],
     });
-    return transact
+    const sig = await transact
       .mutateAsync({
         instructions: [ix],
         invalidateKeys: [["player"]],
@@ -648,6 +650,20 @@ export function MapTab() {
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
+    // Optimistic: bump the local player to the destination city + cell
+    // so the dot lands on the new city's disc immediately rather than
+    // waiting for the WS push to propagate.
+    const store = useAccountStore.getState();
+    const cur = store.player;
+    if (cur) {
+      store.setPlayer(cur.pubkey, {
+        ...cur.account,
+        currentCity: destCityId,
+        currentLat: destLat,
+        currentLong: destLong,
+      });
+    }
+    return sig;
   };
 
   const cancelTravel = async (reportPhase: (p: TxPhase) => void) => {
@@ -1097,11 +1113,16 @@ export function MapTab() {
     if (!publicKey || !player) throw new Error("Not ready");
     const geKey = client.gameEngine;
     const cityId = player.currentCity;
+    // Capture the destination up-front for the optimistic store update
+    // below — by the time the success callback fires, `player` in this
+    // closure is still the pre-tx snapshot, which is what we want.
+    const destLat = player.travelingToLat;
+    const destLong = player.travelingToLong;
     const [destinationLocation] = deriveLocationPda(
       geKey,
       cityId,
-      toGrid(player.travelingToLat),
-      toGrid(player.travelingToLong),
+      toGrid(destLat),
+      toGrid(destLong),
     );
     const ix = createIntracityCompleteInstruction({
       owner: publicKey,
@@ -1109,7 +1130,7 @@ export function MapTab() {
       cityId,
       destinationLocation,
     });
-    return transact
+    const sig = await transact
       .mutateAsync({
         instructions: [ix],
         invalidateKeys: [["player"]],
@@ -1117,6 +1138,22 @@ export function MapTab() {
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
+    // Optimistic: move the dot to the destination immediately. Without
+    // this, the useCityOccupied filter (which compares Location PDAs
+    // against the local player's chain currentLat/Long) keeps the OLD
+    // PDA visible until the WS push of the new player state arrives —
+    // a several-second window where the dot lingers at the old cell.
+    // WS will overwrite this with the canonical state shortly.
+    const store = useAccountStore.getState();
+    const cur = store.player;
+    if (cur) {
+      store.setPlayer(cur.pubkey, {
+        ...cur.account,
+        currentLat: destLat,
+        currentLong: destLong,
+      });
+    }
+    return sig;
   };
 
   const cancelIntra = async (reportPhase: (p: TxPhase) => void) => {
@@ -1301,6 +1338,7 @@ export function MapTab() {
     // is a no-op so we drop the action — only "✕" remains.
     const isSelfEntity = playerData?.pubkey?.toBase58?.() === selectedEntity.pubkey;
     const isEnc = selectedEntity.occupantType === 2;
+    const isCastleEntity = selectedEntity.occupantType === 3;
     if (!isSelfEntity) {
       /*
        * In range → Strike (gated by level-band + stamina + units, so the chain
@@ -1325,10 +1363,90 @@ export function MapTab() {
       } else {
         morphActions.push({
           id: "approach",
-          label: isEnc ? "Approach" : "Walk to",
+          label: "Approach",
           onClick: approachEntity,
           variant: "primary",
           disabled: !hasStables,
+        });
+      }
+
+      /* Composer actions — Reinforce / Rally / Garrison. Mirrors the
+       * EntityPanel's desktop buttons so mobile players reach the same
+       * composers through the morph bar. Same chain-side gating: team
+       * relationship for Reinforce/Garrison (same team) and Rally
+       * (different team). The morph action calls setComposer, which
+       * swaps the floating panel's content to the composer — exactly
+       * what the desktop buttons do. */
+      const otherPlayerAcc =
+        !isEnc && !isCastleEntity
+          ? worldPlayers?.find((p) => p.pubkey.toBase58() === selectedEntity.pubkey)?.account
+          : undefined;
+      const castleAcc = isCastleEntity
+        ? worldCastles?.find((c) => c.pubkey.toBase58() === selectedEntity.pubkey)?.account
+        : undefined;
+      const theirPlayerTeam = otherPlayerAcc?.team?.toBase58?.() ?? null;
+      const theirCastleTeam = castleAcc?.team?.toBase58?.() ?? null;
+      const sameTeam =
+        !!myTeamStr &&
+        ((!!theirPlayerTeam &&
+          theirPlayerTeam !== "11111111111111111111111111111111" &&
+          theirPlayerTeam === myTeamStr) ||
+          (!!theirCastleTeam &&
+            theirCastleTeam !== "11111111111111111111111111111111" &&
+            theirCastleTeam === myTeamStr));
+
+      // Reinforce — same-team player.
+      if (!isEnc && !isCastleEntity && otherPlayerAcc?.owner && sameTeam) {
+        const targetWallet = otherPlayerAcc.owner.toBase58();
+        morphActions.push({
+          id: "reinforce",
+          label: "Reinforce",
+          variant: "secondary",
+          onClick: async () => {
+            setComposer({ kind: "reinforce", targetWallet });
+            return "";
+          },
+        });
+      }
+      // Rally — I have a team, target is enemy (encounter, non-teammate player, opposing castle).
+      const canRally =
+        !!myTeamStr &&
+        !sameTeam &&
+        (isEnc || isCastleEntity || !!otherPlayerAcc);
+      if (canRally) {
+        const targetType = isEnc ? 1 : isCastleEntity ? 2 : 0;
+        const targetCityId = isCastleEntity
+          ? castleAcc?.cityId ?? player!.currentCity
+          : player!.currentCity;
+        const targetPubkey = selectedEntity.pubkey;
+        morphActions.push({
+          id: "rally",
+          label: "Rally",
+          variant: "secondary",
+          onClick: async () => {
+            setComposer({
+              kind: "rally",
+              targetPubkey,
+              targetType,
+              targetCityId,
+              targetLabel: "",
+            });
+            return "";
+          },
+        });
+      }
+      // Garrison — castle whose team matches mine.
+      if (isCastleEntity && castleAcc && sameTeam) {
+        const cityIdArg = castleAcc.cityId;
+        const castleIdArg = castleAcc.castleId;
+        morphActions.push({
+          id: "garrison",
+          label: "Garrison",
+          variant: "secondary",
+          onClick: async () => {
+            setComposer({ kind: "garrison", cityId: cityIdArg, castleId: castleIdArg });
+            return "";
+          },
         });
       }
     }
@@ -1348,7 +1466,7 @@ export function MapTab() {
     // so we must mirror that gate in the UI to avoid an on-chain reject.
     morphActions.push({
       id: "intra-walk",
-      label: "Walk here",
+      label: "move here",
       onClick: startIntraWalk,
       variant: "primary",
       disabled: !hasStables,
@@ -1416,12 +1534,45 @@ export function MapTab() {
     const isCurrent = node.city.cityId === player?.currentCity;
     const inFlight = travel.traveling;
 
+    // Composer takes over the panel when set. Same surface that would
+    // otherwise show the entity detail — keeps the player in one
+    // visual region rather than launching a separate sidebar/modal.
+    if (composer) {
+      return (
+        <ComposerFrame title={composerTitle(composer)} onBack={() => setComposer(null)}>
+          {composer.kind === "reinforce" && (
+            <ReinforceComposerPanel
+              targetWallet={composer.targetWallet}
+              onClose={() => setComposer(null)}
+            />
+          )}
+          {composer.kind === "rally" && (
+            <RallyComposerPanel
+              targetPubkey={composer.targetPubkey}
+              targetType={composer.targetType}
+              targetCityId={composer.targetCityId}
+              targetLabel={composer.targetLabel}
+              onClose={() => setComposer(null)}
+            />
+          )}
+          {composer.kind === "garrison" && (
+            <GarrisonComposerPanel
+              cityId={composer.cityId}
+              castleId={composer.castleId}
+              onClose={() => setComposer(null)}
+            />
+          )}
+        </ComposerFrame>
+      );
+    }
+
     // Entity selection takes over the panel.
     if (selectedEntity) {
       // Show "Approach & strike" only when the entity is in the player's
       // current city — intracity travel can't cross city boundaries.
       const canApproach =
         !travel.traveling && isHomeDestination && publicKey != null && player != null;
+      const sameCity = player?.currentCity === node.city.cityId;
       return (
         <EntityPanel
           entity={selectedEntity}
@@ -1449,16 +1600,8 @@ export function MapTab() {
           myTeamName={myTeamName}
           teamsByPda={teamsByPda}
           onFocus={(gridLat, gridLong) => mapRef.current?.focusCell(gridLat, gridLong)}
-          onDismiss={() => {
-            // "Back to the chart" — clear both entity AND city so the user
-            // lands on the realm overview. Previously this only cleared
-            // the entity, which left the user drilled in someone else's
-            // city with no obvious exit (especially after a team-tab
-            // Reinforce deep-link). Matches the button label.
-            setSelectedEntity(null);
-            setDestinationCity(null);
-            setDestCell(null);
-          }}
+          sameCity={sameCity}
+          onOpenComposer={setComposer}
         />
       );
     }
@@ -1486,7 +1629,7 @@ export function MapTab() {
             const lo = Math.max(pLevel - maxLevelDiff, node.city.minEncounterLevel);
             const hi = Math.min(pLevel + maxLevelDiff, node.city.maxEncounterLevel);
             if (lo <= hi) {
-              rangeLabel = `lv ${lo}–${hi}`;
+              rangeLabel = `${lo}–${hi}`;
             } else {
               rangeLabel = "out of reach";
               rangeTone = "danger";
@@ -1507,11 +1650,11 @@ export function MapTab() {
                   value={node.city.playersPresent.toLocaleString()}
                 />
                 <StatCard
-                  label="wilds about it"
-                  value={`lv ${node.city.minEncounterLevel}–${node.city.maxEncounterLevel}`}
+                  label="encounters (lv)"
+                  value={`${node.city.minEncounterLevel}–${node.city.maxEncounterLevel}`}
                 />
                 {rangeLabel && (
-                  <StatCard label="in your range" value={rangeLabel} tone={rangeTone} />
+                  <StatCard label="in your range (lv)" value={rangeLabel} tone={rangeTone} />
                 )}
               </div>
               {!isCurrent && travelPreview && (
@@ -1575,7 +1718,7 @@ export function MapTab() {
               >
                 {destCell
                   ? "destination chosen, walk below."
-                  : "your seat. Touch a cell in the disc to walk there, or another city to set out."}
+                  : "touch a cell to walk there."}
               </p>
 
               {/* Travel preview — distance + time for the chosen walk.
@@ -1637,20 +1780,27 @@ export function MapTab() {
                 <CellAffinityPanel cityAccount={currentCityData.account} cell={destCell} />
               )}
 
-              <div className="hidden md:block">
-                <div style={{ marginTop: "0.9rem" }}>
-                  <TxButton
-                    onClick={startIntraWalk}
-                    disabled={!destCell || !hasStables}
-                    className={styles.seal}
-                  >
-                    <span>Walk here</span>
-                    <span>
-                      <ChevronRight className="h-3.5 w-3.5" />
-                    </span>
-                  </TxButton>
+              {/* Only render the Walk here CTA once the player has actually
+                  picked a cell — a disabled button in the default state
+                  reads as broken UI when there's nothing to commit. The
+                  stables-gated disabled state stays for the case where
+                  a cell is picked but the player can't move yet. */}
+              {destCell && (
+                <div className="hidden md:block">
+                  <div style={{ marginTop: "0.9rem" }}>
+                    <TxButton
+                      onClick={startIntraWalk}
+                      disabled={!hasStables}
+                      className={styles.seal}
+                    >
+                      <span>move here</span>
+                      <span>
+                        <ChevronRight className="h-3.5 w-3.5" />
+                      </span>
+                    </TxButton>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {!hasStables && (
                 <p style={TRAVEL_NOTE_STYLE}>
@@ -1676,8 +1826,8 @@ export function MapTab() {
               }}
             >
               {destCell
-                ? "landing cell chosen, set out below."
-                : "touch the mapadd to pick where to alight."}
+                ? "landing cell chosen."
+                : "touch the map to pick where to alight."}
             </p>
 
             {/* On-chain terrain bonuses for the chosen landing cell in the
@@ -1988,10 +2138,34 @@ export function MapTab() {
         setDestCell(null);
         setSelectedEntity(null);
       }}
+      /* X-close in the floating panel deselects without exiting the
+       * city — entity + landing cell + composer go, but destinationCity
+       * stays so the disc remains mounted. */
+      onCloseRequest={() => {
+        setSelectedEntity(null);
+        setDestCell(null);
+        setComposer(null);
+      }}
       travel={realmTravel}
       renderSelected={renderSelected}
       renderDefault={renderDefault}
       renderSheetOverride={renderSheetOverride}
+      fullscreen
+      /* Stable id for whatever the player is acting on right now. The
+       * floating detail panel auto-opens on every transition to a new
+       * non-null id, so picking a *different* cell or entity also
+       * re-surfaces the action panel. Priority matches the panel-render
+       * order in `renderSelected` below (entity > travel > cell) so the
+       * id transitions in lock-step with what the panel actually shows. */
+      actionId={
+        selectedEntity
+          ? `entity:${selectedEntity.pubkey}`
+          : travel.traveling
+            ? "travel"
+            : destCell
+              ? `cell:${destCell.gridLat},${destCell.gridLong}`
+              : null
+      }
       scrollHead={
         selectedEntity
           ? selectedEntity.occupantType === 2
@@ -2215,7 +2389,19 @@ interface EntityPanelProps {
    * render the name as plain text (no click target).
    */
   onFocus?: (gridLat: number, gridLong: number) => void;
-  onDismiss: () => void;
+  /**
+   * True when the local player's `currentCity` matches the city this
+   * entity lives in. Reinforce / Rally / Garrison require co-location
+   * (chain-side and game-side), so we gate the buttons disabled when
+   * the player is somewhere else.
+   */
+  sameCity?: boolean;
+  /**
+   * Open the composer panel in-place inside the realm map's floating
+   * detail panel. Parent owns the state and the back-arrow that
+   * returns to this entity view.
+   */
+  onOpenComposer?: (spec: ComposerSpec) => void;
 }
 
 // Minimal projection of the CastleAccount fields the panel renders. The
@@ -2339,7 +2525,8 @@ function EntityPanel({
   myTeamName,
   teamsByPda,
   onFocus,
-  onDismiss,
+  sameCity = false,
+  onOpenComposer,
 }: EntityPanelProps) {
   const isEncounter = entity.occupantType === 2;
   const isCastle = entity.occupantType === 3;
@@ -2976,9 +3163,11 @@ function EntityPanel({
       {/* Action — Strike directly when the encounter is already in attack
           range (no walk needed); otherwise approach an adjacent cell. When
           neither callback is wired the entity is in another city or the
-          player is already traveling — both states make the button useless. */}
+          player is already traveling — both states make the button useless.
+          Desktop-only (`hidden md:block`); on mobile the MorphTabBar carries
+          the same Strike / Approach action so we don't double up. */}
       {!isSelf && onStrike ? (
-        <div style={{ marginTop: "0.9rem" }}>
+        <div className="hidden md:block" style={{ marginTop: "0.9rem" }}>
           <TxButton
             onClick={onStrike}
             className={styles.seal}
@@ -3005,13 +3194,13 @@ function EntityPanel({
           </p>
         </div>
       ) : !isSelf && onApproach ? (
-        <div style={{ marginTop: "0.9rem" }}>
+        <div className="hidden md:block" style={{ marginTop: "0.9rem" }}>
           <TxButton
             onClick={onApproach}
             className={styles.seal}
             disabled={isEncounter && !!enc && encHealthPct <= 0}
           >
-            <span>{isEncounter ? "Approach" : "Walk to them"}</span>
+            <span>Approach</span>
             <span>
               <ChevronRight className="h-3.5 w-3.5" />
             </span>
@@ -3045,36 +3234,16 @@ function EntityPanel({
             ? "Travel to this city first, then approach."
             : "Travel to this city first to walk over."}
         </p>
-      ) : isSelf ? (
-        <p
-          style={{
-            marginTop: "0.9rem",
-            padding: "0.55rem 0.7rem",
-            border: "1px dashed var(--seal)",
-            color: "var(--seal)",
-            fontSize: "0.7rem",
-            fontStyle: "italic",
-          }}
-        >
-          This is you. Touch another cell to set out.
-        </p>
       ) : null}
 
-      {/* Context actions — gated by entity type and chain-side rules:
-       *   Reinforce — same-team player (reinforcement/send.rs: sender +
-       *               destination must share a team).
-       *   Rally     — I have a team AND target is a non-teammate enemy
-       *               (player, encounter, or non-allied castle). Rally
-       *               creator must be on a team (rally/create.rs).
-       *   Garrison  — castle target whose team matches mine
-       *               (castle/join_garrison.rs).
-       * Encounter strike/approach stays in the prior block; this row is
-       * for composer-opening actions only. */}
+      {/* Context actions — Reinforce / Rally / Garrison. Desktop-only —
+       *  on mobile the MorphTabBar carries the same actions so the panel
+       *  doesn't double them up. Chain-side rules per button match what
+       *  the morph-action registration below enforces. */}
+      <div className="hidden md:block">
       {(() => {
         const buttons: React.ReactNode[] = [];
-        const open = (title: string, key: string, props: Record<string, unknown>) =>
-          useRightPanelStore.getState().show(title, key, props);
-        const buttonStyle = {
+        const enabledStyle = {
           fontSize: "0.65rem",
           letterSpacing: "0.08em",
           textTransform: "uppercase" as const,
@@ -3084,6 +3253,14 @@ function EntityPanel({
           background: "var(--readout-tint)",
           cursor: "pointer",
         };
+        const disabledStyle = {
+          ...enabledStyle,
+          opacity: 0.4,
+          cursor: "not-allowed",
+        };
+        const gatedTitle = sameCity
+          ? undefined
+          : "Travel to this city first.";
         const theirPlayerTeam = !isEncounter && !isCastle ? account?.team?.toBase58?.() : null;
         const theirCastleTeam = isCastle ? castle?.team?.toBase58?.() : null;
         const onSameTeam =
@@ -3095,25 +3272,29 @@ function EntityPanel({
               theirCastleTeam !== "11111111111111111111111111111111" &&
               theirCastleTeam === myTeamStr));
 
-        // Reinforce — same-team player only.
+        // Reinforce — same-team player, both in the same city.
         if (!isEncounter && !isCastle && !isSelf && account?.owner && onSameTeam) {
+          const owner = account.owner;
           buttons.push(
             <button
               key="reinforce"
               type="button"
+              disabled={!sameCity}
+              aria-disabled={!sameCity}
+              title={gatedTitle}
               onClick={() =>
-                open("Reinforce", "reinforce-composer", {
-                  targetWallet: account.owner.toBase58(),
-                })
+                sameCity &&
+                onOpenComposer?.({ kind: "reinforce", targetWallet: owner.toBase58() })
               }
-              style={buttonStyle}
+              style={sameCity ? enabledStyle : disabledStyle}
             >
               Reinforce
             </button>,
           );
         }
 
-        // Rally — I have a team, target is enemy (non-self, non-teammate).
+        // Rally — I have a team, target is enemy (non-self, non-teammate),
+        // we're in the same city as the target.
         const canRally =
           !!myTeamStr &&
           !isSelf &&
@@ -3127,34 +3308,44 @@ function EntityPanel({
             <button
               key="rally"
               type="button"
+              disabled={!sameCity}
+              aria-disabled={!sameCity}
+              title={gatedTitle}
               onClick={() =>
-                open("Raise Rally", "rally-composer", {
+                sameCity &&
+                onOpenComposer?.({
+                  kind: "rally",
                   targetPubkey: entity.pubkey,
                   targetType,
                   targetCityId,
                   targetLabel,
                 })
               }
-              style={buttonStyle}
+              style={sameCity ? enabledStyle : disabledStyle}
             >
               Rally
             </button>,
           );
         }
 
-        // Garrison — castle whose team matches mine.
+        // Garrison — castle whose team matches mine, in the same city.
         if (isCastle && castle && onSameTeam) {
           buttons.push(
             <button
               key="garrison"
               type="button"
+              disabled={!sameCity}
+              aria-disabled={!sameCity}
+              title={gatedTitle}
               onClick={() =>
-                open("Join Garrison", "garrison-composer", {
+                sameCity &&
+                onOpenComposer?.({
+                  kind: "garrison",
                   cityId: castle.cityId,
                   castleId: castle.castleId,
                 })
               }
-              style={buttonStyle}
+              style={sameCity ? enabledStyle : disabledStyle}
             >
               Garrison
             </button>,
@@ -3168,6 +3359,7 @@ function EntityPanel({
           </div>
         );
       })()}
+      </div>
 
       {/* Footnotes — fine print, kept out of the way. */}
       <div
@@ -3184,10 +3376,6 @@ function EntityPanel({
           columnGap: "0.5rem",
         }}
       >
-        <span style={{ letterSpacing: "0.1em", textTransform: "uppercase" }}>cell</span>
-        <span style={{ textAlign: "right" }}>
-          {entity.gridLat.toLocaleString()}, {entity.gridLong.toLocaleString()}
-        </span>
         <span style={{ letterSpacing: "0.1em", textTransform: "uppercase" }}>account</span>
         <span style={{ textAlign: "right" }}>{shortPubkey}</span>
         {account?.owner && (
@@ -3199,25 +3387,75 @@ function EntityPanel({
           </>
         )}
       </div>
+    </>
+  );
+}
 
+// ── Composer frame ────────────────────────────────────────────────────
+// Wraps a composer (Reinforce / Rally / Garrison) in the realm map's
+// floating detail panel so the player stays in one visual region rather
+// than launching a separate sidebar/modal. Carries a back arrow that
+// dismisses the composer and returns to the entity detail above.
+
+type ComposerSpec =
+  | { kind: "reinforce"; targetWallet: string }
+  | {
+      kind: "rally";
+      targetPubkey: string;
+      targetType: number;
+      targetCityId: number;
+      targetLabel: string;
+    }
+  | { kind: "garrison"; cityId: number; castleId: number };
+
+function composerTitle(spec: ComposerSpec): string {
+  switch (spec.kind) {
+    case "reinforce":
+      return "Reinforce";
+    case "rally":
+      return "Raise Rally";
+    case "garrison":
+      return "Join Garrison";
+  }
+}
+
+function ComposerFrame({
+  title,
+  onBack,
+  children,
+}: {
+  title: string;
+  onBack: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
       <button
         type="button"
-        onClick={onDismiss}
+        onClick={onBack}
+        aria-label="Back to entity detail"
+        title="Back"
         style={{
-          marginTop: "0.9rem",
-          padding: "0.5rem 0.85rem",
+          display: "inline-flex",
+          alignItems: "center",
+          gap: "0.3rem",
+          padding: "0.25rem 0.55rem 0.25rem 0.35rem",
+          marginBottom: "0.6rem",
           background: "transparent",
-          border: "1px dashed var(--ink-faint)",
+          border: "1px solid var(--parchment-edge)",
+          borderRadius: "999px",
           color: "var(--ink-soft)",
-          fontSize: "0.65rem",
-          letterSpacing: "0.16em",
+          fontFamily: "inherit",
+          fontSize: "0.62rem",
+          letterSpacing: "0.18em",
           textTransform: "uppercase",
           cursor: "pointer",
-          width: "100%",
         }}
       >
-        Back to the chart
+        <ChevronLeft className="h-3 w-3" aria-hidden />
+        <span>{title}</span>
       </button>
-    </>
+      {children}
+    </div>
   );
 }

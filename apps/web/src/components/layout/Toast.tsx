@@ -12,13 +12,18 @@ const explorerUrls: Record<Explorer, (sig: string) => string> = {
   solanafm: (sig) => `https://solana.fm/tx/${sig}`,
 };
 
-// Left-border accent per type; loading stays neutral — the spinner carries it.
-const typeBorder: Record<ToastType, string> = {
-  success: "border-l-emerald-500",
-  error: "border-l-red-500",
-  info: "border-l-blue-500",
-  gold: "border-l-gold-500",
-  loading: "",
+// Per-type full-border tint + faint wash baked into the raised bg via color-mix
+// (sonner toasts have no backdrop, so the card must stay opaque — a translucent
+// overlay would show whatever's scrolled behind it). Loading stays neutral; the
+// spinner carries the signal.
+const typeStyle: Record<ToastType, string> = {
+  success:
+    "border-success/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-success))]",
+  error:
+    "border-danger/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-danger))]",
+  info: "border-info/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-info))]",
+  gold: "border-gold-600/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_92%,var(--color-gold-500))]",
+  loading: "border-border-default bg-[var(--nm-bg-raised)]",
 };
 
 /**
@@ -48,7 +53,7 @@ export function ToastCard({
     <div
       role="button"
       tabIndex={0}
-      className={`flex w-[calc(100vw-2rem)] max-w-sm cursor-pointer items-start gap-3 rounded-lg border border-border-default border-l-4 bg-[var(--nm-bg-raised)] p-3 md:w-80 ${typeBorder[type]}`}
+      className={`flex w-[calc(100vw-2rem)] max-w-sm cursor-pointer items-start gap-3 rounded-lg border p-3 md:w-80 ${typeStyle[type]}`}
       onClick={() => toast.dismiss(sonnerId)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") toast.dismiss(sonnerId);

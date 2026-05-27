@@ -45,10 +45,13 @@ export default function GameLayout({
   return (
     <div className="flex h-screen flex-col overflow-hidden">
       <TopBar />
-      {/* Mobile: collapsible data bar + the draggable Cairn */}
+      {/* Mobile: collapsible data bar + the draggable Cairn.
+       *  /map renders a fullscreen disc with its own floating chrome, so
+       *  we suppress the Cairn there — its sphere otherwise drifts over
+       *  the parchment and competes with the disc for attention. */}
       <div className="lg:hidden">
         <LeftPanelMobile />
-        <CairnFloating />
+        {!(pathname === "/map" || pathname?.startsWith("/map/")) && <CairnFloating />}
       </div>
       {/* 3-column body */}
       <div className="flex flex-1 overflow-hidden">
