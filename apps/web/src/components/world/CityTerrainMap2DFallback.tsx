@@ -11,20 +11,21 @@ import {
   useState,
 } from "react";
 import {
-  cityTerrain,
-  radiusToGridUnits,
   toGrid,
-  isPassable,
-  sampleTerrain,
-  terrainElevation,
-  terrainMoisture,
-  elevationToColor,
   OCCUPANT_PLAYER,
   OCCUPANT_ENCOUNTER,
   OCCUPANT_CASTLE,
   type CityAccount,
-  type CityTerrain,
 } from "novus-mundus-sdk";
+import {
+  biomeAt,
+  biomeColor,
+  biomeKnobsFromCity,
+  biomeName,
+  isPassableBiome,
+  type BiomeKnobs,
+  type BiomeType,
+} from "@/lib/world/biome";
 import { useCityOccupied, type OccupiedCell } from "@/lib/hooks/useCityOccupied";
 import {
   animatedColorAt,
@@ -269,7 +270,8 @@ type Props = CityTerrainMapProps;
  * gameplay area is communicated through interaction, not chrome.
  */
 function renderTerrainViewport(
-  terrain: CityTerrain,
+  biomeSeed: number,
+  knobs: BiomeKnobs,
   sizeDevW: number,
   sizeDevH: number,
   panOx: number,
@@ -293,9 +295,7 @@ function renderTerrainViewport(
       const oy = Math.round(-dpy * gridPerPx + panOy);
       const i = (py * sizeDevW + px) * 4;
 
-      const elev = terrainElevation(terrain, ox, oy);
-      const moist = terrainMoisture(terrain, ox, oy);
-      const [r, g, b] = elevationToColor(elev, terrain.waterLine, terrain.peakLine, moist);
+      const [r, g, b] = biomeColor(biomeAt(biomeSeed, ox, oy, knobs));
       pixels[i] = r;
       pixels[i + 1] = g;
       pixels[i + 2] = b;
@@ -354,11 +354,31 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
 
   const cityLatGrid = toGrid(cityAccount.latitude);
   const cityLongGrid = toGrid(cityAccount.longitude);
+  /* Post flat-strategy: city is a centred square plot of (widthGrid,
+   * heightGrid). We keep the legacy `radiusGridUnits` name as the
+   * half-extent of the LARGER axis so the bake math (which renders a
+   * square region around the city centre) doesn't change shape. Bounds
+   * checks use widthGrid/heightGrid directly via plotHalfW/plotHalfH. */
+  const plotHalfW = useMemo(() => cityAccount.widthGrid / 2, [cityAccount.widthGrid]);
+  const plotHalfH = useMemo(() => cityAccount.heightGrid / 2, [cityAccount.heightGrid]);
   const radiusGridUnits = useMemo(
-    () => radiusToGridUnits(cityAccount.radiusKm, cityAccount.latitude),
-    [cityAccount.radiusKm, cityAccount.latitude],
+    () => Math.max(plotHalfW, plotHalfH),
+    [plotHalfW, plotHalfH],
   );
-  const terrain = useMemo(() => cityTerrain(cityAccount), [cityAccount]);
+  const biomeSeed = cityAccount.biomeSeed;
+  /* Per-city biome knobs — five bytes that bend the procedural sampler.
+   * Memoised so the bake-cache key + every biomeAt call site can share a
+   * stable reference. */
+  const biomeKnobs = useMemo(
+    () => biomeKnobsFromCity(cityAccount),
+    [
+      cityAccount.waterLevelDelta,
+      cityAccount.tempBias,
+      cityAccount.moistureBias,
+      cityAccount.coast,
+      cityAccount.landmassSeed,
+    ],
+  );
 
   /* Canvas size tracking — track width and height separately so the canvas
    * can be a rectangle that fills the parchment sheet. The renderer keeps
@@ -435,19 +455,31 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
   const logicalMin = Math.min(size.w, size.h);
   const gridPerLogicalPx = (viewportRadius * 2) / logicalMin;
 
-  // Clamp the viewport CENTRE so the whole visible circle is covered by the
-  // city's disc — sqrt(panOx² + panOy²) + viewportRadius ≤ cityRadius.
+  // Clamp the viewport CENTRE so the canvas's visible rectangle stays
+  // inside the city's SQUARE plot. Axis-wise (AABB) clamp — matches the
+  // chain's `is_within_city_grid` bounds check (|ox| ≤ widthGrid/2,
+  // |oy| ≤ heightGrid/2). The pre-flat-strategy disc clamp confined the
+  // camera to the inscribed circle, which made the corners of the
+  // square plot inaccessible even though the terrain bake covered them.
   const clampPan = (
     panOx: number,
     panOy: number,
     scale: number,
   ): { panOx: number; panOy: number } => {
     if (scale <= 1.001) return { panOx: 0, panOy: 0 };
-    const max = radiusGridUnits - radiusGridUnits / scale;
-    const len = Math.hypot(panOx, panOy);
-    if (len <= max) return { panOx, panOy };
-    const f = max / len;
-    return { panOx: panOx * f, panOy: panOy * f };
+    // Canvas-aspect-aware viewport half-extents in grid units. `gridPerPx`
+    // is isotropic against the shorter canvas axis, so the longer axis
+    // shows MORE world (= bigger viewport half-extent along that axis).
+    const viewportRadius = radiusGridUnits / scale;
+    const sMin = Math.min(size.w, size.h);
+    const halfViewW = sMin > 0 ? (size.w / sMin) * viewportRadius : viewportRadius;
+    const halfViewH = sMin > 0 ? (size.h / sMin) * viewportRadius : viewportRadius;
+    const maxOx = Math.max(0, plotHalfW - halfViewW);
+    const maxOy = Math.max(0, plotHalfH - halfViewH);
+    return {
+      panOx: Math.max(-maxOx, Math.min(maxOx, panOx)),
+      panOy: Math.max(-maxOy, Math.min(maxOy, panOy)),
+    };
   };
 
   /* Animation infrastructure — `animateView` tweens (scale, panOx, panOy)
@@ -607,13 +639,21 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     cityId: number;
     canvas: HTMLCanvasElement;
     radiusGridUnits: number;
+    biomeSeed: number;
+    knobs: BiomeKnobs;
   } | null>(null);
   const terrainCache = useMemo(() => {
     const cached = terrainCacheRef.current;
     if (
       cached &&
       cached.cityId === cityAccount.cityId &&
-      cached.radiusGridUnits === radiusGridUnits
+      cached.radiusGridUnits === radiusGridUnits &&
+      cached.biomeSeed === biomeSeed &&
+      cached.knobs.waterLevelDelta === biomeKnobs.waterLevelDelta &&
+      cached.knobs.tempBias === biomeKnobs.tempBias &&
+      cached.knobs.moistureBias === biomeKnobs.moistureBias &&
+      cached.knobs.coast === biomeKnobs.coast &&
+      cached.knobs.landmassSeed === biomeKnobs.landmassSeed
     ) {
       return cached.canvas;
     }
@@ -623,7 +663,7 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     offscreen.height = TERRAIN_CACHE_SIZE;
     const offCtx = offscreen.getContext("2d");
     if (!offCtx) return null;
-    /* Cached image covers the full disc bounding square: x∈[-r..+r] grid
+    /* Cached image covers the full plot bounding square: x∈[-r..+r] grid
      * units mapped to pixels 0..TERRAIN_CACHE_SIZE. */
     const gridPerCachedPx = (radiusGridUnits * 2) / TERRAIN_CACHE_SIZE;
     const pixels = new Uint8ClampedArray(
@@ -637,14 +677,7 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
         const ox = Math.round((px - halfCache) * gridPerCachedPx);
         const oy = Math.round(-(py - halfCache) * gridPerCachedPx);
         const i = (py * TERRAIN_CACHE_SIZE + px) * 4;
-        const elev = terrainElevation(terrain, ox, oy);
-        const moist = terrainMoisture(terrain, ox, oy);
-        const [r, g, b] = elevationToColor(
-          elev,
-          terrain.waterLine,
-          terrain.peakLine,
-          moist,
-        );
+        const [r, g, b] = biomeColor(biomeAt(biomeSeed, ox, oy, biomeKnobs));
         pixels[i] = r;
         pixels[i + 1] = g;
         pixels[i + 2] = b;
@@ -658,9 +691,11 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
       cityId: cityAccount.cityId,
       canvas: offscreen,
       radiusGridUnits,
+      biomeSeed,
+      knobs: biomeKnobs,
     };
     return offscreen;
-  }, [cityAccount.cityId, terrain, radiusGridUnits]);
+  }, [cityAccount.cityId, biomeSeed, radiusGridUnits, biomeKnobs]);
 
   // Terrain blit — drawImage the cache, translated/scaled to the view.
   // Replaces the per-pixel rerender that previously fired on every pan.
@@ -1025,6 +1060,12 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
       const isEncounter = cell.occupantType === OCCUPANT_ENCOUNTER;
       const isCastle = cell.occupantType === OCCUPANT_CASTLE;
       if (!isPlayer && !isEncounter && !isCastle) continue;
+      // Castle cells come in N² copies — one per footprint cell — so
+      // click resolution lands on any cell. Render only the anchor
+      // (dlat=0, dlong=0); the anchor paints a single plate spanning
+      // all N×N cells, so the remaining N²-1 cells stay invisible.
+      if (isCastle && cell.footprintAnchor !== true) continue;
+      const castleN = isCastle ? Math.max(1, cell.footprintSize ?? 1) : 1;
       const isSelectedEntity =
         selectedEntity != null &&
         selectedEntity.gridLat === cell.gridLat &&
@@ -1069,12 +1110,17 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
       if (renderAsTiles) {
         /* Snap rectangle to integer device pixels — otherwise adjacent tiles
          * can show sub-pixel gaps or 2-px-wide seams that look like grid
-         * misalignment, especially on mobile DPR. */
+         * misalignment, especially on mobile DPR. Castle anchors paint a
+         * plate spanning N cells in each axis (anchor at the SW corner,
+         * footprint extends +north/+east). */
         const half = pxPerCell / 2;
         const x0 = Math.round(px - half);
-        const y0 = Math.round(py - half);
-        const w = Math.round(px + half) - x0;
-        const h = Math.round(py + half) - y0;
+        const y0 = isCastle
+          ? Math.round(py - pxPerCell * (castleN - 1) - half)
+          : Math.round(py - half);
+        const xExtent = isCastle ? px + pxPerCell * (castleN - 1) + half : px + half;
+        const w = Math.round(xExtent) - x0;
+        const h = isCastle ? Math.round(py + half) - y0 : Math.round(py + half) - y0;
         if (frameGlow) {
           ctx.fillStyle = frameGlow;
           ctx.fillRect(x0 - 3 * dpr, y0 - 3 * dpr, w + 6 * dpr, h + 6 * dpr);
@@ -1105,9 +1151,17 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
           ctx.fill();
           ctx.stroke();
         } else if (isCastle) {
-          /* Castle — filled square (third primitive after circle/diamond). */
+          /* Castle — filled square sized by footprint. Anchor sits at
+           * the SW corner of the footprint; centre the visible square
+           * over the geometric centre of the N×N plot. The minimum
+           * draw size grows with footprint so a 4×4 fortress is
+           * obviously larger than a 1×1 outpost even in dot mode. */
+          const scale = Math.max(1, castleN * 0.7);
+          const half = r * scale;
+          const cx = px + (pxPerCell * (castleN - 1)) / 2;
+          const cy = py - (pxPerCell * (castleN - 1)) / 2;
           ctx.beginPath();
-          ctx.rect(px - r, py - r, r * 2, r * 2);
+          ctx.rect(cx - half, cy - half, half * 2, half * 2);
           ctx.fill();
           ctx.stroke();
         } else {
@@ -1634,10 +1688,10 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
         return;
       }
     }
-    // Outside the invisible gameplay disc — surface the notice and bail.
+    // Outside the city's square plot — surface the notice and bail.
     // Don't clear the entity selection: the user likely just missed the
-    // disc, and yanking the selected encounter away would be hostile.
-    if (ox * ox + oy * oy > radiusGridUnits * radiusGridUnits) {
+    // plot, and yanking the selected encounter away would be hostile.
+    if (Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH) {
       setOutOfBoundsNotice(true);
       clearPreview();
       return;
@@ -1696,7 +1750,7 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     clearPreview();
     onEntitySelect?.(null);
     if (!onSelect) return;
-    if (!isPassable(terrain, ox, oy)) return;
+    if (!isPassableBiome(biomeAt(biomeSeed, ox, oy, biomeKnobs))) return;
     onSelect(gridLat, gridLong);
   };
 
@@ -1705,34 +1759,19 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
   const hoverInfo = useMemo(() => {
     if (!hover) return null;
     const { ox, oy } = pxToGrid(hover.px, hover.py);
-    if (ox * ox + oy * oy > radiusGridUnits * radiusGridUnits) return null;
-    const s = sampleTerrain(terrain, ox, oy);
-    /* Land labels are bucketed by elevation fraction `t` so they line up
-     * with the palette's own bands:
-     *   t < 0.1   → Shore (matches the warm-sand beach band in the renderer)
-     *   t < 0.5   → Land  (lowland tans / muted olive)
-     *   t < 1.0   → Hill  (the darker highland band — visually clearly
-     *                      elevated, this is what players see as "rises")
-     *   e ≥ peak  → Peak  (snow-capped summits)
-     * Before this, Hill kicked in at t > 0.7 — the upper half of the
-     * highland band — so most of the visually-elevated terrain was
-     * mis-labelled as plain Land. */
-    let label = "Land";
-    if (s.isWater) {
-      label = "Water";
-    } else if (s.isMountain) {
-      label = "Peak";
-    } else {
-      const range = Math.max(1, terrain.peakLine - terrain.waterLine);
-      const t = (s.elevation - terrain.waterLine) / range;
-      if (t < 0.1) label = "Shore";
-      else if (t >= 0.5) label = "Hill";
-    }
+    if (Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH) return null;
+    const biome: BiomeType = biomeAt(biomeSeed, ox, oy, biomeKnobs);
+    // Biome name capitalised for the readout — matches the project's
+    // existing "Water/Land/Shore/Hill/Peak" label vocabulary in shape
+    // (single proper-noun word).
+    const name = biomeName(biome);
+    const label = name.charAt(0).toUpperCase() + name.slice(1);
+    const passable = isPassableBiome(biome);
     const distM = Math.round(Math.sqrt(ox * ox + oy * oy) * METERS_PER_GRID_UNIT);
-    return { label, distM, passable: s.isPassable };
+    return { label, distM, passable };
     /* pxToGrid depends on view + size; declared deps are explicit. */
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hover, terrain, radiusGridUnits, size.w, size.h, view.scale, view.panOx, view.panOy]);
+  }, [hover, biomeSeed, biomeKnobs, plotHalfW, plotHalfH, size.w, size.h, view.scale, view.panOx, view.panOy]);
 
   const selectedDistM = useMemo(() => {
     if (!selected) return 0;
@@ -1766,7 +1805,7 @@ export const CityTerrainMap2DFallback = forwardRef<CityTerrainMapHandle, Props>(
     }
     if (!hover) return null;
     const { ox, oy } = pxToGrid(hover.px, hover.py);
-    if (ox * ox + oy * oy > radiusGridUnits * radiusGridUnits) return null;
+    if (Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH) return null;
     const gridLat = cityLatGrid + oy;
     const gridLong = cityLongGrid + ox;
     return pickOccupantAt(occupied, gridLat, gridLong);

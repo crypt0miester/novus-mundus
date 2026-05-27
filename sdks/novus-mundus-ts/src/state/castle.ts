@@ -26,9 +26,13 @@ export interface CastleAccount {
   // Name
   name: string;
 
-  // Location
+  // Location — anchor corner of the N×N footprint, microdegrees.
   latitude: number;
   longitude: number;
+  /** N for the castle's N×N footprint (1..=4). Cells extend at
+   * positive offsets from the anchor; matches Rust
+   * `CastleAccount.footprint_size`. */
+  footprintSize: number;
 
   // Ruler Info
   king: PublicKey;
@@ -162,7 +166,14 @@ export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
   // Location (16 bytes)
   const latitude = reader.readI32();
   const longitude = reader.readI32();
-  reader.skip(8); // _padding_loc
+  // Pre-cut castles stored a zeroed byte where footprint_size now
+  // lives (consumed one byte of the original _padding_loc[8]); chain
+  // attack_castle reads 0 as 1×1 for backwards compatibility. Apply
+  // the same fold here so downstream code never sees a 0 and doesn't
+  // need its own ?? / Math.max(1, …) shim.
+  const footprintSizeRaw = reader.readU8();
+  const footprintSize = footprintSizeRaw === 0 ? 1 : footprintSizeRaw;
+  reader.skip(7); // _padding_loc (now 7 bytes)
 
   // Ruler Info (80 bytes)
   const king = reader.readPubkey();
@@ -244,6 +255,7 @@ export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
     name,
     latitude,
     longitude,
+    footprintSize,
     king,
     team,
     claimedAt,

@@ -7,7 +7,7 @@ mod constants;
 mod error;
 pub mod events;
 mod helpers;
-mod logic;
+pub mod logic;
 mod processor;
 mod state;
 mod token_helpers;
@@ -110,18 +110,9 @@ pub fn process_instruction(
                 instruction_data,
             )
         }
-        7 => {
-            msg!("set terrain");
-            processor::initialization::set_terrain::process(program_id, accounts, instruction_data)
-        }
-        8 => {
-            msg!("append terrain");
-            processor::initialization::append_terrain::process(
-                program_id,
-                accounts,
-                instruction_data,
-            )
-        }
+        // Discriminators 7 (set_terrain) and 8 (append_terrain) retired with
+        // the flat-strategy cut. Biome is now a pure function of biome_seed
+        // sampled at the point of use; no on-chain anchor write step.
 
         // Economy (10-19)
         10 => {

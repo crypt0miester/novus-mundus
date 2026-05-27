@@ -54,6 +54,7 @@ import {
 import {
   type TestContext,
   beforeAllTests,
+  CITIES,
 } from '../fixtures/setup';
 import { advanceTime } from '../fixtures/time';
 import {
@@ -137,7 +138,8 @@ async function addPlayerToTeam(
   await sendTransaction(ctx.svm, new Transaction().add(acceptIx), [member.keypair]);
 }
 
-/** Create castle via DAO */
+/** Create castle via DAO. Anchor is placed at the city's centre + small
+ *  offset so the N×N footprint stays inside the city's AABB. */
 async function createCastle(
   ctx: TestContext,
   cityId: number,
@@ -145,18 +147,28 @@ async function createCastle(
   tier: number = 2,
   minLevel: number = 1
 ): Promise<void> {
+  const city = CITIES[cityId]!;
+  const cityLatGrid = Math.round(city.lat * 10000);
+  const cityLonGrid = Math.round(city.lon * 10000);
   const ix = createCreateCastleInstruction(
     { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
     {
       cityId,
       castleId,
       tier,
-      latitude: 400000,
-      longitude: -740000,
+      // Castle anchors spread on a 5-cell-spaced grid bounded inside
+      // the no-water zone (±200 from city centre for TEST_BIOME_SEED).
+      // 5-cell spacing with 2×2 footprints leaves a 3-cell gap between
+      // castles — no overlap, no collision with player cells from the
+      // spawn picker which fills offsets starting at (0, 0). Modulo
+      // wraps so high castleIds (199 etc.) stay in bounds.
+      latitude: cityLatGrid + ((castleId % 30) * 5 + 30),
+      longitude: cityLonGrid + (Math.floor(castleId / 30) * 5 + 30),
       minLevel,
       minNetworthMillions: 0,
       minTroopsThousands: 0,
       name: `Castle-${cityId}-${castleId}`,
+      footprintSize: 2,
     }
   );
 
@@ -173,18 +185,22 @@ async function createCastleAtPlayer(
 ): Promise<void> {
   const data = await fetchPlayer(ctx.svm, player.playerPda);
   if (!data) throw new Error('player not initialized');
+  // Place the castle anchor +1 grid cell away from the player so the
+  // player's cell isn't inside the castle's N×N footprint (the chain
+  // rejects creates that would overlap an existing LocationAccount).
   const ix = createCreateCastleInstruction(
     { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
     {
       cityId,
       castleId,
       tier,
-      latitude: Math.round(data.currentLat * 10000),
-      longitude: Math.round(data.currentLong * 10000),
+      latitude: Math.round(data.currentLat * 10000) + 1,
+      longitude: Math.round(data.currentLong * 10000) + 1,
       minLevel: 1,
       minNetworthMillions: 0,
       minTroopsThousands: 0,
       name: `AtkCastle${castleId}`,
+      footprintSize: 2,
     }
   );
   await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
@@ -742,6 +758,7 @@ describe('Castle System', () => {
       // defeated" branch and the castle flips to TRANSITIONING with
       // transition_new_king = attacker.
       const attacker = await factory.createPlayer({
+        cityId: CITY,
         initialize: true,
         createEstate: true,
         buildings: [BuildingType.Barracks],
@@ -1918,6 +1935,7 @@ describe('Castle System', () => {
       const CASTLE = 198;
 
       const attacker = await factory.createPlayer({
+        cityId: CITY,
         initialize: true,
         createEstate: true,
         buildings: [BuildingType.Barracks],

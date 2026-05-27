@@ -1,7 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { pickSpawn, toGrid, type SpawnBearing, type SpawnFlavor } from "novus-mundus-sdk";
+import {
+  biomeKnobsFromCity,
+  pickSpawn,
+  toGrid,
+  type SpawnBearing,
+  type SpawnFlavor,
+} from "novus-mundus-sdk";
 import { useAllCities } from "@/lib/hooks/useAllCities";
 import { cityType } from "@/lib/narrative";
 import {
@@ -81,16 +87,11 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
         cityId: a.cityId,
         latitude: a.latitude,
         longitude: a.longitude,
-        radiusKm: a.radiusKm,
+        widthGrid: a.widthGrid,
+        heightGrid: a.heightGrid,
+        biomeSeed: a.biomeSeed,
         cityType: a.cityType,
-        terrain: {
-          seed: a.terrainSeed,
-          waterLine: a.waterLine,
-          peakLine: a.peakLine,
-          anchorCount: a.anchorCount,
-          version: a.terrainVersion,
-          anchors: a.anchors,
-        },
+        knobs: biomeKnobsFromCity(a),
       });
       setSpawnCell({ gridLat: toGrid(spawn.lat), gridLong: toGrid(spawn.long) });
       setAutoSpawn({ flavor: spawn.flavor, bearing: spawn.bearing });

@@ -32,6 +32,14 @@ export interface OccupiedCell {
   equippedBadge?: number;
   equippedFrame?: number;
   equippedTitle?: number;
+  /* Castle footprint metadata — only set for OCCUPANT_CASTLE cells.
+   * `footprintSize` is N for an N×N castle; every footprint cell
+   * carries the same value so click handlers know how big to draw
+   * the selection ring. `footprintAnchor` is true ONLY on the
+   * (dlat=0, dlong=0) cell — the renderer paints a single plate
+   * spanning N×N cells at the anchor and skips the rest. */
+  footprintSize?: number;
+  footprintAnchor?: boolean;
 }
 
 /*
@@ -241,18 +249,34 @@ export function useCityOccupied(cityId: number | null | undefined) {
         equippedTitle: cosmetic?.titleId,
       });
     }
-    /* Fold castles in. CastleAccount stores lat/long as i32 microdegrees
-     * (×1e6); the disc grid is ten-thousandths of a degree, so the scale
-     * collapses to /100. Only the castles in this city show. */
+    /* Fold castles in. CastleAccount stores lat/long as i32 grid units
+     * (×10,000 = LocationAccount precision); the disc grid is in the
+     * same units, so no scaling. Each castle occupies an N×N footprint
+     * anchored at (latitude, longitude); push one OccupiedCell per
+     * cell so any click inside the footprint resolves to the castle.
+     * `footprintAnchor` marks the (dlat=0, dlong=0) cell so the
+     * renderer can paint ONE plate spanning N×N cells instead of N²
+     * independent squares. */
     if (worldCastles) {
       for (const c of worldCastles) {
         if (c.account.cityId !== cityId) continue;
-        out.push({
-          gridLat: Math.round(c.account.latitude / 100),
-          gridLong: Math.round(c.account.longitude / 100),
-          occupantType: OCCUPANT_CASTLE,
-          occupant: c.pubkey.toBase58(),
-        });
+        const anchorLat = c.account.latitude;
+        const anchorLong = c.account.longitude;
+        // deserializeCastle folds pre-cut zero-padding to 1, so this
+        // field is guaranteed >= 1 — no defensive shim needed here.
+        const size = c.account.footprintSize;
+        for (let dlat = 0; dlat < size; dlat++) {
+          for (let dlong = 0; dlong < size; dlong++) {
+            out.push({
+              gridLat: anchorLat + dlat,
+              gridLong: anchorLong + dlong,
+              occupantType: OCCUPANT_CASTLE,
+              occupant: c.pubkey.toBase58(),
+              footprintSize: size,
+              footprintAnchor: dlat === 0 && dlong === 0,
+            });
+          }
+        }
       }
     }
     return out;

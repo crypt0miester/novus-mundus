@@ -17,7 +17,7 @@ use crate::{
     },
     logic::{
         get_time_multiplier, get_time_of_day,
-        location::{apply_travel_speed_bonuses, calculate_distance, is_within_city_bounds},
+        location::{apply_travel_speed_bonuses, calculate_distance},
         ActivityType,
     },
     state::{CityAccount, GameEngine, LocationAccount, PlayerAccount, OCCUPANT_PLAYER},
@@ -198,22 +198,12 @@ pub fn process(
     let dest_lat_f64 = LocationAccount::from_grid(dest_grid_lat);
     let dest_long_f64 = LocationAccount::from_grid(dest_grid_long);
 
-    if !is_within_city_bounds(
-        dest_lat_f64,
-        dest_long_f64,
-        destination_city_data.latitude,
-        destination_city_data.longitude,
-        destination_city_data.radius_km,
-    ) {
+    if !destination_city_data.contains_coord(dest_lat_f64, dest_long_f64) {
         return Err(GameError::DestinationOutsideCity.into());
     }
 
-    // 10a. Terrain Passability Check
-    destination_city_data.require_passable_at(
-        destination_city_account,
-        dest_lat_f64,
-        dest_long_f64,
-    )?;
+    // 10a. Biome Passability Check
+    destination_city_data.require_passable_at(dest_lat_f64, dest_long_f64)?;
 
     let dest_city_bytes = destination_city_id.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();

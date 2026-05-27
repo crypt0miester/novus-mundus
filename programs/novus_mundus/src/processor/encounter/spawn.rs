@@ -240,18 +240,15 @@ pub fn process(
     let spawn_grid_lat = client_grid_lat;
     let spawn_grid_long = client_grid_long;
 
-    // Validate coords are within city radius (simple Euclidean approx)
+    // Validate coords fall inside the city's square plot (AABB).
     let spawn_lat = LocationAccount::from_grid(spawn_grid_lat);
     let spawn_long = LocationAccount::from_grid(spawn_grid_long);
-    let dlat = spawn_lat - city_data.latitude;
-    let dlong = spawn_long - city_data.longitude;
-    let dist_km = libm::sqrt((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0));
-    if dist_km > city_data.radius_km as f64 {
+    if !city_data.contains_coord(spawn_lat, spawn_long) {
         return Err(GameError::OutOfRange.into());
     }
 
-    // 8. Terrain Passability Check — encounters cannot spawn in water or on mountains
-    city_data.require_passable_at(city_account, spawn_lat, spawn_long)?;
+    // 8. Biome Passability Check — encounters cannot spawn on water.
+    city_data.require_passable_at(spawn_lat, spawn_long)?;
 
     // 8a. Validate Spawn Location PDA
     //

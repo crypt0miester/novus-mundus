@@ -66,14 +66,14 @@ export function snapToMode(
   selectionTargetXZ: { x: number; z: number } | null,
 ): void {
   const fromMode = controller.getMode();
-  if (fromMode === "3d" && toMode === "2d") {
+  if (fromMode === "iso" && toMode === "flat") {
     controller.setStoredPitch3D(controller.getDesiredPitch());
   }
   const pitchTo =
-    toMode === "3d" ? controller.getStoredPitch3D() : PITCH_2D;
+    toMode === "iso" ? controller.getStoredPitch3D() : PITCH_2D;
   controller.setPitchHard(pitchTo);
-  terrain.heightScale.value = toMode === "3d" ? 1 : 0;
-  const yTo = toMode === "3d" ? midpointElevation() : 0;
+  terrain.heightScale.value = toMode === "iso" ? 1 : 0;
+  const yTo = toMode === "iso" ? midpointElevation() : 0;
   const current = controller.getDesiredTarget();
   controller.setTargetHard(
     new THREE.Vector3(
@@ -95,15 +95,15 @@ export function runModeTransition(opts: TransitionOptions): RunningTransition {
   // Preserve the user's last 3D pitch across mode toggles. When
   // leaving 3D, stash the current pitch; when entering 3D, restore
   // it instead of slamming back to the default PITCH_3D.
-  if (fromMode === "3d" && toMode === "2d") {
+  if (fromMode === "iso" && toMode === "flat") {
     controller.setStoredPitch3D(pitchFrom);
   }
   const pitchTo =
-    toMode === "3d" ? controller.getStoredPitch3D() : PITCH_2D;
+    toMode === "iso" ? controller.getStoredPitch3D() : PITCH_2D;
   const scaleFrom = terrain.heightScale.value;
-  const scaleTo = toMode === "3d" ? 1 : 0;
+  const scaleTo = toMode === "iso" ? 1 : 0;
   const yFrom = controller.getDesiredTarget().y;
-  const yTo = toMode === "3d" ? midpointElevation() : 0;
+  const yTo = toMode === "iso" ? midpointElevation() : 0;
   const xFrom = controller.getDesiredTarget().x;
   const zFrom = controller.getDesiredTarget().z;
   const xTo = opts.selectionTargetXZ ? opts.selectionTargetXZ.x : xFrom;

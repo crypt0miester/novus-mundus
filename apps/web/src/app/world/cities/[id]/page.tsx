@@ -157,8 +157,10 @@ export default function CityRosterPage({ params }: { params: Promise<{ id: strin
               <span className="text-text-secondary">{teamsPresent.length}</span>
             </div>
             <div>
-              <span className="text-text-muted">Radius: </span>
-              <span className="text-text-secondary">{c.radiusKm.toFixed(1)} km</span>
+              <span className="text-text-muted">Plot: </span>
+              <span className="text-text-secondary">
+                {c.widthGrid} × {c.heightGrid} cells
+              </span>
             </div>
           </div>
         </div>

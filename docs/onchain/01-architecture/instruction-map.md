@@ -122,8 +122,8 @@ graph TD
 | 4 | `close registration` | `processor::initialization::close_registration` | DAO closes new-player registration for a kingdom |
 | 5 | `batch init cities` | `processor::initialization::batch_cities` | Create multiple city accounts in one transaction |
 | 6 | `update game config` | `processor::initialization::update_game_config` | DAO updates embedded `GameEngine` sub-configs (caps, economic config, gameplay config, etc.) |
-| 7 | `set terrain` | `processor::initialization::set_terrain` | Set terrain anchor data on a `CityAccount` |
-| 8 | `append terrain` | `processor::initialization::append_terrain` | Append additional terrain anchors to a city |
+| **7** | *(retired)* | — | Was `set terrain` — biome is now a pure function of `(biome_seed, ox, oy)`, no per-city anchor block. |
+| **8** | *(retired)* | — | Was `append terrain` — see ID 7. |
 | **9** | *(reserved)* | — | — |
 
 [Source: processor/initialization/](../../../programs/novus_mundus/src/processor/initialization/)

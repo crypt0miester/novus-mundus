@@ -19,7 +19,7 @@ use crate::{
         get_time_multiplier, get_time_of_day,
         location::{
             apply_travel_speed_bonuses, calculate_intracity_travel_time, is_valid_latitude,
-            is_valid_longitude, is_within_city_bounds,
+            is_valid_longitude,
         },
         ActivityType,
     },
@@ -152,15 +152,9 @@ pub fn process(
         return Err(GameError::PlayerNotInCity.into());
     }
 
-    // 9. Validate Destination Within City Bounds
+    // 9. Validate Destination Within City Bounds (AABB).
 
-    if !is_within_city_bounds(
-        destination_lat,
-        destination_long,
-        city_data.latitude,
-        city_data.longitude,
-        city_data.radius_km,
-    ) {
+    if !city_data.contains_coord(destination_lat, destination_long) {
         return Err(GameError::DestinationOutsideCity.into());
     }
 
@@ -217,8 +211,8 @@ pub fn process(
     let dest_grid_lat = LocationAccount::to_grid(destination_lat);
     let dest_grid_long = LocationAccount::to_grid(destination_long);
 
-    // 10b. Terrain Passability Check
-    city_data.require_passable_at(current_city_account, destination_lat, destination_long)?;
+    // 10b. Biome Passability Check
+    city_data.require_passable_at(destination_lat, destination_long)?;
 
     let city_bytes = player_data.current_city.to_le_bytes();
     let dest_lat_bytes = dest_grid_lat.to_le_bytes();

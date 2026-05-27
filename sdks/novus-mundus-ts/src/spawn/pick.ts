@@ -7,10 +7,10 @@
  * or stacks every player on one pixel) or walk a linear offset (drifts into
  * impassable terrain). This module fixes both.
  *
- * Algorithm — uniform-disk sample, terrain-aware score, top-K weighted pick:
- *   1. Sample N candidate cells uniformly inside the city's radius.
- *   2. Drop impassable cells (mirrors on-chain `is_passable` exactly).
- *   3. Score survivors by terrain affinity + city-type bias.
+ * Algorithm — uniform AABB sample, biome-aware score, top-K weighted pick:
+ *   1. Sample N candidate cells uniformly inside the city's square plot.
+ *   2. Drop water cells (mirrors on-chain `is_passable_biome` exactly).
+ *   3. Score survivors by biome affinity + city-type bias.
  *   4. Take the top K, weighted-random one.
  *   5. Tag the chosen cell with a `flavor` and `bearing` for narration.
  *
@@ -19,38 +19,52 @@
  */
 
 import {
-  type CityTerrain,
-  isPassable,
-  sampleTerrain,
-  terrainAffinity,
-  radiusToGridUnits,
-  GRID_PRECISION,
-} from "../calculators/terrain";
+  biomeAffinity,
+  biomeAt,
+  BIOME_FOREST,
+  BIOME_MARSH,
+  BIOME_ROCK,
+  BIOME_SHORE,
+  BIOME_SNOW,
+  BIOME_WATER,
+  isPassableBiome,
+  type BiomeKnobs,
+  type BiomeType,
+} from '../calculators/biome';
+import { GRID_PRECISION } from '../calculators/terrain';
 
-// Public types
+// Public types.
 
 export type SpawnFlavor =
-  | "coast"
-  | "foothill"
-  | "grove"
-  | "plain"
-  | "frontier"
-  | "crossroads";
+  | 'coast'
+  | 'foothill'
+  | 'grove'
+  | 'plain'
+  | 'frontier'
+  | 'crossroads';
 
-export type SpawnBearing = "N" | "NE" | "E" | "SE" | "S" | "SW" | "W" | "NW";
+export type SpawnBearing = 'N' | 'NE' | 'E' | 'SE' | 'S' | 'SW' | 'W' | 'NW';
 
 export interface CityForSpawn {
   cityId: number;
   latitude: number;
   longitude: number;
-  radiusKm: number;
+  /** Square plot X extent in grid units (centred AABB). */
+  widthGrid: number;
+  /** Square plot Y extent in grid units. */
+  heightGrid: number;
+  /** Biome noise seed for biomeAt sampling. */
+  biomeSeed: number;
   /** 0 Capital, 1 Resource, 2 Combat, 3 Trade — matches CityType enum. */
   cityType: number;
-  terrain: CityTerrain;
+  /** Per-city biome knobs. REQUIRED — sampling with the wrong knobs
+   * produces "passable" cells the chain rejects as water. Project a
+   * CityAccount via `biomeKnobsFromCity`. */
+  knobs: BiomeKnobs;
 }
 
 export interface SpawnContext {
-  /** Optional anti-cluster signal — known nearby player positions. v1 callers may omit. */
+  /** Optional anti-cluster signal — known nearby player positions. */
   occupiedSampled?: ReadonlyArray<{ lat: number; long: number }>;
 }
 
@@ -66,36 +80,32 @@ export interface SpawnResult extends SpawnCandidate {
   alternates: SpawnCandidate[];
 }
 
-// Tuning
+// Tuning.
 
 const CANDIDATE_COUNT = 64;
 const TOP_K = 5;
-/** Max retries when terrain produces an unusually low yield of passable cells. */
+/** Max retries when biome layout produces an unusually low yield of land cells. */
 const MAX_RESAMPLE = 2;
 
-// Algorithm
+// Algorithm.
 
 export function pickSpawn(city: CityForSpawn, ctx: SpawnContext = {}): SpawnResult {
-  const radiusGrid = radiusToGridUnits(city.radiusKm, city.latitude);
-
-  let scored = sampleAndScore(city, ctx, radiusGrid, CANDIDATE_COUNT);
+  let scored = sampleAndScore(city, ctx, CANDIDATE_COUNT);
 
   for (let attempt = 0; attempt < MAX_RESAMPLE && scored.length < TOP_K; attempt++) {
-    const extra = sampleAndScore(city, ctx, radiusGrid, CANDIDATE_COUNT);
+    const extra = sampleAndScore(city, ctx, CANDIDATE_COUNT);
     scored = scored.concat(extra);
   }
 
   if (scored.length === 0) {
     throw new Error(
-      `No passable spawn cells found in city ${city.cityId}. Terrain may be impassable everywhere — check water_line/peak_line.`,
+      `No passable spawn cells found in city ${city.cityId}. The biome layout may be all-water — try a different biomeSeed.`,
     );
   }
 
   scored.sort((a, b) => b.score - a.score);
   const top = scored.slice(0, Math.min(TOP_K, scored.length));
 
-  // Weighted-random over the top K. Top entry weighted highest, falling off
-  // linearly. Keeps spawns spread without sacrificing best-of-rank.
   const chosen = weightedPick(top);
 
   const result = toCandidate(city, chosen);
@@ -107,37 +117,42 @@ export function pickSpawn(city: CityForSpawn, ctx: SpawnContext = {}): SpawnResu
   return { ...result, alternates };
 }
 
-// Internals
+// Internals.
 
 interface Scored {
   ox: number;
   oy: number;
   score: number;
   flavor: SpawnFlavor;
+  biome: BiomeType;
 }
 
-function sampleAndScore(
-  city: CityForSpawn,
-  ctx: SpawnContext,
-  radiusGrid: number,
-  n: number,
-): Scored[] {
+function sampleAndScore(city: CityForSpawn, ctx: SpawnContext, n: number): Scored[] {
   const out: Scored[] = [];
+  const halfW = city.widthGrid / 2;
+  const halfH = city.heightGrid / 2;
+  // Normalise against the AABB diagonal so corners reach distNorm == 1
+  // without clamping. Using min(halfW, halfH) plateaued ~30% of cells
+  // (the corner triangles outside the inscribed circle) at distNorm=1
+  // and collapsed cityType=2/3 linear biases into step functions.
+  const radiusForNorm = Math.sqrt(halfW * halfW + halfH * halfH);
+  const knobs = city.knobs;
+
   for (let i = 0; i < n; i++) {
-    // Uniform-in-disk: r = sqrt(u) * radius; theta = u * 2π. Without sqrt
-    // points would clump at the center.
-    const r = Math.sqrt(Math.random()) * radiusGrid;
-    const theta = Math.random() * 2 * Math.PI;
-    const ox = Math.round(r * Math.cos(theta));
-    const oy = Math.round(r * Math.sin(theta));
+    // Uniform AABB sample — pick (ox, oy) uniformly in [-halfW, halfW] ×
+    // [-halfH, halfH]. Simple, matches the square plot exactly.
+    const ox = Math.round((Math.random() * 2 - 1) * halfW);
+    const oy = Math.round((Math.random() * 2 - 1) * halfH);
 
-    if (!isPassable(city.terrain, ox, oy)) continue;
+    const biome = biomeAt(city.biomeSeed, ox, oy, knobs);
+    if (!isPassableBiome(biome)) continue;
 
-    const distNorm = r / radiusGrid;
-    const flavor = flavorOf(city.terrain, ox, oy, distNorm);
-    const score = scoreCandidate(city, ctx, ox, oy, distNorm);
+    const dist = Math.sqrt(ox * ox + oy * oy);
+    const distNorm = radiusForNorm > 0 ? dist / radiusForNorm : 0;
+    const flavor = flavorOf(city.biomeSeed, ox, oy, biome, distNorm, knobs);
+    const score = scoreCandidate(city, ctx, ox, oy, biome, distNorm);
 
-    out.push({ ox, oy, score, flavor });
+    out.push({ ox, oy, score, flavor, biome });
   }
   return out;
 }
@@ -147,20 +162,21 @@ function scoreCandidate(
   ctx: SpawnContext,
   ox: number,
   oy: number,
+  biome: BiomeType,
   distNorm: number,
 ): number {
   let score = 0;
 
-  // Terrain affinity — coasts and foothills are inherently more interesting
-  // than featureless plains. Both bonuses peak at 1500 bps.
-  const affinity = terrainAffinity(city.terrain, ox, oy);
-  score += affinity.miningBps * 0.2;
-  score += affinity.fishingBps * 0.2;
+  // Biome affinity — coasts (fishing) and rock/snow (mining) are inherently
+  // more interesting than featureless grass. Both bonuses peak at 1500 bps.
+  const aff = biomeAffinity(biome);
+  score += aff.miningBps * 0.2;
+  score += aff.fishingBps * 0.2;
 
-  // Edge bonus — cells with an impassable neighbor are shorelines and
-  // mountain bases, which photograph well and give the narrator something
-  // concrete to point at.
-  if (isTerrainEdge(city.terrain, ox, oy)) {
+  // Edge bonus — cells with a water neighbour are shorelines; with a forest
+  // / rock neighbour are biome edges. Both photograph well and give the
+  // narrator something concrete to point at.
+  if (isBiomeEdge(city.biomeSeed, ox, oy, city.knobs)) {
     score += 400;
   }
 
@@ -176,7 +192,7 @@ function scoreCandidate(
       const dx = ox - oxx;
       const dy = oy - oyy;
       const d2 = dx * dx + dy * dy;
-      // Penalty within ~1km (≈ 90 grid units → 8100 squared).
+      // Penalty within ~1 km (≈ 90 grid units → 8100 squared).
       if (d2 < 8100) {
         score -= (8100 - d2) * 0.05;
       }
@@ -188,71 +204,66 @@ function scoreCandidate(
 
 function cityTypeBias(cityType: number, distNorm: number): number {
   // distNorm ∈ [0, 1] — 0 at city center, 1 at radius edge.
-  // Returns roughly -1..+1; multiplied by a weight in scoreCandidate.
   switch (cityType) {
-    case 0: // Capital — mid-ring (not throne room, not frontier).
+    case 0: // Capital — mid-ring.
       return 1 - Math.abs(distNorm - 0.4) * 2;
-    case 1: // Resource — let terrain affinity drive; no positional bias.
+    case 1: // Resource — let biome affinity drive; no positional bias.
       return 0;
     case 2: // Combat — bias toward the frontier.
       return distNorm * 2 - 1;
-    case 3: // Trade — bias toward center (markets, not citadels).
+    case 3: // Trade — bias toward centre (markets, not citadels).
       return 1 - distNorm * 2;
     default:
       return 0;
   }
 }
 
-function isTerrainEdge(terrain: CityTerrain, ox: number, oy: number): boolean {
-  // Sample the four cardinal neighbors. If any is impassable, this cell is
-  // on a terrain transition.
-  if (!sampleTerrain(terrain, ox + 1, oy).isPassable) return true;
-  if (!sampleTerrain(terrain, ox - 1, oy).isPassable) return true;
-  if (!sampleTerrain(terrain, ox, oy + 1).isPassable) return true;
-  if (!sampleTerrain(terrain, ox, oy - 1).isPassable) return true;
-  return false;
+function isBiomeEdge(seed: number, ox: number, oy: number, knobs: BiomeKnobs): boolean {
+  const here = biomeAt(seed, ox, oy, knobs);
+  const right = biomeAt(seed, ox + 1, oy, knobs);
+  const left = biomeAt(seed, ox - 1, oy, knobs);
+  const up = biomeAt(seed, ox, oy + 1, knobs);
+  const down = biomeAt(seed, ox, oy - 1, knobs);
+  return right !== here || left !== here || up !== here || down !== here;
 }
 
 function flavorOf(
-  terrain: CityTerrain,
+  seed: number,
   ox: number,
   oy: number,
+  biome: BiomeType,
   distNorm: number,
+  knobs: BiomeKnobs,
 ): SpawnFlavor {
-  // Adjacent-water / adjacent-mountain dominate — those are the strongest
-  // visual signals on the map. Position-based flavors only apply on
-  // featureless interior cells.
-  const right = sampleTerrain(terrain, ox + 1, oy);
-  const left = sampleTerrain(terrain, ox - 1, oy);
-  const up = sampleTerrain(terrain, ox, oy + 1);
-  const down = sampleTerrain(terrain, ox, oy - 1);
-
-  if (right.isWater || left.isWater || up.isWater || down.isWater) return "coast";
-  if (right.isMountain || left.isMountain || up.isMountain || down.isMountain) {
-    return "foothill";
-  }
-
-  const here = sampleTerrain(terrain, ox, oy);
-  if ((here.moisture ?? 128) > 180) return "grove";
-
-  if (distNorm < 0.15) return "crossroads";
-  if (distNorm > 0.75) return "frontier";
-  return "plain";
+  // Biome-specific dominant flavors first.
+  if (biome === BIOME_SHORE) return 'coast';
+  if (biome === BIOME_FOREST) return 'grove';
+  if (biome === BIOME_ROCK || biome === BIOME_SNOW) return 'foothill';
+  // Adjacent-water / adjacent-rock-or-snow as fallback for inland biomes.
+  const neighbours = [
+    biomeAt(seed, ox + 1, oy, knobs),
+    biomeAt(seed, ox - 1, oy, knobs),
+    biomeAt(seed, ox, oy + 1, knobs),
+    biomeAt(seed, ox, oy - 1, knobs),
+  ];
+  if (neighbours.includes(BIOME_WATER)) return 'coast';
+  if (neighbours.some((b) => b === BIOME_ROCK || b === BIOME_SNOW)) return 'foothill';
+  if (biome === BIOME_MARSH) return 'coast';
+  // Position-based flavors for featureless interior cells.
+  if (distNorm < 0.15) return 'crossroads';
+  if (distNorm > 0.75) return 'frontier';
+  return 'plain';
 }
 
 function bearingFrom(ox: number, oy: number): SpawnBearing {
-  // ox = east offset (longitude grid units), oy = north offset (latitude grid units).
-  // atan2(north, east) → 0 = E, π/2 = N, π = W, -π/2 = S.
-  if (ox === 0 && oy === 0) return "N";
+  if (ox === 0 && oy === 0) return 'N';
   const deg = (Math.atan2(oy, ox) * 180) / Math.PI;
   const norm = (deg + 360) % 360;
   const slice = Math.floor((norm + 22.5) / 45) % 8;
-  // slice 0 = E, 1 = NE, 2 = N, 3 = NW, 4 = W, 5 = SW, 6 = S, 7 = SE
-  return (["E", "NE", "N", "NW", "W", "SW", "S", "SE"] as const)[slice]!;
+  return (['E', 'NE', 'N', 'NW', 'W', 'SW', 'S', 'SE'] as const)[slice]!;
 }
 
 function weightedPick<T>(items: T[]): T {
-  // Linear weights: first item gets weight items.length, last gets 1.
   const n = items.length;
   const total = (n * (n + 1)) / 2;
   let r = Math.random() * total;

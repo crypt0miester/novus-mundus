@@ -18,10 +18,11 @@ use crate::{
         event_scoring::update_event_score,
     },
     logic::{
-        apply_time_multiplier, calculate_networth, calculate_synchrony, calculate_xp_reward,
-        consume_novi_logic, consume_produce, get_time_of_day, grant_xp_with_time_bonus,
+        apply_time_multiplier, biome, calculate_networth, calculate_synchrony,
+        calculate_xp_reward, consume_novi_logic, consume_produce, get_time_of_day,
+        grant_xp_with_time_bonus,
         safe_math::{pow_three_quarters, sqrt_product},
-        terrain, update_happiness_operative, ActivityType, XpAction,
+        update_happiness_operative, ActivityType, XpAction,
     },
     state::{CityAccount, GameEngine, PlayerAccount, UserAccount},
     types::{CollectionType, EventType},
@@ -329,15 +330,10 @@ pub fn process(
             {
                 let city_data = unsafe { CityAccount::load(city_acc)? };
                 // Validate city matches player's current city
-                if city_data.city_id == player_data.current_city && city_data.anchor_count > 0 {
-                    let (ox, oy) = terrain::city_offset(
-                        terrain::to_grid(player_data.current_lat),
-                        terrain::to_grid(player_data.current_long),
-                        city_data.latitude,
-                        city_data.longitude,
-                    );
-                    let aff = city_data
-                        .with_terrain(city_acc, |t| terrain::terrain_affinity(t, ox, oy))?;
+                if city_data.city_id == player_data.current_city {
+                    let (ox, oy) =
+                        city_data.offset_for(player_data.current_lat, player_data.current_long);
+                    let aff = biome::biome_affinity(city_data.biome_at_offset(ox, oy));
                     let bonus = match collection_type {
                         CollectionType::Mining => aff.mining_bps,
                         CollectionType::Fishing => aff.fishing_bps,

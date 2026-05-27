@@ -106,17 +106,41 @@ pub fn process(
         return Err(GameError::InActiveRally.into());
     }
 
-    // Verify attacker is at castle location (within attack range).
-    // castle.latitude/longitude are i32 grid coords (degrees × GRID_PRECISION);
-    // convert back to degrees so the comparison matches player.current_lat/long.
-    let distance_meters = calculate_distance_meters(
-        attacker.current_lat,
-        attacker.current_long,
-        LocationAccount::from_grid(castle.latitude),
-        LocationAccount::from_grid(castle.longitude),
-    );
+    // Verify attacker is within attack range of the castle. Under the
+    // multi-cell footprint model an attacker is in range if they're
+    // within `CASTLE_ATTACK_RANGE_METERS` of ANY footprint cell — not
+    // just the anchor. Take the minimum distance across the N×N grid.
+    //
+    // castle.latitude/longitude are grid units (×10,000); `from_grid`
+    // (÷10,000) lands at degrees for the comparison with
+    // attacker.current_lat/long.
+    let anchor_grid_lat = castle.latitude;
+    let anchor_grid_long = castle.longitude;
+    let footprint = if castle.footprint_size == 0 {
+        1i32
+    } else {
+        castle.footprint_size as i32
+    };
+    let mut min_distance_meters = f64::MAX;
+    for dlat in 0..footprint {
+        for dlong in 0..footprint {
+            let cell_lat =
+                LocationAccount::from_grid(anchor_grid_lat.saturating_add(dlat));
+            let cell_long =
+                LocationAccount::from_grid(anchor_grid_long.saturating_add(dlong));
+            let d = calculate_distance_meters(
+                attacker.current_lat,
+                attacker.current_long,
+                cell_lat,
+                cell_long,
+            );
+            if d < min_distance_meters {
+                min_distance_meters = d;
+            }
+        }
+    }
 
-    if distance_meters > CASTLE_ATTACK_RANGE_METERS {
+    if min_distance_meters > CASTLE_ATTACK_RANGE_METERS {
         return Err(GameError::OutOfRange.into());
     }
 

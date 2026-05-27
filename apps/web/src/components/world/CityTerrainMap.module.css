@@ -179,7 +179,7 @@
 
 /* 2D/3D toggle sits left of the reset chip. */
 .toggle3DPill {
-  right: 44px;
+  left: 44px;
 }
 /* Orbit-toggle (touch only) sits left of the 2D/3D pill. */
 .orbitTogglePill {
@@ -190,12 +190,10 @@
   font-size: 0.85rem;
 }
 
-/* Scale bar — bottom-right of the canvas wrap. Shown only in the
- * WebGL path. */
 .scaleBar {
   position: absolute;
   bottom: 8px;
-  right: 8px;
+  left: 8px;
   z-index: 3;
   font-size: 0.55rem;
   letter-spacing: 0.06em;

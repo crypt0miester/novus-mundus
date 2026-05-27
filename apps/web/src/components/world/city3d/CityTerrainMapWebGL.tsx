@@ -28,14 +28,54 @@ import {
 } from "react";
 import * as THREE from "three";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
+import { toGrid, type CityAccount } from "novus-mundus-sdk";
 import {
-  cityTerrain,
-  isPassable,
-  radiusToGridUnits,
-  sampleTerrain,
-  toGrid,
-  type CityAccount,
-} from "novus-mundus-sdk";
+  biomeAt,
+  biomeKnobsFromCity,
+  biomeName,
+  isPassableBiome,
+  type BiomeKnobs,
+} from "@/lib/world/biome";
+
+// Shim values for the WebGL path until S10 rewires it for iso/top
+// presets. The WebGL renderer is currently gated behind
+// ENABLE_3D_MAP=false in CityTerrainMap.tsx, so these stubs don't ship
+// to users — they exist to keep the type-check green while the 2D
+// fallback owns the rendering surface.
+interface CityTerrain {
+  biomeSeed: number;
+  knobs: BiomeKnobs;
+  // Retired elevation lines — kept as zero constants so the legacy
+  // hover-label code in this gated-off WebGL path still type-checks
+  // without polluting the live 2D fallback. The conditional that reads
+  // these is dead code today; we'll rip it out alongside the
+  // sampleTerrain shim when the WebGL renderer is rewired (S10).
+  waterLine: number;
+  peakLine: number;
+}
+function cityTerrain(city: CityAccount): CityTerrain {
+  return {
+    biomeSeed: city.biomeSeed >>> 0,
+    knobs: biomeKnobsFromCity(city),
+    waterLine: 0,
+    peakLine: 0,
+  };
+}
+function isPassable(terrain: CityTerrain, ox: number, oy: number): boolean {
+  return isPassableBiome(biomeAt(terrain.biomeSeed, ox, oy, terrain.knobs));
+}
+
+function sampleTerrain(_terrain: CityTerrain, _ox: number, _oy: number) {
+  return {
+    elevation: 128,
+    moisture: 128,
+    isPassable: true,
+    isWater: false,
+    isMountain: false,
+    nearestAnchor: 0,
+  };
+}
+void biomeName;
 import type { MapMode } from "@/lib/store/settings";
 import type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
 import type { CityTerrainEntity, WalkLine } from "../CityTerrainMap2DFallback";
@@ -55,7 +95,14 @@ import {
   worldToGrid,
   type MeshLOD,
 } from "./coords";
-import { buildTerrainMesh, type BuiltTerrainMesh } from "./buildTerrainMesh";
+import {
+  buildTerrainMesh,
+  meshFromBakedPixels,
+  COLOR_TEXTURE_SIZE_HIGH,
+  COLOR_TEXTURE_SIZE_PREVIEW,
+  type BuiltTerrainMesh,
+} from "./buildTerrainMesh";
+import { getBakeWorker } from "@/lib/world/bakeWorkerClient";
 import {
   CityCameraController,
   FOV_DEG,
@@ -175,8 +222,8 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
   const cityLatGrid = toGrid(props.cityAccount.latitude);
   const cityLongGrid = toGrid(props.cityAccount.longitude);
   const rgu = useMemo(
-    () => radiusToGridUnits(props.cityAccount.radiusKm, props.cityAccount.latitude),
-    [props.cityAccount.radiusKm, props.cityAccount.latitude],
+    () => Math.max(props.cityAccount.widthGrid, props.cityAccount.heightGrid) / 2,
+    [props.cityAccount.widthGrid, props.cityAccount.heightGrid],
   );
   // Mirror terrain into a ref so the mount-bound controller callbacks
   // (onFrameSelectedRequested etc.) and any other long-lived closure
@@ -278,14 +325,22 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     sun.position.set(MESH_SIZE * 0.6, MESH_SIZE * 1.2, MESH_SIZE * 0.4);
     scene.add(sun);
 
-    /* Build the terrain mesh. Square plate, displaced Y per vertex,
-     * sRGB-linearised vertex colors, flat-shaded MeshLambertMaterial. */
-    const built = buildTerrainMesh(terrain, rgu);
+    /* Build the terrain mesh. Synchronous 512² preview lands in
+     * ~250 ms so the city is visible immediately; the full 4096²
+     * bake runs on the Worker (kicked off below `refs.current`
+     * assignment) and swaps in when ready. */
+    const built = buildTerrainMesh(
+      terrain.biomeSeed,
+      rgu,
+      terrain.knobs,
+      undefined,
+      COLOR_TEXTURE_SIZE_PREVIEW,
+    );
     scene.add(built.mesh);
     /* Mode-aware initial flatten. The uniform multiplies into
      * transformed.y in the vertex shader — mesh scale stays at 1
      * so raycasts work normally even when the terrain renders flat. */
-    built.heightScale.value = props.mapMode === "3d" ? 1 : 0;
+    built.heightScale.value = props.mapMode === "iso" ? 1 : 0;
 
     /* Water surface dropped per UX review — the circular plate
      * covered the whole disc in 2D mode and added visual noise in
@@ -321,7 +376,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
      * advertised. At 200× the camera may clip into a tall peak in
      * 3D mode; that's expected — user can tilt up to see better. */
     const maxD0 =
-      props.mapMode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+      props.mapMode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     const controller = new CityCameraController({
       domElement: wrap,
       camera,
@@ -360,7 +415,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       controller.setTargetHard(
         new THREE.Vector3(
           wx,
-          props.mapMode === "3d" ? getElevationAt(terrain, ox, oy) : 0,
+          props.mapMode === "iso" ? getElevationAt(ox, oy) : 0,
           wz,
         ),
       );
@@ -404,13 +459,45 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       viewTween: null,
       lastUpdateMs: performance.now(),
       lastHoverTs: 0,
-      /* Initial LOD: paint() will switch on first frame if needed.
-       * "mid" matches the existing 256² baseline. */
-      meshLOD: "mid",
+      /* LOD bands are collapsed (see coords.ts:lodForZoom) — start
+       * at "high" so the paint-time LOD switch never fires; otherwise
+       * it would trigger a synchronous 4096² rebuild on the main
+       * thread per city load and undo the Progressive LOD bake. */
+      meshLOD: "high",
     };
 
     /* Initial paint. */
     requestRender();
+
+    /* Kick off the high-res 4096² bake off the main thread. When it
+     * lands, swap the preview mesh for the full-res one. Bails if a
+     * rebuild swapped first (terrain identity check) or if the
+     * component unmounted (refs cleared). The cleanup cancels the
+     * in-flight job. */
+    const initialBake = getBakeWorker().bake({
+      biomeSeed: terrain.biomeSeed,
+      rgu,
+      knobs: terrain.knobs,
+      texSize: COLOR_TEXTURE_SIZE_HIGH,
+    });
+    initialBake.promise.then((pixels) => {
+      if (!pixels) return;
+      const r = refs.current;
+      if (!r || r.terrain !== built) return;
+      const high = meshFromBakedPixels(pixels, COLOR_TEXTURE_SIZE_HIGH);
+      /* Share the heightScale object across the swap so an in-flight
+       * mode tween (which captured the preview's reference) keeps
+       * mutating the live mesh's height value rather than a stale
+       * one. transition.ts only reads/writes `.value`. */
+      high.heightScale = built.heightScale;
+      r.scene.remove(built.mesh);
+      built.geometry.dispose();
+      built.material.dispose();
+      built.colorMap.dispose();
+      r.scene.add(high.mesh);
+      r.terrain = high;
+      requestRender();
+    });
 
     const onLost = (e: Event) => {
       e.preventDefault();
@@ -419,6 +506,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     renderer.domElement.addEventListener("webglcontextlost", onLost);
 
     return () => {
+      initialBake.cancel();
       renderer.domElement.removeEventListener("webglcontextlost", onLost);
       if (refs.current?.rafId !== null && refs.current?.rafId !== undefined) {
         cancelAnimationFrame(refs.current.rafId);
@@ -484,20 +572,30 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     requestRender();
   }, [size.w, size.h]);
 
-  /* Rebuild terrain when terrain identity or rgu changes. */
+  /* Rebuild terrain when terrain identity or rgu changes.
+   *
+   * Two-phase: synchronous 512² preview swaps in immediately so the
+   * city is visible right away; the high-res 4096² bake runs on the
+   * Worker and swaps when ready. Cleanup cancels the in-flight job
+   * so a fast city switch drops the stale result. */
   useEffect(() => {
     const r = refs.current;
     if (!r) return;
-    r.scene.remove(r.terrain.mesh);
-    r.terrain.geometry.dispose();
-    r.terrain.material.dispose();
-    r.terrain.colorMap.dispose();
-    /* Preserve current LOD across city switches so the user doesn't
-     * see a coarse mesh flash when changing cities while zoomed in. */
-    const built = buildTerrainMesh(terrain, rgu, r.meshLOD);
-    built.heightScale.value = r.controller.getMode() === "3d" ? 1 : 0;
-    r.scene.add(built.mesh);
-    r.terrain = built;
+    const old = r.terrain;
+    const preview = buildTerrainMesh(
+      terrain.biomeSeed,
+      rgu,
+      terrain.knobs,
+      r.meshLOD,
+      COLOR_TEXTURE_SIZE_PREVIEW,
+    );
+    preview.heightScale.value = r.controller.getMode() === "iso" ? 1 : 0;
+    r.scene.remove(old.mesh);
+    old.geometry.dispose();
+    old.material.dispose();
+    old.colorMap.dispose();
+    r.scene.add(preview.mesh);
+    r.terrain = preview;
     r.rgu = rgu;
     r.cityLatGrid = cityLatGrid;
     r.cityLongGrid = cityLongGrid;
@@ -506,10 +604,36 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     /* Distance bounds: max = mode default (zoom 1×), min = max/200.
      * Re-applied here so a city switch re-clamps in case the user
      * was zoomed in at the previous city. */
-    const maxD = r.controller.getMode() === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const maxD = r.controller.getMode() === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     r.controller.setDistanceBounds(maxD / 200, maxD);
     requestRender();
-  }, [terrain, rgu, cityLatGrid, cityLongGrid, props.cityAccount.radiusKm]);
+
+    const job = getBakeWorker().bake({
+      biomeSeed: terrain.biomeSeed,
+      rgu,
+      knobs: terrain.knobs,
+      texSize: COLOR_TEXTURE_SIZE_HIGH,
+    });
+    job.promise.then((pixels) => {
+      if (!pixels) return;
+      const rr = refs.current;
+      if (!rr || rr.terrain !== preview) return;
+      const high = meshFromBakedPixels(pixels, COLOR_TEXTURE_SIZE_HIGH);
+      // Share heightScale across swap — see mount-effect note above.
+      high.heightScale = preview.heightScale;
+      rr.scene.remove(preview.mesh);
+      preview.geometry.dispose();
+      preview.material.dispose();
+      preview.colorMap.dispose();
+      rr.scene.add(high.mesh);
+      rr.terrain = high;
+      requestRender();
+    });
+
+    return () => {
+      job.cancel();
+    };
+  }, [terrain, rgu, cityLatGrid, cityLongGrid, props.cityAccount.widthGrid, props.cityAccount.heightGrid]);
 
   /* Push occupant/selection/walk state into the markers layer on
    * each relevant prop change. The markers layer no-ops if its inputs
@@ -581,7 +705,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     /* Update controller's distance bounds for the new mode at start
      * of the tween — the user might be zoomed past the new mode's
      * max, which the controller's setDistanceBounds re-clamps. */
-    const maxD = to === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const maxD = to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     r.controller.setDistanceBounds(maxD / 200, maxD);
 
     if (reduce) {
@@ -624,10 +748,10 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     if (props.resetTrigger === 0) return;
     r.viewTween?.cancel();
     const mode = r.controller.getMode();
-    const dDefault = mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     const tDefault = new THREE.Vector3(
       0,
-      mode === "3d" ? midpointElevation() : 0,
+      mode === "iso" ? midpointElevation() : 0,
       0,
     );
     r.viewTween = runViewTween(
@@ -659,14 +783,14 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     const oy = props.autoFocusCell.gridLat - cityLatGrid;
     const { wx, wz } = gridToWorld(ox, oy, rgu);
     const mode = r.controller.getMode();
-    const dTarget = (mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 16;
+    const dTarget = (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 16;
     r.viewTween?.cancel();
     r.viewTween = null;
     r.controller.setDistanceHard(dTarget);
     r.controller.setTargetHard(
       new THREE.Vector3(
         wx,
-        mode === "3d" ? getElevationAt(terrain, ox, oy) : 0,
+        mode === "iso" ? getElevationAt(ox, oy) : 0,
         wz,
       ),
     );
@@ -763,9 +887,11 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     const nextLOD = lodForZoom(zoom, r.meshLOD);
     if (nextLOD !== r.meshLOD) {
       const oldMesh = r.terrain;
+      const live = cityTerrain(propsRef.current.cityAccount);
       const built = buildTerrainMesh(
-        cityTerrain(propsRef.current.cityAccount),
+        live.biomeSeed,
         r.rgu,
+        live.knobs,
         nextLOD,
       );
       built.heightScale.value = oldMesh.heightScale.value;
@@ -911,7 +1037,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     /* Double-click zooms in 2× at the cursor. Animate target +
      * distance via the view tween. */
     const targetXZ = new THREE.Vector3(hit.point.x, 0, hit.point.z);
-    if (r.controller.getMode() === "3d") {
+    if (r.controller.getMode() === "iso") {
       targetXZ.y = midpointElevation();
     }
     const newDistance = Math.max(
@@ -932,10 +1058,10 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     const mode = r.controller.getMode();
     const tDefault = new THREE.Vector3(
       0,
-      mode === "3d" ? midpointElevation() : 0,
+      mode === "iso" ? midpointElevation() : 0,
       0,
     );
-    const dDefault = mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     r.viewTween?.cancel();
     r.viewTween = runViewTween(
       r.controller,
@@ -957,7 +1083,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     const oy = sel.gridLat - r.cityLatGrid;
     const { wx, wz } = gridToWorld(ox, oy, r.rgu);
     const mode = r.controller.getMode();
-    const dTarget = (mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 8;
+    const dTarget = (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 8;
     r.viewTween?.cancel();
     r.viewTween = runViewTween(
       r.controller,
@@ -968,7 +1094,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
           // once at mount, so the literal `terrain` closure would freeze
           // at the mount-time city and use stale elevation after a city
           // switch.
-          mode === "3d" ? getElevationAt(terrainRef.current, ox, oy) : 0,
+          mode === "iso" ? getElevationAt(ox, oy) : 0,
           wz,
         ),
         distance: dTarget,

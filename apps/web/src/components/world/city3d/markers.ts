@@ -15,14 +15,14 @@
  */
 
 import * as THREE from "three";
-import {
-  OCCUPANT_PLAYER,
-  OCCUPANT_ENCOUNTER,
-  type CityTerrain,
-} from "novus-mundus-sdk";
+import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER } from "novus-mundus-sdk";
+
+// CityTerrain retired under flat strategy. Markers no longer carry a
+// terrain handle; the type alias below keeps the previous public
+// `cfg.terrain` / `setTerrain` surface but the value is unused.
+type CityTerrain = unknown;
 import {
   GRID_OVERLAY_MIN_CSS_PX_PER_CELL,
-  MAX_HEIGHT,
   MESH_SIZE,
   getElevationAt,
   gridToWorld,
@@ -66,10 +66,15 @@ const COLOR_BOUNDARY = linearColor(BOUNDARY_INK_SRGB);
 const MAX_OCCUPANTS = 512;
 const MAX_OTHER_WALKS = 256;
 
-/* Tiny Y bias so overlays lift off the terrain surface — combined
- * with polygon offset on the terrain material this kills z-fighting
- * cleanly at every camera angle. */
-const OVERLAY_Y_BIAS = MAX_HEIGHT * 0.005;
+/* Y bias for overlays. Pre-flat-strategy, this lifted markers above
+ * uneven terrain so they didn't clip into peaks. Post-flat-strategy
+ * the terrain mesh is a single flat quad at Y=0 with `polygonOffset`
+ * set on its material — overlays can sit directly on the plate at
+ * Y=0 and rely on polygon offset + renderOrder for z-fighting
+ * prevention. Even at the previous MAX_HEIGHT*0.005=0.0024 value the
+ * lift was visibly elevating dots/tiles/rings off the grid in iso
+ * mode (camera looking down at 35° elevation), so collapse it to 0. */
+const OVERLAY_Y_BIAS = 0;
 
 export interface OccupiedCell {
   gridLat: number;
@@ -271,10 +276,22 @@ export class MarkersLayer {
       transparent: false,
       side: THREE.DoubleSide,
     });
+    /* polygonOffset nudges the ring's depth slightly toward the
+     * camera so it always wins the depth comparison against the
+     * coplanar fill underneath. Without this, the ring and fill
+     * sit at exactly the same world Y after the OVERLAY_Y_BIAS=0
+     * change, and the GPU's per-fragment depth resolve flickers
+     * between them as the camera moves — visible as a jittery
+     * fringe around tile-mode occupants. Negative units = toward
+     * the camera. -1 is the standard "win the tie" magnitude
+     * (smaller values still z-fight at oblique angles). */
     const ringMat = new THREE.MeshBasicMaterial({
       transparent: true,
       opacity: 0.92,
       side: THREE.DoubleSide,
+      polygonOffset: true,
+      polygonOffsetFactor: -1,
+      polygonOffsetUnits: -1,
     });
 
     this.playerDots = new THREE.InstancedMesh(
@@ -514,64 +531,6 @@ export class MarkersLayer {
     return new THREE.LineSegments(geom, mat);
   }
 
-  private buildCentreGlyph(): THREE.Group {
-    const grp = new THREE.Group();
-    const y = midpointElevation() + OVERLAY_Y_BIAS;
-    /* Initial radius placeholder — update() rescales based on
-     * cssPxPerCell so the glyph stays anchored to its cell at every
-     * zoom. */
-    const r = 0.06;
-    const d = r * 0.65;
-
-    /* 8-rayed star — cardinals + diagonals. LineSegments takes pairs. */
-    const starVerts = new Float32Array([
-      0, y, -r, 0, y, r,
-      -r, y, 0, r, y, 0,
-      -d, y, -d, d, y, d,
-      -d, y, d, d, y, -d,
-    ]);
-    const starGeom = new THREE.BufferGeometry();
-    starGeom.setAttribute("position", new THREE.BufferAttribute(starVerts, 3));
-    const star = new THREE.LineSegments(
-      starGeom,
-      new THREE.LineBasicMaterial({
-        color: COLOR_CENTRE,
-        transparent: true,
-        opacity: 0.85,
-      }),
-    );
-    star.name = "centre-star";
-    grp.add(star);
-
-    /* Inked nucleus + cream halo behind. */
-    const nucR = Math.max(0.012, r * 0.3);
-    const nucleusGeom = new THREE.CircleGeometry(nucR, 24);
-    nucleusGeom.rotateX(-Math.PI / 2);
-    const nucleus = new THREE.Mesh(
-      nucleusGeom,
-      new THREE.MeshBasicMaterial({ color: COLOR_CENTRE }),
-    );
-    nucleus.position.y = y + 1e-4;
-    nucleus.name = "centre-nucleus";
-    grp.add(nucleus);
-
-    const haloGeom = new THREE.CircleGeometry(nucR + 0.005, 24);
-    haloGeom.rotateX(-Math.PI / 2);
-    const halo = new THREE.Mesh(
-      haloGeom,
-      new THREE.MeshBasicMaterial({
-        color: COLOR_CREAM,
-        transparent: true,
-        opacity: 0.95,
-      }),
-    );
-    halo.position.y = y;
-    halo.name = "centre-halo";
-    grp.add(halo);
-
-    return grp;
-  }
-
   private buildCrosshair(): THREE.LineSegments {
     /* Built at unit scale — updateLanding sets the actual world
      * scale per zoom so the crosshair stays constant on screen. */
@@ -649,7 +608,7 @@ export class MarkersLayer {
       const ox = cell.gridLong - this.cityLongGrid;
       const oy = cell.gridLat - this.cityLatGrid;
       const { wx, wz } = gridToWorld(ox, oy, this.rgu);
-      const y = getElevationAt(this.terrain, ox, oy) + OVERLAY_Y_BIAS;
+      const y = getElevationAt(ox, oy) + OVERLAY_Y_BIAS;
 
       const isPlayer = cell.occupantType === OCCUPANT_PLAYER;
       const isEncounter = cell.occupantType === OCCUPANT_ENCOUNTER;
@@ -809,7 +768,7 @@ export class MarkersLayer {
     const ox = selected.gridLong - this.cityLongGrid;
     const oy = selected.gridLat - this.cityLatGrid;
     const { wx, wz } = gridToWorld(ox, oy, this.rgu);
-    const y = getElevationAt(this.terrain, ox, oy) + OVERLAY_Y_BIAS * 1.5;
+    const y = getElevationAt(ox, oy) + OVERLAY_Y_BIAS * 1.5;
     /* Tile mode: ring tightly around the cell. Dot mode: target
      * a constant ~10 CSS px DIAMETER on screen so it reads as a
      * deliberate landing picker — slightly larger than the 6 CSS px
@@ -843,8 +802,8 @@ export class MarkersLayer {
     const oyT = walk.toGridLat - this.cityLatGrid;
     const from = gridToWorld(oxF, oyF, this.rgu);
     const to = gridToWorld(oxT, oyT, this.rgu);
-    const yF = getElevationAt(this.terrain, oxF, oyF) + OVERLAY_Y_BIAS;
-    const yT = getElevationAt(this.terrain, oxT, oyT) + OVERLAY_Y_BIAS;
+    const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS;
+    const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS;
 
     const posAttr = this.ownWalkLine.geometry.getAttribute(
       "position",
@@ -889,8 +848,8 @@ export class MarkersLayer {
       const oyT = w.toGridLat - this.cityLatGrid;
       const from = gridToWorld(oxF, oyF, this.rgu);
       const to = gridToWorld(oxT, oyT, this.rgu);
-      const yF = getElevationAt(this.terrain, oxF, oyF) + OVERLAY_Y_BIAS;
-      const yT = getElevationAt(this.terrain, oxT, oyT) + OVERLAY_Y_BIAS;
+      const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS;
+      const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS;
       const posAttr = entry.line.geometry.getAttribute(
         "position",
       ) as THREE.BufferAttribute;
@@ -929,14 +888,11 @@ export class MarkersLayer {
    * line up with the dot-vs-tile transition so the grid feels
    * continuous as you zoom in. */
   updateGrid(cssPxPerCell: number, _viewCenter: THREE.Vector3): void {
-    /* Grid only renders in 2D mode (where group.scale.y collapses
-     * everything onto the plate). In 3D mode the chord lines float
-     * above valleys / cut through peaks — visually noisy without
-     * adding meaningful information, so hide it. */
-    if (this.group.scale.y > 0.5) {
-      if (this.gridLines) this.gridLines.visible = false;
-      return;
-    }
+    /* Grid renders in BOTH 2D and 3D modes — under flat-strategy the
+     * mesh is a single flat quad at Y=0 (see coords.ts::getElevationAt),
+     * so the chord-on-uneven-terrain concern that previously gated this
+     * to 2D-only no longer applies. The lift offset below keeps the
+     * lines just above the terrain surface to avoid z-fighting. */
     /* Gate on the same `cssPxPerCell` threshold that flips dot→tile
      * mode. Below it, cells are sub-pixel and gridlines look like
      * a moiré wash with no cell structure visible. Above it, cells
@@ -983,11 +939,7 @@ export class MarkersLayer {
     const minOy = -this.rgu;
     const maxOy = this.rgu;
     const verts: number[] = [];
-    /* Tiny lift above the terrain surface so the line isn't
-     * coincident with the mesh triangles (which would z-fight even
-     * with polygon offset on the terrain). 0.001 world units ≈
-     * 0.3% of MAX_HEIGHT — invisible to the eye in either mode. */
-    const lift = MAX_HEIGHT * 0.003;
+    const lift = 1e-4;
     /* Half-integer offset so lines bound cells rather than bisect
      * them — matches the Canvas2D fallback. */
     const startOx = Math.ceil(minOx / stride) * stride;
@@ -998,14 +950,14 @@ export class MarkersLayer {
     const wxMax = (maxOx / this.rgu) * halfSide;
     for (let ox = startOx; ox <= maxOx; ox += stride) {
       const wxA = ((ox - 0.5) / this.rgu) * halfSide;
-      const yA = getElevationAt(this.terrain, ox, minOy) + lift;
-      const yB = getElevationAt(this.terrain, ox, maxOy) + lift;
+      const yA = getElevationAt(ox, minOy) + lift;
+      const yB = getElevationAt(ox, maxOy) + lift;
       verts.push(wxA, yA, -wzMin, wxA, yB, -wzMax);
     }
     for (let oy = startOy; oy <= maxOy; oy += stride) {
       const wzA = ((oy - 0.5) / this.rgu) * halfSide;
-      const yA = getElevationAt(this.terrain, minOx, oy) + lift;
-      const yB = getElevationAt(this.terrain, maxOx, oy) + lift;
+      const yA = getElevationAt(minOx, oy) + lift;
+      const yB = getElevationAt(maxOx, oy) + lift;
       verts.push(wxMin, yA, -wzA, wxMax, yB, -wzA);
     }
     const geom = new THREE.BufferGeometry();

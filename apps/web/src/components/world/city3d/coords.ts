@@ -10,7 +10,11 @@
  */
 
 import * as THREE from "three";
-import { terrainElevation, type CityTerrain } from "novus-mundus-sdk";
+
+// Terrain elevation retired with the flat-strategy cut — the mesh is a
+// single flat quad now, so the previously-analytical `getElevationAt`
+// collapses to zero. The function below is kept for callers but
+// returns 0 unconditionally; remove once all consumers stop calling.
 
 /* World-XZ size of the terrain mesh. Picked once to match the
  * terrain-builder reference (city.js:91, `ms = 4`); arbitrary but
@@ -97,21 +101,13 @@ export function gridToWorld(
 }
 
 /**
- * Analytical terrain Y for the given grid offset. Markers (player
- * tiles, selection rings, walk-line endpoints) call this so they sit
- * on the *true* terrain surface, not on whatever the triangle-
- * interpolated mesh samples to at that pixel.
- *
- * When anchorCount===0 the renderer builds a flat plate at elevation
- * 128, so this returns the same midpoint height. Stays in lockstep
- * with buildTerrainMesh's anchor-count short-circuit.
+ * Y of the terrain mesh at the given grid offset. The flat-strategy
+ * mesh is a single quad at Y=0; this returns 0 for every call. Kept
+ * as a function for callers that still pass it through marker /
+ * raycast setup until S10 sweeps the WebGL stack.
  */
-export function getElevationAt(terrain: CityTerrain, ox: number, oy: number): number {
-  if (terrain.anchorCount === 0) {
-    return (128 / 255) * MAX_HEIGHT;
-  }
-  const e = terrainElevation(terrain, ox, oy);
-  return (e / 255) * MAX_HEIGHT;
+export function getElevationAt(_ox: number, _oy: number): number {
+  return 0;
 }
 
 /**
@@ -190,11 +186,10 @@ export function srgbToLinear(c: number): number {
 export const METERS_PER_GRID_UNIT = 11;
 
 /**
- * Midpoint elevation in world units. The 3D camera target.y sits here
- * so zoom-in dives toward the ground rather than above it; the mode
- * transition tween lerps between 0 (2D, target on the plate) and this
- * value (3D).
+ * Midpoint elevation — kept as a function for the mode-transition tween
+ * but returns 0 after the flat-strategy cut. The mesh is flat; nothing
+ * to dive toward.
  */
 export function midpointElevation(): number {
-  return (128 / 255) * MAX_HEIGHT;
+  return 0;
 }

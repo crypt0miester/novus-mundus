@@ -41,5 +41,8 @@ export * from './costs';
 // NOVI purchase calculations (bonuses, caps, streaks)
 export * from './novi';
 
-// Terrain calculations (elevation, passability, rendering)
+// Grid coordinate helpers + integer noise (consumed by biome).
 export * from './terrain';
+
+// Biome system (replaces the retired elevation/passability/affinity helpers).
+export * from './biome';

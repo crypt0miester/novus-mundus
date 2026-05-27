@@ -60,23 +60,39 @@ import {
 } from '../fixtures/time';
 import { CITIES } from '../fixtures/setup';
 
-// Golden Spiral Helpers (must match Rust logic)
+// Spawn coord helpers — post flat-strategy: pick passable cells
+// from the new biome layout rather than spiralling through circular
+// radius math. The chain rejects water cells with TerrainImpassable
+// and out-of-AABB cells with OutOfRange, so the helper must dodge
+// both.
 
+// Spawn coord helpers — under flat strategy the test biomeSeed
+// (TEST_BIOME_SEED in setup.ts) is chosen so all cells within ±200
+// of centre are passable, so we can use a simple golden-spiral that
+// stays in that no-water zone. Same shape as the legacy helper; the
+// `radiusKm` argument is ignored (kept for call-site compatibility).
 const GOLDEN_ANGLE = 2.399963229728653;
 const GRID_PRECISION = 10000;
 
-/** Compute the golden spiral spawn coords for a given city and spawn index */
-function goldenSpiralGridCoords(cityId: number, spawnIndex: number, radiusKm: number = 50): { gridLat: number; gridLong: number } {
+function goldenSpiralGridCoords(
+  cityId: number,
+  spawnIndex: number,
+  _radiusKm: number = 50,
+): { gridLat: number; gridLong: number } {
   const city = CITIES[cityId]!;
+  const cityLatGrid = Math.round(city.lat * GRID_PRECISION);
+  const cityLonGrid = Math.round(city.lon * GRID_PRECISION);
+  // Spiral inside a ±150-grid-unit zone (well inside the no-water
+  // band for TEST_BIOME_SEED). 150 grid units ≈ 1.6 km in real-world
+  // terms — still tight enough that test players land near each
+  // other for PvP range checks.
   const angle = spawnIndex * GOLDEN_ANGLE;
-  const radiusFactor = Math.sqrt(spawnIndex) / 10.0;
-  const radius = Math.min(radiusFactor, 1.0) * radiusKm;
-  const kmPerDegree = 111.0;
-  const latOffset = radius * Math.cos(angle) / kmPerDegree;
-  const lonOffset = radius * Math.sin(angle) / kmPerDegree;
+  const radiusGrid = Math.min(Math.sqrt(spawnIndex) * 15, 150);
+  const dox = Math.round(radiusGrid * Math.cos(angle));
+  const doy = Math.round(radiusGrid * Math.sin(angle));
   return {
-    gridLat: Math.round((city.lat + latOffset) * GRID_PRECISION),
-    gridLong: Math.round((city.lon + lonOffset) * GRID_PRECISION),
+    gridLat: cityLatGrid + doy,
+    gridLong: cityLonGrid + dox,
   };
 }
 

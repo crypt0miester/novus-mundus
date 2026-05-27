@@ -32,7 +32,6 @@ import { handleCrank } from './lib/commands/crank';
 import { handleFlashSale } from './lib/commands/flash-sale';
 import { handleOracle } from './lib/commands/oracle';
 import { handleShow } from './lib/commands/show';
-import { handleTerrain } from './lib/commands/terrain';
 import { handleCreatePlayer } from './lib/commands/create-player';
 import { handleEncounters } from './lib/commands/encounters';
 import { handleValidator } from './lib/commands/validator';
@@ -89,9 +88,6 @@ async function main(): Promise<void> {
       break;
     case 'show':
       await handleShow(ctx, args);
-      break;
-    case 'terrain':
-      await handleTerrain(ctx, args);
       break;
     case 'create-player':
       await handleCreatePlayer(ctx, args);
@@ -177,10 +173,6 @@ Commands:
   show reinforcement <pk>   Show reinforcements for player
   show loot <pubkey>        Show unclaimed loot for player
   show dungeon <pubkey>     Show a player's active or last dungeon run
-  terrain preview <city-id> Render terrain to terminal
-  terrain export <city-id>  Export anchor config to JSON
-  terrain set <city-id>     Submit set_terrain instruction
-  terrain add <city-id>     Append anchors (--anchors '[...]')
   create-player             Create test players at power tiers
                             --tier <beginner|advanced|epic|legendary>
                             --count <n>  (default: 1)

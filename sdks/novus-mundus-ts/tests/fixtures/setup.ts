@@ -43,6 +43,15 @@ import { BUILDING_TEMPLATES } from '../../cli/data/buildings';
 
 // Configuration
 
+/**
+ * Biome seed used by every test city. Empirically verified to produce
+ * zero water cells within ±200 grid units of city centre — lets
+ * legacy spawn coords + small offsets stay passable without rewriting
+ * every travel / encounter / combat test surface. Production cities
+ * use `0xCAFE0000 | cityId` (see cli/data/cities.ts `seedForCity`).
+ */
+export const TEST_BIOME_SEED = 282;
+
 export interface TestConfig {
   /** Whether to initialize game infrastructure if not present */
   autoSetup: boolean;
@@ -677,12 +686,28 @@ async function setupCities(ctx: TestContext): Promise<void> {
       cityAccounts.push(cityPda);
     }
 
+    // All test cities share a single biomeSeed (282) that produces no
+    // water cells within ±200 grid units of centre — keeps pre-existing
+    // spawn coords + small offsets passable without rewriting every
+    // travel / encounter / combat test. Production uses
+    // `0xCAFE0000 | cityId`; tests pin to TEST_BIOME_SEED.
+    //
+    // Biome knobs are all-zero — the chain treats that as bit-for-bit
+    // identical to the pre-knobs procedural sampler, so the no-water
+    // TEST_BIOME_SEED guarantee still holds.
     const batchCities = CITIES.slice(i, i + batchCount).map(c => ({
       name: c.name,
       lat: c.lat,
       lon: c.lon,
-      radiusKm: 50,
+      biomeSeed: TEST_BIOME_SEED,
       cityType: 0,
+      widthGrid: 8000,
+      heightGrid: 8000,
+      waterLevelDelta: 0,
+      tempBias: 0,
+      moistureBias: 0,
+      coast: 0,
+      landmassSeed: 0,
     }));
 
     const ix = createBatchCitiesInstruction(

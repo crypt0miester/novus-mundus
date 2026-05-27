@@ -153,7 +153,7 @@ export class CityCameraController {
   private cfg: ControllerOptions;
 
   /* Desired state (smoothing lerps toward these). */
-  private yaw = 0;
+  private yaw = 0.68;
   private pitch: number;
   private distance: number;
   private target: THREE.Vector3;
@@ -212,11 +212,11 @@ export class CityCameraController {
     this.cfg = opts;
     this.mode = opts.initialMode;
 
-    this.pitch = this.mode === "3d" ? PITCH_3D : PITCH_2D;
-    this.distance = this.mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    this.pitch = this.mode === "iso" ? PITCH_3D : PITCH_2D;
+    this.distance = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     this.target = new THREE.Vector3(
       0,
-      this.mode === "3d" ? midpointElevation() : 0,
+      this.mode === "iso" ? midpointElevation() : 0,
       0,
     );
 
@@ -315,7 +315,7 @@ export class CityCameraController {
 
   getDisplayZoom(): number {
     const base =
-      this.mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+      this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     return base / this.sDistance;
   }
 
@@ -346,10 +346,10 @@ export class CityCameraController {
   }
 
   reset(): void {
-    this.yaw = 0;
-    this.pitch = this.mode === "3d" ? PITCH_3D : PITCH_2D;
-    this.distance = this.mode === "3d" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    this.target.set(0, this.mode === "3d" ? midpointElevation() : 0, 0);
+    this.yaw = 0.68;
+    this.pitch = this.mode === "iso" ? PITCH_3D : PITCH_2D;
+    this.distance = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    this.target.set(0, this.mode === "iso" ? midpointElevation() : 0, 0);
     this.zoomVelocity = 0;
     this.cfg.onChange();
   }
@@ -413,7 +413,13 @@ export class CityCameraController {
       Math.abs(this.sTarget.y - prevSTargetY) > 1e-5 ||
       Math.abs(this.sTarget.z - prevSTargetZ) > 1e-5;
 
-    if (moved) {
+    /* Always re-apply the camera matrix during a mode transition: the
+     * tween drives state via setPitchHard / setTargetHard which align
+     * desired+smoothed in one shot, so the lerp above produces zero
+     * delta and `moved` reads false even though the camera *should*
+     * be moving. Without this, the iso↔top toggle only became visible
+     * after the next mouse gesture forced an update. */
+    if (moved || this.isTransitioning) {
       this.applyCameraFromSmoothed();
     }
     return moved;
@@ -502,7 +508,7 @@ export class CityCameraController {
   private applyOrbit(dxPx: number, dyPx: number): void {
     if (this.isTransitioning) return;
     this.yaw += -dxPx * ORBIT_SPEED;
-    if (this.mode === "3d") {
+    if (this.mode === "iso") {
       this.pitch += -dyPx * ORBIT_SPEED;
       this.pitch = Math.max(MIN_PITCH_3D, Math.min(MAX_PITCH_3D, this.pitch));
     }
@@ -533,9 +539,12 @@ export class CityCameraController {
       this.target.addScaledVector(this.panRight, panK);
       panned = true;
     }
-    if (this.keys.has("q")) this.yaw += KEY_ORBIT_SPEED * dt;
-    if (this.keys.has("e")) this.yaw -= KEY_ORBIT_SPEED * dt;
-    if (this.mode === "3d") {
+    if (this.keys.has("q")) {
+      this.distance = this.clampDistance(this.distance - this.sDistance * 0.8 * dt);
+    }
+    if (this.keys.has("e")) 
+      this.distance = this.clampDistance(this.distance + this.sDistance * 0.8 * dt);
+    if (this.mode === "iso") {
       if (this.keys.has("pageup")) {
         this.pitch = Math.min(MAX_PITCH_3D, this.pitch + KEY_PITCH_SPEED * dt);
       }
@@ -585,14 +594,19 @@ export class CityCameraController {
 
     this.listen(dom, "mousedown", (e: MouseEvent) => {
       if (this.isTransitioning) return;
-      if (e.button !== 0 && e.button !== 2) return;
+      /* Left-click only — right-click orbit is disabled so the iso
+       * camera stays locked to PITCH_3D. Yaw/pitch can still change
+       * via the touch-orbit pill (long-press toggle, opt-in) and the
+       * Q/E/PageUp/PageDown keys, but ambient right-click drag
+       * doesn't accidentally spin the camera off the canonical view. */
+      if (e.button !== 0) return;
       e.preventDefault();
       // preventDefault on mousedown blocks the browser's default
       // focus-on-click. Without an explicit focus(), the wrap never
       // receives keydown events even with tabIndex=0.
       this.dom.focus();
       this.cfg.onGestureStart?.();
-      this.dragMode = e.button === 2 ? "orbit" : "pan";
+      this.dragMode = "pan";
       this.dragStartX = e.clientX;
       this.dragStartY = e.clientY;
       this.dragLastX = e.clientX;

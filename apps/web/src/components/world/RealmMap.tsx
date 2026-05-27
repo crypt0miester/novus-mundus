@@ -492,13 +492,6 @@ export function RealmMap({
   const panelOpenKey = actionId ?? (selectedId != null ? `city:${selectedId}` : null);
   const [panelOpen, setPanelOpen] = useState(false);
   const lastPanelKeyRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!fullscreen) return;
-    if (panelOpenKey && panelOpenKey !== lastPanelKeyRef.current) {
-      setPanelOpen(true);
-    }
-    lastPanelKeyRef.current = panelOpenKey;
-  }, [fullscreen, panelOpenKey]);
   // Viewport — desktop ≥ 768 renders the floating card; below renders
   // the mobile chrome (BottomSheet + status pill).
   const [isDesktop, setIsDesktop] = useState(true);
@@ -510,6 +503,32 @@ export function RealmMap({
     mql.addEventListener("change", sync);
     return () => mql.removeEventListener("change", sync);
   }, []);
+
+  // Mobile: swallow the FIRST non-null panelOpenKey on mount. MapTab
+  // auto-defaults destinationCity to the player's home city as soon as
+  // the player loads, and we don't want the sheet popping up the instant
+  // /map opens — the player wants to look at the map first. Subsequent
+  // transitions (tapping a different city, picking a cell, an action)
+  // still auto-open. Desktop is unchanged: its floating panel doesn't
+  // cover the map, so initial auto-open is fine there.
+  const mobileInitialKeyConsumedRef = useRef(false);
+  useEffect(() => {
+    if (!fullscreen) return;
+    if (
+      !isDesktop &&
+      !mobileInitialKeyConsumedRef.current &&
+      panelOpenKey != null
+    ) {
+      mobileInitialKeyConsumedRef.current = true;
+      lastPanelKeyRef.current = panelOpenKey;
+      return;
+    }
+    if (panelOpenKey && panelOpenKey !== lastPanelKeyRef.current) {
+      setPanelOpen(true);
+    }
+    lastPanelKeyRef.current = panelOpenKey;
+  }, [fullscreen, panelOpenKey, isDesktop]);
+
   // Desktop floating card shows only when there's a target. Mobile
   // sheet shows whenever panelOpen — pill can open default state.
   const desktopPanelShown = !!fullscreen && isDesktop && panelOpen && panelOpenKey != null;

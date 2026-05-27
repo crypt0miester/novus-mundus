@@ -18,14 +18,21 @@ use crate::{
 /// Create a new city within a kingdom (DAO only)
 /// KINGDOM-SCOPED: Cities exist within a specific kingdom
 ///
-/// Instruction data format:
+/// Instruction data format (64 bytes; 59 pre-knobs):
 /// ```text
 /// [0..2]   city_id: u16 (little-endian)
 /// [2..34]  name: [u8; 32] (UTF-8, zero-padded)
 /// [34..42] latitude: f64 (little-endian)
 /// [42..50] longitude: f64 (little-endian)
-/// [50..54] radius_km: f32 (little-endian)
+/// [50..54] biome_seed: u32 (little-endian) — replaces radius_km
 /// [54]     city_type: u8 (0=Capital, 1=Resource, 2=Combat, 3=Trade)
+/// [55..57] width_grid: u16 (little-endian)
+/// [57..59] height_grid: u16 (little-endian)
+/// [59]     water_level_delta: i8 (per-city biome knob; 0 = procedural default)
+/// [60]     temp_bias: i8
+/// [61]     moisture_bias: i8
+/// [62]     coast: u8 (0=none, 1..=8 = N/NE/E/SE/S/SW/W/NW)
+/// [63]     landmass_seed: u8 (0=no mask, >0 carves landmass blobs)
 /// ```
 ///
 /// # Accounts
@@ -49,7 +56,7 @@ pub fn process(
 
     // 2. Parse Instruction Data
 
-    if instruction_data.len() < 55 {
+    if instruction_data.len() < 64 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -80,7 +87,7 @@ pub fn process(
         instruction_data[49],
     ]);
 
-    let radius_km = f32::from_le_bytes([
+    let biome_seed = u32::from_le_bytes([
         instruction_data[50],
         instruction_data[51],
         instruction_data[52],
@@ -88,6 +95,13 @@ pub fn process(
     ]);
 
     let city_type_u8 = instruction_data[54];
+    let width_grid = u16::from_le_bytes([instruction_data[55], instruction_data[56]]);
+    let height_grid = u16::from_le_bytes([instruction_data[57], instruction_data[58]]);
+    let water_level_delta = instruction_data[59] as i8;
+    let temp_bias = instruction_data[60] as i8;
+    let moisture_bias = instruction_data[61] as i8;
+    let coast = instruction_data[62];
+    let landmass_seed = instruction_data[63];
 
     // 3. Validate Instruction Data
 
@@ -99,7 +113,11 @@ pub fn process(
         return Err(GameError::InvalidLongitude.into());
     }
 
-    if radius_km <= 0.0 {
+    if width_grid == 0 || height_grid == 0 {
+        return Err(GameError::InvalidParameter.into());
+    }
+
+    if coast > 8 {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -164,7 +182,6 @@ pub fn process(
     city_data.name = name;
     city_data.latitude = latitude;
     city_data.longitude = longitude;
-    city_data.radius_km = radius_km;
     city_data.city_type = city_type as u8;
     city_data.players_present = 0;
     city_data.active_encounters = 0;
@@ -175,6 +192,16 @@ pub fn process(
     city_data.bump = bump;
     city_data._padding1 = [0; 1];
     city_data.arena_season_id = 0;
+    city_data.biome_seed = biome_seed;
+    city_data.width_grid = width_grid;
+    city_data.height_grid = height_grid;
+    city_data.layout_version = 2;
+    city_data.water_level_delta = water_level_delta;
+    city_data.temp_bias = temp_bias;
+    city_data.moisture_bias = moisture_bias;
+    city_data.coast = coast;
+    city_data.landmass_seed = landmass_seed;
+    city_data._biome_reserved = [0; 2];
 
     // Emit CityInitialized event
     emit!(CityInitialized {

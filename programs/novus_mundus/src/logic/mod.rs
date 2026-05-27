@@ -2,6 +2,7 @@
 // These functions contain NO AccountView references
 // Can be tested independently and reused across frameworks
 
+pub mod biome;
 pub mod calculations;
 pub mod combat;
 pub mod consume;
@@ -18,6 +19,8 @@ pub mod time_cycle;
 
 // Re-export all logic modules for convenience
 // Some may not be used directly in on-chain code but are part of the public API
+#[allow(unused_imports)]
+pub use biome::*;
 pub use calculations::*;
 pub use combat::*;
 pub use consume::*;

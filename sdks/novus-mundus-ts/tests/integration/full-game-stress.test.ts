@@ -57,6 +57,7 @@ import {
 import {
   type TestContext,
   beforeAllTests,
+  CITIES,
 } from '../fixtures/setup';
 import {
   PlayerFactory,
@@ -148,10 +149,16 @@ describe('Full Game Stress (200 players)', () => {
     factory = new PlayerFactory(ctx, { autoInit: true });
 
     // DAO creates vacant castles for the castle phase. Cities 1..NUM_CASTLES,
-    // tier 2, level 1 — cheap to claim.
+    // tier 2, level 1 — cheap to claim. Anchor inside each city's
+    // ±200-grid no-water band (TEST_BIOME_SEED), offset +30 from centre
+    // so the 2×2 footprint doesn't overlap player spawn cells (which
+    // start at city centre and walk +cy from there).
     for (let i = 0; i < NUM_CASTLES; i++) {
       const cityId = i + 1;
       const castleId = 1000 + i;
+      const city = CITIES[cityId]!;
+      const cityLatGrid = Math.round(city.lat * 10000);
+      const cityLonGrid = Math.round(city.lon * 10000);
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
@@ -161,12 +168,13 @@ describe('Full Game Stress (200 players)', () => {
               cityId,
               castleId,
               tier: 2,
-              latitude: 400000,
-              longitude: -740000,
+              latitude: cityLatGrid + 30,
+              longitude: cityLonGrid + 30,
               minLevel: 1,
               minNetworthMillions: 0,
               minTroopsThousands: 0,
               name: `StressCastle${i}`,
+              footprintSize: 2,
             },
           ),
         ),

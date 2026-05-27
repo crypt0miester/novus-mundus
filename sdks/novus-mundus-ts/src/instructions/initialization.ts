@@ -307,10 +307,24 @@ export interface InitCityParams {
   latitude: number;
   /** Longitude in degrees (f64) */
   longitude: number;
-  /** City radius in km (f32) */
-  radiusKm: number;
+  /** Deterministic seed for the city's biome noise channels. */
+  biomeSeed: number;
   /** City type */
   cityType: CityType;
+  /** Square plot X extent in grid units (centred AABB). */
+  widthGrid: number;
+  /** Square plot Y extent in grid units. */
+  heightGrid: number;
+  /** Signed delta added to the global WATER_THRESHOLD. 0 = procedural default. */
+  waterLevelDelta: number;
+  /** Signed shift on the temperature noise channel. 0 = procedural default. */
+  tempBias: number;
+  /** Signed shift on the moisture noise channel. 0 = procedural default. */
+  moistureBias: number;
+  /** Coastal-gradient bearing. 0 = none; 1..=8 = N/NE/E/SE/S/SW/W/NW. */
+  coast: number;
+  /** Landmass mask seed. 0 = no mask; >0 carves organic islands / archipelagos. */
+  landmassSeed: number;
 }
 
 /** ~5,000 CU */
@@ -324,13 +338,20 @@ export interface InitCityParams {
  * 2. [] game_engine: GameEngine account
  * 3. [] system_program
  *
- * Rust instruction data (55 bytes):
- * - [0..2] city_id: u16
- * - [2..34] name: [u8; 32] (UTF-8, zero-padded)
+ * Rust instruction data (64 bytes; 59 pre-knobs):
+ * - [0..2]   city_id: u16
+ * - [2..34]  name: [u8; 32] (UTF-8, zero-padded)
  * - [34..42] latitude: f64
  * - [42..50] longitude: f64
- * - [50..54] radius_km: f32
- * - [54] city_type: u8
+ * - [50..54] biome_seed: u32  (replaces radius_km)
+ * - [54]     city_type: u8
+ * - [55..57] width_grid: u16
+ * - [57..59] height_grid: u16
+ * - [59]     water_level_delta: i8
+ * - [60]     temp_bias: i8
+ * - [61]     moisture_bias: i8
+ * - [62]     coast: u8 (0=none, 1..=8 = N/NE/E/SE/S/SW/W/NW)
+ * - [63]     landmass_seed: u8
  */
 export function createInitCityInstruction(
   accounts: InitCityAccounts,
@@ -346,8 +367,8 @@ export function createInitCityInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  // Fixed 55-byte instruction data per Rust
-  const writer = new BufferWriter(55);
+  // Fixed 64-byte instruction data per Rust.
+  const writer = new BufferWriter(64);
 
   // [0..2] city_id: u16
   writer.writeU16(params.cityId);
@@ -363,11 +384,24 @@ export function createInitCityInstruction(
   // [42..50] longitude: f64
   writer.writeF64(params.longitude);
 
-  // [50..54] radius_km: f32
-  writer.writeF32(params.radiusKm);
+  // [50..54] biome_seed: u32
+  writer.writeU32(params.biomeSeed);
 
   // [54] city_type: u8
   writer.writeU8(params.cityType);
+
+  // [55..57] width_grid: u16
+  writer.writeU16(params.widthGrid);
+
+  // [57..59] height_grid: u16
+  writer.writeU16(params.heightGrid);
+
+  // [59..64] biome knobs.
+  writer.writeI8(params.waterLevelDelta);
+  writer.writeI8(params.tempBias);
+  writer.writeI8(params.moistureBias);
+  writer.writeU8(params.coast);
+  writer.writeU8(params.landmassSeed);
 
   const data = createInstructionData(DISCRIMINATORS.INIT_CITY, writer.toBuffer());
 
@@ -436,10 +470,24 @@ export interface CityInfo {
   lat: number;
   /** Longitude */
   lon: number;
-  /** Radius in km */
-  radiusKm: number;
+  /** Deterministic biome seed (replaces radiusKm). */
+  biomeSeed: number;
   /** City type: 0=Capital, 1=Resource, 2=Combat, 3=Trade */
   cityType: number;
+  /** Square plot X extent in grid units. */
+  widthGrid: number;
+  /** Square plot Y extent in grid units. */
+  heightGrid: number;
+  /** Signed delta added to global WATER_THRESHOLD. 0 = procedural default. */
+  waterLevelDelta: number;
+  /** Signed shift on temperature noise. 0 = procedural default. */
+  tempBias: number;
+  /** Signed shift on moisture noise. 0 = procedural default. */
+  moistureBias: number;
+  /** Coastal-gradient bearing. 0 = none; 1..=8 = N/NE/E/SE/S/SW/W/NW. */
+  coast: number;
+  /** Landmass mask seed. 0 = no mask; >0 carves organic islands. */
+  landmassSeed: number;
 }
 
 export interface BatchCitiesParams {
@@ -465,7 +513,11 @@ export interface BatchCitiesParams {
  * Instruction data:
  * - start_city_id: u16
  * - count: u8
- * - Per city: name_len (u8) + name (bytes) + lat (f64) + lon (f64) + radius (f32) + type (u8)
+ * - Per city: name_len (u8) + name (bytes) + lat (f64) + lon (f64)
+ *   + biome_seed (u32) + city_type (u8) + width_grid (u16) + height_grid (u16)
+ *   + water_level_delta (i8) + temp_bias (i8) + moisture_bias (i8)
+ *   + coast (u8) + landmass_seed (u8)
+ *   (per-city fixed block: 30 bytes; up from 25 pre-knobs)
  */
 export function createBatchCitiesInstruction(
   accounts: BatchCitiesAccounts,
@@ -484,37 +536,46 @@ export function createBatchCitiesInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  // Add city accounts
   for (const cityAccount of accounts.cityAccounts) {
     keys.push({ pubkey: cityAccount, isSigner: false, isWritable: true });
   }
 
-  // Add system program
   keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
 
-  // Calculate buffer size: header (3) + per city (1 + name_len + 8 + 8 + 4 + 1)
+  // Buffer size: header (3) + per city (1 + name_len + 30).
   let bufSize = 3;
   for (const city of params.cities) {
     const nameBytes = Buffer.from(city.name, 'utf-8');
-    bufSize += 1 + nameBytes.length + 21; // name_len + name + lat + lon + radius + type
+    bufSize += 1 + nameBytes.length + 30;
   }
 
   const writer = new BufferWriter(bufSize);
   writer.writeU16(params.startCityId);
   writer.writeU8(count);
 
-  // Write each city's data
   for (const city of params.cities) {
     const nameBytes = Buffer.from(city.name, 'utf-8');
     if (nameBytes.length > 32) {
       throw new Error(`City name "${city.name}" exceeds 32 bytes`);
     }
+    if (city.coast < 0 || city.coast > 8) {
+      throw new Error(
+        `City "${city.name}" coast must be 0..=8 (got ${city.coast})`,
+      );
+    }
     writer.writeU8(nameBytes.length);
     writer.writeBytes(nameBytes);
     writer.writeF64(city.lat);
     writer.writeF64(city.lon);
-    writer.writeF32(city.radiusKm);
+    writer.writeU32(city.biomeSeed);
     writer.writeU8(city.cityType);
+    writer.writeU16(city.widthGrid);
+    writer.writeU16(city.heightGrid);
+    writer.writeI8(city.waterLevelDelta);
+    writer.writeI8(city.tempBias);
+    writer.writeI8(city.moistureBias);
+    writer.writeU8(city.coast);
+    writer.writeU8(city.landmassSeed);
   }
 
   const data = createInstructionData(DISCRIMINATORS.BATCH_CITIES, writer.toBuffer());
@@ -649,134 +710,11 @@ export function createUpdateGameConfigInstruction(
   });
 }
 
-// Set Terrain
-
-import { type CityTerrain, serializeTerrain } from '../calculators/terrain';
-
-export interface SetTerrainAccounts {
-  /** DAO authority (signer, payer for realloc) */
-  daoAuthority: PublicKey;
-  /** GameEngine PDA */
-  gameEngine: PublicKey;
-}
-
-export interface SetTerrainParams {
-  /** City ID */
-  cityId: number;
-  /** Terrain configuration */
-  terrain: CityTerrain;
-}
-
-/**
- * Set or replace terrain data on an existing city account.
- * DAO-only instruction. Reallocates the city account to fit anchors.
- *
- * Accounts:
- * 0. [signer, writable] dao_authority: Must match GameEngine.authority
- * 1. [] game_engine: GameEngine account
- * 2. [writable] city: City PDA
- * 3. [] system_program
- *
- * Instruction data:
- * - city_id: u16 (2 bytes)
- * - terrain payload: seed(4) + waterLine(1) + peakLine(1) + anchorCount(2) + version(1) + reserved(7) + anchors(N×8)
- */
-export function createSetTerrainInstruction(
-  accounts: SetTerrainAccounts,
-  params: SetTerrainParams,
-): TransactionInstruction {
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
-
-  const keys = [
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: city, isSigner: false, isWritable: true },
-    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-  ];
-
-  // city_id (2 bytes) + serialized terrain (header + anchors)
-  const terrainBuf = serializeTerrain(params.terrain);
-  const writer = new BufferWriter(2 + terrainBuf.length);
-  writer.writeU16(params.cityId);
-  writer.writeBytes(terrainBuf);
-
-  const data = createInstructionData(DISCRIMINATORS.SET_TERRAIN, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
-}
-
-// Append Terrain Anchors
-
-import { type Anchor, ANCHOR_SIZE } from '../calculators/terrain';
-
-export interface AppendTerrainAccounts {
-  /** DAO authority (signer, payer for realloc) */
-  daoAuthority: PublicKey;
-  /** GameEngine PDA */
-  gameEngine: PublicKey;
-}
-
-export interface AppendTerrainParams {
-  /** City ID */
-  cityId: number;
-  /** Anchors to append */
-  anchors: Anchor[];
-}
-
-/**
- * Append terrain anchors to an existing city account.
- * The city must already have terrain configured via set_terrain.
- * Use this to add more anchors than fit in a single transaction.
- *
- * Accounts:
- * 0. [signer, writable] dao_authority
- * 1. [] game_engine
- * 2. [writable] city PDA
- * 3. [] system_program
- *
- * Instruction data:
- * - city_id: u16 (2 bytes)
- * - anchors: N × 8 bytes (raw anchor data)
- */
-export function createAppendTerrainInstruction(
-  accounts: AppendTerrainAccounts,
-  params: AppendTerrainParams,
-): TransactionInstruction {
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
-
-  const keys = [
-    { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
-    { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
-    { pubkey: city, isSigner: false, isWritable: true },
-    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
-  ];
-
-  // city_id (2 bytes) + raw anchor bytes (N × ANCHOR_SIZE)
-  const writer = new BufferWriter(2 + params.anchors.length * ANCHOR_SIZE);
-  writer.writeU16(params.cityId);
-
-  for (const a of params.anchors) {
-    writer.writeI16(a.x);
-    writer.writeI16(a.y);
-    writer.writeU8(a.mass);
-    writer.writeU8(a.lift);
-    writer.writeI8(a.pushX);
-    writer.writeI8(a.pushY);
-    writer.writeU8(a.moisture ?? 128);
-  }
-
-  const data = createInstructionData(DISCRIMINATORS.APPEND_TERRAIN, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
-}
+// Set Terrain + Append Terrain instructions retired with the
+// flat-strategy cut — biome is a pure function of biomeSeed sampled at
+// the point of use, no on-chain anchor write step. Use
+// `createInitCityInstruction` / `createBatchCitiesInstruction` to seed
+// `biomeSeed` + `widthGrid` + `heightGrid` at city init time instead.
 
 // Helper: Associated Token Program ID
 

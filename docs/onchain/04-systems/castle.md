@@ -44,7 +44,7 @@ graph TB
 
 | ID | Instruction | Description |
 |----|-------------|-------------|
-| 270 | `create_castle` | DAO creates a new castle with tier, location, and eligibility requirements |
+| 270 | `create_castle` | DAO creates a new castle with tier, anchor location, N×N footprint, and eligibility requirements; also creates `footprint_size²` `LocationAccount`s with `OCCUPANT_CASTLE` |
 | 271 | `claim_vacant_castle` | Player claims an unoccupied castle, entering a 2-hour contest window |
 | 272 | `appoint_court` | King appoints a teammate to a court position (Citadel only) |
 | 273 | `dismiss_court` | King dismisses a court member, closing the position account |
@@ -134,9 +134,10 @@ CastleAccount (~600 bytes):
 ├── _padding2: [u8; 3]
 │
 ├── // Location (16 bytes)
-├── latitude: i32                 // Fixed-point ×1,000,000 (NOT f64)
-├── longitude: i32                // Fixed-point ×1,000,000 (NOT f64)
-├── _padding_loc: [u8; 8]
+├── latitude: i32                 // Grid units ×10,000 — ANCHOR CORNER of the footprint
+├── longitude: i32                // Grid units ×10,000 — ANCHOR CORNER of the footprint
+├── footprint_size: u8            // N for an N×N footprint (1, 2, 3, or 4); each cell owns a LocationAccount
+├── _padding_loc: [u8; 7]
 │
 ├── // Ruler Info (80 bytes)
 ├── king: Pubkey                  // Current king's PlayerAccount PDA (NULL if vacant)
@@ -542,13 +543,13 @@ flowchart TD
 
 ### Attack Castle (Instruction 288)
 
-Solo attack on a castle's garrison from within 50 meters of the castle location.
+Solo attack on a castle's garrison from within 50 meters of ANY footprint cell.
 
 **Prerequisites:**
 - `castle.can_be_attacked(now)` — status is Contest (within window), Vulnerable, or Protected (protection expired), or Transitioning (within 2-hour window)
 - Attacker is not traveling, not in an active rally
 - Attacker has defensive units (castle attacks use defensive forces, not operatives)
-- Attacker is within `CASTLE_ATTACK_RANGE_METERS = 50.0` meters of castle coordinates
+- Attacker is within `CASTLE_ATTACK_RANGE_METERS = 50.0` meters of any cell in the castle's `footprint_size × footprint_size` footprint (min distance across the N² cells, anchored at `castle.latitude`/`castle.longitude`)
 
 **Combat resolution:**
 ```
@@ -593,7 +594,7 @@ When garrison wins (attacker repelled):
 - Garrison members accumulate loot in their `GarrisonContributionAccount.loot_*` fields
 - Emits `CastleDefended`
 
-**Locations:** `castle.latitude` and `castle.longitude` are `i32` fixed-point values (degrees × 1,000,000). The attack range check converts these back to float degrees before calling `calculate_distance_meters`.
+**Locations:** `castle.latitude` and `castle.longitude` are `i32` grid units (degrees × 10,000 — `LocationAccount::GRID_PRECISION`) and store the **anchor corner** of the N×N footprint. The attack range check iterates over the `footprint_size²` cells (`anchor + (dlat, dlong)` for `dlat, dlong ∈ 0..N`), converts each to degrees via `LocationAccount::from_grid`, and takes the minimum `calculate_distance_meters` against the attacker.
 
 ---
 

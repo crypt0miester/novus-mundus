@@ -97,10 +97,10 @@ sequenceDiagram
     A->>Program: attack_player(drive_by)
     Program->>Program: calculate_damage_output(attacker units, weapons, drive_by, ...)
     Program->>Program: apply Time-of-Day multiplier (Attacking)
-    Program->>Program: "apply terrain elevation advantage (net ±1000 bps, max ±10%)"
+    Program->>Program: "apply biome combat advantage (attacker biome combat_bps − defender biome combat_bps)"
     Program->>Program: calculate_damage_output(defender units+reinforcements, weapons, false, ...)
     Program->>Program: apply Time-of-Day multiplier (Defending)
-    Program->>Program: apply terrain (inverse of attacker advantage)
+    Program->>Program: apply biome combat (inverse of attacker advantage)
     Program->>D: "inflict_damage(attacker_damage, defender armor + hero armor eff)"
     Program->>Program: Infirmary recovery for defender
     Program->>A: "inflict_damage(defender_damage, attacker armor + hero armor eff)"

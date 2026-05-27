@@ -16,6 +16,122 @@ import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
+import { biomeAt, isPassableBiome } from '../../src/calculators/biome';
+import type { LiteSVM } from './svm';
+import { TEST_BIOME_SEED } from './setup';
+
+/**
+ * Find the first passable, unoccupied cell in a city — walks the
+ * latitude axis northward from the city centre (cy = 0, 1, 2, …) at
+ * longitude offset 0, returning the lowest `cy` that is (a) passable
+ * per the chain biome and (b) doesn't already have an on-chain
+ * `LocationAccount`. The spawn doesn't collide with a player who's
+ * been moved here by a prior test, or with a castle's footprint cell.
+ *
+ * The `n` parameter is unused — the SVM-aware skip already picks the
+ * next free cell every call, and walking strictly forward keeps
+ * sequential spawns 1 grid unit apart (Haversine ≈ 11.13 m, inside
+ * `PVP_ATTACK_RANGE_METERS = 15 m`). Tests like "should enforce attack
+ * cooldown" spawn attacker + defenders in the same city and expect
+ * them within PvP attack range; an alternating ±k walk produced
+ * non-adjacent neighbours that crossed the threshold.
+ */
+function pickIndexedPassableSpawn(
+  svm: LiteSVM,
+  gameEngine: PublicKey,
+  cityId: number,
+  biomeSeed: number,
+  cityLat: number,
+  cityLon: number,
+  _n: number,
+): { lat: number; long: number } {
+  // 5000 cy steps × 11 m ≈ 55 km — far past the test cities' 8000×8000
+  // grid (half-width 4000 grid units ≈ 44 km), so practically unbounded.
+  const MAX_OFFSET = 5000;
+  const cityLatGrid = Math.round(cityLat * 10000);
+  const cityLonGrid = Math.round(cityLon * 10000);
+  const cx = 0; // 1-D walk: longitude pinned at city centre.
+  const isCellFree = (cy: number): boolean => {
+    if (!isPassableBiome(biomeAt(biomeSeed, cx, cy))) return false;
+    const [loc] = deriveLocationPda(
+      gameEngine,
+      cityId,
+      cityLatGrid + cy,
+      cityLonGrid + cx,
+    );
+    const acct = svm.getAccount(loc);
+    // In tests, every persisted LocationAccount is either an active
+    // spawn cell, a travel reservation, or a castle footprint cell —
+    // all of which the chain will reject on init_player. Skipping any
+    // non-empty Location account is the safe answer.
+    return acct === null || acct.data.length === 0;
+  };
+  for (let cy = 0; cy <= MAX_OFFSET; cy++) {
+    if (isCellFree(cy)) {
+      return { lat: cityLat + cy / 10000, long: cityLon + cx / 10000 };
+    }
+  }
+  throw new Error(
+    `No passable cell found within +${MAX_OFFSET} grid units of city centre (biomeSeed=${biomeSeed})`,
+  );
+}
+
+/**
+ * Find an unoccupied passable cell within `maxDistance` grid units of
+ * `(centerLatGrid, centerLonGrid)` in `cityId`. Used by `movePlayerToPlayer`
+ * to land near a target without colliding with another player's cell.
+ *
+ * Returns grid coordinates `(latGrid, lonGrid)`. Walks the surrounding
+ * cells in stable Chebyshev-ring order (closest first), skipping any
+ * cell that already has a `LocationAccount`. Throws if no free cell is
+ * found within the radius.
+ */
+function findFreeCellNear(
+  svm: LiteSVM,
+  gameEngine: PublicKey,
+  cityId: number,
+  biomeSeed: number,
+  cityLatGrid: number,
+  cityLonGrid: number,
+  centerLatGrid: number,
+  centerLonGrid: number,
+  maxDistance: number = 6,
+): { latGrid: number; lonGrid: number } {
+  const cyCenter = centerLatGrid - cityLatGrid;
+  const cxCenter = centerLonGrid - cityLonGrid;
+  const isFree = (cx: number, cy: number): boolean => {
+    if (!isPassableBiome(biomeAt(biomeSeed, cx, cy))) return false;
+    const [loc] = deriveLocationPda(gameEngine, cityId, cityLatGrid + cy, cityLonGrid + cx);
+    const acct = svm.getAccount(loc);
+    return acct === null || acct.data.length === 0;
+  };
+  for (let r = 1; r <= maxDistance; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (const [ox, oy] of [
+        [cxCenter + dx, cyCenter - r],
+        [cxCenter + dx, cyCenter + r],
+      ] as const) {
+        if (isFree(ox, oy)) {
+          return { latGrid: cityLatGrid + oy, lonGrid: cityLonGrid + ox };
+        }
+      }
+    }
+    for (let dy = -r + 1; dy <= r - 1; dy++) {
+      for (const [ox, oy] of [
+        [cxCenter - r, cyCenter + dy],
+        [cxCenter + r, cyCenter + dy],
+      ] as const) {
+        if (isFree(ox, oy)) {
+          return { latGrid: cityLatGrid + oy, lonGrid: cityLonGrid + ox };
+        }
+      }
+    }
+  }
+  throw new Error(
+    `No free passable cell found within ${maxDistance} grid units of (${centerLatGrid}, ${centerLonGrid}) in city ${cityId}`,
+  );
+}
+
 import {
   createInitPlayerInstruction,
   createInitUserInstruction,
@@ -252,8 +368,16 @@ export class PlayerFactory {
 
     const spawnIndex = this.citySpawnCount.get(player.startingCityId) ?? 0;
     this.citySpawnCount.set(player.startingCityId, spawnIndex + 1);
-    const spawnLat = city.lat + spawnIndex * 0.0001;
-    const spawnLon = city.lon;
+    const biomeSeed = TEST_BIOME_SEED;
+    const { lat: spawnLat, long: spawnLon } = pickIndexedPassableSpawn(
+      this.ctx.svm,
+      this.ctx.gameEngine,
+      player.startingCityId,
+      biomeSeed,
+      city.lat,
+      city.lon,
+      spawnIndex,
+    );
 
     const tx = new Transaction();
 
@@ -345,11 +469,20 @@ export class PlayerFactory {
     }
 
     // Offset spawn location per player so each gets a unique grid cell.
-    // Grid precision is 10000, so 0.0001 degrees = 1 grid cell (~11m).
+    // Post flat-strategy this also has to dodge water — pick the n-th
+    // passable cell from a 100×100 scan, where n = spawnIndex.
     const spawnIndex = this.citySpawnCount.get(player.startingCityId) ?? 0;
     this.citySpawnCount.set(player.startingCityId, spawnIndex + 1);
-    const spawnLat = city.lat + spawnIndex * 0.0001;
-    const spawnLon = city.lon;
+    const biomeSeed = TEST_BIOME_SEED;
+    const { lat: spawnLat, long: spawnLon } = pickIndexedPassableSpawn(
+      this.ctx.svm,
+      this.ctx.gameEngine,
+      player.startingCityId,
+      biomeSeed,
+      city.lat,
+      city.lon,
+      spawnIndex,
+    );
 
     const ix = createInitPlayerInstruction({
       owner: player.publicKey,
@@ -1113,22 +1246,39 @@ export class PlayerFactory {
     // Buy gems for speedup (1000 gems per purchase should be plenty)
     await this.buyGems(mover, 1);
 
-    // If in different cities, need intercity travel first
-    if (moverLocation.cityId !== targetLocation.cityId) {
-      // Offset destination by +1 gridLong to avoid colliding with target player's cell
-      // (Use longitude offset to avoid collision with factory's latitude-based spawn offsets)
-      const destGridLat = targetLocation.gridLat;
-      const destGridLong = targetLocation.gridLong + 2;
+    // Pick a free passable cell near the target — the chain rejects
+    // travel into an existing LocationAccount, and after many tests in
+    // one file the cells adjacent to the target may already be held by
+    // earlier players. `findFreeCellNear` walks the Chebyshev rings
+    // around the target and returns the closest free cell, so the
+    // mover lands within PvP attack range (≤ 15 m) while avoiding
+    // collisions.
+    const targetCity = CITIES.find(c => c.id === targetLocation.cityId)!;
+    const targetCityLatGrid = Math.round(targetCity.lat * 10000);
+    const targetCityLonGrid = Math.round(targetCity.lon * 10000);
+    const dest = findFreeCellNear(
+      this.ctx.svm,
+      this.ctx.gameEngine,
+      targetLocation.cityId,
+      TEST_BIOME_SEED,
+      targetCityLatGrid,
+      targetCityLonGrid,
+      targetLocation.gridLat,
+      targetLocation.gridLong,
+    );
 
-      // Start intercity travel to offset cell near target
+    // If in different cities, need intercity travel first. Land on the
+    // chosen free cell directly.
+    if (moverLocation.cityId !== targetLocation.cityId) {
+      // Start intercity travel to free cell near target
       await this.startIntercityTravel(
         mover,
         moverLocation.cityId,
         targetLocation.cityId,
         moverLocation.gridLat,
         moverLocation.gridLong,
-        destGridLat,
-        destGridLong
+        dest.latGrid,
+        dest.lonGrid
       );
 
       // Speedup travel repeatedly (tier 2 = 25% time remains per application)
@@ -1144,21 +1294,20 @@ export class PlayerFactory {
       // Advance LiteSVM clock past travel arrival time
       await advanceTime(this.ctx.svm, 5);
 
-      // Complete intercity travel at the offset destination
+      // Complete intercity travel at the chosen free cell
       await this.completeIntercityTravel(
         mover,
         moverLocation.cityId,
         targetLocation.cityId,
-        destGridLat,
-        destGridLong
+        dest.latGrid,
+        dest.lonGrid
       );
+      return; // Already in attack range — no intracity travel needed
     }
 
-    // Now in same city - move to adjacent cell for combat range
-    // Use longitude offset to avoid colliding with factory's latitude-based spawn positions
-    const adjacentLat = targetLocation.gridLat;
-    const adjacentLong = targetLocation.gridLong + 1; // ~11m offset
-    // Get current location after potential intercity travel
+    // Same city — intracity travel into the chosen free cell. The free
+    // cell is within `maxDistance` (default 6) grid units of the target,
+    // so the post-travel distance stays within PvP_ATTACK_RANGE_METERS.
     const currentLocation = await this.getPlayerLocation(mover);
     const currentGridLat = currentLocation?.gridLat || moverLocation.gridLat;
     const currentGridLong = currentLocation?.gridLong || moverLocation.gridLong;
@@ -1168,8 +1317,8 @@ export class PlayerFactory {
       targetLocation.cityId,
       currentGridLat,
       currentGridLong,
-      adjacentLat / 10000, // Convert grid to f64 (grid = round(coord * 10000))
-      adjacentLong / 10000  // Convert grid to f64
+      dest.latGrid / 10000,
+      dest.lonGrid / 10000,
     );
 
     // Speedup intracity travel
@@ -1188,8 +1337,8 @@ export class PlayerFactory {
     await this.completeIntracityTravel(
       mover,
       targetLocation.cityId,
-      adjacentLat,
-      adjacentLong
+      dest.latGrid,
+      dest.lonGrid
     );
   }
 

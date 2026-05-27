@@ -18,6 +18,7 @@ use crate::{
     emit,
     error::GameError,
     events::KingdomCitiesInitialized,
+    logic::location::{is_valid_latitude, is_valid_longitude},
     state::{CityAccount, GameEngine},
 };
 
@@ -39,13 +40,20 @@ pub const MAX_CITIES_PER_BATCH: usize = 8;
 /// # Instruction Data
 /// - start_city_id: u16
 /// - count: u8
-/// - For each city:
+/// - For each city (per-city fixed block: 30 bytes after name):
 ///   - name_len: u8 (max 32)
 ///   - name: [u8; name_len]
 ///   - latitude: f64
 ///   - longitude: f64
-///   - radius_km: f32
+///   - biome_seed: u32
 ///   - city_type: u8
+///   - width_grid: u16
+///   - height_grid: u16
+///   - water_level_delta: i8
+///   - temp_bias: i8
+///   - moisture_bias: i8
+///   - coast: u8
+///   - landmass_seed: u8
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -108,9 +116,11 @@ pub fn process(
         let name_bytes = &instruction_data[offset..offset + name_len];
         offset += name_len;
 
-        // Parse latitude (f64), longitude (f64), radius_km (f32), city_type (u8)
-        // Total: 8 + 8 + 4 + 1 = 21 bytes
-        if offset + 21 > instruction_data.len() {
+        // Parse latitude (f64), longitude (f64), biome_seed (u32), city_type (u8),
+        // width_grid (u16), height_grid (u16), water_level_delta (i8),
+        // temp_bias (i8), moisture_bias (i8), coast (u8), landmass_seed (u8).
+        // Total: 8 + 8 + 4 + 1 + 2 + 2 + 5 = 30 bytes.
+        if offset + 30 > instruction_data.len() {
             return Err(ProgramError::InvalidInstructionData);
         }
 
@@ -121,12 +131,48 @@ pub fn process(
             f64::from_le_bytes(instruction_data[offset..offset + 8].try_into().unwrap());
         offset += 8;
 
-        let radius_km =
-            f32::from_le_bytes(instruction_data[offset..offset + 4].try_into().unwrap());
+        if !is_valid_latitude(latitude) {
+            return Err(GameError::InvalidLatitude.into());
+        }
+        if !is_valid_longitude(longitude) {
+            return Err(GameError::InvalidLongitude.into());
+        }
+
+        let biome_seed =
+            u32::from_le_bytes(instruction_data[offset..offset + 4].try_into().unwrap());
         offset += 4;
 
         let city_type = instruction_data[offset];
         offset += 1;
+
+        let width_grid =
+            u16::from_le_bytes(instruction_data[offset..offset + 2].try_into().unwrap());
+        offset += 2;
+
+        let height_grid =
+            u16::from_le_bytes(instruction_data[offset..offset + 2].try_into().unwrap());
+        offset += 2;
+
+        if width_grid == 0 || height_grid == 0 {
+            return Err(GameError::InvalidParameter.into());
+        }
+
+        let water_level_delta = instruction_data[offset] as i8;
+        offset += 1;
+        let temp_bias = instruction_data[offset] as i8;
+        offset += 1;
+        let moisture_bias = instruction_data[offset] as i8;
+        offset += 1;
+        let coast = instruction_data[offset];
+        offset += 1;
+        let landmass_seed = instruction_data[offset];
+        offset += 1;
+
+        // coast bearing is 0..=8 (0 = no coast). Reject out-of-range so a
+        // typo'd payload can't silently disable the gradient.
+        if coast > 8 {
+            return Err(GameError::InvalidParameter.into());
+        }
 
         // Derive and validate city PDA
         let (expected_city_pda, bump) =
@@ -168,7 +214,6 @@ pub fn process(
 
         city_data.latitude = latitude;
         city_data.longitude = longitude;
-        city_data.radius_km = radius_km;
         city_data.city_type = city_type;
         city_data.players_present = 0;
         city_data.active_encounters = 0;
@@ -180,13 +225,17 @@ pub fn process(
         city_data._padding1 = [0; 1];
         city_data.arena_season_id = 0;
 
-        // Terrain — initialized empty (no anchors = all terrain passable)
-        city_data.terrain_seed = 0;
-        city_data.water_line = 0;
-        city_data.peak_line = 255;
-        city_data.anchor_count = 0;
-        city_data.terrain_version = 0;
-        city_data._terrain_reserved = [0; 7];
+        // Biome layout — fixed-size, no trailing variable data.
+        city_data.biome_seed = biome_seed;
+        city_data.width_grid = width_grid;
+        city_data.height_grid = height_grid;
+        city_data.layout_version = 2;
+        city_data.water_level_delta = water_level_delta;
+        city_data.temp_bias = temp_bias;
+        city_data.moisture_bias = moisture_bias;
+        city_data.coast = coast;
+        city_data.landmass_seed = landmass_seed;
+        city_data._biome_reserved = [0; 2];
     }
 
     // Emit KingdomCitiesInitialized event

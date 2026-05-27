@@ -167,7 +167,7 @@ Multipliers come from the golden-ratio family: φ ≈ 1.618, √φ ≈ 1.272, 1/
 
 ### Cities and Travel
 
-Cities are configured per-kingdom via `batch_init_cities` (instruction 5); the canonical list lives in `cli/data/cities.ts` and is passed via instruction data. Each city has `latitude`, `longitude`, `radius_km`, `city_type`, plus on-account terrain anchors (water/peak lines, configurable via `set_terrain` / `append_terrain`).
+Cities are configured per-kingdom via `batch_init_cities` (instruction 5); the canonical list lives in `cli/data/cities.ts` and is passed via instruction data. Each city has `latitude`, `longitude`, `city_type`, plus a `biome_seed` and square plot dimensions (`width_grid`, `height_grid`) in grid units. Biome is a pure function of `(biome_seed, ox, oy)` sampled at the point of use.
 
 | City type | Bonus |
 |---|---|
@@ -564,14 +564,24 @@ In a second terminal, seed the kingdom with the `novus` CLI:
 cd sdks/novus-mundus-ts
 bun run novus airdrop dao --amount 100    # fund the DAO authority
 bun run novus airdrop treasury --amount 100  # fund the treasury
-bun run novus init all                    # 12 phases: GameEngine, cities, terrain, heroes, research, subscriptions, shop, dungeons, castles, arena, events
+bun run novus init all                    # 11 phases: GameEngine, cities, heroes, research, buildings, subscriptions, shop, dungeons, castles, arena, events
 bun run novus status                      # verify each system reports OK
 bun run novus create-player --tier beginner   # optional: register a CLI-spun player (the web app handles wallet-based player creation)
 ```
 
-**Terrain (phase 3) is required.** It calls `set_terrain` for each city using the presets bundled under `terrain-builder/data/`. Without it, cities have no water/peak lines and terrain-gated logic (passability, mining/fishing bonuses) will misbehave. `init all` runs the terrain phase automatically; to (re-)run it standalone use `bun run novus terrain set <city-id>` per city.
-
 `init all` is create-or-skip — existing accounts are never overwritten. See `sdks/novus-mundus-ts/cli/README.md` for the full command reference.
+
+#### Biome seeding — operator notes
+
+Every city's biome layout is fully determined by three things on its `CityAccount`: `biome_seed` (u32), `width_grid` (u16), `height_grid` (u16). `bun run novus init` writes all three at city-init time and the chain rejects movement onto water cells from there.
+
+- **Default seed per city** — `cli/data/cities.ts` exports `seedForCity(id)` (= `0xCAFE0000 | id`). Override per-city by editing that helper before `novus init`; the value is committed to chain on the first init and never re-read.
+- **Re-seed a single city** — close the `CityAccount` (DAO-signed) and re-init with a different `biome_seed`. Player and encounter `LocationAccount`s persist through the close; any cell that lands on water under the new biome will reject the next movement attempt.
+- **Preview a seed** — once the city is initialized, load `/map` in the web app and drill into the city; the renderer bakes biome colour across the square plot from the seed at full resolution. No separate preview tool.
+- **Tune global biome math** — `WATER_THRESHOLD`, the Whittaker table, channel seed offsets, and `biome_affinity` all live in `programs/novus_mundus/src/logic/biome.rs`. Changes require:
+  1. `cargo build-sbf` + `solana program deploy` (chain redeploy)
+  2. `UPDATE_BIOME_VECTORS=1 cargo test --release --test biome_wire_vector` to regenerate `sdks/novus-mundus-ts/tests/fixtures/biome-vectors.json`
+  3. Mirror the same change in `sdks/novus-mundus-ts/src/calculators/biome.ts` so the web/SDK match the chain bit-for-bit; the wire-vector test fails the build if it drifts.
 
 ### 5. Run the web client
 

@@ -1,11 +1,16 @@
 /**
  * City Data — the 24 canonical Novus Mundus settlements.
  *
- * Each settlement sits on the ruins of an old-world city; the real-world city
- * (the lore "Old Name") supplies the coordinates.
- *
- * LEGACY_CITIES preserves the previous placeholder set (real-world names) so
- * nothing that still references it breaks.
+ * Each settlement sits on the ruins of an old-world city; the real-world
+ * city (the lore "Old Name") supplies the coordinates. `radiusKm` is the
+ * SOURCE-OF-TRUTH sizing parameter — `dimsFromRadius` converts it to the
+ * chain-side `widthGrid` / `heightGrid` square plot at use time. Biome
+ * layout is derived deterministically from `seedForCity(id)` and the
+ * chain noise function, biased by per-city `BiomeKnobs` that tilt the
+ * climate (temp / moisture), water level, and landform (coastal gradient
+ * along a bearing or organic landmass mask). All-zero knobs reproduce
+ * the pre-knobs procedural sampler bit-for-bit. No per-cell biome data
+ * is stored anywhere.
  */
 
 /**
@@ -19,6 +24,35 @@ export enum CityType {
 	Trade = 3,
 }
 
+/**
+ * Per-city biome knob preset. Five bytes that bias the procedural
+ * sampler — see `BiomeKnobs` in `sdks/novus-mundus-ts/src/calculators/biome.ts`
+ * and the Rust mirror in `programs/novus_mundus/src/logic/biome.rs`.
+ * Required for every city. Cities without a strong identity use
+ * `BIOME_PROCEDURAL` (all zeros) — explicit, never inferred via `??`.
+ */
+export interface CityBiomePreset {
+	waterLevelDelta: number;
+	tempBias: number;
+	moistureBias: number;
+	/** 0 = none, 1..=8 = N/NE/E/SE/S/SW/W/NW (direction sea lies in). */
+	coast: number;
+	/** 0 = no mask, >0 carves organic islands / archipelagos. */
+	landmassSeed: number;
+}
+
+/** Identity-free baseline. Reproduces the pre-knobs procedural sampler
+ * bit-for-bit. Cities without strong climate / landform identity use
+ * this; new cities should override the fields they care about and
+ * leave the rest at 0. */
+export const BIOME_PROCEDURAL: CityBiomePreset = {
+	waterLevelDelta: 0,
+	tempBias: 0,
+	moistureBias: 0,
+	coast: 0,
+	landmassSeed: 0,
+};
+
 export interface CityData {
 	id: number;
 	name: string;
@@ -26,17 +60,54 @@ export interface CityData {
 	lon: number;
 	radiusKm: number;
 	type: CityType;
-	/**
-	 * Filename (without extension) in `terrain-builder/data/` that supplies the
-	 * anchor preset for this city. Most map 1:1 to the real-world `Old: X`
-	 * placeholder. Omit or `null` means no preset exists yet — the terrain init
-	 * phase skips the city with a warning.
-	 */
-	terrainPreset?: string | null;
+	/** Biome knob preset — required. Use BIOME_PROCEDURAL for no override. */
+	biome: CityBiomePreset;
 }
 
+/**
+ * Square plot extent in grid units, preserving the visible area of the
+ * legacy circular plot of radius `radiusKm` km. Matches the §9 cutover
+ * conversion: `width = height ≈ radius_km × √π / 0.011`.
+ */
+export function dimsFromRadius(radiusKm: number): number {
+	const SQRT_PI = 1.7724539;
+	const KM_PER_DEG = 111;
+	const GRID_PRECISION = 10_000;
+	return Math.round(((radiusKm * SQRT_PI) / KM_PER_DEG) * GRID_PRECISION);
+}
+
+/**
+ * Deterministic biome seed per city. `0xCAFE0000 | id` so a city's biome
+ * layout is reproducible across redeploys. Override here (e.g. with an
+ * `if (id === N) return CUSTOM_SEED`) to pin a different layout for a
+ * specific city; the value is written to chain on first init and never
+ * re-read, so post-init changes need a close + reinit (DAO-signed).
+ */
+export function seedForCity(id: number): number {
+	return (0xcafe0000 | id) >>> 0;
+}
+
+
+// Climate / landform presets. Spell out the design choice next to the
+// city it applies to — these are the "this is what Cairo should feel
+// like" decisions, kept in one place. Knob semantics:
+//   waterLevelDelta: +127 ~ no water; -96 ~ all water; 0 = baseline.
+//   tempBias / moistureBias: ±64 ≈ one Whittaker bucket shift.
+//   coast: 1..=8 (N/NE/E/SE/S/SW/W/NW = direction the sea lies in).
+//   landmassSeed: 0 = no mask; pick any nonzero value to carve islands.
+//
+// Water budget — stacking water-pushing knobs floods the plot:
+//   * landmassSeed != 0 alone forces ~50% water (mask threshold 128/255).
+//   * Negative waterLevelDelta lowers the procedural water threshold
+//     (default 96), adding water everywhere the mask isn't already sea.
+//   * coast adds a smooth gradient of up to ±128 along the bearing.
+// When using landmassSeed, set waterLevelDelta to a POSITIVE value
+// (~+30..+60) to suppress the procedural water layer — otherwise the
+// city ends up almost entirely water. For coastal cities, use `coast`
+// alone and leave waterLevelDelta near 0.
+
 export const CITIES: CityData[] = [
-	// Ashenmere — the central heartland
+	// Ashenmere — the central heartland (procedural defaults, no strong identity).
 	{
 		id: 0,
 		name: "Valdenmoor",
@@ -44,7 +115,7 @@ export const CITIES: CityData[] = [
 		lon: -0.1278,
 		radiusKm: 52,
 		type: CityType.Capital,
-		terrainPreset: "london",
+		biome: BIOME_PROCEDURAL,
 	}, // Old: London
 	{
 		id: 1,
@@ -53,7 +124,7 @@ export const CITIES: CityData[] = [
 		lon: 2.3522,
 		radiusKm: 45,
 		type: CityType.Capital,
-		terrainPreset: "paris",
+		biome: BIOME_PROCEDURAL,
 	}, // Old: Paris
 	{
 		id: 2,
@@ -62,8 +133,8 @@ export const CITIES: CityData[] = [
 		lon: 12.4964,
 		radiusKm: 40,
 		type: CityType.Capital,
-		terrainPreset: "rome",
-	}, // Old: Rome
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 20, tempBias: 30, moistureBias: -10 },
+	}, // Old: Rome — warm/dry Mediterranean inland feel (~15% water)
 	{
 		id: 3,
 		name: "Kael Mora",
@@ -71,8 +142,8 @@ export const CITIES: CityData[] = [
 		lon: 23.7275,
 		radiusKm: 35,
 		type: CityType.Combat,
-		terrainPreset: "athens",
-	}, // Old: Athens
+		biome: { ...BIOME_PROCEDURAL, tempBias: 30, moistureBias: -20, coast: 4 /* SE */ },
+	}, // Old: Athens — Aegean to the SE
 	{
 		id: 4,
 		name: "Thornmark",
@@ -80,10 +151,10 @@ export const CITIES: CityData[] = [
 		lon: 13.405,
 		radiusKm: 40,
 		type: CityType.Trade,
-		terrainPreset: "berlin",
-	}, // Old: Berlin
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 20, tempBias: -20, moistureBias: 10 },
+	}, // Old: Berlin — cool temperate inland (~15% water)
 
-	// Duskfeld — the cold north
+	// Duskfeld — the cold north.
 	{
 		id: 5,
 		name: "Vraenholdt",
@@ -91,8 +162,8 @@ export const CITIES: CityData[] = [
 		lon: 37.6173,
 		radiusKm: 50,
 		type: CityType.Combat,
-		terrainPreset: "moscow",
-	}, // Old: Moscow
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 127, tempBias: -100 },
+	}, // Old: Moscow — inland, snow + rock mix
 	{
 		id: 6,
 		name: "Kaelindra",
@@ -100,10 +171,10 @@ export const CITIES: CityData[] = [
 		lon: 28.9784,
 		radiusKm: 45,
 		type: CityType.Trade,
-		terrainPreset: "istanbul",
-	}, // Old: Istanbul
+		biome: { ...BIOME_PROCEDURAL, tempBias: 20, moistureBias: 0, coast: 1 /* N */ },
+	}, // Old: Istanbul — Bosphorus to the north
 
-	// Sunward Reach — the arid south and east
+	// Sunward Reach — the arid south and east.
 	{
 		id: 7,
 		name: "Auren Khet",
@@ -111,8 +182,8 @@ export const CITIES: CityData[] = [
 		lon: 31.2357,
 		radiusKm: 50,
 		type: CityType.Resource,
-		terrainPreset: "cairo",
-	}, // Old: Cairo
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 127, tempBias: 80, moistureBias: -100 },
+	}, // Old: Cairo — desert mix (sand + rock + dirt)
 	{
 		id: 8,
 		name: "Solvaran",
@@ -120,10 +191,8 @@ export const CITIES: CityData[] = [
 		lon: 55.2708,
 		radiusKm: 45,
 		type: CityType.Trade,
-		terrainPreset: "dubai",
-	}, // Old: Dubai
-	// Korthain (Baghdad) has no matching preset — `jerusalem` is the nearest in
-	// both latitude and climate, so it stands in until a bespoke build is shipped.
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 30, tempBias: 100, moistureBias: -100, coast: 1 /* N */ },
+	}, // Old: Dubai — desert with Gulf to the north (coast gradient brings water on the north side)
 	{
 		id: 9,
 		name: "Korthain",
@@ -131,8 +200,8 @@ export const CITIES: CityData[] = [
 		lon: 44.3661,
 		radiusKm: 40,
 		type: CityType.Combat,
-		terrainPreset: "jerusalem",
-	}, // Old: Baghdad → jerusalem
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 110, tempBias: 70, moistureBias: -90 },
+	}, // Old: Baghdad — arid inland
 	{
 		id: 10,
 		name: "Duskara",
@@ -140,10 +209,10 @@ export const CITIES: CityData[] = [
 		lon: 3.3792,
 		radiusKm: 45,
 		type: CityType.Resource,
-		terrainPreset: "lagos",
-	}, // Old: Lagos
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 30, tempBias: 80, moistureBias: 60, coast: 5 /* S */ },
+	}, // Old: Lagos — tropical coastal, sea to the south
 
-	// Stormbreak Isles — eastern archipelago
+	// Stormbreak Isles — eastern archipelago.
 	{
 		id: 11,
 		name: "Shirevane",
@@ -151,8 +220,8 @@ export const CITIES: CityData[] = [
 		lon: 139.6503,
 		radiusKm: 55,
 		type: CityType.Capital,
-		terrainPreset: "tokyo",
-	}, // Old: Tokyo
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 50, tempBias: 20, moistureBias: 30, landmassSeed: 14 },
+	}, // Old: Tokyo — archipelago (~40% water); mask seed picked so the noise carves real seas on this city's seed
 	{
 		id: 12,
 		name: "Drenmire",
@@ -160,8 +229,8 @@ export const CITIES: CityData[] = [
 		lon: 116.4074,
 		radiusKm: 50,
 		type: CityType.Capital,
-		terrainPreset: "beijing",
-	}, // Old: Beijing
+		biome: { ...BIOME_PROCEDURAL, tempBias: 10, moistureBias: -30 },
+	}, // Old: Beijing — continental temperate, drier
 	{
 		id: 13,
 		name: "Pelagora",
@@ -169,8 +238,8 @@ export const CITIES: CityData[] = [
 		lon: 121.4737,
 		radiusKm: 48,
 		type: CityType.Trade,
-		terrainPreset: "shanghai",
-	}, // Old: Shanghai
+		biome: { ...BIOME_PROCEDURAL, tempBias: 30, moistureBias: 40, coast: 3 /* E */ },
+	}, // Old: Shanghai — humid east coast
 	{
 		id: 14,
 		name: "Aelthis",
@@ -178,10 +247,10 @@ export const CITIES: CityData[] = [
 		lon: 126.978,
 		radiusKm: 45,
 		type: CityType.Capital,
-		terrainPreset: "seoul",
-	}, // Old: Seoul
+		biome: { ...BIOME_PROCEDURAL, tempBias: -30, moistureBias: 10, coast: 7 /* W */ },
+	}, // Old: Seoul — cool with Yellow Sea to the west
 
-	// Jade Straits — tropical trade corridor
+	// Jade Straits — tropical trade corridor.
 	{
 		id: 15,
 		name: "Lyssandor",
@@ -189,8 +258,8 @@ export const CITIES: CityData[] = [
 		lon: 103.8198,
 		radiusKm: 35,
 		type: CityType.Trade,
-		terrainPreset: "singapore",
-	}, // Old: Singapore
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 30, tempBias: 90, moistureBias: 90, landmassSeed: 27 },
+	}, // Old: Singapore — tropical archipelago (~48% water); ls=11 was all-sea on this city's seed
 	{
 		id: 16,
 		name: "Maravhen",
@@ -198,10 +267,10 @@ export const CITIES: CityData[] = [
 		lon: 72.8777,
 		radiusKm: 50,
 		type: CityType.Trade,
-		terrainPreset: "mumbai",
-	}, // Old: Mumbai
+		biome: { ...BIOME_PROCEDURAL, tempBias: 70, moistureBias: 50, coast: 7 /* W */ },
+	}, // Old: Mumbai — tropical west coast
 
-	// Ironmarch — the western continent
+	// Ironmarch — the western continent.
 	{
 		id: 17,
 		name: "Ashenveil",
@@ -209,8 +278,8 @@ export const CITIES: CityData[] = [
 		lon: -74.006,
 		radiusKm: 50,
 		type: CityType.Trade,
-		terrainPreset: "new-york",
-	}, // Old: New York
+		biome: { ...BIOME_PROCEDURAL, tempBias: 10, coast: 3 /* E */ },
+	}, // Old: New York — east coast (Atlantic). Mask dropped — Manhattan landmass is too small for the mask scale, dominated by sea otherwise.
 	{
 		id: 18,
 		name: "Eldrath",
@@ -218,8 +287,8 @@ export const CITIES: CityData[] = [
 		lon: -118.2437,
 		radiusKm: 55,
 		type: CityType.Capital,
-		terrainPreset: "los-angeles",
-	}, // Old: Los Angeles
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 30, tempBias: 60, moistureBias: -50, coast: 7 /* W */ },
+	}, // Old: Los Angeles — warm/dry with Pacific to the west
 	{
 		id: 19,
 		name: "Tonalca",
@@ -227,10 +296,10 @@ export const CITIES: CityData[] = [
 		lon: -99.1332,
 		radiusKm: 50,
 		type: CityType.Resource,
-		terrainPreset: "mexico-city",
-	}, // Old: Mexico City
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 80, tempBias: 50, moistureBias: -20 },
+	}, // Old: Mexico City — high inland plateau
 
-	// Greenvast — the southern reaches
+	// Greenvast — the southern reaches.
 	{
 		id: 20,
 		name: "Verador",
@@ -238,8 +307,8 @@ export const CITIES: CityData[] = [
 		lon: -46.6333,
 		radiusKm: 50,
 		type: CityType.Trade,
-		terrainPreset: "sao-paulo",
-	}, // Old: Sao Paulo
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 20, tempBias: 50, moistureBias: 40 },
+	}, // Old: Sao Paulo — humid subtropical, inland (~15% water)
 	{
 		id: 21,
 		name: "Mirethane",
@@ -247,8 +316,8 @@ export const CITIES: CityData[] = [
 		lon: 151.2093,
 		radiusKm: 45,
 		type: CityType.Capital,
-		terrainPreset: "sydney",
-	}, // Old: Sydney
+		biome: { ...BIOME_PROCEDURAL, tempBias: 30, coast: 3 /* E */ },
+	}, // Old: Sydney — east-facing harbour
 	{
 		id: 22,
 		name: "Grimhollow",
@@ -256,8 +325,8 @@ export const CITIES: CityData[] = [
 		lon: 28.0473,
 		radiusKm: 45,
 		type: CityType.Resource,
-		terrainPreset: "johannesburg",
-	}, // Old: Johannesburg
+		biome: { ...BIOME_PROCEDURAL, waterLevelDelta: 90, tempBias: 30, moistureBias: -40 },
+	}, // Old: Johannesburg — dry highveld inland
 	{
 		id: 23,
 		name: "Seralune",
@@ -265,290 +334,6 @@ export const CITIES: CityData[] = [
 		lon: -43.1729,
 		radiusKm: 42,
 		type: CityType.Capital,
-		terrainPreset: "rio-de-janeiro",
-	}, // Old: Rio de Janeiro
-];
-
-/**
- * LEGACY placeholder cities — real-world names, kept for reference and any
- * tooling that still expects the old set. Do NOT use for new seeding.
- *
- * Note: the `type` values below were authored before the CityType enum was
- * corrected, so they now reflect each city's intended classification rather
- * than the (buggy) bytes that may have been written on-chain previously.
- */
-export const LEGACY_CITIES: CityData[] = [
-	// City 0: Default spawn city
-	{
-		id: 0,
-		name: "New York",
-		lat: 40.7128,
-		lon: -74.006,
-		radiusKm: 50,
-		type: CityType.Capital,
-	},
-
-	// North America
-	{
-		id: 1,
-		name: "Los Angeles",
-		lat: 34.0522,
-		lon: -118.2437,
-		radiusKm: 50,
-		type: CityType.Trade,
-	},
-	{
-		id: 2,
-		name: "Chicago",
-		lat: 41.8781,
-		lon: -87.6298,
-		radiusKm: 45,
-		type: CityType.Combat,
-	},
-	{
-		id: 3,
-		name: "Mexico City",
-		lat: 19.4326,
-		lon: -99.1332,
-		radiusKm: 55,
-		type: CityType.Capital,
-	},
-	{
-		id: 4,
-		name: "Miami",
-		lat: 25.7617,
-		lon: -80.1918,
-		radiusKm: 35,
-		type: CityType.Resource,
-	},
-	{
-		id: 5,
-		name: "Houston",
-		lat: 29.7604,
-		lon: -95.3698,
-		radiusKm: 45,
-		type: CityType.Resource,
-	},
-
-	// South America
-	{
-		id: 6,
-		name: "Buenos Aires",
-		lat: -34.6037,
-		lon: -58.3816,
-		radiusKm: 45,
-		type: CityType.Capital,
-	},
-	{
-		id: 7,
-		name: "Rio de Janeiro",
-		lat: -22.9068,
-		lon: -43.1729,
-		radiusKm: 40,
-		type: CityType.Combat,
-	},
-	{
-		id: 8,
-		name: "Bogotá",
-		lat: 4.711,
-		lon: -74.0721,
-		radiusKm: 40,
-		type: CityType.Resource,
-	},
-
-	// Europe
-	{
-		id: 9,
-		name: "Paris",
-		lat: 48.8566,
-		lon: 2.3522,
-		radiusKm: 45,
-		type: CityType.Capital,
-	},
-	{
-		id: 10,
-		name: "Berlin",
-		lat: 52.52,
-		lon: 13.405,
-		radiusKm: 40,
-		type: CityType.Combat,
-	},
-	{
-		id: 11,
-		name: "Rome",
-		lat: 41.9028,
-		lon: 12.4964,
-		radiusKm: 38,
-		type: CityType.Resource,
-	},
-	{
-		id: 12,
-		name: "Amsterdam",
-		lat: 52.3676,
-		lon: 4.9041,
-		radiusKm: 35,
-		type: CityType.Trade,
-	},
-	{
-		id: 13,
-		name: "Moscow",
-		lat: 55.7558,
-		lon: 37.6173,
-		radiusKm: 50,
-		type: CityType.Capital,
-	},
-	{
-		id: 14,
-		name: "Istanbul",
-		lat: 41.0082,
-		lon: 28.9784,
-		radiusKm: 45,
-		type: CityType.Trade,
-	},
-	{
-		id: 15,
-		name: "Athens",
-		lat: 37.9838,
-		lon: 23.7275,
-		radiusKm: 35,
-		type: CityType.Resource,
-	},
-
-	// Africa
-	{
-		id: 16,
-		name: "Cairo",
-		lat: 30.0444,
-		lon: 31.2357,
-		radiusKm: 50,
-		type: CityType.Capital,
-	},
-	{
-		id: 17,
-		name: "Lagos",
-		lat: 6.5244,
-		lon: 3.3792,
-		radiusKm: 45,
-		type: CityType.Trade,
-	},
-	{
-		id: 18,
-		name: "Johannesburg",
-		lat: -26.2041,
-		lon: 28.0473,
-		radiusKm: 45,
-		type: CityType.Combat,
-	},
-	{
-		id: 19,
-		name: "Nairobi",
-		lat: -1.2921,
-		lon: 36.8219,
-		radiusKm: 40,
-		type: CityType.Resource,
-	},
-	{
-		id: 20,
-		name: "Casablanca",
-		lat: 33.5731,
-		lon: -7.5898,
-		radiusKm: 38,
-		type: CityType.Trade,
-	},
-
-	// Middle East
-	{
-		id: 21,
-		name: "Dubai",
-		lat: 25.2048,
-		lon: 55.2708,
-		radiusKm: 45,
-		type: CityType.Trade,
-	},
-	{
-		id: 22,
-		name: "Jerusalem",
-		lat: 31.7683,
-		lon: 35.2137,
-		radiusKm: 35,
-		type: CityType.Combat,
-	},
-	{
-		id: 23,
-		name: "Riyadh",
-		lat: 24.7136,
-		lon: 46.6753,
-		radiusKm: 40,
-		type: CityType.Resource,
-	},
-
-	// Asia - East
-	{
-		id: 24,
-		name: "Tokyo",
-		lat: 35.6762,
-		lon: 139.6503,
-		radiusKm: 55,
-		type: CityType.Capital,
-	},
-	{
-		id: 25,
-		name: "Beijing",
-		lat: 39.9042,
-		lon: 116.4074,
-		radiusKm: 50,
-		type: CityType.Capital,
-	},
-	{
-		id: 26,
-		name: "Hong Kong",
-		lat: 22.3193,
-		lon: 114.1694,
-		radiusKm: 40,
-		type: CityType.Trade,
-	},
-
-	// Asia - South & Southeast
-	{
-		id: 27,
-		name: "Singapore",
-		lat: 1.3521,
-		lon: 103.8198,
-		radiusKm: 35,
-		type: CityType.Trade,
-	},
-	{
-		id: 28,
-		name: "Delhi",
-		lat: 28.7041,
-		lon: 77.1025,
-		radiusKm: 50,
-		type: CityType.Capital,
-	},
-	{
-		id: 29,
-		name: "Jakarta",
-		lat: -6.2088,
-		lon: 106.8456,
-		radiusKm: 50,
-		type: CityType.Resource,
-	},
-	{
-		id: 30,
-		name: "Manila",
-		lat: 14.5995,
-		lon: 120.9842,
-		radiusKm: 45,
-		type: CityType.Combat,
-	},
-
-	// Oceania
-	{
-		id: 31,
-		name: "Sydney",
-		lat: -33.8688,
-		lon: 151.2093,
-		radiusKm: 45,
-		type: CityType.Capital,
-	},
+		biome: { ...BIOME_PROCEDURAL, tempBias: 60, moistureBias: 40, coast: 3 /* E */ },
+	}, // Old: Rio de Janeiro — tropical coast, sea to the east
 ];

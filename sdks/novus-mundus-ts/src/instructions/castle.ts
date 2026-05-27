@@ -30,6 +30,7 @@ import {
   deriveHeroTemplatePda,
   deriveHeroCollectionPda,
   deriveKingRegistryPda,
+  deriveLocationPda,
   deriveTeamCastleRewardPda,
   deriveUserPda,
 } from '../pda';
@@ -51,9 +52,9 @@ export interface CreateCastleParams {
   castleId: number;
   /** Castle tier (determines multipliers and caps) */
   tier: number;
-  /** Latitude (i32 as number) */
+  /** Anchor latitude in grid units (×10,000) — corner of the footprint. */
   latitude: number;
-  /** Longitude (i32 as number) */
+  /** Anchor longitude in grid units (×10,000) — corner of the footprint. */
   longitude: number;
   /** Minimum player level required */
   minLevel: number;
@@ -63,51 +64,90 @@ export interface CreateCastleParams {
   minTroopsThousands: number;
   /** Castle name (max 32 chars) */
   name: string;
+  /**
+   * N for the N×N footprint. 1..=4 per chain validator. Castles
+   * occupy `footprintSize²` LocationAccounts; the builder derives
+   * each of them and passes them as the trailing accounts. Defaults
+   * to 2 (a 2×2 keep) when omitted.
+   */
+  footprintSize?: number;
 }
 
-/** ~20,000 CU */
+/** ~20,000 CU + ~4k CU per footprint cell (N² × 4k). */
 /**
  * Create a castle.
  *
- * Admin-only (DAO authority). Creates castle for a city.
+ * Admin-only (DAO authority). Creates a CastleAccount PLUS N²
+ * LocationAccounts — one per footprint cell — all atomically.
  *
- * Rust account order (5):
+ * Rust account order (6 fixed + N²):
  * 0. [signer] dao_authority: DAO authority wallet
  * 1. [writable] castle: Castle account PDA (to be created)
  * 2. [] game_engine: GameEngine PDA
- * 3. [] system_program: System program
- * 4. [] rent_sysvar: Rent sysvar
+ * 3. [] city: City account PDA (for biome_seed + width/height_grid)
+ * 4. [] system_program: System program
+ * 5. [] rent_sysvar: Rent sysvar
+ * 6+. [writable] N² Location PDAs row-major (idx = dlat*N + dlong)
  */
 export function createCreateCastleInstruction(
   accounts: CreateCastleAccounts,
   params: CreateCastleParams
 ): TransactionInstruction {
+  const n = params.footprintSize ?? 2;
+  if (!Number.isInteger(n) || n < 1 || n > 4) {
+    throw new Error(`footprintSize must be 1..=4 (got ${n})`);
+  }
+
   const [castle] = deriveCastlePda(accounts.gameEngine, params.cityId, params.castleId);
+  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+
+  // Anchor is already in grid units (×10,000) — matches the chain.
+  const anchorGridLat = params.latitude;
+  const anchorGridLong = params.longitude;
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
     { pubkey: castle, isSigner: false, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: city, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: new PublicKey('SysvarRent111111111111111111111111111111111'), isSigner: false, isWritable: false },
   ];
 
-  // Instruction data per Rust:
-  // - city_id: u16 (bytes 2-3, after 2-byte discriminator)
-  // - castle_id: u16 (bytes 4-5)
-  // - tier: u8 (byte 6)
-  // - latitude: i32 (bytes 7-10)
-  // - longitude: i32 (bytes 11-14)
-  // - min_level: u8 (byte 15)
-  // - min_networth_millions: u8 (byte 16)
-  // - min_troops_thousands: u8 (byte 17)
-  // - name_len: u8 (byte 18)
-  // - name: [u8; 32] (bytes 19-50)
+  // Derive each footprint Location PDA — row-major to match the chain
+  // `for dlat in 0..N { for dlong in 0..N { idx = dlat*N + dlong } }`
+  // loop in processor/castle/create_castle.rs.
+  for (let dlat = 0; dlat < n; dlat++) {
+    for (let dlong = 0; dlong < n; dlong++) {
+      const cellGridLat = anchorGridLat + dlat;
+      const cellGridLong = anchorGridLong + dlong;
+      const [locPda] = deriveLocationPda(
+        accounts.gameEngine,
+        params.cityId,
+        cellGridLat,
+        cellGridLong,
+      );
+      keys.push({ pubkey: locPda, isSigner: false, isWritable: true });
+    }
+  }
+
+  // Instruction data — 50 bytes (49 pre-cut + 1 footprint_size):
+  //   [0..2]  city_id u16
+  //   [2..4]  castle_id u16
+  //   [4]     tier u8
+  //   [5..9]  latitude i32 (microdegrees, anchor corner)
+  //   [9..13] longitude i32 (microdegrees, anchor corner)
+  //   [13]    min_level u8
+  //   [14]    min_networth_millions u8
+  //   [15]    min_troops_thousands u8
+  //   [16]    name_len u8
+  //   [17..49] name [u8; 32]
+  //   [49]    footprint_size u8
   const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
   const namePadded = Buffer.alloc(32);
   nameBytes.copy(namePadded);
 
-  const writer = new BufferWriter(17 + 32);
+  const writer = new BufferWriter(17 + 32 + 1);
   writer.writeU16(params.cityId);
   writer.writeU16(params.castleId);
   writer.writeU8(params.tier);
@@ -118,6 +158,7 @@ export function createCreateCastleInstruction(
   writer.writeU8(params.minTroopsThousands);
   writer.writeU8(nameBytes.length);
   writer.writeBytes(namePadded);
+  writer.writeU8(n);
 
   const data = createInstructionData(DISCRIMINATORS.CASTLE_CREATE, writer.toBuffer());
 

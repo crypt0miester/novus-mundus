@@ -2,22 +2,18 @@
  * CityAccount
  *
  * Fixed city locations where players gather and travel between.
- * repr(C) layout with terrain extension. Total fixed size: 152 bytes
- * (plus anchor_count * 8 bytes of trailing anchor data).
+ * repr(C) layout, fixed 152 bytes — no trailing variable-length data
+ * after the flat-strategy cut (biome is a pure function of biomeSeed
+ * sampled at the point of use; see calculators/biome.ts).
  */
 
 import type { AccountInfo, PublicKey } from '@solana/web3.js';
 import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { CityType } from '../types/enums';
-import {
-  type Anchor,
-  type CityTerrain,
-  TERRAIN_HEADER_SIZE,
-  ANCHOR_SIZE,
-} from '../calculators/terrain';
+import type { BiomeKnobs } from '../calculators/biome';
 
-// City Account Interface
+// City Account Interface.
 
 export interface CityAccount {
   /** Game engine pubkey (kingdom reference) */
@@ -30,8 +26,6 @@ export interface CityAccount {
   latitude: number;
   /** Geographic center point (longitude in degrees) */
   longitude: number;
-  /** City radius in kilometers for boundary validation */
-  radiusKm: number;
   /** Type of city (Capital, Resource, Combat, Trade) */
   cityType: CityType;
   /** Current number of players present in this city */
@@ -50,26 +44,36 @@ export interface CityAccount {
   bump: number;
   /** Current arena season ID for this city */
   arenaSeasonId: number;
-
-  // ─── Terrain ───────────────────────────────────────────────
-  /** Deterministic seed for terrain noise */
-  terrainSeed: number;
-  /** Elevation at or below this is water (impassable) */
-  waterLine: number;
-  /** Elevation at or above this is mountain (impassable) */
-  peakLine: number;
-  /** Number of terrain anchors */
-  anchorCount: number;
-  /** Terrain data format version */
-  terrainVersion: number;
-  /** Parsed terrain anchors (from trailing account data) */
-  anchors: Anchor[];
+  /** Deterministic seed for biome noise channels */
+  biomeSeed: number;
+  /** Square plot X extent in grid units (centred AABB) */
+  widthGrid: number;
+  /** Square plot Y extent in grid units (centred AABB) */
+  heightGrid: number;
+  /** Layout discriminator — bumped to 2 at the flat-strategy cut. */
+  layoutVersion: number;
+  /** Signed delta added to the global WATER_THRESHOLD. 0 = procedural default. */
+  waterLevelDelta: number;
+  /** Signed shift on temperature noise. 0 = procedural default. */
+  tempBias: number;
+  /** Signed shift on moisture noise. 0 = procedural default. */
+  moistureBias: number;
+  /** Coastal-gradient bearing. 0 = none; 1..=8 = N/NE/E/SE/S/SW/W/NW. */
+  coast: number;
+  /** Landmass mask seed. 0 = no mask; >0 carves organic islands. */
+  landmassSeed: number;
 }
 
-/** CityAccount fixed size in bytes (repr(C) layout, excluding trailing anchors) */
-export const CITY_ACCOUNT_SIZE = 152;
+/** CityAccount fixed size in bytes (repr(C) layout, no trailing data). */
+export const CITY_ACCOUNT_SIZE = 144;
 
-// Deserialization
+/** Current on-chain layout version. Bumped at the flat-strategy cut so
+ * pre-cut variable-length accounts (which had radius_km + terrain
+ * anchors and lacked this field) are rejected at parse time rather
+ * than silently misparsed against the new offsets. */
+export const CITY_LAYOUT_VERSION = 2;
+
+// Deserialization.
 
 /**
  * Deserialize CityAccount from raw account bytes.
@@ -79,52 +83,50 @@ export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
   const reader = new BufferReader(data);
 
   // repr(C) layout — see programs/novus_mundus/src/state/city.rs
-  reader.readU8();                                     // offset 0   (account_key discriminator)
-  const gameEngine = reader.readPubkey();              // offset 1   (32 bytes)
-  reader.skip(1);                                      // offset 33  (implicit padding for u16 align)
-  const cityId = reader.readU16();                     // offset 34  (2 bytes)
-  const nameBytes = reader.readBytes(32);              // offset 36  (32 bytes)
+  reader.readU8();                                     // offset 0   account_key
+  const gameEngine = reader.readPubkey();              // offset 1   32 bytes
+  reader.skip(1);                                      // offset 33  padding for u16 align
+  const cityId = reader.readU16();                     // offset 34  2 bytes
+  const nameBytes = reader.readBytes(32);              // offset 36  32 bytes
   const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
-  reader.skip(4);                                      // offset 68  (padding for f64 align, reduced from 6)
-  const latitude = reader.readF64();                  // offset 72  (8 bytes)
-  const longitude = reader.readF64();                 // offset 80  (8 bytes)
-  const radiusKm = reader.readF32();                  // offset 88  (4 bytes)
-  const cityTypeValue = reader.readU8();              // offset 92  (1 byte)
+  reader.skip(4);                                      // offset 68  padding for f64 align
+  const latitude = reader.readF64();                   // offset 72  8 bytes
+  const longitude = reader.readF64();                  // offset 80  8 bytes
+  const cityTypeValue = reader.readU8();               // offset 88  1 byte
   const cityType = cityTypeValue as CityType;
-  reader.skip(3);                                     // offset 93  (padding for u32 align)
-  const playersPresent = reader.readU32();            // offset 96  (4 bytes)
-  reader.skip(4);                                     // offset 100 (padding for u64 align)
-  const activeEncounters = reader.readU64();          // offset 104 (8 bytes)
-  const totalEncountersSpawned = reader.readU64();    // offset 112 (8 bytes)
-  const foundedAt = reader.readI64();                 // offset 120 (8 bytes)
-  const minEncounterLevel = reader.readU8();          // offset 128 (1 byte)
-  const maxEncounterLevel = reader.readU8();          // offset 129 (1 byte)
-  const bump = reader.readU8();                       // offset 130 (1 byte)
-  reader.skip(1);                                     // offset 131 (_padding1)
-  const arenaSeasonId = reader.readU32();             // offset 132 (4 bytes)
-
-  // ─── Terrain header ────────────────────────────────────────
-  const terrainSeed = reader.readU32();               // offset 136 (4 bytes)
-  const waterLine = reader.readU8();                  // offset 140 (1 byte)
-  const peakLine = reader.readU8();                   // offset 141 (1 byte)
-  const anchorCount = reader.readU16();               // offset 142 (2 bytes)
-  const terrainVersion = reader.readU8();             // offset 144 (1 byte)
-  reader.skip(7);                                     // offset 145 (_terrain_reserved)
-  // now at offset 152
-
-  // ─── Trailing anchor data ──────────────────────────────────
-  const anchors: Anchor[] = [];
-  for (let i = 0; i < anchorCount; i++) {
-    anchors.push({
-      x: reader.readI16(),
-      y: reader.readI16(),
-      mass: reader.readU8(),
-      lift: reader.readU8(),
-      pushX: reader.readI8(),
-      pushY: reader.readI8(),
-      moisture: reader.readU8(),
-    });
+  reader.skip(3);                                      // offset 89  padding for u32 align
+  const playersPresent = reader.readU32();             // offset 92  4 bytes
+  // No padding here — players_present ends at 96 which is u64-aligned.
+  // (Pre-cut layout had radius_km: f32 between longitude and city_type,
+  // which shifted everything below by 8 bytes and forced a 4-byte pad
+  // here for u64 align. Post-flat-strategy the pad collapses.)
+  const activeEncounters = reader.readU64();           // offset 96  8 bytes
+  const totalEncountersSpawned = reader.readU64();     // offset 104 8 bytes
+  const foundedAt = reader.readI64();                  // offset 112 8 bytes
+  const minEncounterLevel = reader.readU8();           // offset 120 1 byte
+  const maxEncounterLevel = reader.readU8();           // offset 121 1 byte
+  const bump = reader.readU8();                        // offset 122 1 byte
+  reader.skip(1);                                      // offset 123 _padding1
+  const arenaSeasonId = reader.readU32();              // offset 124 4 bytes
+  // Biome layout fields (replaces pre-cut terrain block + radiusKm).
+  const biomeSeed = reader.readU32();                  // offset 128 4 bytes
+  const widthGrid = reader.readU16();                  // offset 132 2 bytes
+  const heightGrid = reader.readU16();                 // offset 134 2 bytes
+  const layoutVersion = reader.readU8();               // offset 136 1 byte
+  if (layoutVersion !== CITY_LAYOUT_VERSION) {
+    throw new Error(
+      `CityAccount layout_version mismatch: expected ${CITY_LAYOUT_VERSION}, got ${layoutVersion}. ` +
+        `Pre-cut accounts (without biome layout) must be reinitialised after the flat-strategy cut.`,
+    );
   }
+  // Biome knob bytes — see logic/biome.rs::BiomeKnobs.
+  const waterLevelDelta = reader.readI8();             // offset 137 1 byte
+  const tempBias = reader.readI8();                    // offset 138 1 byte
+  const moistureBias = reader.readI8();                // offset 139 1 byte
+  const coast = reader.readU8();                       // offset 140 1 byte
+  const landmassSeed = reader.readU8();                // offset 141 1 byte
+  reader.skip(2);                                      // offset 142 _biome_reserved (2 bytes)
+  // now at offset 144 (matches CITY_ACCOUNT_SIZE)
 
   return {
     gameEngine,
@@ -132,7 +134,6 @@ export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
     name,
     latitude,
     longitude,
-    radiusKm,
     cityType,
     playersPresent,
     activeEncounters,
@@ -142,31 +143,35 @@ export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
     maxEncounterLevel,
     bump,
     arenaSeasonId,
-    terrainSeed,
-    waterLine,
-    peakLine,
-    anchorCount,
-    terrainVersion,
-    anchors,
+    biomeSeed,
+    widthGrid,
+    heightGrid,
+    layoutVersion,
+    waterLevelDelta,
+    tempBias,
+    moistureBias,
+    coast,
+    landmassSeed,
   };
 }
 
-/** Build a CityTerrain view from a deserialized CityAccount */
-export function cityTerrain(city: CityAccount): CityTerrain {
-  return {
-    seed: city.terrainSeed,
-    waterLine: city.waterLine,
-    peakLine: city.peakLine,
-    anchorCount: city.anchorCount,
-    version: city.terrainVersion,
-    anchors: city.anchors,
-  };
-}
-
-/** Parse CityAccount from account info */
+/** Parse CityAccount from account info. */
 export function parseCity(accountInfo: AccountInfo<Buffer>): CityAccount | null {
   if (!accountInfo.data || accountInfo.data.length < CITY_ACCOUNT_SIZE) {
     return null;
   }
   return deserializeCity(accountInfo.data);
+}
+
+/** Project a CityAccount onto the BiomeKnobs tuple consumed by the
+ * biome sampler. Single source of truth so every caller (web, CLI,
+ * tests) reads the same knobs from the same fields. */
+export function biomeKnobsFromCity(city: CityAccount): BiomeKnobs {
+  return {
+    waterLevelDelta: city.waterLevelDelta,
+    tempBias: city.tempBias,
+    moistureBias: city.moistureBias,
+    coast: city.coast,
+    landmassSeed: city.landmassSeed,
+  };
 }

@@ -1,4 +1,3 @@
-pub mod append_terrain;
 pub mod batch_cities;
 pub mod city;
 pub mod close_registration;
@@ -8,6 +7,5 @@ pub mod close_registration;
 /// Should only be called once per entity.
 pub mod game_engine;
 pub mod player;
-pub mod set_terrain;
 pub mod update_game_config;
 pub mod user;

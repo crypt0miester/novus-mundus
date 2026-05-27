@@ -1,7 +1,14 @@
 use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 
 use crate::constants::CITY_SEED;
-use crate::logic::terrain::{self, Anchor, CityTerrain};
+use crate::error::GameError;
+use crate::logic::{biome, terrain};
+use crate::state::AccountKey;
+
+/// Current on-chain layout version. Bumped at the flat-strategy cut so
+/// pre-cut variable-length accounts are rejected at load time rather
+/// than silently misparsed when the program is upgraded in place.
+pub const CITY_LAYOUT_VERSION: u8 = 2;
 
 /// Fixed city locations where players gather and travel between
 ///
@@ -36,10 +43,6 @@ pub struct CityAccount {
     /// Range: -180.0 to 180.0
     pub longitude: f64, // 8 bytes
 
-    /// City radius in kilometers for boundary validation
-    /// Players claiming to be in this city must have coordinates within this radius
-    pub radius_km: f32, // 4 bytes
-
     /// Type of city (Capital, Resource, Combat, etc.)
     /// Affects available bonuses and modifiers
     pub city_type: u8, // 1 byte
@@ -72,26 +75,56 @@ pub struct CityAccount {
     /// Seasons 4+ behind this can be auto-finalized
     pub arena_season_id: u32, // 4 bytes
 
-    // ─── Terrain System ──────────────────────────────────────────
-    // Variable-length anchor data follows the fixed struct in account data.
-    // Total account size = CityAccount::SIZE + anchor_count * ANCHOR_SIZE
-    /// Deterministic seed for terrain noise
-    pub terrain_seed: u32, // 4 bytes
+    // Biome layout.
+    // No trailing variable-length data — the city's biome is a pure
+    // function of (biome_seed, ox, oy, knobs) sampled at the point of
+    // use (see logic::biome::biome_at). One compile-time-constant size
+    // for the whole account.
+    /// Deterministic seed for the biome noise channels.
+    pub biome_seed: u32, // 4 bytes
 
-    /// Elevation at or below this value is water (impassable)
-    pub water_line: u8, // 1 byte
+    /// Square plot extent on the X (longitude) axis, in grid units
+    /// (0.0001° each — ~11 m). Bounds checks use a centred AABB:
+    /// `|ox| <= width_grid / 2`.
+    pub width_grid: u16, // 2 bytes
 
-    /// Elevation at or above this value is mountain (impassable)
-    pub peak_line: u8, // 1 byte
+    /// Square plot extent on the Y (latitude) axis, in grid units.
+    pub height_grid: u16, // 2 bytes
 
-    /// Number of terrain anchors stored after the fixed struct
-    pub anchor_count: u16, // 2 bytes
+    /// Layout discriminator — bumped to 2 at the flat-strategy cut so
+    /// pre-cut accounts (which lacked this field, were variable-length,
+    /// and carried `radius_km` + terrain anchors) can be rejected at
+    /// load time rather than silently misparsed. Always 2 for fresh
+    /// post-cut inits. Adding the BiomeKnobs fields below did NOT bump
+    /// this — the bytes were already zero-initialized in v2 inits and
+    /// zero defaults match the pre-knobs procedural behaviour
+    /// bit-for-bit, so pre-knobs v2 accounts read as procedural.
+    pub layout_version: u8, // 1 byte
 
-    /// Terrain data format version (currently 1)
-    pub terrain_version: u8, // 1 byte
+    // Biome knobs — five bytes that bias the procedural sampler per
+    // city. All-zero = procedural identical to pre-knobs behaviour.
+    // See `logic::biome::BiomeKnobs` for the semantics.
+    /// Signed delta added to the global WATER_THRESHOLD (96). +127 =
+    /// no water at all (Cairo / Moscow); -96 = all water.
+    pub water_level_delta: i8, // 1 byte
+    /// Signed shift on the temperature noise channel. Positive = hotter
+    /// Whittaker bucket; negative = colder.
+    pub temp_bias: i8, // 1 byte
+    /// Signed shift on the moisture noise channel. Positive = wetter;
+    /// negative = drier.
+    pub moisture_bias: i8, // 1 byte
+    /// Coastal gradient bearing. 0 = none; 1..=8 = direction the sea
+    /// lies in (N/NE/E/SE/S/SW/W/NW). Produces an irregular natural
+    /// coastline along the bearing.
+    pub coast: u8, // 1 byte
+    /// Landmass mask seed. 0 = no mask; >0 carves organic island /
+    /// archipelago shapes via a coarse second noise channel. The right
+    /// answer for Tokyo Bay, Stockholm, Singapore (an island is not
+    /// always a radius).
+    pub landmass_seed: u8, // 1 byte
 
-    /// Reserved for future terrain features
-    pub _terrain_reserved: [u8; 7], // 7 bytes
+    /// Reserved for future biome / world-shape knobs.
+    pub _biome_reserved: [u8; 2], // 2 bytes
 }
 
 /// Compile-time assertion: ensure SIZE matches actual struct layout
@@ -102,7 +135,18 @@ impl CityAccount {
     /// With #[repr(C)] alignment, the compiler may insert padding.
     pub const SIZE: usize = core::mem::size_of::<CityAccount>();
 
-    /// Load city account with read-only access
+    /// Load city account with read-only access.
+    ///
+    /// Enforces — when the account is already initialized (byte 0 != 0)
+    /// — that the discriminator matches AccountKey::City and that
+    /// layout_version == CITY_LAYOUT_VERSION. Fresh accounts (byte 0
+    /// == 0) bypass these checks so the init flow can write the
+    /// discriminator and version after the first load_mut.
+    ///
+    /// Callers that read a city from an attacker-controlled context
+    /// (combat, travel, encounter spawn, etc.) MUST also call
+    /// `require_owner(account, program_id)` separately — load does not
+    /// know the program_id.
     ///
     /// # Safety
     /// Caller must ensure the account data is properly initialized as a CityAccount
@@ -110,10 +154,19 @@ impl CityAccount {
         if account.data_len() < Self::SIZE {
             return Err(ProgramError::AccountDataTooSmall);
         }
-        Ok(&*(account.data_ptr() as *const CityAccount))
+        let first_byte = *account.data_ptr();
+        if first_byte != 0 && first_byte != AccountKey::City as u8 {
+            return Err(GameError::InvalidAccountKey.into());
+        }
+        let cast: &CityAccount = &*(account.data_ptr() as *const CityAccount);
+        if first_byte != 0 && cast.layout_version != CITY_LAYOUT_VERSION {
+            return Err(GameError::InvalidAccountKey.into());
+        }
+        Ok(cast)
     }
 
-    /// Load city account with mutable access
+    /// Load city account with mutable access. Same invariants as
+    /// [`CityAccount::load`].
     ///
     /// # Safety
     /// Caller must ensure the account data is properly initialized as a CityAccount
@@ -121,7 +174,15 @@ impl CityAccount {
         if account.data_len() < Self::SIZE {
             return Err(ProgramError::AccountDataTooSmall);
         }
-        Ok(&mut *(account.data_ptr() as *mut CityAccount))
+        let first_byte = *account.data_ptr();
+        if first_byte != 0 && first_byte != AccountKey::City as u8 {
+            return Err(GameError::InvalidAccountKey.into());
+        }
+        let cast: &mut CityAccount = &mut *(account.data_ptr() as *mut CityAccount);
+        if first_byte != 0 && cast.layout_version != CITY_LAYOUT_VERSION {
+            return Err(GameError::InvalidAccountKey.into());
+        }
+        Ok(cast)
     }
 
     /// Derive the PDA for a city account (finds bump - slower)
@@ -185,132 +246,139 @@ impl CityAccount {
         self.active_encounters < self.calculate_max_encounters(base, per_player_count, max)
     }
 
-    // ─── Terrain Helpers ─────────────────────────────────────────
+    // Biome helpers.
 
-    /// Total account size for a city with N anchors.
-    pub fn account_size(anchor_count: u16) -> usize {
-        Self::SIZE + anchor_count as usize * terrain::ANCHOR_SIZE
-    }
-
-    /// Borrow the city's terrain and run a callback against it.
-    ///
-    /// `Anchor` is `#[repr(C)]` with 9 bytes of fields and a hidden 1-byte
-    /// trailing pad — so `size_of::<Anchor>() == 10`. The on-chain layout
-    /// writes anchors at `ANCHOR_SIZE == 9` byte stride (no pad). Indexing a
-    /// `&[Anchor]` built via `from_raw_parts` therefore reads past valid
-    /// memory after the first few anchors, and the BPF runtime aborts with
-    /// the misleading `InvalidRealloc` error. This helper deserializes each
-    /// anchor by-byte into a stack buffer so the resulting slice is properly
-    /// laid out for Rust's indexing.
-    /*
-     * `#[inline(never)]` keeps the 1000-byte `[Anchor; 100]` stack buffer in
-     * `with_terrain`'s own frame instead of having LLVM splat it into every
-     * caller's frame on monomorphization. Six processors (init_player,
-     * encounter::spawn, intracity_start, intercity_start, intercity_teleport,
-     * collect_resources, attack_player) call this on hot paths; without the
-     * hint a future stack-heavy edit in any of them silently regresses to
-     * the same `InvalidRealloc` runtime fault this helper exists to fix.
-     */
-    #[inline(never)]
-    pub fn with_terrain<R>(
-        &self,
-        account: &AccountView,
-        f: impl FnOnce(&CityTerrain) -> R,
-    ) -> Result<R, ProgramError> {
-        const MAX_ANCHORS: usize = 100;
-        let count = self.anchor_count as usize;
-        if count > MAX_ANCHORS {
-            return Err(ProgramError::InvalidAccountData);
-        }
-
-        let data = account.try_borrow()?;
-        let trailer_size = count
-            .checked_mul(terrain::ANCHOR_SIZE)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
-        let required_size = Self::SIZE
-            .checked_add(trailer_size)
-            .ok_or(ProgramError::ArithmeticOverflow)?;
-        if data.len() < required_size {
-            return Err(ProgramError::AccountDataTooSmall);
-        }
-
-        let mut anchors_buf: [Anchor; MAX_ANCHORS] = [Anchor {
-            x: 0,
-            y: 0,
-            mass: 0,
-            lift: 0,
-            push_x: 0,
-            push_y: 0,
-            moisture: 0,
-        }; MAX_ANCHORS];
-        for i in 0..count {
-            let off = Self::SIZE
-                + i.checked_mul(terrain::ANCHOR_SIZE)
-                    .ok_or(ProgramError::ArithmeticOverflow)?;
-            anchors_buf[i] = Anchor {
-                x: i16::from_le_bytes([data[off], data[off + 1]]),
-                y: i16::from_le_bytes([data[off + 2], data[off + 3]]),
-                mass: data[off + 4],
-                lift: data[off + 5],
-                push_x: data[off + 6] as i8,
-                push_y: data[off + 7] as i8,
-                moisture: data[off + 8],
-            };
-        }
-
-        let terrain = CityTerrain {
-            seed: self.terrain_seed,
-            water_line: self.water_line,
-            peak_line: self.peak_line,
-            anchors: &anchors_buf[..count],
-        };
-        Ok(f(&terrain))
-    }
-
-    /// Check if a coordinate offset from city center is passable terrain.
-    /// Returns `Ok(true)` if no terrain is configured (anchor_count == 0).
-    pub fn is_terrain_passable(
-        &self,
-        account: &AccountView,
-        ox: i32,
-        oy: i32,
-    ) -> Result<bool, ProgramError> {
-        if self.anchor_count == 0 {
-            return Ok(true);
-        }
-        self.with_terrain(account, |t| terrain::is_passable(t, ox, oy))
-    }
-
-    /// Quantize a (lat, long) to the grid, compute its offset from the city
-    /// centre, and reject if the resulting cell isn't passable. The five
-    /// processors that gate movement on terrain (init_player, encounter
-    /// spawn, intracity/intercity start, intercity teleport) all share this
-    /// preamble — call this helper instead of inlining it.
-    pub fn require_passable_at(
-        &self,
-        account: &AccountView,
-        lat: f64,
-        long: f64,
-    ) -> Result<(), ProgramError> {
-        let (ox, oy) = terrain::city_offset(
+    /// Compute centre-relative grid offsets for a (lat, long) inside
+    /// this city. Pure helper around `terrain::city_offset` plus the
+    /// existing `LocationAccount::to_grid` quantization.
+    #[inline]
+    pub fn offset_for(&self, lat: f64, long: f64) -> (i32, i32) {
+        terrain::city_offset(
             super::LocationAccount::to_grid(lat),
             super::LocationAccount::to_grid(long),
             self.latitude,
             self.longitude,
-        );
-        if !self.is_terrain_passable(account, ox, oy)? {
+        )
+    }
+
+    /// Build the per-city biome knob tuple consumed by the sampler.
+    /// Pure projection of the five knob bytes onto the
+    /// `logic::biome::BiomeKnobs` struct — see that module for the
+    /// semantic meaning of each field.
+    #[inline]
+    pub fn biome_knobs(&self) -> biome::BiomeKnobs {
+        biome::BiomeKnobs {
+            water_level_delta: self.water_level_delta,
+            temp_bias: self.temp_bias,
+            moisture_bias: self.moisture_bias,
+            coast: self.coast,
+            landmass_seed: self.landmass_seed,
+        }
+    }
+
+    /// Sample the biome at a coordinate inside this city.
+    #[inline]
+    pub fn biome_at(&self, lat: f64, long: f64) -> u8 {
+        let (ox, oy) = self.offset_for(lat, long);
+        biome::biome_at(self.biome_seed, ox, oy, &self.biome_knobs())
+    }
+
+    /// Sample the biome at a centre-relative `(ox, oy)` offset. Useful
+    /// for callers that already computed the offset (e.g. the castle
+    /// footprint loop iterating over `(dlat, dlong)`).
+    #[inline]
+    pub fn biome_at_offset(&self, ox: i32, oy: i32) -> u8 {
+        biome::biome_at(self.biome_seed, ox, oy, &self.biome_knobs())
+    }
+
+    /// Reject if the cell at `(lat, long)` lands on an impassable
+    /// biome (water). Replaces the elevation-noise gate that used to
+    /// reject water + peaks; under flat-strategy water is the only
+    /// impassable biome, shore is walkable by design. The five
+    /// processors that gate movement on terrain (init_player,
+    /// encounter spawn, intracity/intercity start, intercity teleport)
+    /// share this preamble — call this helper instead of inlining it.
+    ///
+    /// AccountView is no longer needed (no trailing anchor data to
+    /// borrow), but the signature keeps a leading `_account` param
+    /// commented in the call sites so the migration diff stays small;
+    /// the parameter itself is gone.
+    pub fn require_passable_at(&self, lat: f64, long: f64) -> ProgramResult {
+        if !biome::is_passable_biome(self.biome_at(lat, long)) {
             return Err(crate::error::GameError::TerrainImpassable.into());
         }
         Ok(())
     }
-}
 
-// Document the on-chain ↔ in-memory size mismatch the `with_terrain` helper
-// has to work around. If a future struct edit changes either constant the
-// build will break here, forcing the author to revisit the per-byte
-// deserialization in `with_terrain` (and the SDK side).
-const _: () = assert!(core::mem::size_of::<Anchor>() == 10);
-const _: () = assert!(terrain::ANCHOR_SIZE == 9);
+    /// AABB bounds check for a (lat, long) inside this city's square
+    /// plot. Replaces the Haversine `is_within_city_bounds(radius_km)`
+    /// check — one comparison per axis, no sqrt, no cos.
+    #[inline]
+    pub fn contains_coord(&self, lat: f64, long: f64) -> bool {
+        let (ox, oy) = self.offset_for(lat, long);
+        crate::logic::location::is_within_city_grid(ox, oy, self.width_grid, self.height_grid)
+    }
+
+    /// Search outward in expanding square rings from the city centre
+    /// for the nearest passable cell, up to `max_radius` rings (i.e.
+    /// at most `(2 * max_radius + 1)²` samples in the worst case).
+    /// Returns `(ox, oy)` in grid offsets relative to the city centre.
+    ///
+    /// Biome is a pure noise function post-flat-strategy — the centre
+    /// cell `(0, 0)` is not guaranteed to be land. Callers that need a
+    /// deterministic landing cell at city centre (e.g. intercity
+    /// teleport) use this helper to snap to the nearest passable
+    /// neighbour instead of failing the whole instruction.
+    ///
+    /// Returns `None` if no passable cell exists within `max_radius` —
+    /// the caller decides whether that's an error or a soft fallback.
+    pub fn find_passable_near_center(&self, max_radius: i32) -> Option<(i32, i32)> {
+        let knobs = self.biome_knobs();
+        if biome::is_passable_biome(biome::biome_at(self.biome_seed, 0, 0, &knobs)) {
+            return Some((0, 0));
+        }
+        for ring in 1..=max_radius {
+            // Walk the ring's perimeter: top & bottom rows (inclusive
+            // of corners), then left & right columns (excluding the
+            // corners already covered). First passable cell wins.
+            for dx in -ring..=ring {
+                for dy in [-ring, ring] {
+                    if crate::logic::location::is_within_city_grid(
+                        dx,
+                        dy,
+                        self.width_grid,
+                        self.height_grid,
+                    ) && biome::is_passable_biome(biome::biome_at(
+                        self.biome_seed,
+                        dx,
+                        dy,
+                        &knobs,
+                    )) {
+                        return Some((dx, dy));
+                    }
+                }
+            }
+            for dy in (-ring + 1)..ring {
+                for dx in [-ring, ring] {
+                    if crate::logic::location::is_within_city_grid(
+                        dx,
+                        dy,
+                        self.width_grid,
+                        self.height_grid,
+                    ) && biome::is_passable_biome(biome::biome_at(
+                        self.biome_seed,
+                        dx,
+                        dy,
+                        &knobs,
+                    )) {
+                        return Some((dx, dy));
+                    }
+                }
+            }
+        }
+        None
+    }
+}
 
 /// City type classification
 #[repr(u8)]

@@ -15,7 +15,8 @@ import { initHeroes } from "../phases/heroes";
 import { initResearch } from "../phases/research";
 import { initShop } from "../phases/shop";
 import { initSubscriptions } from "../phases/subscriptions";
-import { initTerrain } from "../phases/terrain";
+// Terrain phase retired with the flat-strategy cut — biome is sampled
+// from the city's biomeSeed at the point of use, no anchor write step.
 
 interface Phase {
 	name: string;
@@ -26,10 +27,6 @@ interface Phase {
 const PHASES: Phase[] = [
 	{ name: "Engine", key: "engine", fn: initEngine },
 	{ name: "Cities", key: "cities", fn: initCities },
-	// Terrain runs right after Cities — it depends on city PDAs existing, and
-	// anything downstream that uses passability (encounter spawn, travel land
-	// checks) breaks until anchors are set.
-	{ name: "Terrain", key: "terrain", fn: initTerrain },
 	{ name: "Heroes", key: "heroes", fn: initHeroes },
 	{ name: "Research", key: "research", fn: initResearch },
 	{ name: "Buildings", key: "buildings", fn: initBuildings },

@@ -107,34 +107,56 @@ pub fn is_valid_longitude(longitude: f64) -> bool {
     longitude >= -180.0 && longitude <= 180.0
 }
 
-/// Check if coordinates are within city bounds
+/// AABB bounds check on a centred square plot.
 ///
-/// # Arguments
-/// * `lat` - Player's latitude
-/// * `long` - Player's longitude
-/// * `city_lat` - City center latitude
-/// * `city_long` - City center longitude
-/// * `city_radius_km` - City radius in kilometers
-///
-/// # Returns
-/// `true` if coordinates are within the city's circular boundary
+/// `ox` / `oy` are grid offsets from the city centre (the same shape
+/// `terrain::city_offset` returns). `width_grid` / `height_grid` are
+/// the city's square dimensions in grid units. Replaces the circular
+/// `is_within_city_bounds` after the flat-strategy cut — one
+/// comparison per axis, no sqrt, no cos. The Haversine helpers above
+/// keep their callers (intercity / intracity travel-time math).
 ///
 /// # Examples
 /// ```ignore
-/// // Player at NYC coordinates, NYC city center
-/// is_within_city_bounds(40.7128, -74.0060, 40.7128, -74.0060, 50.0)  // true (at center)
-/// is_within_city_bounds(40.7128, -74.0060, 40.7128, -74.0060, 0.1)   // true (within 100m)
-/// is_within_city_bounds(51.5074, -0.1278, 40.7128, -74.0060, 50.0)   // false (London coords, NYC city)
+/// is_within_city_grid(0, 0, 200, 200)      // true (centre)
+/// is_within_city_grid(100, 100, 200, 200)  // true (corner, inclusive)
+/// is_within_city_grid(101, 0, 200, 200)    // false (just past east edge)
 /// ```
-pub fn is_within_city_bounds(
-    lat: f64,
-    long: f64,
-    city_lat: f64,
-    city_long: f64,
-    city_radius_km: f32,
+#[inline]
+pub fn is_within_city_grid(ox: i32, oy: i32, width_grid: u16, height_grid: u16) -> bool {
+    // unsigned_abs avoids the i32::MIN.abs() wrap-to-i32::MIN footgun:
+    // under release overflow-checks=off, the signed abs of i32::MIN
+    // returns i32::MIN (still negative) and slips through the bounds
+    // comparison as 'in range'. half_w/half_h are non-negative so a u32
+    // compare is the correct domain.
+    let half_w = (width_grid as u32) / 2;
+    let half_h = (height_grid as u32) / 2;
+    ox.unsigned_abs() <= half_w && oy.unsigned_abs() <= half_h
+}
+
+/// AABB containment check for a multi-cell castle footprint anchored at
+/// `(anchor_ox, anchor_oy)` (centre-relative grid offsets). The N×N
+/// footprint extends to `(anchor_ox + N - 1, anchor_oy + N - 1)`; every
+/// cell must sit inside the city's plot.
+///
+/// `footprint_size == 0` rejects (defensive — a zero-cell castle is
+/// nonsensical and would always pass a naive check).
+#[inline]
+pub fn castle_fits_in_city_grid(
+    anchor_ox: i32,
+    anchor_oy: i32,
+    footprint_size: u8,
+    width_grid: u16,
+    height_grid: u16,
 ) -> bool {
-    let distance = calculate_distance(lat, long, city_lat, city_long);
-    distance <= city_radius_km as f64
+    if footprint_size == 0 {
+        return false;
+    }
+    let span = (footprint_size as i32).saturating_sub(1);
+    let last_ox = anchor_ox.saturating_add(span);
+    let last_oy = anchor_oy.saturating_add(span);
+    is_within_city_grid(anchor_ox, anchor_oy, width_grid, height_grid)
+        && is_within_city_grid(last_ox, last_oy, width_grid, height_grid)
 }
 
 /// Calculate travel time with custom speed

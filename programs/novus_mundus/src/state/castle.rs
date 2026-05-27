@@ -214,9 +214,21 @@ pub struct CastleAccount {
     pub _padding2: [u8; 3],
 
     // Location (16 bytes)
-    pub latitude: i32,  // Fixed-point (×1,000,000)
-    pub longitude: i32, // Fixed-point (×1,000,000)
-    pub _padding_loc: [u8; 8],
+    // Grid units (×10,000 = LocationAccount::GRID_PRECISION); matches
+    // the precision the disc + LocationAccount PDA derivation use. The
+    // old struct doc claimed "×1,000,000 microdegrees" but every
+    // historical caller (data file, web hook, chain attack_castle)
+    // treats these as ×10,000 grid units — that's the convention.
+    pub latitude: i32,  // Grid units (×10,000) — anchor corner of the footprint
+    pub longitude: i32, // Grid units (×10,000) — anchor corner of the footprint
+    /// N for an N×N footprint (1, 2, 3, or 4). Each footprint cell owns
+    /// a LocationAccount with `occupant_type = OCCUPANT_CASTLE` and
+    /// `occupant = self`. Pre-cut castles default to 1 (single-cell);
+    /// fresh castles default to 2; DAO can promote to 3 or 4 via the
+    /// upgrade flow. Wire format unchanged in size — this byte consumes
+    /// one of the existing `_padding_loc` slots.
+    pub footprint_size: u8,
+    pub _padding_loc: [u8; 7],
 
     // Ruler Info (80 bytes)
     pub king: Address,

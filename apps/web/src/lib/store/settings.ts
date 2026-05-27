@@ -4,12 +4,20 @@ import { persist } from "zustand/middleware";
 type NumberFormat = "compact" | "full";
 export type Explorer = "solscan" | "explorer" | "solanafm";
 export type ThemePreference = "paper" | "dark" | "auto";
-export type MapMode = "2d" | "3d";
+export type MapMode = "flat" | "iso" | "top";
 
 const NUMBER_FORMATS = new Set<NumberFormat>(["compact", "full"]);
 const EXPLORERS = new Set<Explorer>(["solscan", "explorer", "solanafm"]);
 const THEME_PREFERENCES = new Set<ThemePreference>(["paper", "dark", "auto"]);
-const MAP_MODES = new Set<MapMode>(["2d", "3d"]);
+const MAP_MODES = new Set<MapMode>(["flat", "iso", "top"]);
+
+// v1 → v2: "2d" maps to the new Canvas2D top-down "flat" preset, and
+// "3d" maps to the dimetric "iso" preset (closest match to the old
+// 35° tilt; user can switch to "top" via the picker if they prefer).
+const LEGACY_MAP_MODE_MAP: Record<string, MapMode> = {
+  "2d": "flat",
+  "3d": "iso",
+};
 
 interface SettingsStore {
   numberFormat: NumberFormat;
@@ -37,7 +45,7 @@ export const useSettings = create<SettingsStore>()(
       explorer: "solscan",
       priorityFee: 10_000,
       themePreference: "auto",
-      mapMode: "2d",
+      mapMode: "flat",
       setNumberFormat: (fmt) => set({ numberFormat: fmt }),
       setAnimationsEnabled: (enabled) => set({ animationsEnabled: enabled }),
       setExplorer: (e) => set({ explorer: e }),
@@ -47,15 +55,22 @@ export const useSettings = create<SettingsStore>()(
     }),
     {
       name: "novus-settings",
-      // Bumped to v1 alongside the mapMode addition. `migrate` returns a
-      // partial state shape — Zustand merges it over the current defaults,
-      // so a missing field rolls in cleanly without nuking the rest. Any
-      // future schema change (rename, enum extension) should bump again
-      // and patch this in place.
-      version: 1,
+      // Bumped to v2 at the flat-strategy cut. v1 stored mapMode as
+      // "2d" | "3d"; the migration maps "2d"→"flat" and "3d"→"iso".
+      // Any future schema change should bump and patch in place.
+      version: 2,
       migrate: (state) => {
-        const s = (state ?? {}) as Partial<SettingsStore>;
-        return { ...s, mapMode: MAP_MODES.has(s.mapMode as MapMode) ? s.mapMode : "2d" };
+        const s = (state ?? {}) as Partial<SettingsStore> & { mapMode?: unknown };
+        const raw = s.mapMode;
+        let mapMode: MapMode = "flat";
+        if (typeof raw === "string") {
+          if (MAP_MODES.has(raw as MapMode)) {
+            mapMode = raw as MapMode;
+          } else if (raw in LEGACY_MAP_MODE_MAP) {
+            mapMode = LEGACY_MAP_MODE_MAP[raw]!;
+          }
+        }
+        return { ...s, mapMode };
       },
       // Hard-validate every union-typed field at rehydrate. A tampered or
       // stale localStorage blob can otherwise smuggle a non-union string
@@ -78,7 +93,9 @@ export const useSettings = create<SettingsStore>()(
             : current.themePreference,
           mapMode: MAP_MODES.has(p.mapMode as MapMode)
             ? (p.mapMode as MapMode)
-            : current.mapMode,
+            : typeof p.mapMode === "string" && p.mapMode in LEGACY_MAP_MODE_MAP
+              ? LEGACY_MAP_MODE_MAP[p.mapMode as string]!
+              : current.mapMode,
         };
       },
     }

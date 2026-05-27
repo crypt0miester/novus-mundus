@@ -10,15 +10,98 @@ import {
   type PhaseStats,
 } from '../helpers';
 import {
+  biomeAt,
+  isPassableBiome,
   createCreateCastleInstruction,
   deriveCastlePda,
   parseCastle,
+  toGrid,
+  type BiomeKnobs,
 } from '../../../src/index';
-import { CASTLES } from '../../data/castles';
+import { CASTLES, defaultFootprintForTier } from '../../data/castles';
+import { CITIES } from '../../data/cities';
 import {
   section, table, bold, dim, green, red, yellow, formatNum, addr,
   check, statusBadge,
 } from '../format';
+
+interface AnchorResolution {
+  latitude: number;
+  longitude: number;
+}
+
+/**
+ * Resolve a castle's anchor (grid lat / lon) so its N×N footprint lands
+ * on all-passable cells. Tries the data-file hint first (preserves
+ * authored placements like Tower of London east of central London),
+ * then spirals outward from the hint until a valid footprint is found.
+ *
+ * The spiral skips the city centre cell (spawn point) to avoid
+ * stomping on `init_player`'s first LocationAccount claim.
+ */
+function resolveCastleAnchor(
+  cityLatGrid: number,
+  cityLongGrid: number,
+  cityHalfWidth: number,
+  cityHalfHeight: number,
+  biomeSeed: number,
+  knobs: BiomeKnobs,
+  footprint: number,
+  hintLatGrid: number,
+  hintLongGrid: number,
+): AnchorResolution | null {
+  const hintOx = hintLongGrid - cityLongGrid;
+  const hintOy = hintLatGrid - cityLatGrid;
+
+  const footprintFits = (ox: number, oy: number): boolean => {
+    // AABB containment — anchor + (N-1) must stay inside the half-extent.
+    if (ox < -cityHalfWidth || ox + footprint - 1 > cityHalfWidth) return false;
+    if (oy < -cityHalfHeight || oy + footprint - 1 > cityHalfHeight) return false;
+    // Skip the spawn cell at (0, 0) so the player can land there.
+    for (let dx = 0; dx < footprint; dx++) {
+      for (let dy = 0; dy < footprint; dy++) {
+        if (ox + dx === 0 && oy + dy === 0) return false;
+      }
+    }
+    // Every footprint cell must be passable.
+    for (let dx = 0; dx < footprint; dx++) {
+      for (let dy = 0; dy < footprint; dy++) {
+        const cellOx = ox + dx;
+        const cellOy = oy + dy;
+        if (!isPassableBiome(biomeAt(biomeSeed, cellOx, cellOy, knobs))) {
+          return false;
+        }
+      }
+    }
+    return true;
+  };
+
+  // Try the hint first.
+  if (footprintFits(hintOx, hintOy)) {
+    return { latitude: hintLatGrid, longitude: hintLongGrid };
+  }
+
+  // Spiral outward from the hint. `step=1` is fine for the small plot
+  // sizes here (half-extent ~4000 grid units). The outer cap stops the
+  // search well before we'd run off the plot.
+  const maxRadius = Math.min(cityHalfWidth, cityHalfHeight);
+  for (let r = 1; r <= maxRadius; r++) {
+    for (let dx = -r; dx <= r; dx++) {
+      for (let dy = -r; dy <= r; dy++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring only
+        const ox = hintOx + dx;
+        const oy = hintOy + dy;
+        if (footprintFits(ox, oy)) {
+          return {
+            latitude: cityLatGrid + oy,
+            longitude: cityLongGrid + ox,
+          };
+        }
+      }
+    }
+  }
+  return null;
+}
 
 export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
@@ -26,6 +109,56 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
   for (const castle of CASTLES) {
     const [castlePda] = deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
 
+    const city = CITIES.find(c => c.id === castle.cityId);
+    if (!city) {
+      throw new Error(
+        `Castle #${castle.castleId} ('${castle.name}') targets cityId ${castle.cityId} ` +
+        `which is not in the city catalogue. Update cli/data/castles.ts.`,
+      );
+    }
+
+    const footprint = castle.footprintSize ?? defaultFootprintForTier(castle.tier);
+    const cityLatGrid = toGrid(city.lat);
+    const cityLongGrid = toGrid(city.lon);
+    // Match `dimsFromRadius` in cli/data/cities.ts. Square plot, so half
+    // is the same on both axes.
+    const SQRT_PI = 1.7724539;
+    const KM_PER_DEG = 111;
+    const GRID_PRECISION = 10_000;
+    const dim = Math.round(((city.radiusKm * SQRT_PI) / KM_PER_DEG) * GRID_PRECISION);
+    const half = Math.floor(dim / 2);
+    const knobs: BiomeKnobs = {
+      waterLevelDelta: city.biome.waterLevelDelta,
+      tempBias: city.biome.tempBias,
+      moistureBias: city.biome.moistureBias,
+      coast: city.biome.coast,
+      landmassSeed: city.biome.landmassSeed,
+    };
+    const resolved = resolveCastleAnchor(
+      cityLatGrid,
+      cityLongGrid,
+      half,
+      half,
+      // Cities use `seedForCity(id)` at init time; this MUST match what
+      // was written to chain (see cli/lib/phases/cities.ts).
+      (0xcafe0000 | castle.cityId) >>> 0,
+      knobs,
+      footprint,
+      castle.latitude,
+      castle.longitude,
+    );
+    if (!resolved) {
+      throw new Error(
+        `Castle #${castle.castleId} ('${castle.name}'): no passable ` +
+        `${footprint}×${footprint} footprint anywhere in city ${castle.cityId}.`,
+      );
+    }
+
+    // Each castle creates 1 CastleAccount + N² LocationAccounts via
+    // CreateAccount CPIs, plus an N² biome passability scan. N=4 (citadel)
+    // is ~17 CPIs + 16 noise-sampled cells which blows the default 200k CU
+    // limit. 600k is comfortably above the worst case for tier 4 castles
+    // and still well under the per-tx maximum of 1.4M.
     await createOrSkip(
       ctx,
       `Castle #${castle.castleId} (${castle.name})`,
@@ -39,15 +172,17 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
           cityId: castle.cityId,
           castleId: castle.castleId,
           tier: castle.tier,
-          latitude: castle.latitude,
-          longitude: castle.longitude,
+          latitude: resolved.latitude,
+          longitude: resolved.longitude,
           minLevel: castle.minLevel,
           minNetworthMillions: castle.minNetworthMillions,
           minTroopsThousands: castle.minTroopsThousands,
           name: castle.name,
+          footprintSize: footprint,
         }
       ),
-      stats
+      stats,
+      { computeUnits: 600_000 },
     );
   }
 

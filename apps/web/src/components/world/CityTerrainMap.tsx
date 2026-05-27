@@ -21,7 +21,6 @@
  *    polling).
  */
 
-import dynamic from "next/dynamic";
 import {
   forwardRef,
   useEffect,
@@ -43,10 +42,11 @@ import {
   type CityTerrainMapHandle,
   type CityTerrainMapProps,
 } from "./CityTerrainMap2DFallback";
-import type {
-  CityTerrainMapWebGLProps,
-  HoverReadout,
-  PickInfo,
+import {
+  CityTerrainMapWebGL as CityTerrainMapWebGLImpl,
+  type CityTerrainMapWebGLProps,
+  type HoverReadout,
+  type PickInfo,
 } from "./city3d/CityTerrainMapWebGL";
 
 export type {
@@ -57,24 +57,17 @@ export type {
   CityTerrainMapProps,
 } from "./CityTerrainMap2DFallback";
 
-// Master switch for the WebGL 3D renderer. When false, the orchestrator
-// short-circuits to the 2D fallback, and city3d/* plus its three.js dependency
-// stay out of the page bundle: the gated dynamic import below evaluates to
-// null at build time, so the import() factory is never reached. Flip to true
-// to re-enable the 3D path — toggle pills, retry overlay, and mapMode wake up
-// unchanged; first 3D mount pays one chunk-load round-trip.
-const ENABLE_3D_MAP = false;
+// Master switch for the WebGL 3D renderer. Statically imported above so
+// the first map open doesn't pay the dynamic-chunk round-trip — the
+// file is "use client" already, so three.js lands in the route bundle
+// once at compile rather than as a per-mount lazy chunk (which on dev
+// HMR was taking 5+ minutes per city open). Flip to false to fall back
+// to the 2D Canvas renderer; with a static import three.js still ships
+// in the bundle, but the WebGL scene is never mounted.
+const ENABLE_3D_MAP = true;
 
 const CityTerrainMapWebGL: ComponentType<CityTerrainMapWebGLProps> | null =
-  ENABLE_3D_MAP
-    ? dynamic(
-        () =>
-          import("./city3d/CityTerrainMapWebGL").then(
-            (m) => m.CityTerrainMapWebGL,
-          ),
-        { ssr: false },
-      )
-    : null;
+  ENABLE_3D_MAP ? CityTerrainMapWebGLImpl : null;
 
 /**
  * One-shot WebGL2 capability probe. The result is cached at module scope —
@@ -180,7 +173,9 @@ function CityTerrainMap3DScene({
   const encounterCount = occupied.filter(
     (c) => c.occupantType === OCCUPANT_ENCOUNTER,
   ).length;
-  const terrainEmpty = props.cityAccount.anchorCount === 0;
+  // Post flat-strategy there are no anchors; biome is sampled from
+  // biomeSeed at use-time, so the disc is never "empty".
+  const terrainEmpty = false;
 
   // Distance from city centre to the selected landing cell, mirroring
   // the 2D fallback's "Landing chosen · X m from centre" readout so the
@@ -239,7 +234,7 @@ function CityTerrainMap3DScene({
   }, [outOfBoundsNotice]);
 
   const handleToggleMode = () => {
-    setMapMode(mapMode === "3d" ? "2d" : "3d");
+    setMapMode(mapMode === "iso" ? "flat" : "iso");
   };
 
   const handleModeCommitted = (_m: MapMode) => {
@@ -281,34 +276,6 @@ function CityTerrainMap3DScene({
 
   return (
     <div className={styles.root}>
-      <div className={styles.label}>
-        <span>The land · {props.cityAccount.name}</span>
-        {occupancyLoading && <span className={styles.scouting}> · scouting…</span>}
-        {!occupancyLoading && !occupancyError && (
-          <span className={styles.scouting}>
-            {" · "}
-            {playerCount} {playerCount === 1 ? "player" : "players"} · {encounterCount} wild
-          </span>
-        )}
-        {occupancyError && (
-          <span className={styles.scouting} title={occupancyError}>
-            {" · scouting blocked"}
-          </span>
-        )}
-        {terrainEmpty && (
-          <span
-            className={styles.scouting}
-            title="Terrain anchors are not yet set on this city (set_terrain not run)."
-          >
-            {" · terrain unset"}
-          </span>
-        )}
-        <span className={styles.scouting}>
-          {" · "}
-          {zoom < 1.05 ? "1×" : `${zoom.toFixed(1)}×`}
-          {cellsVisible ? " · cells visible" : ""}
-        </span>
-      </div>
       <div
         className={styles.canvasWrap}
         role="application"
@@ -319,10 +286,10 @@ function CityTerrainMap3DScene({
           type="button"
           className={`${styles.togglePill} ${styles.toggle3DPill}`}
           onClick={handleToggleMode}
-          aria-pressed={mapMode === "3d"}
-          title={mapMode === "3d" ? "Switch to top-down (2D)" : "Switch to tilted view (3D)"}
+          aria-pressed={mapMode === "iso"}
+          title={mapMode === "iso" ? "Switch to top-down (2D)" : "Switch to tilted view (3D)"}
         >
-          {mapMode === "3d" ? "2D" : "3D"}
+          {mapMode === "iso" ? "2D" : "3D"}
         </button>
         {touchSupport && (
           <button
@@ -375,22 +342,6 @@ function CityTerrainMap3DScene({
         ) : (
           <span>click a player or wild to inspect, or pick an empty cell to land.</span>
         )}
-      </div>
-      <div className={styles.legend}>
-        {props.myPlayerPubkey && (
-          <span>
-            <span className={`${styles.swatch} ${styles.swMe}`} /> you
-          </span>
-        )}
-        <span>
-          <span className={`${styles.swatch} ${styles.swPlayer}`} /> player
-        </span>
-        <span>
-          <span className={`${styles.swatch} ${styles.swEnc}`} /> wild
-        </span>
-        <span>
-          <span className={`${styles.swatch} ${styles.swSel}`} /> chosen
-        </span>
       </div>
     </div>
   );

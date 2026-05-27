@@ -629,10 +629,12 @@ Each hero has a specialization that grants different bonuses:
 Cities are passed via instruction data to `batch_init_cities` (instruction 5). Canonical list in `cli/data/cities.ts`. Each city has:
 
 - `name` (up to 32 bytes)
-- `latitude`, `longitude` (f64 degrees)
-- `radius_km` (f32)
+- `latitude`, `longitude` (f64 degrees) — geographic centre
+- `biome_seed` (u32) — drives the deterministic biome function (water mask + Whittaker temperature/moisture lookup)
+- `width_grid`, `height_grid` (u16 each) — square plot in grid units (centred AABB; ~11 m per cell)
 - `city_type` (Capital/Resource/Combat/Trade)
-- Terrain anchors (water_line / peak_line / anchor_count) configurable via `set_terrain` + `append_terrain`
+
+Biome is sampled on demand via `logic::biome::biome_at(seed, ox, oy)` — no anchor data on the account, no `set_terrain` / `append_terrain` step. Water is the only impassable biome; shore is walkable by design. Mining / fishing / combat affinities are biome-keyed; see `logic::biome::biome_affinity` for the table.
 
 ### City Type Bonuses
 

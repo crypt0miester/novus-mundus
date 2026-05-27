@@ -11,6 +11,7 @@ use crate::{
     error::GameError,
     events::PlayerJoinedKingdom,
     helpers::{mint_tokens, validate_token_account_owner},
+    logic::location::{is_valid_latitude, is_valid_longitude},
     state::{CityAccount, GameEngine, LocationAccount, PlayerAccount},
     token_helpers::create_associated_token_account,
     utils::read_u16,
@@ -103,6 +104,17 @@ pub fn process(
     let spawn_lat = f64::from_le_bytes(data[2..10].try_into().unwrap());
     let spawn_long = f64::from_le_bytes(data[10..18].try_into().unwrap());
 
+    // Reject NaN / Inf / out-of-range f64 inputs before they reach
+    // to_grid → saturating cast. Defence in depth: the AABB bounds
+    // check downstream uses unsigned_abs, but this fails fast with a
+    // meaningful error code.
+    if !is_valid_latitude(spawn_lat) {
+        return Err(GameError::InvalidLatitude.into());
+    }
+    if !is_valid_longitude(spawn_long) {
+        return Err(GameError::InvalidLongitude.into());
+    }
+
     // 3. Validate Accounts
 
     // Owner must sign (pays for account and proves ownership)
@@ -184,20 +196,13 @@ pub fn process(
     // Validate city PDA
     CityAccount::validate_pda(starting_city, city_data)?;
 
-    // Validate spawn coordinates are within city radius
-    {
-        let dlat = spawn_lat - city_data.latitude;
-        let dlong = spawn_long - city_data.longitude;
-        // Approximate distance in km (1 degree ≈ 111 km)
-        let dist_km =
-            libm::sqrt((dlat * 111.0) * (dlat * 111.0) + (dlong * 111.0) * (dlong * 111.0));
-        if dist_km > city_data.radius_km as f64 {
-            return Err(GameError::OutOfRange.into());
-        }
+    // Validate spawn coordinates fall inside the city's square plot.
+    if !city_data.contains_coord(spawn_lat, spawn_long) {
+        return Err(GameError::OutOfRange.into());
     }
 
-    // Validate spawn location is passable terrain (not water or mountain).
-    city_data.require_passable_at(starting_city, spawn_lat, spawn_long)?;
+    // Validate spawn location is on a passable biome (rejects water).
+    city_data.require_passable_at(spawn_lat, spawn_long)?;
 
     // Verify novi_mint matches the program-binary singleton. NOVI is one
     // mint across all kingdoms, derived at compile time.

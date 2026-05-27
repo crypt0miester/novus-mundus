@@ -9,7 +9,7 @@ import {
   deriveCityPda,
   parseCity,
 } from '../../../src/index';
-import { CITIES, CityType } from '../../data/cities';
+import { CITIES, CityType, dimsFromRadius, seedForCity } from '../../data/cities';
 import {
   section, table, bold, dim, green, red, formatNum, check, statusBadge,
 } from '../format';
@@ -61,13 +61,23 @@ export async function initCities(ctx: CLIContext): Promise<PhaseStats> {
       },
       {
         startCityId: startId,
-        cities: batch.map(c => ({
-          name: c.name,
-          lat: c.lat,
-          lon: c.lon,
-          radiusKm: c.radiusKm,
-          cityType: c.type,
-        })),
+        cities: batch.map(c => {
+          const dim = dimsFromRadius(c.radiusKm);
+          return {
+            name: c.name,
+            lat: c.lat,
+            lon: c.lon,
+            biomeSeed: seedForCity(c.id),
+            cityType: c.type,
+            widthGrid: dim,
+            heightGrid: dim,
+            waterLevelDelta: c.biome.waterLevelDelta,
+            tempBias: c.biome.tempBias,
+            moistureBias: c.biome.moistureBias,
+            coast: c.biome.coast,
+            landmassSeed: c.biome.landmassSeed,
+          };
+        }),
       }
     );
 
@@ -131,7 +141,7 @@ export async function detailCities(ctx: CLIContext): Promise<string> {
       CITY_TYPE_NAMES[data.cityType] ?? String(data.cityType),
       formatNum(data.playersPresent),
       formatNum(data.activeEncounters),
-      `${data.radiusKm}km`,
+      `${data.widthGrid}×${data.heightGrid}`,
     ]);
   }
 
@@ -142,7 +152,7 @@ export async function detailCities(ctx: CLIContext): Promise<string> {
       { header: 'Type', width: 9 },
       { header: 'Players', align: 'right' },
       { header: 'Encounters', align: 'right' },
-      { header: 'Radius', align: 'right' },
+      { header: 'Plot', align: 'right' },
     ],
     rows
   ));

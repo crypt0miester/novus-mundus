@@ -7,6 +7,9 @@ use crate::constants::LOCATION_SEED;
 pub const OCCUPANT_NONE: u8 = 0;
 pub const OCCUPANT_PLAYER: u8 = 1;
 pub const OCCUPANT_ENCOUNTER: u8 = 2;
+/// Multi-cell castle footprint. Every cell in a castle's N×N footprint
+/// is occupied with this discriminant.
+pub const OCCUPANT_CASTLE: u8 = 3;
 
 /// Grid-based location account for cell occupancy
 /// KINGDOM-SCOPED: Locations exist within a kingdom
@@ -97,6 +100,12 @@ impl LocationAccount {
     #[inline]
     pub fn is_encounter_occupied(&self) -> bool {
         self.occupant_type == OCCUPANT_ENCOUNTER && self.occupant != Self::NULL_OCCUPANT
+    }
+
+    /// Check if this cell is occupied by a castle footprint cell.
+    #[inline]
+    pub fn is_castle_occupied(&self) -> bool {
+        self.occupant_type == OCCUPANT_CASTLE && self.occupant != Self::NULL_OCCUPANT
     }
 
     /// Check if this cell is occupied by a specific entity

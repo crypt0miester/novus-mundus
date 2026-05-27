@@ -215,7 +215,8 @@ export async function createOrSkip(
   name: string,
   pda: PublicKey,
   buildIx: () => TransactionInstruction | TransactionInstruction[],
-  stats: PhaseStats
+  stats: PhaseStats,
+  opts?: SendOptions
 ): Promise<boolean> {
   const exists = await accountExists(ctx.connection, pda);
   if (exists) {
@@ -225,7 +226,7 @@ export async function createOrSkip(
   }
 
   const ix = buildIx();
-  await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
+  await sendWithRetry(ctx, ix, [ctx.daoAuthority], opts);
   if (ctx.dryRun) log.dryRun(`Would create: ${name}`);
   else log.create(name);
   stats.created++;

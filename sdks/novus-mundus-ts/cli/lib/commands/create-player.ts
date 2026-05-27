@@ -42,6 +42,7 @@ import {
   deriveCityPda,
   deriveNoviMintPda,
   getAssociatedTokenAddressSync,
+  biomeKnobsFromCity,
   parseCity,
   pickSpawn,
   type CityForSpawn,
@@ -205,16 +206,11 @@ async function loadCityForSpawn(
     cityId: city.cityId,
     latitude: city.latitude,
     longitude: city.longitude,
-    radiusKm: city.radiusKm,
+    widthGrid: city.widthGrid,
+    heightGrid: city.heightGrid,
+    biomeSeed: city.biomeSeed,
     cityType: city.cityType,
-    terrain: {
-      seed: city.terrainSeed,
-      waterLine: city.waterLine,
-      peakLine: city.peakLine,
-      anchorCount: city.anchorCount,
-      version: city.terrainVersion,
-      anchors: city.anchors,
-    },
+    knobs: biomeKnobsFromCity(city),
   };
   cache.set(cityId, out);
   return out;

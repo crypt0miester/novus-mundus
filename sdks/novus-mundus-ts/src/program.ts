@@ -134,8 +134,9 @@ export const DISCRIMINATORS = {
   CLOSE_REGISTRATION: 4,
   BATCH_CITIES: 5,
   UPDATE_GAME_CONFIG: 6,
-  SET_TERRAIN: 7,
-  APPEND_TERRAIN: 8,
+  // Discriminators 7 and 8 (SET_TERRAIN / APPEND_TERRAIN) retired at
+  // the flat-strategy cut — biome is now a pure function of biomeSeed.
+  // Slots intentionally left vacant; chain returns InvalidInstructionData.
 
   // Economy (10-19)
   UPDATE_LOCKED_NOVI: 10,

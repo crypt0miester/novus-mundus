@@ -200,20 +200,24 @@ pub fn process(
     // NOTE: Origin close is deferred until after CreateAccount CPI (step 16b)
     // to avoid UnbalancedInstruction from mixing unsafe lamport manipulation with CPI.
 
-    // 14. Quantize Destination City Center to Grid Cell
+    // 14. Quantize Destination City Center to Grid Cell.
+    // Biome is a pure noise function post-flat-strategy, so the (0,0)
+    // cell is not guaranteed to be land — for cities whose seed hashes
+    // the centre to water we snap outward to the nearest passable
+    // neighbour within MAX_TELEPORT_SNAP_RADIUS rings. Without the
+    // snap, those cities would be permanently un-teleportable.
+    const MAX_TELEPORT_SNAP_RADIUS: i32 = 8;
+    let (snap_ox, snap_oy) = destination_city_data
+        .find_passable_near_center(MAX_TELEPORT_SNAP_RADIUS)
+        .ok_or(GameError::TerrainImpassable)?;
 
-    let dest_grid_lat = LocationAccount::to_grid(destination_city_data.latitude);
-    let dest_grid_long = LocationAccount::to_grid(destination_city_data.longitude);
+    let dest_grid_lat = LocationAccount::to_grid(destination_city_data.latitude)
+        .saturating_add(snap_oy);
+    let dest_grid_long = LocationAccount::to_grid(destination_city_data.longitude)
+        .saturating_add(snap_ox);
 
     let cell_center_lat = LocationAccount::from_grid(dest_grid_lat);
     let cell_center_long = LocationAccount::from_grid(dest_grid_long);
-
-    // 14a. Terrain Passability Check (city center should always pass, but validate)
-    destination_city_data.require_passable_at(
-        destination_city_account,
-        cell_center_lat,
-        cell_center_long,
-    )?;
 
     // 15. Validate Destination Location PDA
 

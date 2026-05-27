@@ -1,12 +1,21 @@
 "use client";
 
 import { useMemo } from "react";
+import { type CityAccount } from "novus-mundus-sdk";
 import {
-  cityTerrain,
-  terrainAffinity,
-  toGrid,
-  type CityAccount,
-} from "novus-mundus-sdk";
+  biomeAffinity,
+  biomeAt,
+  biomeKnobsFromCity,
+  biomeName,
+  BIOME_FOREST,
+  BIOME_MARSH,
+  BIOME_SAND,
+  BIOME_SHORE,
+  BIOME_SNOW,
+  BIOME_ROCK,
+  type BiomeType,
+} from "@/lib/world/biome";
+import { toGrid } from "novus-mundus-sdk";
 import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 
 interface CellAffinityPanelProps {
@@ -23,32 +32,30 @@ interface Chip {
 }
 
 /**
- * "THE LAND OFFERS" — surfaces the on-chain terrain_affinity bonuses for a
- * specific cell within a city. Three numbers from the chain
- * (mining_bps, fishing_bps, elevation_bps) drive at most three chips; only
- * non-zero entries are rendered so a midpoint cell shows a single "balanced
- * ground" line instead of empty rows.
+ * "THE LAND OFFERS" — surfaces the on-chain biome_affinity bonuses for
+ * the specific cell within a city. Three numbers from chain
+ * (miningBps, fishingBps, combatBps) drive at most three chips; only
+ * non-zero entries render so a featureless grass cell shows the
+ * "balanced ground" line.
  *
- * Authoritative reference: programs/novus_mundus/src/logic/terrain.rs —
- * `terrain_affinity()` returns zeros for water / peak / midpoint, positive
- * mining bps above the midpoint, positive fishing bps below, and a signed
- * elevation_bps in [-500, +500]. The PvP combat path (attack_player.rs)
- * applies elevation_bps with opposite signs to attacker and defender, so a
- * single "high/low ground" chip captures both attack and defense impact.
+ * Authoritative reference: programs/novus_mundus/src/logic/biome.rs —
+ * `biome_affinity()` is a const lookup keyed by biome ID. Values match
+ * the magnitudes of the retired `terrain_affinity` table so PvP
+ * balance shifts predictably across the cut.
  *
- * Activities that DO NOT consume terrain_affinity on chain — encounters,
- * dungeons, castle attacks, travel speed, rallies, hero abilities — are
- * deliberately omitted; surfacing them would imply a bonus the program
- * never actually applies.
+ * The combat chip label is biome-themed (e.g. "forest defender",
+ * "sand attacker") since biomes don't have an elevation gradient — the
+ * advantage attribution flows from the biome itself, not from being
+ * on higher ground.
  */
 export function CellAffinityPanel({ cityAccount, cell }: CellAffinityPanelProps) {
-  const aff = useMemo(() => {
-    const terrain = cityTerrain(cityAccount);
+  const { biome, aff } = useMemo(() => {
     const cityLatGrid = toGrid(cityAccount.latitude);
     const cityLongGrid = toGrid(cityAccount.longitude);
     const ox = cell.gridLong - cityLongGrid;
     const oy = cell.gridLat - cityLatGrid;
-    return terrainAffinity(terrain, ox, oy);
+    const b = biomeAt(cityAccount.biomeSeed, ox, oy, biomeKnobsFromCity(cityAccount));
+    return { biome: b, aff: biomeAffinity(b) };
   }, [cityAccount, cell.gridLat, cell.gridLong]);
 
   const chips: Chip[] = [];
@@ -70,16 +77,16 @@ export function CellAffinityPanel({ cityAccount, cell }: CellAffinityPanelProps)
       tone: "boon",
     });
   }
-  if (aff.elevationBps !== 0) {
-    const pct = Math.round(Math.abs(aff.elevationBps) / 100);
+  if (aff.combatBps !== 0) {
+    const pct = Math.round(Math.abs(aff.combatBps) / 100);
     if (pct > 0) {
-      const isHigh = aff.elevationBps > 0;
+      const isBoon = aff.combatBps > 0;
       chips.push({
         key: "combat",
         iconId: "map-combat",
-        value: `${isHigh ? "+" : "−"}${pct}%`,
-        label: isHigh ? "high ground" : "low ground",
-        tone: isHigh ? "boon" : "penalty",
+        value: `${isBoon ? "+" : "−"}${pct}%`,
+        label: combatLabelFor(biome, isBoon),
+        tone: isBoon ? "boon" : "penalty",
       });
     }
   }
@@ -96,7 +103,7 @@ export function CellAffinityPanel({ cityAccount, cell }: CellAffinityPanelProps)
           color: "var(--ink-soft)",
         }}
       >
-        the land offers
+        the land offers · {biomeName(biome)}
       </div>
       {chips.length === 0 ? (
         <p
@@ -108,7 +115,7 @@ export function CellAffinityPanel({ cityAccount, cell }: CellAffinityPanelProps)
             margin: 0,
           }}
         >
-          balanced ground — no terrain edge here.
+          balanced ground — no biome edge here.
         </p>
       ) : (
         <div style={{ display: "flex", flexWrap: "wrap", gap: "0.35rem" }}>
@@ -146,4 +153,32 @@ export function CellAffinityPanel({ cityAccount, cell }: CellAffinityPanelProps)
       )}
     </>
   );
+}
+
+// Biome-themed combat-bonus label. The retired terrain model used
+// "high/low ground" as the cue — under biomes the bonus comes from the
+// terrain itself, so the label names which biome favours whom.
+function combatLabelFor(biome: BiomeType, attackerBonus: boolean): string {
+  if (attackerBonus) {
+    switch (biome) {
+      case BIOME_SAND:
+        return "sand attacker";
+      case BIOME_ROCK:
+        return "rock attacker";
+      default:
+        return "favourable ground";
+    }
+  }
+  switch (biome) {
+    case BIOME_FOREST:
+      return "forest defender";
+    case BIOME_MARSH:
+      return "marsh defender";
+    case BIOME_SNOW:
+      return "snow defender";
+    case BIOME_SHORE:
+      return "shore defender";
+    default:
+      return "unfavourable ground";
+  }
 }

@@ -17,12 +17,12 @@ use crate::{
         event_scoring::update_event_score,
     },
     logic::{
-        apply_time_multiplier, calculate_damage_output, calculate_distance_meters,
+        apply_time_multiplier, biome, calculate_damage_output, calculate_distance_meters,
         calculate_networth, calculate_xp_reward,
         combat::{resolve_weapon_combat, WeaponSet},
-        get_time_of_day, grant_xp_with_time_bonus, inflict_damage, is_within_city_bounds,
+        get_time_of_day, grant_xp_with_time_bonus, inflict_damage,
         safe_math::apply_bp,
-        terrain, update_happiness_defensive, ActivityType, XpAction,
+        update_happiness_defensive, ActivityType, XpAction,
     },
     state::{require_extension, CityAccount, PlayerAccount, EXT_RESEARCH},
     types::EventType,
@@ -104,6 +104,10 @@ pub fn process(
     require_writable(defender_player)?;
     require_owner(attacker_player, program_id)?;
     require_owner(defender_player, program_id)?;
+    require_owner(&attacker_city, program_id)?;
+    if attacker_city.address() != defender_city.address() {
+        require_owner(&defender_city, program_id)?;
+    }
 
     let attacker_bump = require_pda(
         attacker_player,
@@ -203,24 +207,12 @@ pub fn process(
         return Err(GameError::PlayerNotInCity.into());
     }
 
-    // 6d. Bounds check (security): Verify coordinates are within claimed city
-    if !is_within_city_bounds(
-        attacker_data.current_lat,
-        attacker_data.current_long,
-        attacker_city_data.latitude,
-        attacker_city_data.longitude,
-        attacker_city_data.radius_km,
-    ) {
+    // 6d. Bounds check (security): Verify coordinates are within claimed city (AABB).
+    if !attacker_city_data.contains_coord(attacker_data.current_lat, attacker_data.current_long) {
         return Err(GameError::InvalidLocationForCity.into());
     }
 
-    if !is_within_city_bounds(
-        defender_data.current_lat,
-        defender_data.current_long,
-        defender_city_data.latitude,
-        defender_city_data.longitude,
-        defender_city_data.radius_km,
-    ) {
+    if !defender_city_data.contains_coord(defender_data.current_lat, defender_data.current_long) {
         return Err(GameError::InvalidLocationForCity.into());
     }
 
@@ -314,34 +306,22 @@ pub fn process(
     let attacker_damage =
         apply_time_multiplier(base_attacker_damage, time_of_day, ActivityType::Attacking);
 
-    // 9b. Compute terrain elevation advantage (high ground bonus)
-    // Attacker at higher elevation → bonus to attack, penalty to defense
-    // Max ±1000 BPS (±10%) from net elevation difference
-    let terrain_elevation_net_bps: i32 = if attacker_city_data.anchor_count > 0 {
-        let (att_ox, att_oy) = terrain::city_offset(
-            terrain::to_grid(attacker_data.current_lat),
-            terrain::to_grid(attacker_data.current_long),
-            attacker_city_data.latitude,
-            attacker_city_data.longitude,
-        );
-        let (def_ox, def_oy) = terrain::city_offset(
-            terrain::to_grid(defender_data.current_lat),
-            terrain::to_grid(defender_data.current_long),
-            defender_city_data.latitude,
-            defender_city_data.longitude,
-        );
-        attacker_city_data.with_terrain(attacker_city, |t| {
-            let att_aff = terrain::terrain_affinity(t, att_ox, att_oy);
-            let def_aff = terrain::terrain_affinity(t, def_ox, def_oy);
-            att_aff.elevation_bps as i32 - def_aff.elevation_bps as i32
-        })?
-    } else {
-        0
+    // 9b. Compute biome combat advantage (replaces elevation high-ground bonus).
+    // Attacker biome's combat_bps minus defender biome's combat_bps; signed.
+    // Sampled at each player's actual cell within their respective city's grid.
+    let combat_bps_net: i32 = {
+        let (att_ox, att_oy) =
+            attacker_city_data.offset_for(attacker_data.current_lat, attacker_data.current_long);
+        let (def_ox, def_oy) =
+            defender_city_data.offset_for(defender_data.current_lat, defender_data.current_long);
+        let att = biome::biome_affinity(attacker_city_data.biome_at_offset(att_ox, att_oy));
+        let def = biome::biome_affinity(defender_city_data.biome_at_offset(def_ox, def_oy));
+        att.combat_bps as i32 - def.combat_bps as i32
     };
 
-    // Apply terrain to attacker damage (positive net = high ground bonus)
-    let attacker_damage = if terrain_elevation_net_bps != 0 {
-        let m = (10000i32 + terrain_elevation_net_bps).max(5000) as u64;
+    // Apply biome combat advantage to attacker damage (positive net = attacker bonus).
+    let attacker_damage = if combat_bps_net != 0 {
+        let m = (10000i32 + combat_bps_net).max(5000) as u64;
         attacker_damage.saturating_mul(m) / 10000
     } else {
         attacker_damage
@@ -405,10 +385,10 @@ pub fn process(
     let defender_damage =
         apply_time_multiplier(base_defender_damage, time_of_day, ActivityType::Defending);
 
-    // 10b. Apply terrain to defender damage (inverse of attacker's terrain advantage)
-    // If attacker has high ground, defender's counterattack is weaker
-    let defender_damage = if terrain_elevation_net_bps != 0 {
-        let m = (10000i32 - terrain_elevation_net_bps).max(5000) as u64;
+    // 10b. Apply biome combat advantage to defender (inverse of attacker's swing).
+    // If attacker's biome favours them, defender's counterattack is weaker.
+    let defender_damage = if combat_bps_net != 0 {
+        let m = (10000i32 - combat_bps_net).max(5000) as u64;
         defender_damage.saturating_mul(m) / 10000
     } else {
         defender_damage
