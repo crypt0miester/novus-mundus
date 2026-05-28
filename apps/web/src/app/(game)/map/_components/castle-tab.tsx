@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useState, useMemo, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
+import { useUrlIntParam, useUrlPatch } from "@/lib/hooks/useUrlParam";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useCastle } from "@/lib/hooks/useCastle";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -52,19 +53,13 @@ import {
   type GarrisonContributionAccount,
 } from "novus-mundus-sdk";
 import bs58 from "bs58";
+import {
+  CASTLE_TIER_NAMES,
+  CASTLE_STATUS_NAMES,
+  CASTLE_STATUS_NARRATION,
+} from "@/lib/world/castles";
 
-const CASTLE_TIERS = ["Outpost", "Keep", "Stronghold", "Fortress", "Citadel"];
-const CASTLE_STATUS = ["Vacant", "Contest", "Protected", "Vulnerable", "Transitioning"];
 const COURT_POSITIONS = ["Advisor", "Scholar", "Guardian", "Treasurer", "Marshal"];
-
-// The condition of the seat, told as a line rather than a status word.
-const CASTLE_STATUS_NARRATION: Record<number, string> = {
-  0: "The seat stands empty. A banner could be planted here today.",
-  1: "The seat is contested — blades are already in the field for it.",
-  2: "The seat is held and under protection. No one may move against it yet.",
-  3: "The seat is held, but its protection has lapsed. It can be taken.",
-  4: "The seat is changing hands. Wait for the dust to settle.",
-};
 
 const CASTLE_FRAMING = systemFraming("castle");
 const UPGRADE_TYPES = [
@@ -90,31 +85,20 @@ export function CastleTab() {
    * inspected outside the player's city silently resolved to a
    * castle 0 PDA in the WRONG city. */
   const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
+  const urlPatch = useUrlPatch();
+  const playerCity = player?.currentCity ?? 0;
+  /* cityId has a dynamic default (player's current city), so it can't
+   * use useUrlIntParam directly — that helper takes a static default
+   * baked into the URL's delete-on-default logic. */
   const cityId = useMemo(() => {
     const raw = searchParams.get("cityId");
     if (raw != null) {
       const n = Number(raw);
       if (Number.isInteger(n) && n >= 0) return n;
     }
-    return player?.currentCity ?? 0;
-  }, [searchParams, player?.currentCity]);
-  const castleId = useMemo(() => {
-    const raw = searchParams.get("castleId");
-    if (raw == null) return 0;
-    const n = Number(raw);
-    return Number.isInteger(n) && n >= 0 ? n : 0;
-  }, [searchParams]);
-  const setCastleId = useCallback(
-    (id: number) => {
-      const params = new URLSearchParams(searchParams.toString());
-      if (id === 0) params.delete("castleId");
-      else params.set("castleId", String(id));
-      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-    },
-    [searchParams, router, pathname],
-  );
+    return playerCity;
+  }, [searchParams, playerCity]);
+  const [castleId, setCastleId] = useUrlIntParam("castleId", 0);
   const { data: castleData } = useCastle(cityId, castleId);
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
@@ -610,27 +594,25 @@ export function CastleTab() {
         {castlePda && castle && (
           <button
             type="button"
-            onClick={() => {
+            onClick={() =>
               /* Map-tab's deep-link consumer (map-tab.tsx ~237)
                * early-exits unless `?city=` is present, and it only
-               * pans/selects when `?lat=` AND `?long=` are ALSO set.
+               * pans/selects when `?lat=` AND `?long=` are also set.
                * Send all four so the round-trip actually focuses the
                * camera and pops the EntityPanel on the right castle.
                * CastleAccount.latitude / longitude are i32 grid units
-               * (degrees * 10000); the URL contract expects decimal
+               * (degrees × 10000); the URL contract expects decimal
                * degrees so we divide before pushing. */
-              const params = new URLSearchParams(searchParams.toString());
-              params.delete("tab");
-              params.delete("castleId");
-              params.delete("cityId");
-              params.set("city", String(castle.cityId));
-              params.set("lat", String(castle.latitude / 10000));
-              params.set("long", String(castle.longitude / 10000));
-              params.set("castle", castlePda.toBase58());
-              router.replace(`${pathname}?${params.toString()}`, {
-                scroll: false,
-              });
-            }}
+              urlPatch({
+                tab: null,
+                castleId: null,
+                cityId: null,
+                city: String(castle.cityId),
+                lat: String(castle.latitude / 10000),
+                long: String(castle.longitude / 10000),
+                castle: castlePda.toBase58(),
+              })
+            }
             className="rounded-md border border-border-default bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-gold"
           >
             Locate
@@ -646,13 +628,13 @@ export function CastleTab() {
               <div>
                 <div className="text-xs text-text-muted">Tier</div>
                 <div className="text-sm font-semibold text-text-gold">
-                  {CASTLE_TIERS[castle.tier ?? 0]}
+                  {CASTLE_TIER_NAMES[castle.tier ?? 0]}
                 </div>
               </div>
               <div>
                 <div className="text-xs text-text-muted">Status</div>
                 <div className="text-sm font-semibold text-text-primary">
-                  {CASTLE_STATUS[castle.status ?? 0]}
+                  {CASTLE_STATUS_NAMES[castle.status ?? 0]}
                 </div>
               </div>
               <div>

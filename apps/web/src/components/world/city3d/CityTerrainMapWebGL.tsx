@@ -28,7 +28,7 @@ import {
 } from "react";
 import * as THREE from "three";
 import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { toGrid, type CityAccount } from "novus-mundus-sdk";
+import { toGrid, OCCUPANT_CASTLE, type CityAccount } from "novus-mundus-sdk";
 import {
   biomeAt,
   biomeKnobsFromCity,
@@ -91,6 +91,7 @@ import {
   INITIAL_DISTANCE_3D,
   PITCH_2D,
   PITCH_3D,
+  cityCameraSizeFactor,
 } from "./controls";
 import { MarkersLayer } from "./markers";
 import { InspectionLabelsLayer } from "./inspectionLabels";
@@ -417,11 +418,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
      * largest canonical city plot width so smaller cities zoom in
      * (camera closer = smaller distance) and Tokyo stays at the
      * baseline distance. */
-    const REF_WIDTH_GRID = 8782;
-    const sizeFactor = Math.min(
-      1,
-      Math.max(0.45, props.cityAccount.widthGrid / REF_WIDTH_GRID),
-    );
+    const sizeFactor = cityCameraSizeFactor(props.cityAccount);
     const baseMax =
       props.mapMode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     const maxD0 = baseMax * sizeFactor;
@@ -752,11 +749,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
      * NEW max. Without this, switching modes snaps the camera to the
      * destination mode's default distance — a 2D-zoomed-in user
      * suddenly framed wide on toggle to 3D, or vice versa. */
-    const REF_WIDTH_GRID = 8782;
-    const sizeFactor = Math.min(
-      1,
-      Math.max(0.45, props.cityAccount.widthGrid / REF_WIDTH_GRID),
-    );
+    const sizeFactor = cityCameraSizeFactor(props.cityAccount);
     const oldMax =
       (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
     const newMax =
@@ -854,11 +847,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
      * single-cell-fills-the-screen feel as the 2D path at full zoom. */
     const baseMax =
       mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const REF_WIDTH_GRID = 8782;
-    const sizeFactor = Math.min(
-      1,
-      Math.max(0.45, propsRef.current.cityAccount.widthGrid / REF_WIDTH_GRID),
-    );
+    const sizeFactor = cityCameraSizeFactor(propsRef.current.cityAccount);
     const maxD = baseMax * sizeFactor;
     const targetDistance = maxD / 200;
     const targetVec = new THREE.Vector3(
@@ -1047,7 +1036,24 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     const p = propsRef.current;
     const markerHit = raycastMarkers(r, clientX, clientY, p.occupied);
     if (markerHit && p.onActiveOccupant) {
-      const cell = markerHit.cell;
+      let cell = markerHit.cell;
+      /* Castles emit N² OccupiedCell entries (one per footprint cell)
+       * with identical occupant pubkey but different grid coords. The
+       * 2D-mode ground-plane fallback in raycastMarkers can return ANY
+       * of those cells; anchoring the tooltip to whichever cell was
+       * hit makes the bubble jump 1–3 cells SW→NE as the cursor slides
+       * across the same castle. Snap to the anchor (the one cell with
+       * footprintAnchor=true) so the tooltip stays put for the whole
+       * footprint. */
+      if (cell.occupantType === OCCUPANT_CASTLE && cell.footprintAnchor !== true) {
+        const anchor = p.occupied.find(
+          (c) =>
+            c.occupantType === OCCUPANT_CASTLE &&
+            c.occupant === cell.occupant &&
+            c.footprintAnchor === true,
+        );
+        if (anchor) cell = anchor;
+      }
       const ox = cell.gridLong - r.cityLongGrid;
       const oy = cell.gridLat - r.cityLatGrid;
       const halfSide = MESH_SIZE / 2;

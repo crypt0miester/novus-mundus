@@ -81,9 +81,20 @@ function linearColor(rgb: readonly [number, number, number]): THREE.Color {
  * caller can fall through to the default fill rather than render a
  * black pixel. The cosmetic-color catalog stores hex strings, so the
  * occupant cells passed into `updateOccupants` carry hex; this turns
- * each one into a per-instance fill colour. */
+ * each one into a per-instance fill colour.
+ *
+ * Cached by trimmed hex string — `updateOccupants` runs per animation
+ * frame and a busy city can call this hundreds of times per paint. The
+ * cosmetic catalog has dozens of distinct hexes (not unbounded), so a
+ * Map<hex, Color> turns the hot path into a single lookup after the
+ * first paint. Malformed inputs return null without caching so a typo
+ * doesn't poison the cache. */
+const _hexColorCache = new Map<string, THREE.Color>();
 function parseHexLinear(hex: string): THREE.Color | null {
-  let h = hex.trim();
+  const trimmed = hex.trim();
+  const cached = _hexColorCache.get(trimmed);
+  if (cached) return cached;
+  let h = trimmed;
   if (h.startsWith("#")) h = h.slice(1);
   // Expand `#rgb` shorthand.
   if (h.length === 3) {
@@ -98,7 +109,9 @@ function parseHexLinear(hex: string): THREE.Color | null {
   const r = (n >> 16) & 0xff;
   const g = (n >> 8) & 0xff;
   const b = n & 0xff;
-  return linearColor([r, g, b]);
+  const color = linearColor([r, g, b]);
+  _hexColorCache.set(trimmed, color);
+  return color;
 }
 
 const COLOR_PLAYER = linearColor(PLAYER_FILL_SRGB);
@@ -217,31 +230,14 @@ let _occupancyOverflowWarned = false;
  * mode (camera looking down at 35° elevation), so collapse it to 0. */
 const OVERLAY_Y_BIAS = 0;
 
-export interface OccupiedCell {
-  gridLat: number;
-  gridLong: number;
-  occupantType: number;
-  occupant: string;
-  /* Cosmetic name colour (sRGB hex like "#b45309"). When set, the
-   * occupant's fill instance-colour adopts this — paid identity reads
-   * across the disc, not just in the EntityPanel. */
-  nameColorHex?: string;
-  /* Catalog-keyed colour animation. Renderers re-set the instance
-   * colour per frame against this; static when undefined. Defer
-   * implementing the per-frame tick until the base static-colour
-   * path is shipped. */
-  nameColorAnim?: string;
-  /* Castle footprint anchor flag — only the (dlat=0, dlong=0) cell of
-   * an N×N castle has this set so the renderer paints ONE plate per
-   * castle instead of N² duplicates. */
-  footprintSize?: number;
-  footprintAnchor?: boolean;
-  /* Castle tier (CastleTier enum, 0..4) drives tower-glyph layout.
-   * Castle status (CastleStatus enum, 0..4) drives the corner pip
-   * color. Both only set on OCCUPANT_CASTLE anchor cells. */
-  castleTier?: number;
-  castleStatus?: number;
-}
+/* Re-export the canonical `OccupiedCell` so consumers can keep
+ * importing it from this module, but the single source of truth lives
+ * in the hook that builds the stream. Maintaining two parallel
+ * declarations let them silently drift (nameColorAnim was typed as
+ * `string` here while the hook narrowed it to a `CosmeticColorAnimation`
+ * union; the cosmetic IDs were missing here entirely). */
+export type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
+import type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
 
 export interface SelectedEntity {
   pubkey: string;
@@ -355,7 +351,15 @@ export class MarkersLayer {
     cfg.scene.add(this.group);
 
     this.boundarySquare = this.buildBoundarySquare();
-    this.boundarySquare.renderOrder = 1;
+    /* renderOrder 1.7 puts the boundary OVER the dashed walk lines
+     * (1.2/1.5) and their markers (1.3/1.6). The walks use
+     * depthTest:false to dodge z-fighting with the terrain plate, so
+     * the only way to stop a crossing walk-line from visually
+     * breaking the boundary frame is to draw the boundary after the
+     * walk in renderOrder. Player/encounter dots at 3.x still draw on
+     * top of the boundary, which is correct — boundary should
+     * disappear behind an occupant standing on the edge cell. */
+    this.boundarySquare.renderOrder = 1.7;
     this.group.add(this.boundarySquare);
 
     /* Centre cartographer star removed — didn't carry any

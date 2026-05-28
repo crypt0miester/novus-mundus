@@ -68,6 +68,23 @@ export const MAX_PITCH_3D = 85 * DEG;
 export const INITIAL_DISTANCE_2D = 8;
 export const INITIAL_DISTANCE_3D = 4.5;
 
+/* INITIAL_DISTANCE_* is tuned for the largest canonical city
+ * (Tokyo, widthGrid ~8782). Smaller cities at the same distance feel
+ * "lost in space" — the plot floats inside an over-zoomed canvas.
+ * Scaling by `widthGrid / REF_WIDTH_GRID` pulls the camera in
+ * proportionally so every city frames similarly at zoom 1×. Clamped
+ * to [0.45, 1] so micro-cities don't dive into the ground and Tokyo
+ * stays at the baseline. Returns a multiplier applied to whatever
+ * INITIAL_DISTANCE_{2D,3D} the caller is targeting — every call site
+ * (initial mount, mode-toggle, focusRequest) needs the same clamp
+ * or the camera framing diverges between paths. */
+const REF_WIDTH_GRID = 8782;
+export function cityCameraSizeFactor(cityAccount: {
+  widthGrid: number;
+}): number {
+  return Math.min(1, Math.max(0.45, cityAccount.widthGrid / REF_WIDTH_GRID));
+}
+
 /* Exponential smoothing rate, in 1/sec. 8.0 matches IsometricCamera.js:33
  * — gestures feel responsive without snapping. */
 export const SMOOTHING = 8.0;

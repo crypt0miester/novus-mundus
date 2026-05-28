@@ -64,6 +64,13 @@ import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/buildings";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { DomainName } from "@/components/shared/DomainName";
+import {
+  CASTLE_TIER_NAMES,
+  CASTLE_STATUS_NAMES,
+  CASTLE_STATUS_NARRATION,
+  isCastleStatusDanger,
+} from "@/lib/world/castles";
+import { useUrlPatch } from "@/lib/hooks/useUrlParam";
 import { TxButton, type TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { formatTime } from "@/lib/utils";
@@ -220,6 +227,7 @@ export function MapTab() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
+  const urlPatch = useUrlPatch();
   const deepLinkConsumedRef = useRef(false);
   // Cancel handle for the in-flight tryFocus chain started by the
   // deep-link effect — the StrictMode re-mount otherwise leaves two
@@ -1638,18 +1646,18 @@ export function MapTab() {
           onFocus={(gridLat, gridLong) => mapRef.current?.focusCell(gridLat, gridLong)}
           sameCity={sameCity}
           onOpenComposer={setComposer}
-          onOpenInCastles={(castleId, cityId) => {
+          onOpenInCastles={(castleId, cityId) =>
             /* Pass cityId too — castle-tab derives the PDA via
              * `useCastle(cityId, castleId)`; the previous version
              * fell through to `player.currentCity`, so a deep link
              * from a castle inspected in a different city resolved
              * to the wrong castle's PDA. */
-            const params = new URLSearchParams(searchParams.toString());
-            params.set("tab", "castle");
-            params.set("castleId", String(castleId));
-            params.set("cityId", String(cityId));
-            router.replace(`${pathname}?${params.toString()}`, { scroll: false });
-          }}
+            urlPatch({
+              tab: "castle",
+              castleId: String(castleId),
+              cityId: String(cityId),
+            })
+          }
         />
       );
     }
@@ -2496,43 +2504,9 @@ interface CastleSnapshot {
   contestEndAt: { toNumber(): number };
 }
 
-/* CastleTier enum (chain-side) — names must match `CastleTier` in the
- * SDK so the inspect panel and the dedicated Castles tab agree on
- * what to call each tier. */
-const CASTLE_TIER_NAMES: Record<number, string> = {
-  0: "Outpost",
-  1: "Keep",
-  2: "Stronghold",
-  3: "Fortress",
-  4: "Citadel",
-};
-
-/* CastleStatus enum (chain-side) — 5 states:
- *   0 Vacant         — no king, claimable
- *   1 Contest        — active conflict for the seat
- *   2 Protected      — held with protection window active
- *   3 Vulnerable     — held but protection has lapsed
- *   4 Transitioning  — mid-handover from outgoing to incoming king
- * The previous shorter table mis-labeled 1/2/3 (called Contest "Held"
- * and shifted everything by one), which surfaced wrong words in the
- * inspect panel for held + contested castles. */
-const CASTLE_STATUS_NAMES: Record<number, string> = {
-  0: "Vacant",
-  1: "Contested",
-  2: "Protected",
-  3: "Vulnerable",
-  4: "Transitioning",
-};
-
-/* One-line story per status — surfaces what the player can DO from
- * this seat's current state, in the same voice castle-tab.tsx uses. */
-const CASTLE_STATUS_NARRATION: Record<number, string> = {
-  0: "The seat stands empty. A banner could be planted here today.",
-  1: "Blades are already in the field for this seat.",
-  2: "The seat is held, and protection still wraps it. No one may move against it yet.",
-  3: "The seat is held, but its protection has lapsed. It can be taken.",
-  4: "The seat is changing hands. Wait for the dust to settle.",
-};
+/* Castle vocabulary (tier name, status name, status narration) lives
+ * in `@/lib/world/castles` so the EntityPanel inspect block, the
+ * on-disc hover tooltip, and the dedicated Castles tab can't drift. */
 
 // Minimal projection of the EncounterAccount fields we render. Pulled from
 // EncounterAccount in the SDK — we only need rarity/level/health/etc here.
@@ -3060,7 +3034,7 @@ function EntityPanel({
             <StatCard
               label="status"
               value={CASTLE_STATUS_NAMES[castle.status] ?? `S${castle.status}`}
-              tone={castle.status === 1 || castle.status === 3 ? "danger" : undefined}
+              tone={isCastleStatusDanger(castle.status) ? "danger" : undefined}
             />
             <StatCard
               label="garrison"
@@ -3092,8 +3066,7 @@ function EntityPanel({
               100,
               Math.round((castle.garrisonCount / castle.maxGarrison) * 100),
             );
-            const dangerState =
-              castle.status === 1 || castle.status === 3;
+            const dangerState = isCastleStatusDanger(castle.status);
             return (
               <div
                 style={{

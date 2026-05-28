@@ -110,6 +110,17 @@ export class InspectionLabelsLayer {
    * is what actually fires. Without the indirection, the listener
    * would invoke a callback stale by N renders. */
   private currentClickHandler: ((cell: OccupiedCell) => void) | null = null;
+  /* Memoised sort + teamSet inputs. `update()` runs every paint and
+   * the inputs only change when the parent's react state changes —
+   * usually 1-10 Hz at most. Sorting 2000 occupants and rebuilding the
+   * teamSet at 60 Hz is pure wasted work. Cache hit = the four
+   * identity tracks all match; cache miss = rebuild and store. */
+  private cachedOccupiedRef: OccupiedCell[] | null = null;
+  private cachedMyPubkey: string | undefined = undefined;
+  private cachedSelectedKey: string | null = null;
+  private cachedTeamMatesRef: string[] | undefined = undefined;
+  private cachedSorted: OccupiedCell[] | null = null;
+  private cachedTeamSet: Set<string> = new Set();
 
   constructor(cfg: InspectionLabelsConfig) {
     this.group = new THREE.Group();
@@ -211,27 +222,56 @@ export class InspectionLabelsLayer {
     const halfSide = MESH_SIZE / 2;
     const halfW = args.canvasW / 2;
     const halfH = args.canvasH / 2;
-    const teamSet = new Set(args.teamMatePubkeys ?? []);
-    const isSelected = (c: OccupiedCell): boolean =>
-      args.selectedEntity != null &&
-      args.selectedEntity.gridLat === c.gridLat &&
-      args.selectedEntity.gridLong === c.gridLong;
 
-    /* Priority — lower number = higher priority. Mirrors the 2D
-     * fallback's order so collision-cull biases identical. */
-    const priority = (c: OccupiedCell): number => {
-      if (args.myPlayerPubkey != null && c.occupant === args.myPlayerPubkey) {
-        return 0;
-      }
-      if (isSelected(c)) return 1;
-      if (c.occupantType === OCCUPANT_PLAYER && teamSet.has(c.occupant)) {
-        return 2;
-      }
-      if (c.occupantType === OCCUPANT_ENCOUNTER) return 3;
-      if (c.occupantType === OCCUPANT_CASTLE) return 4;
-      return 5;
-    };
-    const sorted = [...args.occupied].sort((a, b) => priority(a) - priority(b));
+    /* Cache lookup. selectedEntity is the only object input we compare
+     * by content (gridLat/gridLong) rather than reference — its
+     * identity churns when the parent re-renders, but its grid coords
+     * are stable across the relevant window. The other three inputs
+     * compare by reference; the parent (useCityOccupied, the team-mate
+     * memo) returns stable references when nothing changed. */
+    const selectedKey = args.selectedEntity
+      ? `${args.selectedEntity.gridLat},${args.selectedEntity.gridLong}`
+      : null;
+    const cacheHit =
+      this.cachedSorted != null &&
+      this.cachedOccupiedRef === args.occupied &&
+      this.cachedMyPubkey === args.myPlayerPubkey &&
+      this.cachedSelectedKey === selectedKey &&
+      this.cachedTeamMatesRef === args.teamMatePubkeys;
+
+    let sorted: OccupiedCell[];
+    let teamSet: Set<string>;
+    if (cacheHit) {
+      sorted = this.cachedSorted!;
+      teamSet = this.cachedTeamSet;
+    } else {
+      teamSet = new Set(args.teamMatePubkeys ?? []);
+      const isSelected = (c: OccupiedCell): boolean =>
+        args.selectedEntity != null &&
+        args.selectedEntity.gridLat === c.gridLat &&
+        args.selectedEntity.gridLong === c.gridLong;
+      /* Priority — lower number = higher priority. Mirrors the 2D
+       * fallback's order so collision-cull biases identical. */
+      const priority = (c: OccupiedCell): number => {
+        if (args.myPlayerPubkey != null && c.occupant === args.myPlayerPubkey) {
+          return 0;
+        }
+        if (isSelected(c)) return 1;
+        if (c.occupantType === OCCUPANT_PLAYER && teamSet.has(c.occupant)) {
+          return 2;
+        }
+        if (c.occupantType === OCCUPANT_ENCOUNTER) return 3;
+        if (c.occupantType === OCCUPANT_CASTLE) return 4;
+        return 5;
+      };
+      sorted = [...args.occupied].sort((a, b) => priority(a) - priority(b));
+      this.cachedSorted = sorted;
+      this.cachedTeamSet = teamSet;
+      this.cachedOccupiedRef = args.occupied;
+      this.cachedMyPubkey = args.myPlayerPubkey;
+      this.cachedSelectedKey = selectedKey;
+      this.cachedTeamMatesRef = args.teamMatePubkeys;
+    }
 
     const tmpVec = new THREE.Vector3();
     const drawn: { x: number; y: number; w: number; h: number }[] = [];
