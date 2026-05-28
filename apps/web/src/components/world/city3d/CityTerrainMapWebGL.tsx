@@ -27,15 +27,8 @@ import {
   useState,
 } from "react";
 import * as THREE from "three";
-import { CSS2DRenderer, CSS2DObject } from "three/examples/jsm/renderers/CSS2DRenderer.js";
-import { toGrid, OCCUPANT_CASTLE, type CityAccount } from "novus-mundus-sdk";
-import {
-  biomeAt,
-  biomeKnobsFromCity,
-  biomeName,
-  isPassableBiome,
-  type BiomeKnobs,
-} from "@/lib/world/biome";
+import { toGrid, type CityAccount } from "novus-mundus-sdk";
+import { biomeKnobsFromCity, type BiomeKnobs } from "@/lib/world/biome";
 
 /* Minimal terrain handle for the WebGL renderer — biome lookups for
  * click + hover go through this struct. Pre-flat-strategy this was a
@@ -52,9 +45,9 @@ function cityTerrain(city: CityAccount): CityTerrain {
     knobs: biomeKnobsFromCity(city),
   };
 }
-function isPassable(terrain: CityTerrain, ox: number, oy: number): boolean {
-  return isPassableBiome(biomeAt(terrain.biomeSeed, ox, oy, terrain.knobs));
-}
+/* `isPassable` was inlined into useSceneInputs along with cityTerrain;
+ * the orchestrator still uses cityTerrain() above for the `terrain`
+ * useMemo it threads into setupCityScene + the rebuild effect. */
 import type { MapMode } from "@/lib/store/settings";
 import type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
 import type {
@@ -65,47 +58,18 @@ import type {
 
 import styles from "../CityTerrainMap.module.css";
 import {
-  MARKER_FLAT_SCALE_Y,
-  GRID_OVERLAY_MIN_CSS_PX_PER_CELL,
-  MAX_HEIGHT,
   MESH_SIZE,
   METERS_PER_GRID_UNIT,
-  cssPxPerCellAt,
-  getElevationAt,
-  gridToWorld,
-  midpointElevation,
   worldToGrid,
 } from "./coords";
-import {
-  buildTerrainMesh,
-  meshFromBakedPixels,
-  COLOR_TEXTURE_SIZE_HIGH,
-  COLOR_TEXTURE_SIZE_PREVIEW,
-  type BuiltTerrainMesh,
-} from "./buildTerrainMesh";
-import { getBakeWorker } from "@/lib/world/bakeWorkerClient";
-import {
-  CityCameraController,
-  FOV_DEG,
-  INITIAL_DISTANCE_2D,
-  INITIAL_DISTANCE_3D,
-  PITCH_2D,
-  PITCH_3D,
-  cityCameraSizeFactor,
-} from "./controls";
-import { MarkersLayer } from "./markers";
-import { InspectionLabelsLayer } from "./inspectionLabels";
-import {
-  runModeTransition,
-  runViewTween,
-  shouldRunTransition,
-  snapToMode,
-} from "./transition";
 import {
   setupCityScene,
   type SceneRefs,
   type SceneHandlersRef,
 } from "./hooks/setupCityScene";
+import { usePaintLoop } from "./hooks/usePaintLoop";
+import { useSceneInputs } from "./hooks/useSceneInputs";
+import { useSceneSync } from "./hooks/useSceneSync";
 
 export interface HoverReadout {
   /** Capitalised biome name (e.g. "Forest", "Sand", "Shore") — mirrors
@@ -193,10 +157,8 @@ export interface CityTerrainMapWebGLProps {
   onLabelClick?: (cell: OccupiedCell) => void;
 }
 
-/* `SceneRefs` lives in hooks/setupCityScene.ts now — the orchestrator
- * just references the imported type. */
-
-const HOVER_THROTTLE_MS = 33;
+/* `SceneRefs` + `HOVER_THROTTLE_MS` live in `hooks/setupCityScene.ts`
+ * and `hooks/useSceneInputs.ts` respectively now. */
 
 /* Mount the WebGL renderer into the wrap. Returns a ref object the
  * caller pokes via `useEffect` to push state updates. */
@@ -273,6 +235,12 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     requestRender: () => {},
   });
 
+  /* Tracks the cityId we've already snapped the auto-focus camera for.
+   * Shared between the mount effect (initial snap, when autoFocusCell
+   * is known at mount time) and the post-mount snap effect in
+   * useSceneSync (when autoFocusCell becomes non-null later). */
+  const autoFocusedForCityRef = useRef<number | null>(null);
+
   /* Build the scene exactly once. Subsequent prop changes flow
    * through targeted `useEffect`s below. */
   useEffect(() => {
@@ -307,666 +275,41 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
   }, []);
 
 
-  /* Resize on size change. */
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    r.renderer.setSize(size.w, size.h, false);
-    r.cssRenderer.setSize(size.w, size.h);
-    r.camera.aspect = size.w / size.h;
-    r.camera.updateProjectionMatrix();
-    requestRender();
-  }, [size.w, size.h]);
-
-  /* Rebuild terrain when terrain identity or rgu changes.
-   *
-   * Two-phase: synchronous 512² preview swaps in immediately so the
-   * city is visible right away; the high-res 4096² bake runs on the
-   * Worker and swaps when ready. Cleanup cancels the in-flight job
-   * so a fast city switch drops the stale result. */
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    const old = r.terrain;
-    const preview = buildTerrainMesh(
-      terrain.biomeSeed,
-      rgu,
-      terrain.knobs,
-      COLOR_TEXTURE_SIZE_PREVIEW,
-    );
-    preview.heightScale.value = r.controller.getMode() === "iso" ? 1 : 0;
-    r.scene.remove(old.mesh);
-    old.geometry.dispose();
-    old.material.dispose();
-    old.colorMap.dispose();
-    r.scene.add(preview.mesh);
-    r.terrain = preview;
-    r.rgu = rgu;
-    r.cityLatGrid = cityLatGrid;
-    r.cityLongGrid = cityLongGrid;
-    r.markers.setTerrain(terrain);
-    r.markers.setCenterGrid(cityLatGrid, cityLongGrid, rgu);
-    /* Distance bounds: max = mode default (zoom 1×), min = max/200.
-     * Re-applied here so a city switch re-clamps in case the user
-     * was zoomed in at the previous city. */
-    const maxD = r.controller.getMode() === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    r.controller.setDistanceBounds(maxD / 200, maxD);
-    requestRender();
-
-    const job = getBakeWorker().bake({
-      biomeSeed: terrain.biomeSeed,
-      rgu,
-      knobs: terrain.knobs,
-      texSize: COLOR_TEXTURE_SIZE_HIGH,
-    });
-    job.promise.then((pixels) => {
-      if (!pixels) return;
-      const rr = refs.current;
-      if (!rr || rr.terrain !== preview) return;
-      const high = meshFromBakedPixels(pixels, COLOR_TEXTURE_SIZE_HIGH);
-      // Share heightScale across swap — see mount-effect note above.
-      high.heightScale = preview.heightScale;
-      rr.scene.remove(preview.mesh);
-      preview.geometry.dispose();
-      preview.material.dispose();
-      preview.colorMap.dispose();
-      rr.scene.add(high.mesh);
-      rr.terrain = high;
-      requestRender();
-    });
-
-    return () => {
-      job.cancel();
-    };
-  }, [terrain, rgu, cityLatGrid, cityLongGrid, props.cityAccount.widthGrid, props.cityAccount.heightGrid]);
-
-  /* Push occupant/selection/walk state into the markers layer on
-   * each relevant prop change. The markers layer no-ops if its inputs
-   * haven't actually changed shape-wise, so React-render churn from
-   * the parent doesn't translate into GPU thrash. */
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    const cssPx = cssPxPerCellAt(r.camera, r.controller.getTarget(), r.rgu, size.h);
-    r.markers.updateOccupants(
-      props.occupied,
-      props.selectedEntity ?? null,
-      props.myPlayerPubkey,
-      cssPx,
-    );
-    r.markers.updateLanding(props.selected, cssPx);
-    requestRender();
-  }, [
-    props.occupied,
-    props.selected,
-    props.selectedEntity,
-    props.myPlayerPubkey,
-    size.h,
-  ]);
-
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    r.markers.updateOwnWalk(props.travel ?? null);
-    r.markers.updateOtherWalks(props.otherWalks ?? []);
-    requestRender();
-  }, [props.travel, props.otherWalks]);
-
-  /* Mode change: run the tween (or snap if prefers-reduced-motion).
-   * Selection-aware framing: if an entity or landing cell is
-   * selected, target.x/z tweens to its world position so the focused
-   * cell stays centred under the tilt.
-   *
-   * `lastRequestedModeRef` tracks the most recent mode the orchestrator
-   * asked us to be in — NOT the controller's committed mode, which
-   * only flips at tween completion. Comparing against the requested
-   * mode lets a fast second toggle (e.g. 2D→3D press, then 3D→2D
-   * press 200ms later) start a reversing tween instead of short-
-   * circuiting via shouldRunTransition(committed, target) === false. */
-  const lastRequestedModeRef = useRef<MapMode>(props.mapMode);
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    const from = lastRequestedModeRef.current;
-    const to = props.mapMode;
-    if (!shouldRunTransition(from, to)) return;
-    lastRequestedModeRef.current = to;
-
-    /* Pick selection target if any. */
-    let selectionTargetXZ: { x: number; z: number } | null = null;
-    const sel = props.selectedEntity ?? props.selected;
-    if (sel) {
-      const ox = sel.gridLong - cityLongGrid;
-      const oy = sel.gridLat - cityLatGrid;
-      const { wx, wz } = gridToWorld(ox, oy, rgu);
-      selectionTargetXZ = { x: wx, z: wz };
-    }
-
-    const reduce =
-      typeof window !== "undefined" &&
-      window.matchMedia &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-
-    /* Preserve the user's relative zoom across the mode toggle.
-     * Compute the fractional zoom against the OLD max (before
-     * `setDistanceBounds` clamps), then apply the same fraction to the
-     * NEW max. Without this, switching modes snaps the camera to the
-     * destination mode's default distance — a 2D-zoomed-in user
-     * suddenly framed wide on toggle to 3D, or vice versa. */
-    const sizeFactor = cityCameraSizeFactor(props.cityAccount);
-    const oldMax =
-      (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
-    const newMax =
-      (to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
-    const distanceFrom = r.controller.getDistance();
-    const relativeZoom = Math.max(0, Math.min(1, distanceFrom / oldMax));
-    const distanceTo = relativeZoom * newMax;
-
-    /* Update controller's distance bounds for the new mode at start
-     * of the tween — the user might be zoomed past the new mode's
-     * max, which the controller's setDistanceBounds re-clamps. */
-    r.controller.setDistanceBounds(newMax / 200, newMax);
-
-    if (reduce) {
-      r.modeTween?.cancel();
-      snapToMode(r.controller, r.terrain, to, selectionTargetXZ);
-      r.controller.setDistanceHard(distanceTo);
-      props.onModeCommitted(to);
-      requestRender();
-      return;
-    }
-
-    /* Cancel any in-flight mode tween + view tween before starting. */
-    r.modeTween?.cancel();
-    r.viewTween?.cancel();
-    r.modeTween = runModeTransition({
-      controller: r.controller,
-      terrain: r.terrain,
-      fromMode: from,
-      toMode: to,
-      selectionTargetXZ,
-      distanceFrom,
-      distanceTo,
-      onChange: requestRender,
-      onComplete: (mode) => {
-        if (refs.current) refs.current.modeTween = null;
-        propsRef.current.onModeCommitted(mode);
-      },
-    });
-  }, [props.mapMode]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /* Touch-orbit toggle passes through to the controller. */
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    r.controller.setTouchOrbitEnabled(props.touchOrbitEnabled);
-  }, [props.touchOrbitEnabled]);
-
-  /* Reset trigger — orchestrator bumps a counter and the scene runs
-   * an in-mode view tween back to defaults. */
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    if (props.resetTrigger === 0) return;
-    r.viewTween?.cancel();
-    const mode = r.controller.getMode();
-    const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const tDefault = new THREE.Vector3(
-      0,
-      mode === "iso" ? midpointElevation() : 0,
-      0,
-    );
-    r.viewTween = runViewTween(
-      r.controller,
-      { target: tDefault, distance: dDefault, yaw: 0 },
-      requestRender,
-    );
-  }, [props.resetTrigger]);
-
-  /* Focus request — imperative `focusCell()` handle on the orchestrator
-   * sets a payload-counter prop; we run an in-mode view tween to the
-   * requested cell at near-maximum zoom. Mirrors the 2D fallback's
-   * `focusCell` (CityTerrainMap2DFallback.tsx:570) so callers (entity-
-   * panel name-click, future nav prompts) get the same UX on either
-   * renderer. The `nonce` in the payload distinguishes successive calls
-   * to the same coords. */
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    const req = props.focusRequest;
-    if (!req) return;
-    /* Convert grid coord → world XZ using the same projection the
-     * marker layer + click handler share, so the focused cell lands
-     * dead-centre under the new camera target. */
-    const ox = req.gridLong - r.cityLongGrid;
-    const oy = req.gridLat - r.cityLatGrid;
-    const { wx, wz } = gridToWorld(ox, oy, r.rgu);
-    const mode = r.controller.getMode();
-    /* Target distance — match the 2D fallback's MAX_VIEW_SCALE = 500
-     * (distance = max / 500). Under flat-strategy the mesh has no
-     * elevation so the "can't dive too deep into a peak" caveat from
-     * the elevation-era is moot; we go as close as the controller
-     * allows. The controller's minDistance is `maxDistance / 200`, so
-     * `maxD / 200` lands exactly at the deepest legal zoom — same
-     * single-cell-fills-the-screen feel as the 2D path at full zoom. */
-    const baseMax =
-      mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const sizeFactor = cityCameraSizeFactor(propsRef.current.cityAccount);
-    const maxD = baseMax * sizeFactor;
-    const targetDistance = maxD / 200;
-    const targetVec = new THREE.Vector3(
-      wx,
-      mode === "iso" ? midpointElevation() : 0,
-      wz,
-    );
-    r.viewTween?.cancel();
-    r.viewTween = runViewTween(
-      r.controller,
-      { target: targetVec, distance: targetDistance },
-      requestRender,
-      req.durationMs ?? 520,
-    );
-  }, [props.focusRequest]);
-
-  /* Auto-focus on a cell when mounting the home-city disc. Fires
-   * once per cityId via the autoFocusCell prop changing.
-   *
-   * SNAP, not tween — the user navigates to /map expecting to land
-   * already centred on their cell. Tweening leaves a visible flash
-   * of the default overview before animating in, which reads as a
-   * load glitch rather than a smooth entrance. The mount effect
-   * also snaps when autoFocusCell is known at mount; this effect
-   * catches the case where `player` hasn't loaded yet by mount
-   * time and autoFocusCell becomes non-null on a later render. */
-  const autoFocusedForCityRef = useRef<number | null>(null);
-  useEffect(() => {
-    const r = refs.current;
-    if (!r) return;
-    if (!props.autoFocusCell) return;
-    if (autoFocusedForCityRef.current === props.cityAccount.cityId) return;
-    autoFocusedForCityRef.current = props.cityAccount.cityId;
-
-    const ox = props.autoFocusCell.gridLong - cityLongGrid;
-    const oy = props.autoFocusCell.gridLat - cityLatGrid;
-    const { wx, wz } = gridToWorld(ox, oy, rgu);
-    const mode = r.controller.getMode();
-    const dTarget = (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 16;
-    r.viewTween?.cancel();
-    r.viewTween = null;
-    r.controller.setDistanceHard(dTarget);
-    r.controller.setTargetHard(
-      new THREE.Vector3(
-        wx,
-        mode === "iso" ? getElevationAt(ox, oy) : 0,
-        wz,
-      ),
-    );
-    /* Force-apply the snap to the camera before the next paint;
-     * controller.update(0) won't, because desired===smoothed leaves
-     * `moved` false and the apply call is gated on it. */
-    r.controller.applyToCamera();
-    requestRender();
-    // No cleanup: resetting autoFocusedForCityRef on every dep change
-    // (e.g. when autoFocusCell coords update after an intracity walk)
-    // would defeat the documented "fires once per cityId" guard above
-    // and yank the camera back to the focused cell on every walk.
-  }, [
-    props.autoFocusCell?.gridLat,
-    props.autoFocusCell?.gridLong,
-    props.cityAccount.cityId,
-    cityLatGrid,
-    cityLongGrid,
-    rgu,
-    terrain,
-  ]); // eslint-disable-line react-hooks/exhaustive-deps
-
   /* ─── Helpers (closed over refs) ─────────────────────────── */
 
-  const requestRender = useCallback(() => {
-    const r = refs.current;
-    if (!r) return;
-    if (r.paintQueued) return;
-    r.paintQueued = true;
-    requestAnimationFrame((now) => {
-      if (!refs.current) return;
-      paint(now);
-    });
-  }, []);
+  const { requestRender } = usePaintLoop(
+    refs,
+    propsRef,
+    updateScaleBar,
+    updateCompass,
+  );
 
-  const paint = useCallback((now: number) => {
-    const r = refs.current;
-    if (!r) return;
-    r.paintQueued = false;
-    const dt = Math.min(0.1, Math.max(0, (now - r.lastUpdateMs) / 1000));
-    r.lastUpdateMs = now;
+  const {
+    handleClick,
+    handleDoubleClick,
+    handleResetRequested,
+    handleFrameSelected,
+    handlePointerMove,
+  } = useSceneInputs(refs, propsRef, requestRender, raycastMarkers, raycast);
 
-    /* Tween rAF self-schedules; here we only need to ensure the
-     * controller's smoothing is applied and the camera is rebuilt.
-     * `update` returns true if anything moved, in which case we
-     * need to keep painting until the smoothing settles. */
-    const moved = r.controller.update(dt);
+  /* Prop-sync effects: resize, terrain rebuild, marker updates, mode
+   * change, touch-orbit, reset chip, focusRequest, home-disc auto-
+   * focus. Each was a separate useEffect in the orchestrator before
+   * the split — same semantics, deps preserved verbatim. */
+  useSceneSync({
+    refs,
+    propsRef,
+    props,
+    size,
+    terrain,
+    rgu,
+    cityLatGrid,
+    cityLongGrid,
+    requestRender,
+    autoFocusedForCityRef,
+  });
 
-    /* Push CSS-px-per-cell to markers so they swap dot/tile mode if
-     * threshold crossed. */
-    const canvasH = r.renderer.domElement.clientHeight;
-    const cssPx = cssPxPerCellAt(
-      r.camera,
-      r.controller.getTarget(),
-      r.rgu,
-      canvasH,
-    );
-    /* Markers follow the terrain's effective height scale but with a
-     * MARKER_FLAT_SCALE_Y floor — their raycaster needs a non-singular
-     * world matrix to dispatch hits in 2D mode. The terrain mesh itself
-     * has no such floor (its uniform handles the visual flatten). */
-    r.markers.setTerrainScaleY(
-      Math.max(MARKER_FLAT_SCALE_Y, r.terrain.heightScale.value),
-    );
-    r.markers.updateCentreScale(cssPx);
-    r.markers.updateGrid(cssPx, r.controller.getTarget());
-
-    /* Re-evaluate occupant layer mode (dot vs tile) on each paint —
-     * markers.updateOccupants is the canonical entry but it requires
-     * the latest props. Just re-fire it with current props. */
-    const p = propsRef.current;
-    r.markers.updateOccupants(
-      p.occupied,
-      p.selectedEntity ?? null,
-      p.myPlayerPubkey,
-      cssPx,
-    );
-    r.markers.updateLanding(p.selected, cssPx);
-
-    /* Inspection-band labels — refresh every paint so projected
-     * positions track camera motion. The layer itself short-circuits
-     * when the zoom is outside the inspection band. */
-    const zoom = r.controller.getDisplayZoom();
-    const canvasW = r.renderer.domElement.clientWidth;
-    r.inspectionLabels.update({
-      occupied: p.occupied,
-      getDotTooltip: p.getDotTooltip,
-      myPlayerPubkey: p.myPlayerPubkey,
-      selectedEntity: p.selectedEntity ?? null,
-      viewScale: zoom,
-      camera: r.camera,
-      canvasW,
-      canvasH,
-      cityLatGrid: r.cityLatGrid,
-      cityLongGrid: r.cityLongGrid,
-      rgu: r.rgu,
-      teamMatePubkeys: p.teamMatePubkeys,
-      onLabelClick: p.onLabelClick,
-    });
-
-    r.renderer.render(r.scene, r.camera);
-    r.cssRenderer.render(r.scene, r.camera);
-
-    /* Notify orchestrator of zoom + cells-visible state for the
-     * status row. Throttled — only fire on change. */
-    p.onZoomChange(zoom);
-    p.onCellsVisibleChange(cssPx >= GRID_OVERLAY_MIN_CSS_PX_PER_CELL);
-
-    /* LOD scaffolding ripped out — under flat-strategy the mesh is a
-     * single flat quad with no vertex displacement, so per-zoom LOD
-     * rebuilds were a no-op (`coords.ts:lodForZoom` already always
-     * returned "high"). The dead conditional + rebuild branch lived
-     * here and synchronously rebuilt the 4096² DataTexture on the
-     * main thread per zoom step, which it never actually wanted to
-     * do — dropped entirely. */
-
-    updateScaleBar(r);
-    updateCompass(r);
-
-    /* If the controller is still smoothing toward a desired state
-     * (gesture in flight or just released), schedule the next paint. */
-    if (moved) {
-      r.paintQueued = true;
-      requestAnimationFrame((t) => paint(t));
-    }
-  }, []);
-
-  const handlePointerMove = useCallback((clientX: number, clientY: number) => {
-    const r = refs.current;
-    if (!r) return;
-    const now = performance.now();
-    if (now - r.lastHoverTs < HOVER_THROTTLE_MS) return;
-    r.lastHoverTs = now;
-
-    /* Marker raycast FIRST so an occupant under the pointer wins the
-     * hover even if the terrain ray would land on a neighbouring cell.
-     * Active-occupant emission fires from this path so the orchestrator
-     * can render the Variant B tooltip; pure-terrain hovers fire only
-     * the biome hover label. */
-    const p = propsRef.current;
-    const markerHit = raycastMarkers(r, clientX, clientY, p.occupied);
-    if (markerHit && p.onActiveOccupant) {
-      let cell = markerHit.cell;
-      /* Castles emit N² OccupiedCell entries (one per footprint cell)
-       * with identical occupant pubkey but different grid coords. The
-       * 2D-mode ground-plane fallback in raycastMarkers can return ANY
-       * of those cells; anchoring the tooltip to whichever cell was
-       * hit makes the bubble jump 1–3 cells SW→NE as the cursor slides
-       * across the same castle. Snap to the anchor (the one cell with
-       * footprintAnchor=true) so the tooltip stays put for the whole
-       * footprint. */
-      if (cell.occupantType === OCCUPANT_CASTLE && cell.footprintAnchor !== true) {
-        const anchor = p.occupied.find(
-          (c) =>
-            c.occupantType === OCCUPANT_CASTLE &&
-            c.occupant === cell.occupant &&
-            c.footprintAnchor === true,
-        );
-        if (anchor) cell = anchor;
-      }
-      const ox = cell.gridLong - r.cityLongGrid;
-      const oy = cell.gridLat - r.cityLatGrid;
-      const halfSide = MESH_SIZE / 2;
-      const wx = (ox / r.rgu) * halfSide;
-      const wz = -(oy / r.rgu) * halfSide;
-      const tmpV = new THREE.Vector3(wx, 0, wz);
-      tmpV.project(r.camera);
-      const canvasW = r.renderer.domElement.clientWidth;
-      const canvasH = r.renderer.domElement.clientHeight;
-      /* Canvas-relative coords (NOT viewport) — the orchestrator
-       * renders the Variant B tooltip inside the position:relative
-       * `.canvasWrap` so the inline `left/top` is anchored to the
-       * wrap's top-left, which is the same as the canvas's top-left
-       * (canvas is `position:absolute; inset: 0`). */
-      const screenX = (tmpV.x * 0.5 + 0.5) * canvasW;
-      const screenY = (-tmpV.y * 0.5 + 0.5) * canvasH;
-      p.onActiveOccupant({
-        cell: cell as OccupiedCell,
-        screen: { x: screenX, y: screenY },
-      });
-    } else if (p.onActiveOccupant) {
-      p.onActiveOccupant(null);
-    }
-
-    const hit = raycast(r, clientX, clientY);
-    if (!hit) {
-      p.onHover(null);
-      return;
-    }
-    const { ox, oy } = worldToGrid(hit.point.x, hit.point.z, r.rgu);
-    /* AABB bounds — the chain validates with `is_within_city_grid`
-     * (|ox| ≤ widthGrid/2, |oy| ≤ heightGrid/2). The previous disc
-     * check (`ox² + oy² > rgu²`) rejected the four corners of the
-     * square plot even though they're legal landing cells. */
-    const cityAcc = p.cityAccount;
-    const plotHalfW = cityAcc.widthGrid / 2;
-    const plotHalfH = cityAcc.heightGrid / 2;
-    const outOfBounds = Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH;
-    if (outOfBounds) {
-      p.onHover(null);
-      return;
-    }
-    /* Sample biome fresh from the city account — mirrors the 2D
-     * fallback's hover readout. */
-    const knobs = biomeKnobsFromCity(cityAcc);
-    const biome = biomeAt(cityAcc.biomeSeed, ox, oy, knobs);
-    const passable = isPassableBiome(biome);
-    const rawName = biomeName(biome);
-    const label = rawName.charAt(0).toUpperCase() + rawName.slice(1);
-    const distM = Math.round(Math.sqrt(ox * ox + oy * oy) * METERS_PER_GRID_UNIT);
-    p.onHover({ label, distM, passable, outOfBounds: false });
-  }, []);
-
-  const handleClick = useCallback((clientX: number, clientY: number) => {
-    const r = refs.current;
-    if (!r) return;
-    /* Try marker raycast first — if the user's click lands on a
-     * rendered dot/tile we resolve the cell from the instance id
-     * directly, no grid-coord round-trip risk. Pass the latest
-     * occupied snapshot so the ground-plane fallback inside
-     * raycastMarkers can match against current cells. */
-    const markerHit = raycastMarkers(r, clientX, clientY, propsRef.current.occupied);
-    if (markerHit) {
-      propsRef.current.onPick({
-        gridLat: markerHit.cell.gridLat,
-        gridLong: markerHit.cell.gridLong,
-        passable: true,
-        outOfBounds: false,
-        entityAtCell: {
-          pubkey: markerHit.cell.occupant,
-          occupantType: markerHit.cell.occupantType,
-          gridLat: markerHit.cell.gridLat,
-          gridLong: markerHit.cell.gridLong,
-        },
-      });
-      return;
-    }
-    const hit = raycast(r, clientX, clientY);
-    if (!hit) {
-      /* Click outside the mesh entirely. Treat as a deselect — the
-       * orchestrator handles entity-vs-landing branching. */
-      propsRef.current.onPick({
-        gridLat: 0,
-        gridLong: 0,
-        passable: false,
-        outOfBounds: true,
-        entityAtCell: null,
-      });
-      return;
-    }
-    const { ox, oy } = worldToGrid(hit.point.x, hit.point.z, r.rgu);
-    /* AABB bounds — mirrors the chain's `is_within_city_grid` and the
-     * 2D fallback's `plotHalfW` / `plotHalfH` clamp. */
-    const cityAcc = propsRef.current.cityAccount;
-    const plotHalfW = cityAcc.widthGrid / 2;
-    const plotHalfH = cityAcc.heightGrid / 2;
-    const outOfBounds = Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH;
-    const gridLat = r.cityLatGrid + oy;
-    const gridLong = r.cityLongGrid + ox;
-    /* Read terrain fresh from props for the same reason as
-     * handlePointerMove — controller bindings are mount-time, terrain
-     * identity changes with cityAccount. */
-    const liveTerrain = cityTerrain(propsRef.current.cityAccount);
-    const passable = !outOfBounds && isPassable(liveTerrain, ox, oy);
-    /* Strict equality lookup — same contract as the Canvas2D
-     * fallback. The marker raycast above (`raycastMarkers`) is the
-     * primary path for occupant clicks; this branch only runs when
-     * the click landed on raw terrain (empty cell), so it should
-     * NEVER fire entity selection. Previously a snap-to-nearest
-     * here was hijacking landing-cell picks within 14 CSS px of any
-     * occupant. */
-    const p = propsRef.current;
-    const exact = p.occupied.find(
-      (c) => c.gridLat === gridLat && c.gridLong === gridLong,
-    );
-    const hitCell: typeof exact = exact;
-    const entityAtCell = hitCell
-      ? {
-          pubkey: hitCell.occupant,
-          occupantType: hitCell.occupantType,
-          gridLat: hitCell.gridLat,
-          gridLong: hitCell.gridLong,
-        }
-      : null;
-    const finalGridLat = hitCell ? hitCell.gridLat : gridLat;
-    const finalGridLong = hitCell ? hitCell.gridLong : gridLong;
-    p.onPick({
-      gridLat: finalGridLat,
-      gridLong: finalGridLong,
-      passable,
-      outOfBounds,
-      entityAtCell,
-    });
-  }, []);
-
-  const handleDoubleClick = useCallback((clientX: number, clientY: number) => {
-    const r = refs.current;
-    if (!r) return;
-    const hit = raycast(r, clientX, clientY);
-    if (!hit) return;
-    /* Double-click zooms in 2× at the cursor. Animate target +
-     * distance via the view tween. */
-    const targetXZ = new THREE.Vector3(hit.point.x, 0, hit.point.z);
-    if (r.controller.getMode() === "iso") {
-      targetXZ.y = midpointElevation();
-    }
-    const newDistance = Math.max(
-      0.04,
-      r.controller.getDistance() / 2,
-    );
-    r.viewTween?.cancel();
-    r.viewTween = runViewTween(
-      r.controller,
-      { target: targetXZ, distance: newDistance },
-      requestRender,
-    );
-  }, []);
-
-  const handleResetRequested = useCallback(() => {
-    const r = refs.current;
-    if (!r) return;
-    const mode = r.controller.getMode();
-    const tDefault = new THREE.Vector3(
-      0,
-      mode === "iso" ? midpointElevation() : 0,
-      0,
-    );
-    const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    r.viewTween?.cancel();
-    r.viewTween = runViewTween(
-      r.controller,
-      { target: tDefault, distance: dDefault, yaw: 0 },
-      requestRender,
-    );
-  }, []);
-
-  // F key — Maya/Unity/Blender/Substance "Frame Selected" convention.
-  // Tweens to selectedEntity (preferred) or the landing-cell selection,
-  // no-op if nothing's selected (don't surprise the user with a reset).
-  const handleFrameSelected = useCallback(() => {
-    const r = refs.current;
-    if (!r) return;
-    const p = propsRef.current;
-    const sel = p.selectedEntity ?? p.selected;
-    if (!sel) return;
-    const ox = sel.gridLong - r.cityLongGrid;
-    const oy = sel.gridLat - r.cityLatGrid;
-    const { wx, wz } = gridToWorld(ox, oy, r.rgu);
-    const mode = r.controller.getMode();
-    const dTarget = (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 8;
-    r.viewTween?.cancel();
-    r.viewTween = runViewTween(
-      r.controller,
-      {
-        target: new THREE.Vector3(
-          wx,
-          // Read terrain via ref — the controller binds this callback
-          // once at mount, so the literal `terrain` closure would freeze
-          // at the mount-time city and use stale elevation after a city
-          // switch.
-          mode === "iso" ? getElevationAt(ox, oy) : 0,
-          wz,
-        ),
-        distance: dTarget,
-      },
-      requestRender,
-    );
-  }, []);
-
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   /* Sync handlersRef every render so the controller's mount-bound
    * callbacks always hit the LATEST React closures. Without this,
    * `handleClick` etc. would freeze at first mount and ignore any
