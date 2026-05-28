@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useCastle } from "@/lib/hooks/useCastle";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -78,9 +79,42 @@ export function CastleTab() {
   const { data: playerData } = usePlayer();
   const { data: geData } = useGameEngine();
   const player = playerData?.account;
-  const cityId = player?.currentCity ?? 0;
 
-  const [castleId, setCastleId] = useState(0);
+  /* Castle selection is URL-driven so the map's "Open in Castles"
+   * deep-link can pre-select a castle and so the URL itself is the
+   * source of truth (shareable, back-button friendly). Both `cityId`
+   * and `castleId` come from the URL when present; cityId falls
+   * through to the player's current city when absent. The previous
+   * implementation hard-coded `cityId = player.currentCity` and
+   * clamped `castleId < 3`, which meant a deep-link from a castle
+   * inspected outside the player's city silently resolved to a
+   * castle 0 PDA in the WRONG city. */
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const cityId = useMemo(() => {
+    const raw = searchParams.get("cityId");
+    if (raw != null) {
+      const n = Number(raw);
+      if (Number.isInteger(n) && n >= 0) return n;
+    }
+    return player?.currentCity ?? 0;
+  }, [searchParams, player?.currentCity]);
+  const castleId = useMemo(() => {
+    const raw = searchParams.get("castleId");
+    if (raw == null) return 0;
+    const n = Number(raw);
+    return Number.isInteger(n) && n >= 0 ? n : 0;
+  }, [searchParams]);
+  const setCastleId = useCallback(
+    (id: number) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (id === 0) params.delete("castleId");
+      else params.set("castleId", String(id));
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
   const { data: castleData } = useCastle(cityId, castleId);
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
@@ -552,21 +586,56 @@ export function CastleTab() {
         <p className="mt-1 text-xs italic text-text-muted">{CASTLE_FRAMING.line}</p>
       </div>
 
-      {/* Castle selector */}
-      <div className="flex gap-1 rounded-lg bg-surface p-1">
-        {[0, 1, 2].map((id) => (
+      {/* Castle selector + Locate — Locate closes the round-trip from
+       * the inspect panel on the map. We drop `tab` so we land on the
+       * default realm view, drop `castleId` (castle-tab state), and set
+       * `castle=<pubkey>` which map-tab.tsx already consumes to preselect
+       * the entity + pan/zoom the disc onto its cell. */}
+      <div className="flex items-center gap-2">
+        <div className="flex flex-1 gap-1 rounded-lg bg-surface p-1">
+          {[0, 1, 2].map((id) => (
+            <button
+              key={id}
+              onClick={() => setCastleId(id)}
+              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                castleId === id
+                  ? "bg-surface-raised text-text-gold"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              Castle {id}
+            </button>
+          ))}
+        </div>
+        {castlePda && castle && (
           <button
-            key={id}
-            onClick={() => setCastleId(id)}
-            className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-              castleId === id
-                ? "bg-surface-raised text-text-gold"
-                : "text-text-muted hover:text-text-secondary"
-            }`}
+            type="button"
+            onClick={() => {
+              /* Map-tab's deep-link consumer (map-tab.tsx ~237)
+               * early-exits unless `?city=` is present, and it only
+               * pans/selects when `?lat=` AND `?long=` are ALSO set.
+               * Send all four so the round-trip actually focuses the
+               * camera and pops the EntityPanel on the right castle.
+               * CastleAccount.latitude / longitude are i32 grid units
+               * (degrees * 10000); the URL contract expects decimal
+               * degrees so we divide before pushing. */
+              const params = new URLSearchParams(searchParams.toString());
+              params.delete("tab");
+              params.delete("castleId");
+              params.delete("cityId");
+              params.set("city", String(castle.cityId));
+              params.set("lat", String(castle.latitude / 10000));
+              params.set("long", String(castle.longitude / 10000));
+              params.set("castle", castlePda.toBase58());
+              router.replace(`${pathname}?${params.toString()}`, {
+                scroll: false,
+              });
+            }}
+            className="rounded-md border border-border-default bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-gold"
           >
-            Castle {id}
+            Locate
           </button>
-        ))}
+        )}
       </div>
 
       {/* Castle Info */}

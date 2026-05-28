@@ -63,6 +63,7 @@ import type { PanelAction } from "@/lib/store/right-panel";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingId } from "@/lib/buildings";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { DomainName } from "@/components/shared/DomainName";
 import { TxButton, type TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { formatTime } from "@/lib/utils";
@@ -211,7 +212,7 @@ export function MapTab() {
   // refresh doesn't replay them:
   //   1. ?city=<id>&lat=<rawLat>&long=<rawLong>[&player=<pda>] — drill into
   //      the city, focus the cell, optionally pre-select an entity. From the
-  //      team tab's "View on Map" action.
+  //      team tab's "Locate" action.
   //   2. ?openPanel=<key>&...props — open the named RightPanel composer with
   //      the props forwarded straight through. Used by team tab Reinforce /
   //      rally browse Join clicks so the action lands on the map instead of
@@ -501,9 +502,44 @@ export function MapTab() {
           accent: ENCOUNTER_RARITY_COLOR[e.account.rarity],
         };
       }
+      if (occupantType === OCCUPANT_CASTLE) {
+        const c = worldCastles?.find((x) => x.pubkey.toBase58() === occupant);
+        if (!c?.account) return null;
+        /* Reuse the module-scope CASTLE_TIER_NAMES / CASTLE_STATUS_NAMES
+         * so the hover bubble agrees with the EntityPanel inspect block.
+         * The previous inline arrays were stale (status order shifted
+         * by one against the chain CastleStatus enum), so a Vulnerable
+         * castle read as "Protected" in the hover bubble while the
+         * inspect panel correctly said "Vulnerable" — directly
+         * contradicting each other on the same castle's attackability. */
+        const tierName =
+          CASTLE_TIER_NAMES[c.account.tier] ?? `T${c.account.tier}`;
+        const statusName = c.account.isVacant
+          ? "Vacant"
+          : CASTLE_STATUS_NAMES[c.account.status] ?? `S${c.account.status}`;
+        const displayName = c.account.name?.trim() || `Castle #${c.account.castleId}`;
+        /* Slate accent ties the bubble border to the on-disc castle
+         * fill (rgba(95, 105, 120) — same vocabulary). Selection-aware
+         * accent (gold for own castle) could land later via `king` /
+         * `team` matches; for now slate-everywhere is clear enough. */
+        return {
+          primary: displayName,
+          secondary: `${tierName}${statusName ? ` · ${statusName}` : ""}`,
+          accent: "rgba(95, 105, 120, 0.95)",
+        };
+      }
       return null;
     },
-    [player, playerData, cityPlayers, viewedEncounters, myTeamStr, myTeamName, teamsByPda],
+    [
+      player,
+      playerData,
+      cityPlayers,
+      viewedEncounters,
+      worldCastles,
+      myTeamStr,
+      myTeamName,
+      teamsByPda,
+    ],
   );
 
   const stableLevel = useMemo(() => {
@@ -1602,6 +1638,18 @@ export function MapTab() {
           onFocus={(gridLat, gridLong) => mapRef.current?.focusCell(gridLat, gridLong)}
           sameCity={sameCity}
           onOpenComposer={setComposer}
+          onOpenInCastles={(castleId, cityId) => {
+            /* Pass cityId too — castle-tab derives the PDA via
+             * `useCastle(cityId, castleId)`; the previous version
+             * fell through to `player.currentCity`, so a deep link
+             * from a castle inspected in a different city resolved
+             * to the wrong castle's PDA. */
+            const params = new URLSearchParams(searchParams.toString());
+            params.set("tab", "castle");
+            params.set("castleId", String(castleId));
+            params.set("cityId", String(cityId));
+            router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+          }}
         />
       );
     }
@@ -2297,10 +2345,24 @@ function StatCard({
           fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
           fontVariantNumeric: "tabular-nums",
           fontWeight: 700,
-          fontSize: "1.1rem",
+          /* Dropped from 1.1rem — long text values (castle tier
+           * "Stronghold", status "Transitioning", "Vacant", etc.)
+           * overflowed the 1fr column in a 3-up grid inside the
+           * right panel. Numeric stats (level, networth, garrison
+           * "N/M") stay legible at 0.95rem because they're shorter
+           * to begin with. */
+          fontSize: "0.95rem",
           color: valueColor,
           marginTop: "0.15rem",
           lineHeight: 1.1,
+          /* Truncate gracefully if the value still overflows — same
+           * sentinel a CSS text-overflow chain needs. minWidth:0
+           * lets the value flex DOWN inside a grid track that would
+           * otherwise size to content. */
+          whiteSpace: "nowrap",
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          minWidth: 0,
         }}
       >
         {value}
@@ -2402,6 +2464,17 @@ interface EntityPanelProps {
    * returns to this entity view.
    */
   onOpenComposer?: (spec: ComposerSpec) => void;
+  /**
+   * Open the dedicated Castles tab pre-selected on this castle.
+   * The inspect panel is read-only by design — court appointments,
+   * upgrades, attack, claim, garrison composer all live in the
+   * Castle tab where they have room. Caller is expected to push
+   * both `castleId` AND `cityId` to the URL because the Castle tab
+   * derives the PDA from both; passing only castleId resolves a
+   * different castle's PDA when the inspected castle sits in a
+   * different city than the player's `currentCity`.
+   */
+  onOpenInCastles?: (castleId: number, cityId: number) => void;
 }
 
 // Minimal projection of the CastleAccount fields the panel renders. The
@@ -2423,19 +2496,42 @@ interface CastleSnapshot {
   contestEndAt: { toNumber(): number };
 }
 
+/* CastleTier enum (chain-side) — names must match `CastleTier` in the
+ * SDK so the inspect panel and the dedicated Castles tab agree on
+ * what to call each tier. */
 const CASTLE_TIER_NAMES: Record<number, string> = {
   0: "Outpost",
-  1: "Fort",
-  2: "Citadel",
-  3: "Bastion",
-  4: "Stronghold",
+  1: "Keep",
+  2: "Stronghold",
+  3: "Fortress",
+  4: "Citadel",
 };
 
+/* CastleStatus enum (chain-side) — 5 states:
+ *   0 Vacant         — no king, claimable
+ *   1 Contest        — active conflict for the seat
+ *   2 Protected      — held with protection window active
+ *   3 Vulnerable     — held but protection has lapsed
+ *   4 Transitioning  — mid-handover from outgoing to incoming king
+ * The previous shorter table mis-labeled 1/2/3 (called Contest "Held"
+ * and shifted everything by one), which surfaced wrong words in the
+ * inspect panel for held + contested castles. */
 const CASTLE_STATUS_NAMES: Record<number, string> = {
   0: "Vacant",
-  1: "Held",
-  2: "Contested",
-  3: "Transitioning",
+  1: "Contested",
+  2: "Protected",
+  3: "Vulnerable",
+  4: "Transitioning",
+};
+
+/* One-line story per status — surfaces what the player can DO from
+ * this seat's current state, in the same voice castle-tab.tsx uses. */
+const CASTLE_STATUS_NARRATION: Record<number, string> = {
+  0: "The seat stands empty. A banner could be planted here today.",
+  1: "Blades are already in the field for this seat.",
+  2: "The seat is held, and protection still wraps it. No one may move against it yet.",
+  3: "The seat is held, but its protection has lapsed. It can be taken.",
+  4: "The seat is changing hands. Wait for the dust to settle.",
 };
 
 // Minimal projection of the EncounterAccount fields we render. Pulled from
@@ -2527,6 +2623,7 @@ function EntityPanel({
   onFocus,
   sameCity = false,
   onOpenComposer,
+  onOpenInCastles,
 }: EntityPanelProps) {
   const isEncounter = entity.occupantType === 2;
   const isCastle = entity.occupantType === 3;
@@ -2944,7 +3041,10 @@ function EntityPanel({
 
       {isCastle && castle && (
         <>
-          {/* Castle row 1 — tier · status · garrison */}
+          {/* Castle row 1 — tier · status · garrison. The danger tone
+           * fires on Contest (active conflict) and Vulnerable (held
+           * but exposed), since those are the two states that demand
+           * a decision. Protected reads neutral — the seat's safe. */}
           <div
             style={{
               marginTop: "0.7rem",
@@ -2960,13 +3060,64 @@ function EntityPanel({
             <StatCard
               label="status"
               value={CASTLE_STATUS_NAMES[castle.status] ?? `S${castle.status}`}
-              tone={castle.status === 2 ? "danger" : undefined}
+              tone={castle.status === 1 || castle.status === 3 ? "danger" : undefined}
             />
             <StatCard
               label="garrison"
               value={`${castle.garrisonCount}/${castle.maxGarrison}`}
             />
           </div>
+
+          {/* Status narration — one-line story so the seat's current
+           * disposition reads without decoding the status word. */}
+          <p
+            style={{
+              marginTop: "0.4rem",
+              fontStyle: "italic",
+              fontSize: "0.7rem",
+              lineHeight: 1.35,
+              color: "var(--ink-soft)",
+            }}
+          >
+            {CASTLE_STATUS_NARRATION[castle.status] ??
+              "The condition of the seat is unclear."}
+          </p>
+
+          {/* Garrison strength bar — visual reinforcement of the
+           * numerical N/M stat-card above. Filled portion uses the
+           * danger tone when the castle is in Contest or Vulnerable
+           * (states where garrison strength matters most). */}
+          {castle.maxGarrison > 0 && (() => {
+            const pct = Math.min(
+              100,
+              Math.round((castle.garrisonCount / castle.maxGarrison) * 100),
+            );
+            const dangerState =
+              castle.status === 1 || castle.status === 3;
+            return (
+              <div
+                style={{
+                  marginTop: "0.4rem",
+                  height: "6px",
+                  borderRadius: "3px",
+                  background: "var(--readout-tint)",
+                  border: "1px solid var(--parchment-edge)",
+                  overflow: "hidden",
+                }}
+                title={`Garrison ${castle.garrisonCount}/${castle.maxGarrison}`}
+              >
+                <div
+                  style={{
+                    width: `${pct}%`,
+                    height: "100%",
+                    background: dangerState
+                      ? "rgba(180, 60, 30, 0.85)"
+                      : "var(--seal)",
+                  }}
+                />
+              </div>
+            );
+          })()}
 
           {/* Castle row 2 — ownership chips */}
           <div
@@ -3004,6 +3155,64 @@ function EntityPanel({
                   })()}
             </span>
           </div>
+
+          {/* King identity — DomainName resolves the king's wallet to
+           * their .sol name when one is registered, falling through to
+           * a shortened address otherwise. Only shown when held. */}
+          {castle.hasKing && (
+            <div
+              style={{
+                marginTop: "0.4rem",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "baseline",
+                padding: "0.35rem 0.6rem",
+                fontSize: "0.7rem",
+                letterSpacing: "0.04em",
+              }}
+            >
+              <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
+                king
+              </span>
+              <span
+                style={{
+                  fontFamily:
+                    "var(--font-jetbrains), ui-monospace, monospace",
+                }}
+              >
+                <DomainName pubkey={castle.king.toBase58()} chars={6} />
+              </span>
+            </div>
+          )}
+
+          {/* Open in Castles — deep-link to the dedicated tab pre-
+           * selected on this castle. The map panel is a quick inspect;
+           * court appointments, upgrades, garrison composer, and the
+           * full action surface live in the Castles tab. */}
+          {onOpenInCastles && (
+            <button
+              type="button"
+              onClick={() => onOpenInCastles(castle.castleId, castle.cityId)}
+              style={{
+                marginTop: "0.7rem",
+                width: "100%",
+                padding: "0.5rem 0.7rem",
+                background: "transparent",
+                border: "1px solid var(--parchment-edge)",
+                color: "var(--ink)",
+                fontSize: "0.72rem",
+                letterSpacing: "0.05em",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: "0.35rem",
+              }}
+            >
+              Open in Castles
+              <ChevronRight className="h-3.5 w-3.5" />
+            </button>
+          )}
         </>
       )}
 

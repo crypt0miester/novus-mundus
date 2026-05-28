@@ -15,7 +15,7 @@
  */
 
 import * as THREE from "three";
-import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER } from "novus-mundus-sdk";
+import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER, OCCUPANT_CASTLE } from "novus-mundus-sdk";
 
 // CityTerrain retired under flat strategy. Markers no longer carry a
 // terrain handle; the type alias below keeps the previous public
@@ -38,11 +38,33 @@ import {
 const PLAYER_FILL_SRGB = [160, 100, 45] as const;
 const MY_PLAYER_FILL_SRGB = [20, 14, 8] as const;
 const WILD_FILL_SRGB = [115, 55, 30] as const;
+/* Cold-stone slate — mirrors the 2D fallback's `CASTLE_FILL` so the
+ * antique-tobacco occupant palette has a distinct cool fourth shade
+ * for territorial holdings. */
+const CASTLE_FILL_SRGB = [95, 105, 120] as const;
+/* Tower glyphs sit on top of the slate plate — use the darkest ink in
+ * the palette so they read strongly against the cool slate. */
+const CASTLE_TOWER_SRGB = [46, 31, 16] as const;
 const CREAM_STROKE_SRGB = [252, 244, 220] as const;
 const SELECTED_STROKE_SRGB = [220, 175, 60] as const;
 const SEAL_ORANGE_SRGB = [180, 83, 9] as const;
 const CENTRE_INK_SRGB = [70, 50, 28] as const;
 const BOUNDARY_INK_SRGB = [46, 31, 16] as const;
+/* Status pip palette — matches `CastleStatus` enum:
+ *   0 Vacant       — cream      (claimable, neutral)
+ *   1 Contest      — seal-orange (active conflict)
+ *   2 Protected    — verdigris   (held + safe)
+ *   3 Vulnerable   — amber       (held + unprotected)
+ *   4 Transitioning — slate-blue (mid-handover)
+ * Vacant reuses CREAM so the pip blends into the ring — a vacant
+ * castle has no urgent state to signal, and the cream tower visible
+ * IN it already conveys "unclaimed". */
+const STATUS_CONTEST_SRGB = [200, 80, 30] as const;
+const STATUS_PROTECTED_SRGB = [80, 130, 70] as const;
+const STATUS_VULNERABLE_SRGB = [200, 150, 50] as const;
+const STATUS_TRANSITIONING_SRGB = [80, 100, 160] as const;
+
+const WALK_LINE_LIFT = 5e-4;
 
 function linearColor(rgb: readonly [number, number, number]): THREE.Color {
   const c = new THREE.Color();
@@ -54,17 +76,136 @@ function linearColor(rgb: readonly [number, number, number]): THREE.Color {
   return c;
 }
 
+/* Parse a `#rgb` / `#rrggbb` sRGB hex string into a linear THREE.Color,
+ * matching `linearColor` above. Returns null on a malformed input so the
+ * caller can fall through to the default fill rather than render a
+ * black pixel. The cosmetic-color catalog stores hex strings, so the
+ * occupant cells passed into `updateOccupants` carry hex; this turns
+ * each one into a per-instance fill colour. */
+function parseHexLinear(hex: string): THREE.Color | null {
+  let h = hex.trim();
+  if (h.startsWith("#")) h = h.slice(1);
+  // Expand `#rgb` shorthand.
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  if (h.length !== 6) return null;
+  const n = parseInt(h, 16);
+  if (Number.isNaN(n)) return null;
+  const r = (n >> 16) & 0xff;
+  const g = (n >> 8) & 0xff;
+  const b = n & 0xff;
+  return linearColor([r, g, b]);
+}
+
 const COLOR_PLAYER = linearColor(PLAYER_FILL_SRGB);
 const COLOR_MY_PLAYER = linearColor(MY_PLAYER_FILL_SRGB);
 const COLOR_WILD = linearColor(WILD_FILL_SRGB);
+const COLOR_CASTLE = linearColor(CASTLE_FILL_SRGB);
+const COLOR_CASTLE_TOWER = linearColor(CASTLE_TOWER_SRGB);
 const COLOR_CREAM = linearColor(CREAM_STROKE_SRGB);
 const COLOR_SELECTED = linearColor(SELECTED_STROKE_SRGB);
 const COLOR_SEAL = linearColor(SEAL_ORANGE_SRGB);
 const COLOR_CENTRE = linearColor(CENTRE_INK_SRGB);
 const COLOR_BOUNDARY = linearColor(BOUNDARY_INK_SRGB);
+const COLOR_STATUS_CONTEST = linearColor(STATUS_CONTEST_SRGB);
+const COLOR_STATUS_PROTECTED = linearColor(STATUS_PROTECTED_SRGB);
+const COLOR_STATUS_VULNERABLE = linearColor(STATUS_VULNERABLE_SRGB);
+const COLOR_STATUS_TRANSITIONING = linearColor(STATUS_TRANSITIONING_SRGB);
 
-const MAX_OCCUPANTS = 512;
+/* Tower-placement table — per `CastleTier`, returns positions (in grid
+ * cells offset from the castle's geometric center, can be fractional)
+ * plus each tower's scale as a fraction of the PLATE side length
+ * (n × cellWorld). Scaling by plate side keeps towers proportionate
+ * regardless of N×N footprint. The corner offset is the centre of a
+ * corner cell pulled in 15% so towers sit visibly inside the cream
+ * ring rather than overlapping it.
+ *
+ * Tier ladder:
+ *   Outpost  (0) — single small tower (lookout)
+ *   Keep     (1) — single larger tower (a proper keep)
+ *   Stronghold (2) — keep + 2 flanking towers across an axis
+ *   Fortress (3) — 4 corner towers (curtain-wall fortress)
+ *   Citadel  (4) — 4 corner towers + central keep
+ *
+ * For N=1 footprints the corner positions collapse onto the centre,
+ * so we always emit only the central tower regardless of tier — at
+ * one-cell resolution the tier reads from the pip + ring color, not
+ * from tower count. */
+interface TowerSpec {
+  ox: number;
+  oy: number;
+  scaleFrac: number;
+}
+function getCastleTowerPositions(tier: number, n: number): TowerSpec[] {
+  if (n <= 1) {
+    return [{ ox: 0, oy: 0, scaleFrac: 0.30 }];
+  }
+  const cornerOffset = (n / 2 - 0.5) * 0.85;
+  switch (tier) {
+    case 0:
+      return [{ ox: 0, oy: 0, scaleFrac: 0.16 }];
+    case 1:
+      return [{ ox: 0, oy: 0, scaleFrac: 0.26 }];
+    case 2:
+      return [
+        { ox: 0, oy: 0, scaleFrac: 0.22 },
+        { ox: -cornerOffset, oy: 0, scaleFrac: 0.14 },
+        { ox: cornerOffset, oy: 0, scaleFrac: 0.14 },
+      ];
+    case 3:
+      return [
+        { ox: -cornerOffset, oy: -cornerOffset, scaleFrac: 0.14 },
+        { ox: cornerOffset, oy: -cornerOffset, scaleFrac: 0.14 },
+        { ox: -cornerOffset, oy: cornerOffset, scaleFrac: 0.14 },
+        { ox: cornerOffset, oy: cornerOffset, scaleFrac: 0.14 },
+      ];
+    case 4:
+      return [
+        { ox: -cornerOffset, oy: -cornerOffset, scaleFrac: 0.14 },
+        { ox: cornerOffset, oy: -cornerOffset, scaleFrac: 0.14 },
+        { ox: -cornerOffset, oy: cornerOffset, scaleFrac: 0.14 },
+        { ox: cornerOffset, oy: cornerOffset, scaleFrac: 0.14 },
+        { ox: 0, oy: 0, scaleFrac: 0.22 },
+      ];
+    default:
+      return [{ ox: 0, oy: 0, scaleFrac: 0.20 }];
+  }
+}
+
+/* Map `CastleStatus` to a THREE.Color for the corner pip. Vacant
+ * returns null — the renderer hides the pip in that case so the
+ * castle reads "no holding faction, no urgent state". */
+function colorForCastleStatus(status: number | undefined): THREE.Color | null {
+  switch (status) {
+    case 1:
+      return COLOR_STATUS_CONTEST;
+    case 2:
+      return COLOR_STATUS_PROTECTED;
+    case 3:
+      return COLOR_STATUS_VULNERABLE;
+    case 4:
+      return COLOR_STATUS_TRANSITIONING;
+    default:
+      return null;
+  }
+}
+
+/* Per-layer InstancedMesh capacity. Sized for a busy event city:
+ * ~2k players + ~500 encounters at a major gathering still fits. Each
+ * InstancedMesh buffer is `count × (16 floats matrix + 3 floats colour) ≈
+ * 76 bytes/instance`, so 4096 ≈ 300 KB GPU memory per layer — eight
+ * layers ≈ 2.4 MB total, comfortable on every browser+device. */
+const MAX_OCCUPANTS = 4096;
 const MAX_OTHER_WALKS = 256;
+
+/* One-shot warn flag — if the occupant stream ever exceeds capacity,
+ * we log once per session so the silent-drop footgun is visible during
+ * testing without spamming the console on every paint. */
+let _occupancyOverflowWarned = false;
 
 /* Y bias for overlays. Pre-flat-strategy, this lifted markers above
  * uneven terrain so they didn't clip into peaks. Post-flat-strategy
@@ -81,6 +222,25 @@ export interface OccupiedCell {
   gridLong: number;
   occupantType: number;
   occupant: string;
+  /* Cosmetic name colour (sRGB hex like "#b45309"). When set, the
+   * occupant's fill instance-colour adopts this — paid identity reads
+   * across the disc, not just in the EntityPanel. */
+  nameColorHex?: string;
+  /* Catalog-keyed colour animation. Renderers re-set the instance
+   * colour per frame against this; static when undefined. Defer
+   * implementing the per-frame tick until the base static-colour
+   * path is shipped. */
+  nameColorAnim?: string;
+  /* Castle footprint anchor flag — only the (dlat=0, dlong=0) cell of
+   * an N×N castle has this set so the renderer paints ONE plate per
+   * castle instead of N² duplicates. */
+  footprintSize?: number;
+  footprintAnchor?: boolean;
+  /* Castle tier (CastleTier enum, 0..4) drives tower-glyph layout.
+   * Castle status (CastleStatus enum, 0..4) drives the corner pip
+   * color. Both only set on OCCUPANT_CASTLE anchor cells. */
+  castleTier?: number;
+  castleStatus?: number;
 }
 
 export interface SelectedEntity {
@@ -96,6 +256,12 @@ export interface WalkLine {
   toGridLat: number;
   toGridLong: number;
   pct: number;
+  /* Cosmetic name colour tints the line stroke and moving marker so
+   * the walker's identity follows them across the disc. */
+  nameColorHex?: string;
+  nameColorAnim?: string;
+  /* Equipped frame ring colour — wraps the moving marker. */
+  frameBorderColor?: string;
 }
 
 export interface MarkersConfig {
@@ -134,6 +300,7 @@ export class MarkersLayer {
   private playerTileInstanceCells: OccupiedCell[] = [];
   private encounterDotInstanceCells: OccupiedCell[] = [];
   private encounterTileInstanceCells: OccupiedCell[] = [];
+  private castleInstanceCells: OccupiedCell[] = [];
 
   /* Occupant fills + outlines (dual-mode). */
   private playerDots: THREE.InstancedMesh;
@@ -144,6 +311,21 @@ export class MarkersLayer {
   private encounterDotRings: THREE.InstancedMesh;
   private encounterTiles: THREE.InstancedMesh;
   private encounterTileRings: THREE.InstancedMesh;
+  /* Castle plates — single layer (no dual-mode dot/tile because a
+   * castle's identity is the FOOTPRINT, which only reads as such when
+   * sized to N×N cells). Always rendered as a filled plate spanning
+   * the castle's N×N grid range. Ring uses the same outline material
+   * as players/encounters for the selected stroke. */
+  private castles: THREE.InstancedMesh;
+  private castleRings: THREE.InstancedMesh;
+  /* Castle tower glyphs — small dark-ink disks placed inside the slate
+   * plate. Position + scale + count vary by tier (Outpost = 1 small,
+   * Citadel = 4 corners + keep). Capacity = MAX_CASTLES * 5 since
+   * Citadel is the densest tier. */
+  private castleTowers: THREE.InstancedMesh;
+  /* Castle status pip — one colored disk per castle at the plate's
+   * top-right corner. Hidden for vacant castles. */
+  private castleStatusPips: THREE.InstancedMesh;
 
   /* Selection rings — one mesh each, position-snapped on update. */
   private selectedEntityRing: THREE.Mesh;
@@ -374,6 +556,60 @@ export class MarkersLayer {
     this.encounterTileRings.renderOrder = 3.1;
     this.group.add(this.encounterTileRings);
 
+    /* Castle plates — capacity 64 is generous. A kingdom maxes ~50
+     * castles total across all cities, and a single city's view shows
+     * only its own castles. RenderOrder 3.0 puts them BENEATH player
+     * + encounter dots so a player standing on a castle cell is still
+     * visible. */
+    const MAX_CASTLES = 64;
+    this.castles = new THREE.InstancedMesh(
+      tileGeom.clone(),
+      fillMat.clone(),
+      MAX_CASTLES,
+    );
+    this.castles.count = 0;
+    this.castles.frustumCulled = false;
+    this.castles.renderOrder = 3.0;
+    this.group.add(this.castles);
+
+    this.castleRings = new THREE.InstancedMesh(
+      tileFrameGeom.clone(),
+      ringMat.clone(),
+      MAX_CASTLES,
+    );
+    this.castleRings.count = 0;
+    this.castleRings.frustumCulled = false;
+    this.castleRings.renderOrder = 2.9;
+    this.group.add(this.castleRings);
+
+    /* Castle towers — small filled circles. RenderOrder sits between
+     * the plate (3.0) and player dots (3.2) so towers paint on top of
+     * the slate but a player standing on a castle still reads over
+     * the tower. Up to 5 towers per castle (Citadel tier). */
+    const MAX_TOWERS = MAX_CASTLES * 5;
+    this.castleTowers = new THREE.InstancedMesh(
+      dotGeom.clone(),
+      fillMat.clone(),
+      MAX_TOWERS,
+    );
+    this.castleTowers.count = 0;
+    this.castleTowers.frustumCulled = false;
+    this.castleTowers.renderOrder = 3.05;
+    this.group.add(this.castleTowers);
+
+    /* Status pip — single coloured disk per castle. RenderOrder above
+     * the tower layer so the pip is always visible at the plate
+     * corner regardless of which tower happens to sit nearest. */
+    this.castleStatusPips = new THREE.InstancedMesh(
+      dotGeom.clone(),
+      fillMat.clone(),
+      MAX_CASTLES,
+    );
+    this.castleStatusPips.count = 0;
+    this.castleStatusPips.frustumCulled = false;
+    this.castleStatusPips.renderOrder = 3.07;
+    this.group.add(this.castleStatusPips);
+
     /* Selection ring + landing cross — singletons. Initially hidden,
      * shown when state demands. */
     const selRingGeom = new THREE.RingGeometry(1, 1.2, 32);
@@ -444,6 +680,17 @@ export class MarkersLayer {
       dashSize: 0.06,
       gapSize: 0.04,
       linewidth: 2,
+      /* depthTest:false + depthWrite:false bypass the GPU depth
+       * comparison entirely. Without this, the line is coplanar with
+       * the terrain quad at Y≈0 and depth-buffer precision over a
+       * 4-unit-wide disc viewed by a perspective camera flickers
+       * dashes in and out at oblique angles — the "cut in places"
+       * symptom. polygonOffset on the terrain material protects
+       * triangle overlays (player tiles, castle plates) but doesn't
+       * apply to Line primitives. RenderOrder=1.5 still keeps the
+       * line under player dots (3.2) since dots draw after. */
+      depthTest: false,
+      depthWrite: false,
     });
     this.ownWalkLine = new THREE.Line(ownLineGeom, ownLineMat);
     this.ownWalkLine.visible = false;
@@ -486,6 +733,10 @@ export class MarkersLayer {
         dashSize: 0.04,
         gapSize: 0.04,
         linewidth: 1.5,
+        /* See ownLineMat above — same z-fight fix applies to remote
+         * walkers' dashed lines. */
+        depthTest: false,
+        depthWrite: false,
       });
       const line = new THREE.Line(lineGeom, lineMat);
       line.visible = false;
@@ -589,12 +840,19 @@ export class MarkersLayer {
     let eCount = 0;
     let pTileCount = 0;
     let eTileCount = 0;
+    let castleCount = 0;
+    let towerCount = 0;
+    let pipCount = 0;
+    const CASTLE_CAPACITY = this.castles.instanceMatrix.count;
+    const TOWER_CAPACITY = this.castleTowers.instanceMatrix.count;
+    const PIP_CAPACITY = this.castleStatusPips.instanceMatrix.count;
 
     /* Reset instance->cell maps before this frame's rebuild. */
     this.playerDotInstanceCells.length = 0;
     this.playerTileInstanceCells.length = 0;
     this.encounterDotInstanceCells.length = 0;
     this.encounterTileInstanceCells.length = 0;
+    this.castleInstanceCells.length = 0;
 
     const tmpMat = new THREE.Matrix4();
     const tmpQuat = new THREE.Quaternion();
@@ -612,6 +870,113 @@ export class MarkersLayer {
 
       const isPlayer = cell.occupantType === OCCUPANT_PLAYER;
       const isEncounter = cell.occupantType === OCCUPANT_ENCOUNTER;
+      const isCastle = cell.occupantType === OCCUPANT_CASTLE;
+
+      /* Castles — paint a single plate per castle spanning the N×N
+       * footprint. `useCityOccupied` emits N² OccupiedCell entries per
+       * castle (one per footprint cell so any click resolves), but
+       * only the `footprintAnchor === true` cell builds geometry; the
+       * remaining N²-1 cells fall through (no dot, no tile) — clicks
+       * on them still find the castle via the raycast → cell lookup. */
+      if (isCastle) {
+        if (cell.footprintAnchor !== true) continue;
+        if (castleCount >= CASTLE_CAPACITY) continue;
+        const n = Math.max(1, cell.footprintSize ?? 1);
+        /* Anchor sits at the SW corner of the N×N footprint. Centre
+         * the plate over the geometric centre of the range so the
+         * plate's local ±0.5 extent (PlaneGeometry) maps to the full
+         * footprint when scaled by `plateExtent`. */
+        const centerOx = ox + (n - 1) / 2;
+        const centerOy = oy + (n - 1) / 2;
+        const center = gridToWorld(centerOx, centerOy, this.rgu);
+        /* Match selection by occupant pubkey rather than (gridLat,
+         * gridLong). The raycast fallback in CityTerrainMapWebGL
+         * (ground-plane match for 2D-mode degenerate matrices) can
+         * commit selectedEntity at a non-anchor footprint cell of an
+         * N×N castle. The geometry only paints on the anchor cell —
+         * a coord-based check would then see no selection and the
+         * gold stroke wouldn't fire. */
+        const isSelectedCastle =
+          selectedEntity != null &&
+          selectedEntity.occupantType === OCCUPANT_CASTLE &&
+          selectedEntity.pubkey === cell.occupant;
+        tmpPos.set(center.wx, y, center.wz);
+        /* In tile mode (zoomed in), draw the full N×N footprint so the
+         * castle reads as the territorial holding it is. In dot mode
+         * (zoomed out), the footprint is sub-pixel — scale up to a
+         * constant CSS-px square so the castle stays legible. Mirror
+         * the 2D fallback's `scale = max(1, castleN * 0.7)` so a 4×4
+         * Citadel reads visibly bigger than a 1×1 Outpost even at
+         * overview zoom. */
+        const TARGET_CASTLE_DIAMETER_CSS_PX = 12;
+        const dotExtent =
+          (TARGET_CASTLE_DIAMETER_CSS_PX * cellWorld) / cssPxClamped;
+        const castleScale = Math.max(1, n * 0.7);
+        const plateExtent = renderAsTiles
+          ? n * cellWorld
+          : dotExtent * castleScale;
+        /* Per-grid-cell world distance on the RENDERED plate. In tile
+         * mode this equals cellWorld; in dot mode the plate is inflated
+         * to a constant CSS-px scale, so towers/pips placed by raw
+         * grid offsets would cluster near the plate centre instead of
+         * its corners. Use plateExtent/n so glyph positions follow
+         * the plate's actual visual size at every zoom. */
+        const cellOnPlate = plateExtent / n;
+        tmpScale.set(plateExtent, 1, plateExtent);
+        tmpMat.compose(tmpPos, tmpQuat, tmpScale);
+        this.castles.setMatrixAt(castleCount, tmpMat);
+        this.castles.setColorAt(castleCount, COLOR_CASTLE);
+        this.castleRings.setMatrixAt(castleCount, tmpMat);
+        this.castleRings.setColorAt(
+          castleCount,
+          isSelectedCastle ? COLOR_SELECTED : COLOR_CREAM,
+        );
+        this.castleInstanceCells[castleCount] = cell;
+        castleCount++;
+
+        /* Tower glyphs — placement + count per tier. Drawn slightly
+         * above the plate (Y bias) so they don't z-fight. Capacity-
+         * capped silently; with MAX_CASTLES=64 and 5 towers max per
+         * castle (Citadel) the cap is 320, which matches the GPU
+         * buffer we sized. Positions use `cellOnPlate` so glyphs
+         * follow the rendered plate's size in both tile mode (= one
+         * grid cell) and dot mode (= 1/n of the inflated plate). */
+        const towerSpecs = getCastleTowerPositions(cell.castleTier ?? 0, n);
+        for (let ti = 0; ti < towerSpecs.length; ti++) {
+          if (towerCount >= TOWER_CAPACITY) break;
+          const t = towerSpecs[ti]!;
+          const dx = t.ox * cellOnPlate;
+          const dz = -t.oy * cellOnPlate;
+          tmpPos.set(center.wx + dx, y + 1e-4, center.wz + dz);
+          const towerR = plateExtent * t.scaleFrac;
+          tmpScale.set(towerR, 1, towerR);
+          tmpMat.compose(tmpPos, tmpQuat, tmpScale);
+          this.castleTowers.setMatrixAt(towerCount, tmpMat);
+          this.castleTowers.setColorAt(towerCount, COLOR_CASTLE_TOWER);
+          towerCount++;
+        }
+
+        /* Status pip — corner disk coloured by `castleStatus`. Vacant
+         * castles get no pip (colorForCastleStatus returns null) so
+         * the plate reads as "unclaimed, no urgent state". Positions
+         * use cellOnPlate (see tower loop comment) so the pip sits at
+         * the rendered plate's corner at every zoom. */
+        const pipColor = colorForCastleStatus(cell.castleStatus);
+        if (pipColor && pipCount < PIP_CAPACITY) {
+          const pipReach = (n / 2) * (n <= 1 ? 0.6 : 0.85);
+          const pipDx = pipReach * cellOnPlate;
+          const pipDz = -pipReach * cellOnPlate;
+          tmpPos.set(center.wx + pipDx, y + 2e-4, center.wz + pipDz);
+          const pipR = plateExtent * (n <= 1 ? 0.13 : 0.09);
+          tmpScale.set(pipR, 1, pipR);
+          tmpMat.compose(tmpPos, tmpQuat, tmpScale);
+          this.castleStatusPips.setMatrixAt(pipCount, tmpMat);
+          this.castleStatusPips.setColorAt(pipCount, pipColor);
+          pipCount++;
+        }
+        continue;
+      }
+
       if (!isPlayer && !isEncounter) continue;
       const isMyPlayer =
         isPlayer && myPlayerPubkey != null && cell.occupant === myPlayerPubkey;
@@ -620,19 +985,43 @@ export class MarkersLayer {
         selectedEntity.gridLat === cell.gridLat &&
         selectedEntity.gridLong === cell.gridLong;
 
-      const fill = isMyPlayer
-        ? COLOR_MY_PLAYER
-        : isPlayer
-          ? COLOR_PLAYER
-          : COLOR_WILD;
+      /* Cosmetic name colour wins over the canonical palette — same
+       * rule the 2D fallback applies (lib/hooks/useCityOccupied.ts
+       * threads `nameColorHex` from the player's catalog entry). Falls
+       * through to the default ink colours when the player has no
+       * paid colour equipped. Static-colour path only here; animated
+       * colours (`nameColorAnim`) require a per-frame instance-colour
+       * tick — separate follow-up. */
+      const cosmeticFill = cell.nameColorHex
+        ? parseHexLinear(cell.nameColorHex)
+        : null;
+      const fill = cosmeticFill
+        ? cosmeticFill
+        : isMyPlayer
+          ? COLOR_MY_PLAYER
+          : isPlayer
+            ? COLOR_PLAYER
+            : COLOR_WILD;
 
       // Cap iteration at the InstancedMesh capacity. Without this, writes
       // past MAX_OCCUPANTS silently drop into the TypedArray's overflow
       // (no-op) but .count is bumped, so three.js renders past-the-end
       // instances that still hold the identity matrix — visible as a
       // stack of ghost dots at world origin (city centre).
-      if (isPlayer && (renderAsTiles ? pTileCount : pCount) >= MAX_OCCUPANTS) continue;
-      if (isEncounter && (renderAsTiles ? eTileCount : eCount) >= MAX_OCCUPANTS) continue;
+      const playerCapHit =
+        isPlayer && (renderAsTiles ? pTileCount : pCount) >= MAX_OCCUPANTS;
+      const encounterCapHit =
+        isEncounter && (renderAsTiles ? eTileCount : eCount) >= MAX_OCCUPANTS;
+      if (playerCapHit || encounterCapHit) {
+        if (!_occupancyOverflowWarned) {
+          _occupancyOverflowWarned = true;
+          console.warn(
+            `[city3d/markers] occupant cap reached — MAX_OCCUPANTS=${MAX_OCCUPANTS}. ` +
+              `Some dots/tiles are being dropped this frame. Bump the constant in city3d/markers.ts.`,
+          );
+        }
+        continue;
+      }
 
       if (renderAsTiles) {
         tmpPos.set(wx, y, wz);
@@ -713,6 +1102,12 @@ export class MarkersLayer {
     this.playerTileRings.count = renderAsTiles ? pTileCount : 0;
     this.encounterTiles.count = renderAsTiles ? eTileCount : 0;
     this.encounterTileRings.count = renderAsTiles ? eTileCount : 0;
+    /* Castles always render at their footprint size regardless of
+     * zoom — they're a structural overlay, not a "you are here" dot. */
+    this.castles.count = castleCount;
+    this.castleRings.count = castleCount;
+    this.castleTowers.count = towerCount;
+    this.castleStatusPips.count = pipCount;
 
     this.playerDots.instanceMatrix.needsUpdate = true;
     this.playerDotRings.instanceMatrix.needsUpdate = true;
@@ -722,6 +1117,18 @@ export class MarkersLayer {
     this.playerTileRings.instanceMatrix.needsUpdate = true;
     this.encounterTiles.instanceMatrix.needsUpdate = true;
     this.encounterTileRings.instanceMatrix.needsUpdate = true;
+    this.castles.instanceMatrix.needsUpdate = true;
+    this.castleRings.instanceMatrix.needsUpdate = true;
+    this.castleTowers.instanceMatrix.needsUpdate = true;
+    this.castleStatusPips.instanceMatrix.needsUpdate = true;
+    if (this.castles.instanceColor)
+      this.castles.instanceColor.needsUpdate = true;
+    if (this.castleRings.instanceColor)
+      this.castleRings.instanceColor.needsUpdate = true;
+    if (this.castleTowers.instanceColor)
+      this.castleTowers.instanceColor.needsUpdate = true;
+    if (this.castleStatusPips.instanceColor)
+      this.castleStatusPips.instanceColor.needsUpdate = true;
 
     if (this.playerDots.instanceColor)
       this.playerDots.instanceColor.needsUpdate = true;
@@ -740,18 +1147,16 @@ export class MarkersLayer {
     if (this.encounterTileRings.instanceColor)
       this.encounterTileRings.instanceColor.needsUpdate = true;
 
-    if (selectedRingPos) {
-      const r = renderAsTiles ? tileHalf * 1.4 : dotR * 1.4;
-      this.selectedEntityRing.scale.set(r, 1, r);
-      this.selectedEntityRing.position.set(
-        selectedRingPos.wx,
-        selectedRingPos.y + 5e-4,
-        selectedRingPos.wz,
-      );
-      this.selectedEntityRing.visible = true;
-    } else {
-      this.selectedEntityRing.visible = false;
-    }
+    /* `selectedEntityRing` was a 32-segment `RingGeometry` halo drawn
+     * around the selected occupant — a CIRCLE in both modes. In tile
+     * mode that meant a circular halo "hovering" on top of the
+     * square tile, which read as a stray UI artifact rather than a
+     * selection cue. Selection is already legible via the fill +
+     * outline-ring colour swap (cream → COLOR_SELECTED on the tile /
+     * dot ring), so the extra halo was redundant. Hidden permanently;
+     * left in `SceneRefs` to avoid churning the dispose path. */
+    this.selectedEntityRing.visible = false;
+    void selectedRingPos;
   }
 
   updateLanding(
@@ -802,8 +1207,8 @@ export class MarkersLayer {
     const oyT = walk.toGridLat - this.cityLatGrid;
     const from = gridToWorld(oxF, oyF, this.rgu);
     const to = gridToWorld(oxT, oyT, this.rgu);
-    const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS;
-    const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS;
+    const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
+    const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
 
     const posAttr = this.ownWalkLine.geometry.getAttribute(
       "position",
@@ -814,6 +1219,18 @@ export class MarkersLayer {
     this.ownWalkLine.geometry.computeBoundingSphere();
     this.ownWalkLine.computeLineDistances();
     this.ownWalkLine.visible = true;
+
+    /* Cosmetic name colour tints both the line and the marker so the
+     * walker's identity follows them across the disc — same rule the
+     * 2D fallback applies. Falls through to the canonical seal-orange
+     * when the walker has no colour equipped. */
+    const walkColor = walk.nameColorHex
+      ? parseHexLinear(walk.nameColorHex)
+      : null;
+    const lineMat = this.ownWalkLine.material as THREE.LineBasicMaterial;
+    lineMat.color.copy(walkColor ?? COLOR_SEAL);
+    const markerMat = this.ownWalkMarker.material as THREE.MeshBasicMaterial;
+    markerMat.color.copy(walkColor ?? COLOR_SEAL);
 
     const t = Math.min(1, Math.max(0, walk.pct / 100));
     const mx = from.wx + (to.wx - from.wx) * t;
@@ -848,8 +1265,11 @@ export class MarkersLayer {
       const oyT = w.toGridLat - this.cityLatGrid;
       const from = gridToWorld(oxF, oyF, this.rgu);
       const to = gridToWorld(oxT, oyT, this.rgu);
-      const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS;
-      const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS;
+      /* Same 5e-4 lift as the own-walk line — keeps the dashed
+       * overlay above the terrain plate so depth-test ties don't
+       * chop the line into visible pieces. */
+      const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
+      const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
       const posAttr = entry.line.geometry.getAttribute(
         "position",
       ) as THREE.BufferAttribute;
@@ -859,6 +1279,17 @@ export class MarkersLayer {
       entry.line.geometry.computeBoundingSphere();
       entry.line.computeLineDistances();
       entry.line.visible = true;
+
+      /* Cosmetic colour for each remote walker too — matches the 2D
+       * fallback's per-walk tint so paid identity is visible while
+       * remote players are in motion. */
+      const walkColor = w.nameColorHex
+        ? parseHexLinear(w.nameColorHex)
+        : null;
+      const lineMat = entry.line.material as THREE.LineBasicMaterial;
+      lineMat.color.copy(walkColor ?? COLOR_SEAL);
+      const markerMat = entry.marker.material as THREE.MeshBasicMaterial;
+      markerMat.color.copy(walkColor ?? COLOR_SEAL);
 
       const t = Math.min(1, Math.max(0, w.pct / 100));
       const mx = from.wx + (to.wx - from.wx) * t;
@@ -999,19 +1430,21 @@ export class MarkersLayer {
       this.playerTiles,
       this.encounterDots,
       this.encounterTiles,
+      this.castles,
     ];
   }
 
   /**
    * Look up the cell that drove a given instance of one of the
    * interactive meshes. Returns null if the index is out of range
-   * or the mesh isn't one of the four occupant layers.
+   * or the mesh isn't one of the occupant layers.
    */
   cellForInstance(mesh: THREE.Object3D, instanceId: number): OccupiedCell | null {
     if (mesh === this.playerDots) return this.playerDotInstanceCells[instanceId] ?? null;
     if (mesh === this.playerTiles) return this.playerTileInstanceCells[instanceId] ?? null;
     if (mesh === this.encounterDots) return this.encounterDotInstanceCells[instanceId] ?? null;
     if (mesh === this.encounterTiles) return this.encounterTileInstanceCells[instanceId] ?? null;
+    if (mesh === this.castles) return this.castleInstanceCells[instanceId] ?? null;
     return null;
   }
 

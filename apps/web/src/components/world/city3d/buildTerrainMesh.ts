@@ -21,7 +21,7 @@
 import * as THREE from "three";
 import { bakeBiomePixels } from "@/lib/world/bakeBiomePixels";
 import type { BiomeKnobs } from "@/lib/world/biome";
-import { MESH_SIZE, type MeshLOD } from "./coords";
+import { MESH_SIZE } from "./coords";
 
 export interface BuiltTerrainMesh {
   mesh: THREE.Mesh;
@@ -92,7 +92,6 @@ export function buildTerrainMesh(
   biomeSeed: number,
   rgu: number,
   knobs: BiomeKnobs,
-  _lod: MeshLOD = "mid",
   texSize: number = COLOR_TEXTURE_SIZE_HIGH,
 ): BuiltTerrainMesh {
   const pixels = bakeBiomePixels(biomeSeed, rgu, knobs, texSize);

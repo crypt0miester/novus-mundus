@@ -212,11 +212,13 @@ Layers 4–7 reuse **existing repo assets** end-to-end:
   | 3 Gaming        | `barracks-banner` |
   | 4 Original      | `forge-banner` |
 
-- Buff icons: the existing 18 relief PNGs at `buff-attack-power` through
-  `buff-fishing-affinity` map 1:1 to the `BuffStat` enum in
+- Buff icons: the existing 18 relief icons at
+  `apps/web/public/img/icons/game/buff-*.webp` (with `@2x` retina variants)
+  map 1:1 to the `BuffStat` enum in
   `programs/novus_mundus/src/state/hero.rs` (values 1..18). For each hero we
   render the icons for its non-zero `buffs[].stat`, right-aligned along the
-  right rim, top-down, 80 × 80 each.
+  right rim, top-down, 80 × 80 each. The compositor loads the `@2x` (128 px)
+  variant and downsamples in canvas for a sharper edge at the target size.
 
 ---
 
@@ -255,6 +257,7 @@ stable `seed`, followed by an `export-*.sh` post-processing pass.
     "backend":  "mlx",
     "width":    1024,
     "height":   1024,
+    "steps":    28,
     "endpoint": "http://localhost:8000/generate"
   },
 
@@ -329,17 +332,29 @@ hero to the local Bonsai FastAPI server, writes raw 1024 px PNG to
 # Variant defaults to manifest's defaults.variant (ternary).
 ```
 
-Bonsai's FastAPI request shape (from
-[Bonsai-image-demo](https://github.com/PrismML-Eng/Bonsai-image-demo)):
+Bonsai's FastAPI request shape (confirmed against
+[`scripts/send_request.sh`](https://github.com/PrismML-Eng/Bonsai-image-demo/blob/main/scripts/send_request.sh)):
 
-```json
+```
 POST /generate
-{ "prompt": "<full prompt>", "seed": 2001, "width": 1024, "height": 1024 }
-→ { "image_b64": "..." }
+Content-Type: application/json
+Max-Time: 600s
+
+{ "prompt": "<full prompt>", "seed": 2001, "steps": 28, "width": 1024, "height": 1024 }
+
+→ HTTP 200, Content-Type: image/png
+  (response body is raw PNG bytes — no JSON wrapper, no base64)
 ```
 
-The script saves the decoded PNG to `images/heroes/raw/<id>.png`. Re-running
-on an existing file is a no-op unless `FORCE=1`.
+The generator writes the response body straight to
+`images/heroes/raw/<id>.png` with `curl -o`. No JSON parsing, no base64
+decode. Re-running on an existing file is a no-op unless `FORCE=1`.
+
+`steps` defaults to 28 (a reasonable Flux denoising count at 1024² for both
+ternary and binary checkpoints). Iterate by passing `--steps N` to
+`generate-heroes.sh` if a particular hero needs more refinement; the chosen
+value can also be pinned per-hero in the manifest by adding a `steps:` field
+to that entry, which overrides `defaults.steps`.
 
 ### 6.3 The exporter — `images/scripts/export-heroes-to-app.sh`
 
@@ -616,6 +631,105 @@ hit Bonsai if any hero's `subject` fails the checklist, so a bad prompt
 doesn't burn a few minutes of inference before you notice. This keeps the
 catalog from drifting as new heroes are added by different authors.
 
+### 6.6 Operator runbook — Apple Silicon
+
+The full path from a clean Mac to a baked hero PNG. The Bonsai checkout
+lives **inside our repo** at `images/bonsai/` (gitignored — its Python venv
+and multi-GB model weights are never committed). Three thin wrapper scripts
+in `images/scripts/` handle the lifecycle:
+
+| script | purpose |
+|--------|---------|
+| `bonsai-install.sh` | one-time: clone Bonsai-image-demo into `images/bonsai/`, run its `setup.sh` (Python venv + mflux + weights, 5-10 GB download) |
+| `bonsai-serve.sh`   | foreground: launches `images/bonsai/scripts/serve.sh` with `BONSAI_VARIANT=ternary` and `BACKEND_PORT=8000` |
+| `bonsai-health.sh`  | pre-flight: `curl /openapi.json` against `$BONSAI_URL`, exits 0 if alive |
+
+We don't write any Python. The Bonsai demo manages its own environment;
+we just shell out to it and POST to its `/generate` endpoint.
+
+#### First-time setup (~15-20 min, one-time per machine)
+
+```bash
+images/scripts/bonsai-install.sh
+# Clones https://github.com/PrismML-Eng/Bonsai-image-demo (default ref: main)
+#   into images/bonsai/, then runs its setup.sh:
+#     · creates images/bonsai/.venv
+#     · pip installs mflux, fastapi, uvicorn, huggingface_hub, ...
+#     · downloads MLX checkpoints into images/bonsai/models/
+#   First-time disk + bandwidth: ~5-10 GB.
+```
+
+Pin a specific upstream commit by setting `BONSAI_REF=<sha-or-tag>` before
+running. While Bonsai-image-demo is fresh, tracking `main` is fine; bump
+when something breaks.
+
+#### Bake-time workflow
+
+Two terminals:
+
+```bash
+# Terminal A — keep the daemon running while you bake.
+images/scripts/bonsai-serve.sh
+# Server warms weights (~5-10 s), then listens on 127.0.0.1:8000.
+# Ctrl-C unloads weights and shuts down.
+
+# Terminal B — kick off the bake (slice 0+).
+images/scripts/bonsai-health.sh       # one-line sanity check
+images/scripts/generate-heroes.sh     # POSTs every manifest entry to localhost:8000
+images/scripts/export-heroes-to-app.sh   # alpha-strip + duotone + trim
+```
+
+`generate-heroes.sh` calls `bonsai-health.sh` first and aborts with a clear
+message if the daemon isn't up — no silent hang.
+
+#### Switching variants
+
+For prompt iteration, restart the daemon with `BONSAI_VARIANT=binary`
+(faster, 88% quality):
+
+```bash
+# In terminal A:
+^C
+BONSAI_VARIANT=binary images/scripts/bonsai-serve.sh
+```
+
+Re-bake the final asset under `ternary` (default) before committing the raw
+PNG — convention only, no automated gate.
+
+#### Disk + memory at a glance
+
+| location | grows to | committed? |
+|----------|----------|------------|
+| `images/bonsai/.venv/`              | ~1 GB             | no (gitignored) |
+| `images/bonsai/models/`             | 5-10 GB           | no (gitignored) |
+| `images/bonsai/` (git, code only)   | ~50 MB            | no (gitignored — re-clone from upstream) |
+| `images/heroes/raw/`                | ~80 × 1 MB        | no (gitignored — re-bake from Bonsai) |
+| `apps/web/public/img/heroes/templates/` | ~80 × 200 KB  | yes (the final assets we serve) |
+| RAM during inference                | 1.95-2.38 GB (unified) | — |
+
+#### Fallback if Bonsai-image-demo's setup fails
+
+If `setup.sh` blows up on this Mac (Python version mismatch, mflux build
+failure, weight-download error), drop to **mflux directly** — that's the
+underlying Apple MLX-Flux library Bonsai is built on, and it loads HF
+checkpoints in ~20 lines of Python:
+
+```python
+# scripts/bonsai-bake.py (fallback path, only if bonsai-serve.sh is broken)
+from mflux import Flux1
+model = Flux1.from_hub("prism-ml/bonsai-image-ternary-4B-mlx-2bit")
+img = model.generate_image(
+    prompt="<full prompt>",
+    seed=2001, width=1024, height=1024, num_inference_steps=28,
+)
+img.save("images/heroes/raw/<id>.png")
+```
+
+A daemon variant of this (read prompts from stdin, write PNGs to a queue
+dir) would give us the same warm-cache batching the FastAPI server
+provides. Document this path in §13 if we ever need it; today's plan stays
+on Bonsai-image-demo.
+
 ---
 
 ## 7. Halo patterns
@@ -647,20 +761,25 @@ hashing their canvas output and comparing to a fixture.
 
 ## 8. City sigils
 
-Twelve cities (`meditationCityId 1..12`) plus the "everywhere" sentinel `0`.
-Each gets a **hand-authored heraldic sigil** at 1024², solid antique-gold
-engraving on transparent background, drawn in the existing icon style. These
-are committed once to `apps/web/public/img/heroes/city-sigils/<cityId>.png`
-and never regenerated.
+**Seventeen** cities are referenced by the current 79-hero catalog —
+`meditationCityId` values `1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 15, 16,
+19, 22` — plus the `0` "everywhere" sentinel for crypto-icon heroes with no
+fixed origin. (Counted from
+`sdks/novus-mundus-ts-kit/cli/data/heroes.ts` on 2026-05-27; IDs `14, 17,
+18, 20, 21` are valid cities in the world but no current hero meditates
+there, so they get no sigil until a hero is added that uses them.)
+
+Each used city gets a **hand-authored heraldic sigil** at 1024², solid
+antique-gold engraving on transparent background, drawn in the existing icon
+style. These are committed once to
+`apps/web/public/img/heroes/city-sigils/<cityId>.png` and never regenerated.
 
 | cityId | city | sigil subject (concept) |
 |--------|------|-------------------------|
 | 0 | (everywhere) | reuse `sanctuary-meditation` cairn — five stacked stones |
-| 1 | TBD per HERO_GALLERY.md | TBD |
-| 2 | TBD | TBD |
-| … | (filled in during implementation against the canonical city list) | |
+| 1..13, 15, 16, 19, 22 | per HERO_GALLERY.md | filled in during implementation against the canonical city list |
 
-Hand-authored beats AI here because: (a) only ~12 assets total, (b) sigils
+Hand-authored beats AI here because: (a) only 17 assets total, (b) sigils
 are tiny on the canvas (~14% of frame) so AI variance is wasted, (c) hand
 control lets us guarantee they read clearly at small sizes.
 
@@ -723,19 +842,30 @@ export function fingerprintFromPubkey(
 `apps/web/src/app/api/hero/image/[pubkey]/route.ts`
 
 ```ts
-import { PublicKey } from "@solana/web3.js";
-import { fetchHero } from "@/lib/chain/heroes";
+import { PublicKey, Connection } from "@solana/web3.js";
+import { parseAssetV1 } from "novus-mundus-sdk";
 import { fingerprintFromPubkey } from "@/lib/hero-image/fingerprint";
 import { composeHeroImage } from "@/lib/hero-image/compose";
 
 export const runtime = "nodejs";
+
+// Server-side counterpart to apps/web/src/lib/hooks/useLockedHeroes.ts —
+// same getAccountInfo + parseAssetV1 pattern, single-shot for one pubkey.
+// Lives in apps/web/src/lib/chain/heroes.ts (to be added in slice 0).
+async function fetchHero(connection: Connection, pubkey: PublicKey) {
+  const info = await connection.getAccountInfo(pubkey, "confirmed");
+  if (!info?.data) throw new Error("hero account not found");
+  const asset = parseAssetV1(info.data);
+  if (!asset) throw new Error("not a hero asset");
+  return asset;  // exposes templateId, tier, level, locked via plugins
+}
 
 export async function GET(
   req: Request,
   { params }: { params: { pubkey: string } },
 ) {
   const pubkey = new PublicKey(params.pubkey);
-  const hero   = await fetchHero(pubkey);
+  const hero   = await fetchHero(getConnection(), pubkey);
   const fp     = fingerprintFromPubkey(pubkey.toBytes(), hero);
   const png    = await composeHeroImage(hero, fp);
 
@@ -819,7 +949,10 @@ slice end-to-end:
    default.
 5. **1 city sigil** (the cairn fallback, by reusing the existing
    `sanctuary-meditation` icon).
-6. `palette.ts`, `fingerprint.ts`, `compose.ts`, and the API route.
+6. `palette.ts`, `fingerprint.ts`, `compose.ts`, a server-side `fetchHero`
+   helper (`apps/web/src/lib/chain/heroes.ts`, mirroring `useLockedHeroes`),
+   and the API route.
+   Also: add `@napi-rs/canvas` to `apps/web/package.json` deps.
 7. A throwaway page at `/dev/hero-portraits` that lists the 5 minted heroes
    in the local validator with their portraits side-by-side so we can eyeball
    the output.
@@ -840,20 +973,3 @@ halo patterns, 11 more city sigils, 16 corner-variant tweaks) — none of which
 requires further architectural decisions.
 
 ---
-
-## 13. Open follow-ups (post-slice-0)
-
-- **Animated portraits?** A future v2 could add a subtle pubkey-seeded
-  constellation drift or halo pulse as a WebP/APNG. The static path remains
-  authoritative.
-- **Inventory grid optimization.** For dense inventory views we may want a
-  256² thumbnail variant served from
-  `/api/hero/image/<pubkey>/thumb`. Same compose pipeline, smaller target.
-- **Hero burn imagery.** When a hero is burned (`HERO_BURN_DESIGN.md`) we
-  could permanently mark its on-chain "burned" footprint with a different
-  state-glow color, but burned heroes typically don't render anywhere so this
-  is low priority.
-- **Off-chain pre-rendering.** If the route ever shows up hot in CDN logs we
-  can run the compose step ahead of time for active heroes and dump PNGs to
-  R2/S3, falling back to the live route for cold heroes. The compose function
-  is pure and trivially re-hostable.

@@ -4,6 +4,10 @@ button:not(:disabled) {
   cursor: pointer;
 }
 
+*:focus:not(:focus-visible) {
+  outline: none;
+}
+
 /* ═══════════════════════════════════════════════════════════════
    NOVUS MUNDUS — Black & Gold Elite Theme
    ═══════════════════════════════════════════════════════════════ */

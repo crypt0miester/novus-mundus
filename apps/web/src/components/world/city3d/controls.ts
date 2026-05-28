@@ -252,27 +252,38 @@ export class CityCameraController {
     this.mode = mode;
   }
 
-  /* Writes desired and smoothed pitch in lockstep — used by the
-   * transition driver and by reset-to-default snap paths. */
+  /* Writes desired and smoothed state in lockstep — used by tweens
+   * (mode transition, view tween, reset) that drive their own easing
+   * curve. After mutating smoothed state, immediately rebuild the
+   * camera matrix from the new values so the next paint reflects
+   * them — otherwise `update(dt)` reads `sX === prevSX` (no lerp
+   * delta because desired+smoothed are already aligned), returns
+   * `moved = false`, and `applyCameraFromSmoothed` is skipped. The
+   * symptom is that focusCell / reset / mode-toggle silently fail
+   * to move the camera until the next gesture forces an update. */
   setPitchHard(p: number): void {
     this.pitch = p;
     this.sPitch = p;
+    this.applyCameraFromSmoothed();
   }
 
   setDistanceHard(d: number): void {
     this.distance = d;
     this.sDistance = d;
     this.zoomVelocity = 0;
+    this.applyCameraFromSmoothed();
   }
 
   setTargetHard(v: THREE.Vector3): void {
     this.target.copy(v);
     this.sTarget.copy(v);
+    this.applyCameraFromSmoothed();
   }
 
   setYawHard(y: number): void {
     this.yaw = y;
     this.sYaw = y;
+    this.applyCameraFromSmoothed();
   }
 
   /**

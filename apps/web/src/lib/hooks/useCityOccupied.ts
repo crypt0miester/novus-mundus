@@ -40,6 +40,15 @@ export interface OccupiedCell {
    * spanning N×N cells at the anchor and skips the rest. */
   footprintSize?: number;
   footprintAnchor?: boolean;
+  /* Castle tier + status — only set for OCCUPANT_CASTLE cells. The
+   * tier drives the tower-glyph layout in the markers layer (1
+   * central tower for Outpost up to corner-towers + keep for
+   * Citadel); the status drives the corner pip's color so vacant /
+   * contested / protected reads at a glance without opening the
+   * inspect panel. Numeric enum values match `CastleTier` and
+   * `CastleStatus` from the SDK. */
+  castleTier?: number;
+  castleStatus?: number;
 }
 
 /*
@@ -274,6 +283,8 @@ export function useCityOccupied(cityId: number | null | undefined) {
               occupant: c.pubkey.toBase58(),
               footprintSize: size,
               footprintAnchor: dlat === 0 && dlong === 0,
+              castleTier: c.account.tier,
+              castleStatus: c.account.status,
             });
           }
         }

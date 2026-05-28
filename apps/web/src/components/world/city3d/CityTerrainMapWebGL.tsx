@@ -37,48 +37,31 @@ import {
   type BiomeKnobs,
 } from "@/lib/world/biome";
 
-// Shim values for the WebGL path until S10 rewires it for iso/top
-// presets. The WebGL renderer is currently gated behind
-// ENABLE_3D_MAP=false in CityTerrainMap.tsx, so these stubs don't ship
-// to users — they exist to keep the type-check green while the 2D
-// fallback owns the rendering surface.
+/* Minimal terrain handle for the WebGL renderer — biome lookups for
+ * click + hover go through this struct. Pre-flat-strategy this was a
+ * fully-fledged elevation/moisture/anchor sample; under flat-strategy
+ * the biome sampler (biomeAt) is the only consumer, so the struct
+ * collapses to a biomeSeed + per-city knob tuple. */
 interface CityTerrain {
   biomeSeed: number;
   knobs: BiomeKnobs;
-  // Retired elevation lines — kept as zero constants so the legacy
-  // hover-label code in this gated-off WebGL path still type-checks
-  // without polluting the live 2D fallback. The conditional that reads
-  // these is dead code today; we'll rip it out alongside the
-  // sampleTerrain shim when the WebGL renderer is rewired (S10).
-  waterLine: number;
-  peakLine: number;
 }
 function cityTerrain(city: CityAccount): CityTerrain {
   return {
     biomeSeed: city.biomeSeed >>> 0,
     knobs: biomeKnobsFromCity(city),
-    waterLine: 0,
-    peakLine: 0,
   };
 }
 function isPassable(terrain: CityTerrain, ox: number, oy: number): boolean {
   return isPassableBiome(biomeAt(terrain.biomeSeed, ox, oy, terrain.knobs));
 }
-
-function sampleTerrain(_terrain: CityTerrain, _ox: number, _oy: number) {
-  return {
-    elevation: 128,
-    moisture: 128,
-    isPassable: true,
-    isWater: false,
-    isMountain: false,
-    nearestAnchor: 0,
-  };
-}
-void biomeName;
 import type { MapMode } from "@/lib/store/settings";
 import type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
-import type { CityTerrainEntity, WalkLine } from "../CityTerrainMap2DFallback";
+import type {
+  CityTerrainEntity,
+  DotTooltip,
+  WalkLine,
+} from "../CityTerrainMap2DFallback";
 
 import styles from "../CityTerrainMap.module.css";
 import {
@@ -90,10 +73,8 @@ import {
   cssPxPerCellAt,
   getElevationAt,
   gridToWorld,
-  lodForZoom,
   midpointElevation,
   worldToGrid,
-  type MeshLOD,
 } from "./coords";
 import {
   buildTerrainMesh,
@@ -112,6 +93,7 @@ import {
   PITCH_3D,
 } from "./controls";
 import { MarkersLayer } from "./markers";
+import { InspectionLabelsLayer } from "./inspectionLabels";
 import {
   runModeTransition,
   runViewTween,
@@ -122,7 +104,10 @@ import {
 } from "./transition";
 
 export interface HoverReadout {
-  label: "Water" | "Shore" | "Land" | "Hill" | "Peak";
+  /** Capitalised biome name (e.g. "Forest", "Sand", "Shore") — mirrors
+   * the 2D fallback's vocabulary so screen readers see no difference
+   * between renderers. */
+  label: string;
   distM: number;
   passable: boolean;
   outOfBounds: boolean;
@@ -162,6 +147,46 @@ export interface CityTerrainMapWebGLProps {
   /* Imperative reset trigger from the orchestrator's reset chip.
    * Bumping this counter runs an in-mode reset tween. */
   resetTrigger: number;
+  /* Resolver for occupant labels — mirrors the prop the 2D fallback
+   * receives. The 3D renderer uses it to populate the inspection-band
+   * label pool and the active hover tooltip with name + level + tier
+   * + cosmetics. When undefined, labels and the active tooltip don't
+   * render (matches the 2D fallback's behaviour). */
+  getDotTooltip?: (
+    occupant: string,
+    occupantType: number,
+  ) => DotTooltip | null;
+  /* Pubkeys of OTHER players on the local viewer's team — passed
+   * straight through to the inspection-band label sizer (teammates
+   * get a higher priority so collisions hide neutrals first). */
+  teamMatePubkeys?: string[];
+  /* Active hover occupant + its projected screen position. Fires on
+   * pointer-move when the hovered cell is occupied; null on miss or
+   * pointer leave. The orchestrator uses this to render Variant B
+   * (cosmetic frame + badge + title + level/tier readout) anchored
+   * to the cell's projected XY in CSS px. */
+  onActiveOccupant?: (
+    info: {
+      cell: OccupiedCell;
+      screen: { x: number; y: number };
+    } | null,
+  ) => void;
+  /* Imperative focus request — payload-counter pattern. Orchestrator
+   * bumps `nonce` on each `focusCell()` call so the same (gridLat,
+   * gridLong) re-fires cleanly. The 3D renderer's `useEffect` keys
+   * on this prop's identity, converts grid → world XZ, and runs an
+   * in-mode view tween toward the cell at near-maximum zoom. Mirrors
+   * the 2D fallback's `focusCell` helper. */
+  focusRequest?: {
+    nonce: number;
+    gridLat: number;
+    gridLong: number;
+    durationMs?: number;
+  } | null;
+  /* Fired when a user taps an inspection-band label pill. Parent
+   * typically does both: focus the camera on the cell + commit the
+   * entity selection (so the EntityPanel opens). */
+  onLabelClick?: (cell: OccupiedCell) => void;
 }
 
 interface SceneRefs {
@@ -171,6 +196,7 @@ interface SceneRefs {
   camera: THREE.PerspectiveCamera;
   controller: CityCameraController;
   markers: MarkersLayer;
+  inspectionLabels: InspectionLabelsLayer;
   terrain: BuiltTerrainMesh;
   cityNameLabel: CSS2DObject | null;
   waterMesh: THREE.Mesh | null;
@@ -197,8 +223,6 @@ interface SceneRefs {
   lastUpdateMs: number;
   /* Last hover client-coords for throttling. */
   lastHoverTs: number;
-  /* Current LOD band — checked each paint; rebuild mesh on change. */
-  meshLOD: MeshLOD;
 }
 
 const HOVER_THROTTLE_MS = 33;
@@ -333,7 +357,6 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       terrain.biomeSeed,
       rgu,
       terrain.knobs,
-      undefined,
       COLOR_TEXTURE_SIZE_PREVIEW,
     );
     scene.add(built.mesh);
@@ -357,6 +380,15 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       terrain,
     });
 
+    /* Inspection-band labels — DOM pills that pop up next to every
+     * occupant when the camera zoom sits inside the inspection band
+     * (1.5× to 30×). Pre-allocated pool so per-frame updates don't
+     * touch the DOM beyond the visible label count. */
+    const inspectionLabels = new InspectionLabelsLayer({
+      scene,
+      teamMatePubkeys: props.teamMatePubkeys,
+    });
+
     /* City name label — CSS2DObject anchored slightly above the
      * peak so it doesn't intersect terrain. */
     const labelDiv = document.createElement("div");
@@ -374,9 +406,25 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     /* Distance range: max = mode's default (zoom 1×), min = max/200
      * so the user gets the full 200× zoom range the Canvas2D path
      * advertised. At 200× the camera may clip into a tall peak in
-     * 3D mode; that's expected — user can tilt up to see better. */
-    const maxD0 =
+     * 3D mode; that's expected — user can tilt up to see better.
+     *
+     * Per-city scaling — `INITIAL_DISTANCE_{2D,3D}` are tuned for the
+     * largest city (radius ~55, widthGrid ~8782). Smaller cities at
+     * the same distance feel "lost in space" with their plot floating
+     * inside an over-zoomed-out canvas. Scaling by
+     * `widthGrid / REF_WIDTH_GRID` pulls the camera in proportionally
+     * so every city's plot frames similarly at zoom 1×. REF is the
+     * largest canonical city plot width so smaller cities zoom in
+     * (camera closer = smaller distance) and Tokyo stays at the
+     * baseline distance. */
+    const REF_WIDTH_GRID = 8782;
+    const sizeFactor = Math.min(
+      1,
+      Math.max(0.45, props.cityAccount.widthGrid / REF_WIDTH_GRID),
+    );
+    const baseMax =
       props.mapMode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const maxD0 = baseMax * sizeFactor;
     const controller = new CityCameraController({
       domElement: wrap,
       camera,
@@ -444,6 +492,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       camera,
       controller,
       markers,
+      inspectionLabels,
       terrain: built,
       cityNameLabel,
       waterMesh: null,
@@ -459,11 +508,6 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       viewTween: null,
       lastUpdateMs: performance.now(),
       lastHoverTs: 0,
-      /* LOD bands are collapsed (see coords.ts:lodForZoom) — start
-       * at "high" so the paint-time LOD switch never fires; otherwise
-       * it would trigger a synchronous 4096² rebuild on the main
-       * thread per city load and undo the Progressive LOD bake. */
-      meshLOD: "high",
     };
 
     /* Initial paint. */
@@ -515,6 +559,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       refs.current?.viewTween?.cancel();
       controller.dispose();
       markers.dispose();
+      inspectionLabels.dispose();
       // Take the live terrain off the ref — between mount and unmount the
       // rebuild effect (below) may have replaced `built` with a fresh
       // BuiltTerrain. We must dispose THAT one, not the stale closure
@@ -586,7 +631,6 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       terrain.biomeSeed,
       rgu,
       terrain.knobs,
-      r.meshLOD,
       COLOR_TEXTURE_SIZE_PREVIEW,
     );
     preview.heightScale.value = r.controller.getMode() === "iso" ? 1 : 0;
@@ -702,15 +746,34 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
+    /* Preserve the user's relative zoom across the mode toggle.
+     * Compute the fractional zoom against the OLD max (before
+     * `setDistanceBounds` clamps), then apply the same fraction to the
+     * NEW max. Without this, switching modes snaps the camera to the
+     * destination mode's default distance — a 2D-zoomed-in user
+     * suddenly framed wide on toggle to 3D, or vice versa. */
+    const REF_WIDTH_GRID = 8782;
+    const sizeFactor = Math.min(
+      1,
+      Math.max(0.45, props.cityAccount.widthGrid / REF_WIDTH_GRID),
+    );
+    const oldMax =
+      (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const newMax =
+      (to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const distanceFrom = r.controller.getDistance();
+    const relativeZoom = Math.max(0, Math.min(1, distanceFrom / oldMax));
+    const distanceTo = relativeZoom * newMax;
+
     /* Update controller's distance bounds for the new mode at start
      * of the tween — the user might be zoomed past the new mode's
      * max, which the controller's setDistanceBounds re-clamps. */
-    const maxD = to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    r.controller.setDistanceBounds(maxD / 200, maxD);
+    r.controller.setDistanceBounds(newMax / 200, newMax);
 
     if (reduce) {
       r.modeTween?.cancel();
       snapToMode(r.controller, r.terrain, to, selectionTargetXZ);
+      r.controller.setDistanceHard(distanceTo);
       props.onModeCommitted(to);
       requestRender();
       return;
@@ -725,6 +788,8 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       fromMode: from,
       toMode: to,
       selectionTargetXZ,
+      distanceFrom,
+      distanceTo,
       onChange: requestRender,
       onComplete: (mode) => {
         if (refs.current) refs.current.modeTween = null;
@@ -760,6 +825,55 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       requestRender,
     );
   }, [props.resetTrigger]);
+
+  /* Focus request — imperative `focusCell()` handle on the orchestrator
+   * sets a payload-counter prop; we run an in-mode view tween to the
+   * requested cell at near-maximum zoom. Mirrors the 2D fallback's
+   * `focusCell` (CityTerrainMap2DFallback.tsx:570) so callers (entity-
+   * panel name-click, future nav prompts) get the same UX on either
+   * renderer. The `nonce` in the payload distinguishes successive calls
+   * to the same coords. */
+  useEffect(() => {
+    const r = refs.current;
+    if (!r) return;
+    const req = props.focusRequest;
+    if (!req) return;
+    /* Convert grid coord → world XZ using the same projection the
+     * marker layer + click handler share, so the focused cell lands
+     * dead-centre under the new camera target. */
+    const ox = req.gridLong - r.cityLongGrid;
+    const oy = req.gridLat - r.cityLatGrid;
+    const { wx, wz } = gridToWorld(ox, oy, r.rgu);
+    const mode = r.controller.getMode();
+    /* Target distance — match the 2D fallback's MAX_VIEW_SCALE = 500
+     * (distance = max / 500). Under flat-strategy the mesh has no
+     * elevation so the "can't dive too deep into a peak" caveat from
+     * the elevation-era is moot; we go as close as the controller
+     * allows. The controller's minDistance is `maxDistance / 200`, so
+     * `maxD / 200` lands exactly at the deepest legal zoom — same
+     * single-cell-fills-the-screen feel as the 2D path at full zoom. */
+    const baseMax =
+      mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const REF_WIDTH_GRID = 8782;
+    const sizeFactor = Math.min(
+      1,
+      Math.max(0.45, propsRef.current.cityAccount.widthGrid / REF_WIDTH_GRID),
+    );
+    const maxD = baseMax * sizeFactor;
+    const targetDistance = maxD / 200;
+    const targetVec = new THREE.Vector3(
+      wx,
+      mode === "iso" ? midpointElevation() : 0,
+      wz,
+    );
+    r.viewTween?.cancel();
+    r.viewTween = runViewTween(
+      r.controller,
+      { target: targetVec, distance: targetDistance },
+      requestRender,
+      req.durationMs ?? 520,
+    );
+  }, [props.focusRequest]);
 
   /* Auto-focus on a cell when mounting the home-city disc. Fires
    * once per cityId via the autoFocusCell prop changing.
@@ -870,39 +984,42 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     );
     r.markers.updateLanding(p.selected, cssPx);
 
+    /* Inspection-band labels — refresh every paint so projected
+     * positions track camera motion. The layer itself short-circuits
+     * when the zoom is outside the inspection band. */
+    const zoom = r.controller.getDisplayZoom();
+    const canvasW = r.renderer.domElement.clientWidth;
+    r.inspectionLabels.update({
+      occupied: p.occupied,
+      getDotTooltip: p.getDotTooltip,
+      myPlayerPubkey: p.myPlayerPubkey,
+      selectedEntity: p.selectedEntity ?? null,
+      viewScale: zoom,
+      camera: r.camera,
+      canvasW,
+      canvasH,
+      cityLatGrid: r.cityLatGrid,
+      cityLongGrid: r.cityLongGrid,
+      rgu: r.rgu,
+      teamMatePubkeys: p.teamMatePubkeys,
+      onLabelClick: p.onLabelClick,
+    });
+
     r.renderer.render(r.scene, r.camera);
     r.cssRenderer.render(r.scene, r.camera);
 
     /* Notify orchestrator of zoom + cells-visible state for the
      * status row. Throttled — only fire on change. */
-    const zoom = r.controller.getDisplayZoom();
     p.onZoomChange(zoom);
     p.onCellsVisibleChange(cssPx >= GRID_OVERLAY_MIN_CSS_PX_PER_CELL);
 
-    /* LOD switch: if the display zoom crossed a band boundary,
-     * rebuild the terrain mesh at the matching resolution. The
-     * hysteresis in `lodForZoom` keeps the boundary from thrashing.
-     * Mesh rebuild is one-shot (~5-20 ms depending on band) and
-     * scheduled inline because the user's gesture already paused. */
-    const nextLOD = lodForZoom(zoom, r.meshLOD);
-    if (nextLOD !== r.meshLOD) {
-      const oldMesh = r.terrain;
-      const live = cityTerrain(propsRef.current.cityAccount);
-      const built = buildTerrainMesh(
-        live.biomeSeed,
-        r.rgu,
-        live.knobs,
-        nextLOD,
-      );
-      built.heightScale.value = oldMesh.heightScale.value;
-      r.scene.remove(oldMesh.mesh);
-      oldMesh.geometry.dispose();
-      oldMesh.material.dispose();
-      oldMesh.colorMap.dispose();
-      r.scene.add(built.mesh);
-      r.terrain = built;
-      r.meshLOD = nextLOD;
-    }
+    /* LOD scaffolding ripped out — under flat-strategy the mesh is a
+     * single flat quad with no vertex displacement, so per-zoom LOD
+     * rebuilds were a no-op (`coords.ts:lodForZoom` already always
+     * returned "high"). The dead conditional + rebuild branch lived
+     * here and synchronously rebuilt the 4096² DataTexture on the
+     * main thread per zoom step, which it never actually wanted to
+     * do — dropped entirely. */
 
     updateScaleBar(r);
     updateCompass(r);
@@ -921,35 +1038,67 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     const now = performance.now();
     if (now - r.lastHoverTs < HOVER_THROTTLE_MS) return;
     r.lastHoverTs = now;
+
+    /* Marker raycast FIRST so an occupant under the pointer wins the
+     * hover even if the terrain ray would land on a neighbouring cell.
+     * Active-occupant emission fires from this path so the orchestrator
+     * can render the Variant B tooltip; pure-terrain hovers fire only
+     * the biome hover label. */
+    const p = propsRef.current;
+    const markerHit = raycastMarkers(r, clientX, clientY, p.occupied);
+    if (markerHit && p.onActiveOccupant) {
+      const cell = markerHit.cell;
+      const ox = cell.gridLong - r.cityLongGrid;
+      const oy = cell.gridLat - r.cityLatGrid;
+      const halfSide = MESH_SIZE / 2;
+      const wx = (ox / r.rgu) * halfSide;
+      const wz = -(oy / r.rgu) * halfSide;
+      const tmpV = new THREE.Vector3(wx, 0, wz);
+      tmpV.project(r.camera);
+      const canvasW = r.renderer.domElement.clientWidth;
+      const canvasH = r.renderer.domElement.clientHeight;
+      /* Canvas-relative coords (NOT viewport) — the orchestrator
+       * renders the Variant B tooltip inside the position:relative
+       * `.canvasWrap` so the inline `left/top` is anchored to the
+       * wrap's top-left, which is the same as the canvas's top-left
+       * (canvas is `position:absolute; inset: 0`). */
+      const screenX = (tmpV.x * 0.5 + 0.5) * canvasW;
+      const screenY = (-tmpV.y * 0.5 + 0.5) * canvasH;
+      p.onActiveOccupant({
+        cell: cell as OccupiedCell,
+        screen: { x: screenX, y: screenY },
+      });
+    } else if (p.onActiveOccupant) {
+      p.onActiveOccupant(null);
+    }
+
     const hit = raycast(r, clientX, clientY);
     if (!hit) {
-      propsRef.current.onHover(null);
+      p.onHover(null);
       return;
     }
     const { ox, oy } = worldToGrid(hit.point.x, hit.point.z, r.rgu);
-    const outOfBounds = ox * ox + oy * oy > r.rgu * r.rgu;
+    /* AABB bounds — the chain validates with `is_within_city_grid`
+     * (|ox| ≤ widthGrid/2, |oy| ≤ heightGrid/2). The previous disc
+     * check (`ox² + oy² > rgu²`) rejected the four corners of the
+     * square plot even though they're legal landing cells. */
+    const cityAcc = p.cityAccount;
+    const plotHalfW = cityAcc.widthGrid / 2;
+    const plotHalfH = cityAcc.heightGrid / 2;
+    const outOfBounds = Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH;
     if (outOfBounds) {
-      propsRef.current.onHover(null);
+      p.onHover(null);
       return;
     }
-    /* Read terrain fresh from props — capturing the outer `terrain`
-     * via closure would freeze the controller's bindings to whatever
-     * terrain existed at mount, and stale-terrain hover labels would
-     * persist across city switches. cityTerrain is a cheap struct
-     * unwrap from the account; no allocation cost. */
-    const liveTerrain = cityTerrain(propsRef.current.cityAccount);
-    const s = sampleTerrain(liveTerrain, ox, oy);
-    let label: HoverReadout["label"] = "Land";
-    if (s.isWater) label = "Water";
-    else if (s.isMountain) label = "Peak";
-    else {
-      const range = Math.max(1, liveTerrain.peakLine - liveTerrain.waterLine);
-      const t = (s.elevation - liveTerrain.waterLine) / range;
-      if (t < 0.1) label = "Shore";
-      else if (t >= 0.5) label = "Hill";
-    }
+    /* Sample biome fresh from the city account — mirrors the 2D
+     * fallback's hover readout. */
+    const knobs = biomeKnobsFromCity(cityAcc);
+    const biome = biomeAt(cityAcc.biomeSeed, ox, oy, knobs);
+    const passable = isPassableBiome(biome);
+    const rawName = biomeName(biome);
+    const label = rawName.charAt(0).toUpperCase() + rawName.slice(1);
     const distM = Math.round(Math.sqrt(ox * ox + oy * oy) * METERS_PER_GRID_UNIT);
-    propsRef.current.onHover({ label, distM, passable: s.isPassable, outOfBounds: false });
+    p.onHover({ label, distM, passable, outOfBounds: false });
   }, []);
 
   const handleClick = useCallback((clientX: number, clientY: number) => {
@@ -990,7 +1139,12 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       return;
     }
     const { ox, oy } = worldToGrid(hit.point.x, hit.point.z, r.rgu);
-    const outOfBounds = ox * ox + oy * oy > r.rgu * r.rgu;
+    /* AABB bounds — mirrors the chain's `is_within_city_grid` and the
+     * 2D fallback's `plotHalfW` / `plotHalfH` clamp. */
+    const cityAcc = propsRef.current.cityAccount;
+    const plotHalfW = cityAcc.widthGrid / 2;
+    const plotHalfH = cityAcc.heightGrid / 2;
+    const outOfBounds = Math.abs(ox) > plotHalfW || Math.abs(oy) > plotHalfH;
     const gridLat = r.cityLatGrid + oy;
     const gridLong = r.cityLongGrid + ox;
     /* Read terrain fresh from props for the same reason as

@@ -1309,10 +1309,10 @@ export function TeamTab() {
                                     memberPda,
                                   )
                                 }
-                                title="View on Map"
+                                title="Locate"
                               >
                                 <MapPin className="h-3.5 w-3.5" />
-                                <span className="hidden sm:inline">View on Map</span>
+                                <span className="hidden sm:inline">Locate</span>
                               </ActionButton>
                               {canReinforce && (
                                 <ActionButton

@@ -35,13 +35,25 @@ import {
   toGrid,
 } from "novus-mundus-sdk";
 import { useSettings, type MapMode } from "@/lib/store/settings";
-import { useCityOccupied } from "@/lib/hooks/useCityOccupied";
+import {
+  useCityOccupied,
+  type OccupiedCell,
+} from "@/lib/hooks/useCityOccupied";
 import styles from "./CityTerrainMap.module.css";
 import {
   CityTerrainMap2DFallback,
   type CityTerrainMapHandle,
   type CityTerrainMapProps,
 } from "./CityTerrainMap2DFallback";
+import {
+  animatedColorAt,
+  animatedColorToRgba,
+  getCosmeticTitle,
+  cosmeticColorAnimationClass,
+  RARITY_BORDER,
+} from "@/lib/config/cosmetics-catalog";
+import { CosmeticBadge } from "@/components/cosmetics/CosmeticBadge";
+import { CosmeticFrame } from "@/components/cosmetics/CosmeticFrame";
 import {
   CityTerrainMapWebGL as CityTerrainMapWebGLImpl,
   type CityTerrainMapWebGLProps,
@@ -125,18 +137,45 @@ function CityTerrainMap3DScene({
   const mapMode = useSettings((s) => s.mapMode);
   const setMapMode = useSettings((s) => s.setMapMode);
 
-  /* Stub focusCell — the WebGL renderer doesn't yet expose its
-   * runViewTween via ref. Once we wire that up (a `focusRequest`
-   * trigger-counter passed into <Renderer>, mirroring resetTrigger),
-   * route the call through. Until then this is a no-op so callers
-   * don't blow up when ENABLE_3D_MAP=true is flipped. */
+  /* Focus payload — orchestrator-owned state that mirrors the
+   * Canvas2D fallback's `focusCell` imperative handle. The 3D
+   * renderer's useEffect on `focusRequest` does the actual camera
+   * tween; we just push the payload (with a monotonic `nonce` so
+   * back-to-back focuses to the same cell still re-fire). */
+  const [focusRequest, setFocusRequest] = useState<{
+    nonce: number;
+    gridLat: number;
+    gridLong: number;
+    durationMs?: number;
+  } | null>(null);
+
   useImperativeHandle(
     ref,
     () => ({
-      focusCell: (_gridLat: number, _gridLong: number) => {
-        // Intentionally empty — see comment above. Coords ignored.
-        void _gridLat;
-        void _gridLong;
+      focusCell: (
+        gridLat: number,
+        gridLong: number,
+        opts?: { scale?: number; durationMs?: number },
+      ) => {
+        /* `scale` is the 2D fallback's pan-zoom scale; the 3D path
+         * uses camera distance internally, so we pass only the
+         * coords + duration through and let the renderer pick a
+         * near-max-zoom distance. Keep `opts.scale` accepted in the
+         * signature so callers don't have to branch on renderer.
+         *
+         * Functional setState so back-to-back focusCell calls within
+         * the same render cycle still produce monotonically-increasing
+         * nonces — without it, multiple calls before React commits the
+         * state update would all read the same stale `focusRequest`
+         * via closure and produce identical nonces, defeating the
+         * re-fire-on-same-coords contract. */
+        void opts?.scale;
+        setFocusRequest((prev) => ({
+          nonce: (prev?.nonce ?? 0) + 1,
+          gridLat,
+          gridLong,
+          durationMs: opts?.durationMs,
+        }));
       },
     }),
     [],
@@ -162,6 +201,16 @@ function CityTerrainMap3DScene({
   const [cellsVisible, setCellsVisible] = useState(false);
   const [touchOrbitEnabled, setTouchOrbitEnabled] = useState(false);
   const [resetTrigger, setResetTrigger] = useState(0);
+  /* Active hovered occupant + its projected CSS-px position. The 3D
+   * renderer fires `onActiveOccupant` on pointer-move (or null when
+   * the pointer is over empty terrain). The orchestrator renders
+   * Variant B (cosmetic frame + badge + title + level/tier readout)
+   * anchored to `screen.{x,y}` so the tooltip tracks the cell across
+   * camera moves. */
+  const [activeOccupant, setActiveOccupant] = useState<{
+    cell: OccupiedCell;
+    screen: { x: number; y: number };
+  } | null>(null);
 
   const {
     data: occupied,
@@ -233,12 +282,44 @@ function CityTerrainMap3DScene({
     return () => window.clearTimeout(id);
   }, [outOfBoundsNotice]);
 
+  /* Reset the active hover tooltip whenever the city changes — old
+   * cells reference a different occupant set and would render stale
+   * data against the new city's anchor. Declared BEFORE the
+   * `if (!useWebGL) return ...` short-circuit below: a mid-session
+   * WebGL context-loss would otherwise drop this hook from the
+   * render and trigger React's "rendered fewer hooks" invariant
+   * crash. */
+  useEffect(() => {
+    setActiveOccupant(null);
+  }, [props.cityAccount.cityId]);
+
   const handleToggleMode = () => {
     setMapMode(mapMode === "iso" ? "flat" : "iso");
   };
 
   const handleModeCommitted = (_m: MapMode) => {
     _m;
+  };
+
+  /* Inspection-band label / active-tooltip click handler. Mirrors
+   * the 2D fallback's behaviour (`CityTerrainMap2DFallback.tsx:1681`):
+   * focus the camera AND commit the entity selection so the panel
+   * opens. The same handler powers both the floating CSS2DObject
+   * pills in the 3D scene and the Variant B hover tooltip. */
+  const handleLabelClick = (cell: OccupiedCell) => {
+    setFocusRequest((prev) => ({
+      nonce: (prev?.nonce ?? 0) + 1,
+      gridLat: cell.gridLat,
+      gridLong: cell.gridLong,
+    }));
+    if (props.onEntitySelect) {
+      props.onEntitySelect({
+        pubkey: cell.occupant,
+        occupantType: cell.occupantType,
+        gridLat: cell.gridLat,
+        gridLong: cell.gridLong,
+      });
+    }
   };
 
   // WebGL unavailable or context lost mid-session: short-circuit to the
@@ -251,6 +332,103 @@ function CityTerrainMap3DScene({
   if (!useWebGL) {
     return <CityTerrainMap2DFallback {...props} />;
   }
+
+  /* Variant B tooltip — full cosmetic preview (frame + badge + title
+   * + level/tier readout) anchored to the hovered occupant's
+   * projected canvas-relative XY. Mirrors the 2D fallback's
+   * activeTooltip block (CityTerrainMap2DFallback.tsx:1928-2017) so
+   * the two paths read identically. Suppressed when getDotTooltip
+   * is undefined (read-only surfaces). */
+  const activeTooltipNode = (() => {
+    if (!activeOccupant || !props.getDotTooltip) return null;
+    const t = props.getDotTooltip(
+      activeOccupant.cell.occupant,
+      activeOccupant.cell.occupantType,
+    );
+    if (!t) return null;
+    const titleEntry = t.titleId ? getCosmeticTitle(t.titleId) : null;
+    const hasFrame = (t.frameId ?? 0) > 0;
+    const hasBadge = (t.badgeId ?? 0) > 0;
+    const showLeftCol = hasFrame || hasBadge;
+    const nowMs = Date.now();
+    /* Animated colour resolves per-render — close enough to the
+     * 2D fallback's per-rAF tick for a hover bubble that the user
+     * stares at briefly. */
+    const colorNow =
+      t.nameColorHex && t.nameColorAnim
+        ? animatedColorToRgba(
+            animatedColorAt(t.nameColorHex, t.nameColorAnim, nowMs),
+          )
+        : t.nameColorHex ?? null;
+    const animClass = t.nameColorAnim
+      ? cosmeticColorAnimationClass({
+          id: 0,
+          name: "",
+          rarity: "common",
+          hex: t.nameColorHex ?? "#000",
+          animation: t.nameColorAnim,
+        })
+      : null;
+    return (
+      <div
+        className={styles.dotTooltip}
+        style={{
+          left: `${activeOccupant.screen.x}px`,
+          top: `${activeOccupant.screen.y}px`,
+          borderColor: t.accent ?? undefined,
+          display: "flex",
+          gap: "0.5rem",
+          alignItems: "center",
+        }}
+        role="tooltip"
+        aria-hidden="true"
+      >
+        {showLeftCol && (
+          <CosmeticFrame id={t.frameId ?? 0} size={36}>
+            {hasBadge ? (
+              <CosmeticBadge id={t.badgeId ?? 0} size={32} />
+            ) : (
+              <span
+                aria-hidden
+                style={{
+                  width: 20,
+                  height: 20,
+                  borderRadius: "50%",
+                  background: "var(--readout-tint, #efe2c4)",
+                }}
+              />
+            )}
+          </CosmeticFrame>
+        )}
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div
+            className={`${styles.dotTooltipPrimary} ${animClass ?? ""}`}
+            style={colorNow ? { color: colorNow } : undefined}
+          >
+            {t.primary}
+          </div>
+          <div className={styles.dotTooltipSecondary}>{t.secondary}</div>
+          {titleEntry && (
+            <div
+              style={{
+                marginTop: "0.25rem",
+                display: "inline-block",
+                fontSize: "0.55rem",
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                padding: "0.1rem 0.35rem",
+                border: `1px solid ${RARITY_BORDER[titleEntry.rarity]}`,
+                color: RARITY_BORDER[titleEntry.rarity],
+                background: "var(--readout-tint)",
+              }}
+            >
+              {titleEntry.displayName}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  })();
 
   const rendererNode = (
     <Renderer
@@ -271,6 +449,11 @@ function CityTerrainMap3DScene({
       onContextLost={() => setWebglLost(true)}
       touchOrbitEnabled={touchOrbitEnabled}
       resetTrigger={resetTrigger}
+      getDotTooltip={props.getDotTooltip}
+      teamMatePubkeys={props.teamMatePubkeys}
+      onActiveOccupant={setActiveOccupant}
+      focusRequest={focusRequest}
+      onLabelClick={handleLabelClick}
     />
   );
 
@@ -280,8 +463,10 @@ function CityTerrainMap3DScene({
         className={styles.canvasWrap}
         role="application"
         aria-label={`Terrain disc for ${props.cityAccount.name}. Click an occupant to inspect them, or pick an empty cell to land. Scroll or pinch to zoom, drag to pan, double-click to zoom in.`}
+        onPointerLeave={() => setActiveOccupant(null)}
       >
         {rendererNode}
+        {activeTooltipNode}
         <button
           type="button"
           className={`${styles.togglePill} ${styles.toggle3DPill}`}

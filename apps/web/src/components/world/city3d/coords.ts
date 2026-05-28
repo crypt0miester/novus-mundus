@@ -32,30 +32,14 @@ export const MESH_SIZE = 4;
 export const MAX_HEIGHT_RATIO = 0.12;
 export const MAX_HEIGHT = MESH_SIZE * MAX_HEIGHT_RATIO;
 
-/* Vertex resolution for the terrain plane. Pinned to the HIGH
- * band (512² ≈ 262k vertices ≈ 6 MB GPU buffer) so the user gets
- * crisp terrain at every zoom level — no band-switching, no mid-
- * paint rebuild stutter. The LOD-band machinery below is kept so
- * the surface area stays compatible with callers that pass a
- * `MeshLOD`, but `meshResForLOD` and `lodForZoom` now collapse to
- * the high band regardless of input.
- *
- * Trade: every city carries a 6 MB GPU buffer instead of starting
- * at 0.4 MB and growing on demand. iOS Safari's WebGL2 budget is
- * 32 MB+ on modern devices, so 6 MB is comfortable; desktops are
- * a non-issue. */
-export const MESH_RES_LOW = 512;
-export const MESH_RES_MID = 512;
-export const MESH_RES_HIGH = 512;
-export const MESH_RES = MESH_RES_HIGH;
-export type MeshLOD = "low" | "mid" | "high";
-export function meshResForLOD(_lod: MeshLOD): number {
-  return MESH_RES_HIGH;
-}
-/* Always return "high" — band-switching disabled. */
-export function lodForZoom(_zoom: number, _current: MeshLOD): MeshLOD {
-  return "high";
-}
+/* Vertex resolution for the terrain plane. Pinned at 512² (≈ 262k
+ * vertices ≈ 6 MB GPU buffer) under flat-strategy — the mesh is a
+ * single flat quad with no vertex displacement, so band-switching
+ * has no visible payoff and the dead `MeshLOD` / `lodForZoom`
+ * scaffolding was just synchronous main-thread rebuilds on every
+ * zoom step. Removed entirely; any future LOD work can re-introduce
+ * the type when there's something to actually band-switch on. */
+export const MESH_RES = 512;
 
 /* Threshold at which marker rendering swaps from dot-mode to tile-mode
  * (and the proximity grid turns on). Matches the Canvas2D fallback's

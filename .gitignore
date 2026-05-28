@@ -28,3 +28,12 @@ apps/web/.last-run.json
 # Icon source generations — 1024px Krea raws. Re-export from these via
 # images/scripts/export-icons-to-app.sh; never shipped to the client.
 images/icons/raw/
+
+# Bonsai-Image-4B local checkout — cloned by images/scripts/bonsai-install.sh.
+# Contains a Python venv and multi-GB MLX model weights; never committed.
+# Re-clone on any new machine via bonsai-install.sh.
+images/bonsai/
+
+# Hero silhouette source generations — 1024px Bonsai raws. Re-export from
+# these via images/scripts/export-heroes-to-app.sh; never shipped to client.
+images/heroes/raw/

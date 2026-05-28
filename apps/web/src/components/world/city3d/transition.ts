@@ -42,6 +42,13 @@ export interface TransitionOptions {
    * leave target.x/z alone (the default — most toggles aren't entity-
    * focused). */
   selectionTargetXZ: { x: number; z: number } | null;
+  /* Distance lerp endpoints — preserved relative zoom across mode
+   * toggles. Caller computes both: `distanceFrom` is whatever the
+   * controller's smoothed distance is at tween start; `distanceTo`
+   * is the equivalent fraction of the new mode's range so the user
+   * doesn't lose their zoom level when flipping iso ↔ top. */
+  distanceFrom: number;
+  distanceTo: number;
   onChange: () => void;
   onComplete: (toMode: MapMode) => void;
 }
@@ -123,6 +130,12 @@ export function runModeTransition(opts: TransitionOptions): RunningTransition {
     /* Write both desired AND smoothed values via setPitchHard so the
      * controller's smoothing loop doesn't lerp on top of the tween. */
     controller.setPitchHard(lerp(pitchFrom, pitchTo, e));
+
+    /* Lerp distance so a user who was zoomed into a specific area in
+     * 2D doesn't snap to the new mode's default distance on toggle.
+     * The caller pre-computes `distanceTo` as the same relative-zoom
+     * fraction expressed against the new mode's max distance. */
+    controller.setDistanceHard(lerp(opts.distanceFrom, opts.distanceTo, e));
 
     const newTarget = new THREE.Vector3(
       lerp(xFrom, xTo, e),
