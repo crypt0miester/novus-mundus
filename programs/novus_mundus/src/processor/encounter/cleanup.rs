@@ -45,7 +45,10 @@ use crate::{
 ///   `location_creator` — the original spawn payer.
 /// - If the cell is already closed (the encounter was killed, which closes the
 ///   cell), no on-chain payer record survives, so the encounter rent falls back
-///   to `game_engine.authority`.
+///   to `game_engine.game_authority` — the backend keypair the cron uses to
+///   sign auto-spawns. (DAO governance authority would also be plausible here,
+///   but the web cron only holds `game_authority`, and routing rent to a key
+///   that can't ever be the payer would strand it behind a multisig.)
 ///
 /// # Accounts
 /// - [writable] encounter: EncounterAccount PDA to close
@@ -54,7 +57,7 @@ use crate::{
 /// - [writable] encounter_location: the encounter's LocationAccount cell
 ///   (the real PDA, whether still open or already closed)
 /// - [writable] rent_recipient: receives reclaimed rent (must be the cell's
-///   `location_creator`, or `game_engine.authority` when the cell is closed)
+///   `location_creator`, or `game_engine.game_authority` when the cell is closed)
 ///
 /// # Instruction Data
 /// None — every value needed is read from the encounter account itself.
@@ -179,8 +182,10 @@ pub fn process(
             close_account(encounter_location_account, rent_recipient)?;
         }
         None => {
-            // Cell already gone (or reused): no surviving payer record.
-            if rent_recipient.address() != &game_engine_data.authority {
+            // Cell already gone (or reused): no surviving payer record. Route
+            // to game_authority — the backend keypair the cron signs with so
+            // permissionless cleanups can actually deliver the rent.
+            if rent_recipient.address() != &game_engine_data.game_authority {
                 return Err(GameError::InvalidParameter.into());
             }
         }

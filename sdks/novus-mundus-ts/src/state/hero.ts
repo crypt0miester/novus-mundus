@@ -164,3 +164,14 @@ export function requiresSpecificCity(template: HeroTemplateAccount): boolean {
 export function isHeroAtHome(template: HeroTemplateAccount, playerCityId: number): boolean {
   return template.meditationCityId === 0 || template.meditationCityId === playerCityId;
 }
+
+/** Derive hero tier from mint cost (lamports). Mirrors
+ * programs/novus_mundus/src/state/hero.rs `tier_from_mint_cost`.
+ * 5-tier ladder: Common(0) / Rare(1) / Epic(2) / Legendary(3) / Mythic(4). */
+export function tierFromMintCost(mintCostLamports: number): 0 | 1 | 2 | 3 | 4 {
+  if (mintCostLamports >= 10_000_000_000) return 4;
+  if (mintCostLamports >= 5_000_000_000) return 3;
+  if (mintCostLamports >= 1_000_000_000) return 2;
+  if (mintCostLamports >= 250_000_000) return 1;
+  return 0;
+}

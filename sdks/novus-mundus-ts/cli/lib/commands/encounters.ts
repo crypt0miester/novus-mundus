@@ -306,6 +306,15 @@ async function handleCleanup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   let totalCleaned = 0;
   let totalPending = 0;
 
+  // game_authority is the chain-required rent recipient for the closed-cell
+  // fallback (cleanup.rs:181-187). Fetch it once instead of per-encounter.
+  const ge = await client.fetchGameEngine();
+  if (!ge.account) {
+    log.error(`GameEngine ${ctx.gameEngine.toBase58()} not found`);
+    return;
+  }
+  const gameAuthority = ge.account.gameAuthority;
+
   for (const cityId of cityIds) {
     const city = CITIES.find(c => c.id === cityId);
     if (!city) {
@@ -331,8 +340,10 @@ async function handleCleanup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       const [locationPda] = deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
 
       // Route rent: cell still held by this encounter -> its creator; cell
-      // closed or reused by a newer encounter -> kingdom (DAO) authority.
-      let rentRecipient = ctx.daoAuthority.publicKey;
+      // closed or reused by a newer encounter -> game_authority (chain
+      // accepts only game_authority on the fallback so the cron/CLI can
+      // both deliver the rent without holding the DAO multisig key).
+      let rentRecipient = gameAuthority;
       const locInfo = await ctx.connection.getAccountInfo(locationPda);
       if (locInfo && locInfo.data.length > 0) {
         const loc = deserializeLocation(locInfo.data);

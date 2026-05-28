@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "next dev --turbopack",
+    "gen:template-map": "bun run scripts/gen-template-map.ts",
+    "prebuild": "bun run gen:template-map",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
@@ -14,6 +16,8 @@
     "test:smoke": "playwright test"
   },
   "dependencies": {
+    "@napi-rs/canvas": "^1.0.0",
+    "@napi-rs/canvas-darwin-arm64": "^1.0.0",
     "@noble/hashes": "2.0.1",
     "@number-flow/react": "^0.6.0",
     "@onsol/tldparser": "1.2.1",

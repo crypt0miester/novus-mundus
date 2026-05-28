@@ -155,12 +155,18 @@ export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
   };
 }
 
-/** Parse CityAccount from account info. */
+/** Parse CityAccount from account info. Returns null for malformed accounts
+ * (wrong size or unparseable layout) so bulk fetches can skip stragglers
+ * from older deploys instead of crashing the caller. */
 export function parseCity(accountInfo: AccountInfo<Buffer>): CityAccount | null {
   if (!accountInfo.data || accountInfo.data.length < CITY_ACCOUNT_SIZE) {
     return null;
   }
-  return deserializeCity(accountInfo.data);
+  try {
+    return deserializeCity(accountInfo.data);
+  } catch {
+    return null;
+  }
 }
 
 /** Project a CityAccount onto the BiomeKnobs tuple consumed by the
