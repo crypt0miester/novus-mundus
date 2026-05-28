@@ -100,9 +100,12 @@ import {
   runViewTween,
   shouldRunTransition,
   snapToMode,
-  type RunningTransition,
-  type RunningViewTween,
 } from "./transition";
+import {
+  setupCityScene,
+  type SceneRefs,
+  type SceneHandlersRef,
+} from "./hooks/setupCityScene";
 
 export interface HoverReadout {
   /** Capitalised biome name (e.g. "Forest", "Sand", "Shore") — mirrors
@@ -190,41 +193,8 @@ export interface CityTerrainMapWebGLProps {
   onLabelClick?: (cell: OccupiedCell) => void;
 }
 
-interface SceneRefs {
-  renderer: THREE.WebGLRenderer;
-  cssRenderer: CSS2DRenderer;
-  scene: THREE.Scene;
-  camera: THREE.PerspectiveCamera;
-  controller: CityCameraController;
-  markers: MarkersLayer;
-  inspectionLabels: InspectionLabelsLayer;
-  terrain: BuiltTerrainMesh;
-  cityNameLabel: CSS2DObject | null;
-  waterMesh: THREE.Mesh | null;
-  scaleBarEl: HTMLDivElement;
-  compassEl: HTMLDivElement;
-  rgu: number;
-  cityLatGrid: number;
-  cityLongGrid: number;
-  raycaster: THREE.Raycaster;
-  /* Continuous rAF id for tween-driven paints. Outside a tween, the
-   * scene paints on demand via `requestRender`. */
-  rafId: number | null;
-  /* Per-frame paint flag — multiple state changes in one tick batch
-   * into one paint. */
-  paintQueued: boolean;
-  /* The active mode-transition tween, if any. Reset re-presses
-   * during the 700 ms cancel cleanly. */
-  modeTween: RunningTransition | null;
-  /* The active in-mode view tween (double-click, reset). Any new
-   * gesture / wheel cancels this. */
-  viewTween: RunningViewTween | null;
-  /* Last time `update(dt)` ran — used to derive dt without an
-   * always-on clock. */
-  lastUpdateMs: number;
-  /* Last hover client-coords for throttling. */
-  lastHoverTs: number;
-}
+/* `SceneRefs` lives in hooks/setupCityScene.ts now — the orchestrator
+ * just references the imported type. */
 
 const HOVER_THROTTLE_MS = 33;
 
@@ -288,320 +258,54 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     };
   }, []);
 
+  /* Stable handler shim — long-lived controller callbacks (bound once
+   * at mount inside `setupCityScene`) read through this ref so they
+   * always hit the LATEST React closure rather than the snapshot
+   * captured at first mount. Sync every render — the cost is one
+   * object literal, the win is that prop changes (a new
+   * `onEntitySelect`) propagate without re-mounting the scene. */
+  const handlersRef = useRef<SceneHandlersRef["current"]>({
+    handleClick: () => {},
+    handleDoubleClick: () => {},
+    handleResetRequested: () => {},
+    handleFrameSelected: () => {},
+    handlePointerMove: () => {},
+    requestRender: () => {},
+  });
+
   /* Build the scene exactly once. Subsequent prop changes flow
    * through targeted `useEffect`s below. */
   useEffect(() => {
     const wrap = wrapRef.current;
     if (!wrap) return;
+    const scaleBarEl = scaleBarRef.current;
+    const compassEl = compassRef.current;
+    if (!scaleBarEl || !compassEl) return;
 
-    let renderer: THREE.WebGLRenderer;
-    try {
-      renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    } catch {
-      props.onContextLost();
-      return;
-    }
-    if (!renderer.capabilities.isWebGL2) {
-      renderer.dispose();
-      propsRef.current.onContextLost();
-      return;
-    }
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.setSize(wrap.clientWidth, wrap.clientHeight, false);
-    renderer.setClearColor(0x000000, 0);
-    renderer.domElement.classList.add(styles.canvas3d ?? "");
-    renderer.domElement.style.display = "block";
-    renderer.domElement.style.width = "100%";
-    renderer.domElement.style.height = "100%";
-    wrap.appendChild(renderer.domElement);
-
-    /* CSS2DRenderer overlays HTML labels (city name) tracked to
-     * world-space anchors. Lives in a sibling DOM element so it
-     * doesn't intercept canvas pointer events. */
-    const cssRenderer = new CSS2DRenderer();
-    cssRenderer.setSize(wrap.clientWidth, wrap.clientHeight);
-    cssRenderer.domElement.style.position = "absolute";
-    cssRenderer.domElement.style.inset = "0";
-    cssRenderer.domElement.style.pointerEvents = "none";
-    wrap.appendChild(cssRenderer.domElement);
-
-    const scene = new THREE.Scene();
-    /* Subtle parchment-toned fog — distant mountains haze toward the
-     * sepia ink colour rather than the reference's dark navy, so the
-     * disc reads as a hand-drawn map rather than a satellite tile. */
-    scene.fog = new THREE.FogExp2(0x6b4a2a, 0.04);
-
-    const camera = new THREE.PerspectiveCamera(
-      FOV_DEG,
-      wrap.clientWidth / wrap.clientHeight,
-      0.01,
-      1000,
-    );
-
-    /* Lights — MeshLambertMaterial is unlit without these.
-     * HemisphereLight tints upward faces toward the sky color and
-     * downward faces toward the ground color — Three.js's canonical
-     * outdoor-ambient pattern, intensity 1.0 matches the docs example
-     * (HemisphereLight docs page). Sky stays near-white so terrain
-     * colors aren't shifted; a slight warm tint (0xfff4d6) gives a
-     * sunlit-parchment feel without recoloring the palette. */
-    scene.add(new THREE.HemisphereLight(0xfff4d6, 0x6b4a2a, 1.0));
-    const sun = new THREE.DirectionalLight(0xffffff, 0.95);
-    sun.position.set(MESH_SIZE * 0.6, MESH_SIZE * 1.2, MESH_SIZE * 0.4);
-    scene.add(sun);
-
-    /* Build the terrain mesh. Synchronous 512² preview lands in
-     * ~250 ms so the city is visible immediately; the full 4096²
-     * bake runs on the Worker (kicked off below `refs.current`
-     * assignment) and swaps in when ready. */
-    const built = buildTerrainMesh(
-      terrain.biomeSeed,
-      rgu,
-      terrain.knobs,
-      COLOR_TEXTURE_SIZE_PREVIEW,
-    );
-    scene.add(built.mesh);
-    /* Mode-aware initial flatten. The uniform multiplies into
-     * transformed.y in the vertex shader — mesh scale stays at 1
-     * so raycasts work normally even when the terrain renders flat. */
-    built.heightScale.value = props.mapMode === "iso" ? 1 : 0;
-
-    /* Water surface dropped per UX review — the circular plate
-     * covered the whole disc in 2D mode and added visual noise in
-     * 3D. The terrain's own blue water bands already convey the
-     * waterLine without it. */
-
-    /* Markers layer — all the overlay vocabulary, mirrored from the
-     * Canvas2D fallback. */
-    const markers = new MarkersLayer({
-      scene,
-      rgu,
-      cityLatGrid,
-      cityLongGrid,
-      terrain,
-    });
-
-    /* Inspection-band labels — DOM pills that pop up next to every
-     * occupant when the camera zoom sits inside the inspection band
-     * (1.5× to 30×). Pre-allocated pool so per-frame updates don't
-     * touch the DOM beyond the visible label count. */
-    const inspectionLabels = new InspectionLabelsLayer({
-      scene,
-      teamMatePubkeys: props.teamMatePubkeys,
-    });
-
-    /* City name label — CSS2DObject anchored slightly above the
-     * peak so it doesn't intersect terrain. */
-    const labelDiv = document.createElement("div");
-    labelDiv.className = styles.cityNameLabel ?? "";
-    labelDiv.style.cssText =
-      "color:var(--ink,#2e1f10);font-size:0.7rem;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;text-shadow:0 1px 2px var(--parchment,#efe2c4);user-select:none;pointer-events:none;white-space:nowrap;";
-    labelDiv.textContent = props.cityAccount.name;
-    const cityNameLabel = new CSS2DObject(labelDiv);
-    cityNameLabel.position.set(0, MAX_HEIGHT * 1.4, 0);
-    scene.add(cityNameLabel);
-
-    /* Camera controller. Bound to the wrap (not the canvas) so
-     * touch-action: none applies and one-finger drag doesn't steal
-     * page scroll. */
-    /* Distance range: max = mode's default (zoom 1×), min = max/200
-     * so the user gets the full 200× zoom range the Canvas2D path
-     * advertised. At 200× the camera may clip into a tall peak in
-     * 3D mode; that's expected — user can tilt up to see better.
-     *
-     * Per-city scaling — `INITIAL_DISTANCE_{2D,3D}` are tuned for the
-     * largest city (radius ~55, widthGrid ~8782). Smaller cities at
-     * the same distance feel "lost in space" with their plot floating
-     * inside an over-zoomed-out canvas. Scaling by
-     * `widthGrid / REF_WIDTH_GRID` pulls the camera in proportionally
-     * so every city's plot frames similarly at zoom 1×. REF is the
-     * largest canonical city plot width so smaller cities zoom in
-     * (camera closer = smaller distance) and Tokyo stays at the
-     * baseline distance. */
-    const sizeFactor = cityCameraSizeFactor(props.cityAccount);
-    const baseMax =
-      props.mapMode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const maxD0 = baseMax * sizeFactor;
-    const controller = new CityCameraController({
-      domElement: wrap,
-      camera,
-      initialMode: props.mapMode,
-      minDistance: maxD0 / 200,
-      maxDistance: maxD0,
-      onClick: (cx, cy) => handleClick(cx, cy),
-      onDoubleClick: (cx, cy) => handleDoubleClick(cx, cy),
-      onResetRequested: () => handleResetRequested(),
-      onFrameSelectedRequested: () => handleFrameSelected(),
-      onChange: () => requestRender(),
-      onPointerMove: (cx, cy) => handlePointerMove(cx, cy),
-      onGestureStart: () => {
-        /* Any new gesture cancels an in-flight view tween — the
-         * user's input always wins, otherwise the eased animation
-         * keeps drifting toward an old target while being actively
-         * manipulated. Same cancellation contract the Canvas2D
-         * fallback applies via `cancelAnim()`. */
-        refs.current?.viewTween?.cancel();
-        if (refs.current) refs.current.viewTween = null;
-      },
-    });
-
-    /* If we have an autoFocusCell at mount time, snap the controller
-     * to the focused state BEFORE the first paint so the disc lands
-     * already centred on the player's cell at high zoom — no flash
-     * of the full overview followed by a 520ms tween. The
-     * autoFocusedForCityRef below skips the post-mount tween effect
-     * so it doesn't double-animate. */
-    if (props.autoFocusCell) {
-      const ox = props.autoFocusCell.gridLong - cityLongGrid;
-      const oy = props.autoFocusCell.gridLat - cityLatGrid;
-      const { wx, wz } = gridToWorld(ox, oy, rgu);
-      const dTarget = maxD0 / 16;
-      controller.setDistanceHard(dTarget);
-      controller.setTargetHard(
-        new THREE.Vector3(
-          wx,
-          props.mapMode === "iso" ? getElevationAt(ox, oy) : 0,
-          wz,
-        ),
-      );
-      /* Force-apply so the first paint reflects the snapped state.
-       * Without this, the constructor's earlier applyCameraFromSmoothed
-       * — done at default state — is the last thing the camera saw. */
-      controller.applyToCamera();
-      autoFocusedForCityRef.current = props.cityAccount.cityId;
-    }
-
-    /* Make the wrap focusable so keyboard shortcuts work without
-     * requiring a click-into-focus first. */
-    wrap.tabIndex = 0;
-
-    const raycaster = new THREE.Raycaster();
-
-    /* Build the scale bar + compass HUD elements as siblings. They
-     * read camera state on each requestRender via DOM refs. */
-    const scaleBarEl = scaleBarRef.current!;
-    const compassEl = compassRef.current!;
-
-    refs.current = {
-      renderer,
-      cssRenderer,
-      scene,
-      camera,
-      controller,
-      markers,
-      inspectionLabels,
-      terrain: built,
-      cityNameLabel,
-      waterMesh: null,
+    const result = setupCityScene({
+      wrap,
       scaleBarEl,
       compassEl,
+      cityAccount: props.cityAccount,
+      mapMode: props.mapMode,
+      autoFocusCell: props.autoFocusCell,
+      teamMatePubkeys: props.teamMatePubkeys,
+      terrain,
       rgu,
       cityLatGrid,
       cityLongGrid,
-      raycaster,
-      rafId: null,
-      paintQueued: false,
-      modeTween: null,
-      viewTween: null,
-      lastUpdateMs: performance.now(),
-      lastHoverTs: 0,
-    };
-
-    /* Initial paint. */
-    requestRender();
-
-    /* Kick off the high-res 4096² bake off the main thread. When it
-     * lands, swap the preview mesh for the full-res one. Bails if a
-     * rebuild swapped first (terrain identity check) or if the
-     * component unmounted (refs cleared). The cleanup cancels the
-     * in-flight job. */
-    const initialBake = getBakeWorker().bake({
-      biomeSeed: terrain.biomeSeed,
-      rgu,
-      knobs: terrain.knobs,
-      texSize: COLOR_TEXTURE_SIZE_HIGH,
+      propsRef,
+      autoFocusedForCityRef,
+      handlersRef,
     });
-    initialBake.promise.then((pixels) => {
-      if (!pixels) return;
-      const r = refs.current;
-      if (!r || r.terrain !== built) return;
-      const high = meshFromBakedPixels(pixels, COLOR_TEXTURE_SIZE_HIGH);
-      /* Share the heightScale object across the swap so an in-flight
-       * mode tween (which captured the preview's reference) keeps
-       * mutating the live mesh's height value rather than a stale
-       * one. transition.ts only reads/writes `.value`. */
-      high.heightScale = built.heightScale;
-      r.scene.remove(built.mesh);
-      built.geometry.dispose();
-      built.material.dispose();
-      built.colorMap.dispose();
-      r.scene.add(high.mesh);
-      r.terrain = high;
-      requestRender();
-    });
-
-    const onLost = (e: Event) => {
-      e.preventDefault();
-      propsRef.current.onContextLost();
-    };
-    renderer.domElement.addEventListener("webglcontextlost", onLost);
-
-    return () => {
-      initialBake.cancel();
-      renderer.domElement.removeEventListener("webglcontextlost", onLost);
-      if (refs.current?.rafId !== null && refs.current?.rafId !== undefined) {
-        cancelAnimationFrame(refs.current.rafId);
-      }
-      refs.current?.modeTween?.cancel();
-      refs.current?.viewTween?.cancel();
-      controller.dispose();
-      markers.dispose();
-      inspectionLabels.dispose();
-      // Take the live terrain off the ref — between mount and unmount the
-      // rebuild effect (below) may have replaced `built` with a fresh
-      // BuiltTerrain. We must dispose THAT one, not the stale closure
-      // capture, otherwise the 4096^2 RGBA DataTexture (~64 MB GPU buffer
-      // per city) leaks. The rebuild path already disposes the OLD
-      // colorMap when swapping; this unmount path closes the loop on the
-      // one that's currently in the scene.
-      const live = refs.current?.terrain ?? built;
-      scene.remove(live.mesh);
-      live.geometry.dispose();
-      live.material.dispose();
-      live.colorMap.dispose();
-      if (cityNameLabel.element.parentNode) {
-        cityNameLabel.element.parentNode.removeChild(cityNameLabel.element);
-      }
-      // Walk anything else still in the scene (markers' meshes are
-      // disposed by markers.dispose above; this catches stragglers like
-      // the city name label's HTML wrapper or any future helper). The
-      // terrain mesh is already removed + disposed above, so the
-      // traversal won't double-touch it.
-      scene.traverse((o) => {
-        const m = o as THREE.Mesh;
-        if (m.geometry) m.geometry.dispose();
-        const mat = (m as THREE.Mesh).material as
-          | THREE.Material
-          | THREE.Material[]
-          | undefined;
-        if (Array.isArray(mat)) mat.forEach((x) => x.dispose());
-        else mat?.dispose();
-      });
-      if (renderer.domElement.parentNode) {
-        renderer.domElement.parentNode.removeChild(renderer.domElement);
-      }
-      if (cssRenderer.domElement.parentNode) {
-        cssRenderer.domElement.parentNode.removeChild(cssRenderer.domElement);
-      }
-      renderer.dispose();
-      refs.current = null;
-    };
+    if (!result) return;
+    refs.current = result.sceneRefs;
+    return result.dispose;
     /* Empty deps — scene mounts ONCE. Prop changes hit the targeted
-     * effects below. The mesh, however, depends on terrain identity;
-     * the doc says rebuild only when terrain/rgu change, so we add
-     * a guarded effect for that. */
+     * effects below. */
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
+
 
   /* Resize on size change. */
   useEffect(() => {
@@ -1262,6 +966,19 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       requestRender,
     );
   }, []);
+
+  /* Sync handlersRef every render so the controller's mount-bound
+   * callbacks always hit the LATEST React closures. Without this,
+   * `handleClick` etc. would freeze at first mount and ignore any
+   * subsequent prop-driven behaviour changes. */
+  handlersRef.current = {
+    handleClick,
+    handleDoubleClick,
+    handleResetRequested,
+    handleFrameSelected,
+    handlePointerMove,
+    requestRender,
+  };
 
   return (
     <>
