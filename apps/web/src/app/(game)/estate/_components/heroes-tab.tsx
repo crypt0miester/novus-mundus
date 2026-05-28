@@ -564,15 +564,8 @@ export function HeroesTab() {
               <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
                 {maxLockedHeroes === 0
                   ? "Build a Sanctuary on your estate to unlock your first hero slot."
-                  : `Sanctuary level ${sanctuaryLevel} keeps ${maxLockedHeroes}/3 slots open. Upgrade to Sanctuary level ${nextSlotUnlockLevel} to unlock slot ${maxLockedHeroes + 1}.`}
+                  : `Upgrade to Sanctuary level ${nextSlotUnlockLevel} to unlock slot ${maxLockedHeroes + 1}.`}
               </p>
-              <Link
-                href="/estate?building=sanctuary"
-                className="mt-1 inline-flex items-center gap-1 rounded border border-border-gold/50 bg-accent/20 px-2 py-1 text-[10px] font-medium text-text-gold transition-colors hover:bg-accent/40"
-              >
-                Open Sanctuary
-                <ChevronRight className="h-3 w-3" />
-              </Link>
             </div>
           )}
 

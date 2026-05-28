@@ -1,6 +1,12 @@
 "use client";
 
-import { GameFooter, useIndexedSelection } from "./_shell";
+import {
+  GameFooter,
+  GameHeader,
+  GameTimer,
+  useFireOnce,
+  useIndexedSelection,
+} from "./_shell";
 
 /** Client-safe Assignment presentation (server `assignment` archetype). */
 export interface AssignmentPresentation {
@@ -16,9 +22,13 @@ interface AssignmentGameProps {
   onSubmit: (answer: number[]) => void;
 }
 
+// 4s per item — enough to read the value, glance at the bins, and tap.
+const MS_PER_ITEM = 4_000;
+
 /**
  * Assignment game UI. Each item shows a value; the player taps the bin it
- * belongs in, then submits once every item is sorted.
+ * belongs in, then submits once every item is sorted — or the round-wide
+ * timer runs out, snap-submitting current state with unsorted items as -1.
  */
 export function AssignmentGame({ presentation, submitting, onSubmit }: AssignmentGameProps) {
   const { instruction, valueLabel, bins, items } = presentation;
@@ -27,8 +37,21 @@ export function AssignmentGame({ presentation, submitting, onSubmit }: Assignmen
   const sorted = assigned.filter((a) => a !== null).length;
   const allSorted = sorted === items.length;
 
+  const fireSubmit = useFireOnce(() => onSubmit(assigned.map((a) => a ?? -1)));
+
   return (
     <div className="space-y-3">
+      <GameHeader
+        current={Math.min(sorted + 1, items.length)}
+        total={items.length}
+        noun="Sort"
+      />
+      <GameTimer
+        totalMs={MS_PER_ITEM * items.length}
+        paused={submitting}
+        onExpire={fireSubmit}
+      />
+
       <p className="text-sm text-text-secondary">{instruction}</p>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums text-text-muted">
         {bins.map((b, bi) => (
@@ -53,9 +76,9 @@ export function AssignmentGame({ presentation, submitting, onSubmit }: Assignmen
                   type="button"
                   disabled={submitting}
                   onClick={() => setAssignedAt(i, bi)}
-                  className={`rounded-lg border px-3 py-1 text-xs font-medium transition-colors ${
+                  className={`rounded-lg border px-3 py-1 text-xs font-medium transition-all ${
                     assigned[i] === bi
-                      ? "border-border-gold bg-accent/30 text-text-gold"
+                      ? "scale-105 border-border-gold bg-accent/30 text-text-gold shadow-[0_0_10px_-3px_rgba(220,180,90,0.55)]"
                       : "border-border-default text-text-secondary hover:border-border-gold/50"
                   }`}
                 >
@@ -68,10 +91,10 @@ export function AssignmentGame({ presentation, submitting, onSubmit }: Assignmen
       </div>
       <GameFooter
         progress={{ done: sorted, total: items.length, noun: "sorted" }}
-        submitLabel="Submit"
+        submitLabel={allSorted ? "Submit roll" : "Submit (unsorted count as wrong)"}
         submitting={submitting}
-        disabled={!allSorted}
-        onSubmit={() => onSubmit(assigned.map((a) => a ?? -1))}
+        disabled={false}
+        onSubmit={fireSubmit}
       />
     </div>
   );

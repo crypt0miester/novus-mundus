@@ -1,6 +1,12 @@
 "use client";
 
-import { GameFooter, useIndexedSelection } from "./_shell";
+import {
+  GameFooter,
+  GameHeader,
+  GameTimer,
+  useFireOnce,
+  useIndexedSelection,
+} from "./_shell";
 
 /** Client-safe SetSelect presentation (server `set-select` archetype). */
 export interface SetSelectPresentation {
@@ -16,16 +22,43 @@ interface SetSelectGameProps {
   onSubmit: (answer: boolean[]) => void;
 }
 
+// 3s per item — binary tap, fastest of the single-shot archetypes.
+const MS_PER_ITEM = 3_000;
+
 /**
  * SetSelect game UI. Each item shows two labelled numbers; the player taps the
- * items that satisfy the rule (the genuine ones) and submits once.
+ * items that satisfy the rule (the genuine ones) and submits once — or the
+ * round-wide timer snap-submits the current selection.
  */
 export function SetSelectGame({ presentation, submitting, onSubmit }: SetSelectGameProps) {
   const { instruction, aLabel, bLabel, items } = presentation;
   const [selected, setSelectedAt] = useIndexedSelection<boolean>(() => items.map(() => false));
 
+  const flagged = selected.filter(Boolean).length;
+
+  const fireSubmit = useFireOnce(() =>
+    onSubmit(items.map((_, i) => selected[i] ?? false)),
+  );
+
   return (
     <div className="space-y-3">
+      <GameHeader
+        current={flagged}
+        total={items.length}
+        noun="Item"
+        pips={false}
+        trailing={
+          <span className="font-mono text-[10px] tabular-nums text-text-muted">
+            {flagged} flagged
+          </span>
+        }
+      />
+      <GameTimer
+        totalMs={MS_PER_ITEM * items.length}
+        paused={submitting}
+        onExpire={fireSubmit}
+      />
+
       <p className="text-sm text-text-secondary">{instruction}</p>
       <div className="grid gap-2 sm:grid-cols-2">
         {items.map((it, i) => {
@@ -36,8 +69,10 @@ export function SetSelectGame({ presentation, submitting, onSubmit }: SetSelectG
               type="button"
               disabled={submitting}
               onClick={() => setSelectedAt(i, !on)}
-              className={`card flex items-center justify-between gap-2 text-left transition-colors ${
-                on ? "border-border-gold bg-accent/20" : "hover:border-border-gold/50"
+              className={`card flex items-center justify-between gap-2 text-left transition-all ${
+                on
+                  ? "scale-[1.02] border-border-gold bg-accent/20 shadow-[0_0_10px_-3px_rgba(220,180,90,0.5)]"
+                  : "hover:border-border-gold/50"
               }`}
             >
               <div>
@@ -62,7 +97,7 @@ export function SetSelectGame({ presentation, submitting, onSubmit }: SetSelectG
       <GameFooter
         submitLabel="Submit"
         submitting={submitting}
-        onSubmit={() => onSubmit(items.map((_, i) => selected[i] ?? false))}
+        onSubmit={fireSubmit}
       />
     </div>
   );

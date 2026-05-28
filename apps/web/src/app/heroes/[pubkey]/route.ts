@@ -17,6 +17,9 @@ import { serverConnection } from "@/lib/server/game-authority";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+const HERO_DESCRIPTION =
+  "A hero in Novus Mundus. Procedural portrait composed from baked Bonsai layers; attributes are read directly from the on-chain MPL Core Asset.";
+
 const TIER_NAME = ["Common", "Rare", "Epic", "Legendary", "Mythic"] as const;
 const CATEGORY_NAME = [
   "Historical",
@@ -68,8 +71,7 @@ export async function GET(
   const metadata: HeroMetadata = {
     name: hero.asset.name || `Hero #${hero.state.templateId}`,
     symbol: "HERO",
-    description:
-      "A hero in Novus Mundus. Procedural portrait composed from baked Bonsai layers; attributes are read directly from the on-chain MPL Core Asset.",
+    description: HERO_DESCRIPTION,
     image: imageUrl,
     external_url: "https://novusmundus.gg",
     attributes: [
@@ -133,9 +135,9 @@ async function renderPreview(
   const imageUrl = `${url.origin}/heroes/${pubkeyParam}/image?${previewQuery}`;
 
   const metadata: HeroMetadata = {
-    name: `Hero #${templateId} (preview)`,
+    name: meta.name,
     symbol: "HERO",
-    description: "Preview hero metadata — not backed by on-chain state.",
+    description: HERO_DESCRIPTION,
     image: imageUrl,
     external_url: "https://novusmundus.gg",
     attributes: [

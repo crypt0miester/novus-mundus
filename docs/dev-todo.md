@@ -46,16 +46,41 @@ memo, off-chain relay, NFT-gated channel) before committing to scope.
 
 ---
 
-## #18 Daily-activity minigame UX — `TODO`
+## #18 Daily-activity minigame UX — `WIP`
 
 Minigame UIs live under `app/(game)/estate/_components/daily-activity/` (meta
 at `daily-activity/meta.ts`; the Barracks "Morning Drill" reflex round is the
 benchmark). The other archetypes read as bland forms.
 
-**Plan.** Pass for visual treatment, juice (feedback on input, success/fail
-states), consistent header/footer pattern, and clear scoring summary. The
-server-side minigame system itself is shipped (see memory
-`project_minigames_phase0`); this is purely the client-side polish.
+**Shipped this pass (2026-05-28).**
+- `_shell.tsx` now exports `GameHeader` (round pips, lifted from ReflexGame),
+  `ResultBadge` (gold/silver/muted/fail chip), `GameTimer` (round-wide
+  countdown bar, color-shifts gold→amber→red, snap-submits on expire),
+  and `tierFromRemaining` / `tierFromMemoryMoves` helpers.
+- `McqGame`, `AssignmentGame`, `OrderingGame`, `SetSelectGame` each gained
+  `GameHeader` + round-wide `GameTimer` (auto-submits on expire; unanswered
+  slots count as wrong) + selection scale/glow juice.
+- `MemoryGame` gained the timer (display-only pressure), a per-match pulse,
+  and a 1.8s "Ledger reconciled" completion overlay with `ResultBadge`
+  scored on move efficiency (`tierFromMemoryMoves`).
+
+**Timing knobs to tune from playtest** — all in the per-game `MS_PER_*`
+constants at the top of each file: MCQ 6s/question, Assignment 4s/item,
+Ordering 6s/item, SetSelect 3s/item, Memory 3s/pair. Bump per archetype if
+playtesters report it's too tight.
+
+**Follow-up — cosigner-side elapsed_ms (the actual bot fix).** Time pressure
+on the client is human urgency; it doesn't gate bots. The real defense is
+the game_authority cosigner refusing submits faster than the human-plausible
+floor (~250ms) and tier-gating the reward by elapsed_ms. Lives in the
+daily-activity submit handler on the cosigner side; the chain doesn't need
+to change because the cosigner is already the authoritative arbiter of
+score. When that ships, the client's `tierFromRemaining` / per-game timers
+become the visible signal of the same metric the cosigner already enforced.
+
+**Optional later** — render MCQ prompts to SVG/canvas glyphs so naive
+DOM-scrapers need OCR. Lower priority than the cosigner-elapsed work; ships
+marginal friction at meaningful effort.
 
 ---
 

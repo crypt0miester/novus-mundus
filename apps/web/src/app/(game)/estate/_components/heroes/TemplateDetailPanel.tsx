@@ -44,11 +44,24 @@ export function TemplateDetailPanel({
 
   return (
     <>
+      {/* Portrait — last surface before the Mint button, so the user sees the
+          composited level-1 hero (halo + silhouette + city sigil + buffs +
+          1 bronze ascension knot) rather than text-only stats. Preview mode
+          skips the chain fetch; `template-${id}` is a stable placeholder so
+          the silhouette flip/rotate fingerprint stays consistent per template. */}
+      <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-border-default bg-surface">
+        <img
+          src={`/heroes/template-${t.account.templateId}/image?preview=1&template=${t.account.templateId}&level=1`}
+          alt={t.account.name}
+          className="h-full w-full object-cover"
+        />
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <div className="text-base font-semibold text-text-primary">{t.account.name}</div>
           <div className="text-[10px] text-text-muted">
-            Template #{t.account.templateId} · {HERO_TIER_NAMES[tier]}
+            #{t.account.templateId} · {HERO_TIER_NAMES[tier]}
           </div>
         </div>
         {t.minted && (

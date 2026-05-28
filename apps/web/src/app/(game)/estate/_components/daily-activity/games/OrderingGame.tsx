@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { GameFooter } from "./_shell";
+import { useEffect, useRef, useState } from "react";
+import { GameFooter, GameHeader, GameTimer, useFireOnce } from "./_shell";
 
 /** Client-safe Ordering presentation (server `ordering` archetype). */
 export interface OrderingPresentation {
@@ -16,13 +16,26 @@ interface OrderingGameProps {
   onSubmit: (answer: number[]) => void;
 }
 
+// 6s per item — comparing adjacent items takes a beat longer than a bin tap.
+const MS_PER_ITEM = 6_000;
+
 /**
  * Ordering game UI. The player nudges items up and down into the right order
- * and submits the final sequence.
+ * and submits the final sequence — or the round-wide timer snap-submits the
+ * current arrangement.
  */
 export function OrderingGame({ presentation, submitting, onSubmit }: OrderingGameProps) {
   const { instruction, metricLabel, items } = presentation;
   const [order, setOrder] = useState<number[]>(() => items.map((_, i) => i));
+  const [moved, setMoved] = useState<number | null>(null);
+  const moveTimeoutRef = useRef<number | null>(null);
+
+  useEffect(
+    () => () => {
+      if (moveTimeoutRef.current !== null) clearTimeout(moveTimeoutRef.current);
+    },
+    [],
+  );
 
   const move = (pos: number, dir: -1 | 1) => {
     const target = pos + dir;
@@ -34,17 +47,38 @@ export function OrderingGame({ presentation, submitting, onSubmit }: OrderingGam
       next[target] = held;
       return next;
     });
+    setMoved(target);
+    if (moveTimeoutRef.current !== null) clearTimeout(moveTimeoutRef.current);
+    moveTimeoutRef.current = window.setTimeout(() => {
+      setMoved(null);
+      moveTimeoutRef.current = null;
+    }, 250);
   };
+
+  const fireSubmit = useFireOnce(() => onSubmit(order));
 
   return (
     <div className="space-y-3">
+      <GameHeader current={items.length} total={items.length} noun="Slot" pips={false} />
+      <GameTimer
+        totalMs={MS_PER_ITEM * items.length}
+        paused={submitting}
+        onExpire={fireSubmit}
+      />
+
       <p className="text-sm text-text-secondary">{instruction}</p>
       <div className="space-y-1.5">
         {order.map((itemIdx, pos) => {
           const it = items[itemIdx];
           if (!it) return null;
+          const isMoved = moved === pos;
           return (
-            <div key={itemIdx} className="card flex items-center justify-between gap-2 py-2">
+            <div
+              key={itemIdx}
+              className={`card flex items-center justify-between gap-2 py-2 transition-all ${
+                isMoved ? "border-border-gold/70 bg-accent/15" : ""
+              }`}
+            >
               <div className="flex items-center gap-2">
                 <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded bg-surface-overlay text-[11px] font-bold tabular-nums text-text-muted">
                   {pos + 1}
@@ -81,7 +115,7 @@ export function OrderingGame({ presentation, submitting, onSubmit }: OrderingGam
       <GameFooter
         submitLabel="Submit order"
         submitting={submitting}
-        onSubmit={() => onSubmit(order)}
+        onSubmit={fireSubmit}
       />
     </div>
   );

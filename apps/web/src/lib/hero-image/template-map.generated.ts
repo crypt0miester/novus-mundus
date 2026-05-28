@@ -5,6 +5,8 @@
 import type { HeroTier } from "./palette";
 
 export interface TemplateMeta {
+  /** Display name from heroes.ts; matches the on-chain HeroTemplate.name and the minted MPL Core Asset name (≤ 32 bytes). */
+  name: string;
   tier: HeroTier;
   category: 0 | 1 | 2 | 3 | 4;
   /** BuffStat enum ids (1..18), up to 4. Drives Layer 7 icon overlay. */
@@ -14,88 +16,88 @@ export interface TemplateMeta {
 }
 
 export const TEMPLATE_META: Readonly<Record<number, TemplateMeta>> = {
-  1: { tier: 0, category: 0, buffs: [2, 13], meditationCity: 2 }, // Roman Centurion
-  2: { tier: 0, category: 0, buffs: [1, 15], meditationCity: 5 }, // Viking Raider
-  3: { tier: 0, category: 0, buffs: [3, 9], meditationCity: 12 }, // Silk Road Merchant
-  4: { tier: 0, category: 0, buffs: [1, 2], meditationCity: 11 }, // Wandering Ronin
-  5: { tier: 0, category: 4, buffs: [2, 8], meditationCity: 0 }, // Ashenmere Ranger
-  6: { tier: 0, category: 4, buffs: [1, 15], meditationCity: 9 }, // Korthain Tomb-Hunter
-  7: { tier: 0, category: 4, buffs: [3, 9], meditationCity: 8 }, // Sunward Caravaneer
-  155: { tier: 0, category: 2, buffs: [3, 5, 17], meditationCity: 0 }, // Paper Hands
-  10: { tier: 1, category: 0, buffs: [1, 6, 4], meditationCity: 3 }, // Alexander the Great
-  11: { tier: 1, category: 0, buffs: [1, 2, 3], meditationCity: 2 }, // Julius Caesar
-  12: { tier: 1, category: 0, buffs: [2, 16, 8], meditationCity: 3 }, // Leonidas
-  13: { tier: 1, category: 0, buffs: [3, 12, 9], meditationCity: 7 }, // Cleopatra
-  15: { tier: 1, category: 0, buffs: [7, 2, 4], meditationCity: 12 }, // Sun Tzu
-  16: { tier: 1, category: 0, buffs: [2, 8, 11], meditationCity: 1 }, // Joan of Arc
-  72: { tier: 1, category: 0, buffs: [15, 3, 7], meditationCity: 0 }, // Robin Hood
-  79: { tier: 1, category: 1, buffs: [3, 15, 9, 18], meditationCity: 9 }, // Sinbad
-  86: { tier: 1, category: 0, buffs: [1, 2, 8], meditationCity: 12 }, // Hua Mulan
-  89: { tier: 1, category: 1, buffs: [15, 3, 4], meditationCity: 8 }, // Aladdin
-  151: { tier: 1, category: 2, buffs: [2, 9, 11, 17], meditationCity: 0 }, // Diamond Hands
-  200: { tier: 1, category: 4, buffs: [12, 3, 9], meditationCity: 6 }, // Theophilos the Builder
-  14: { tier: 2, category: 0, buffs: [1, 14, 6, 15], meditationCity: 12 }, // Genghis Khan
-  17: { tier: 2, category: 0, buffs: [1, 7, 6, 4], meditationCity: 1 }, // Napoleon Bonaparte
-  18: { tier: 2, category: 0, buffs: [1, 14, 7], meditationCity: 7 }, // Hannibal Barca
-  50: { tier: 2, category: 1, buffs: [1, 2, 7, 15], meditationCity: 3 }, // Zeus
-  51: { tier: 2, category: 1, buffs: [2, 7, 4], meditationCity: 3 }, // Athena
-  52: { tier: 2, category: 1, buffs: [1, 14, 10], meditationCity: 3 }, // Ares
-  54: { tier: 2, category: 1, buffs: [1, 7, 11], meditationCity: 5 }, // Thor
-  55: { tier: 2, category: 1, buffs: [3, 12, 4], meditationCity: 7 }, // Ra
-  71: { tier: 2, category: 0, buffs: [1, 7, 10], meditationCity: 11 }, // Miyamoto Musashi
-  77: { tier: 2, category: 1, buffs: [1, 14, 2], meditationCity: 5 }, // Beowulf
-  80: { tier: 2, category: 1, buffs: [4, 3, 8], meditationCity: 9 }, // Scheherazade
-  153: { tier: 2, category: 2, buffs: [3, 15, 8, 17], meditationCity: 0 }, // Bored Ape
-  201: { tier: 2, category: 4, buffs: [7, 2, 4, 15], meditationCity: 3 }, // Kassandra the Oracle
-  202: { tier: 2, category: 4, buffs: [2, 16, 8], meditationCity: 6 }, // Nikephoros Ironside
-  53: { tier: 3, category: 1, buffs: [1, 2, 4, 7], meditationCity: 5 }, // Odin
-  70: { tier: 3, category: 1, buffs: [1, 7, 11, 14], meditationCity: 12 }, // Sun Wukong
-  73: { tier: 3, category: 1, buffs: [4, 7, 2, 3], meditationCity: 0 }, // Merlin
-  230: { tier: 3, category: 4, buffs: [1, 2, 4, 5], meditationCity: 2 }, // Marcus Aurelius Maximus
-  250: { tier: 3, category: 4, buffs: [1, 6, 14, 11], meditationCity: 8 }, // Khalid the Warrior
-  271: { tier: 3, category: 4, buffs: [2, 16, 13, 11], meditationCity: 5 }, // Boris the Mountain
-  150: { tier: 2, category: 2, buffs: [3, 15, 9, 17], meditationCity: 0 }, // Satoshi Nakamoto
-  160: { tier: 4, category: 1, buffs: [1, 2, 14, 11], meditationCity: 9 }, // Gilgamesh
-  161: { tier: 4, category: 1, buffs: [3, 2, 4, 12], meditationCity: 11 }, // Amaterasu
-  162: { tier: 4, category: 1, buffs: [1, 7, 6, 15], meditationCity: 19 }, // Quetzalcoatl
-  163: { tier: 4, category: 1, buffs: [4, 5, 3, 2], meditationCity: 3 }, // Prometheus
-  252: { tier: 4, category: 4, buffs: [8, 6, 4, 3], meditationCity: 9 }, // Omar the Orator
-  19: { tier: 1, category: 0, buffs: [2, 8, 11], meditationCity: 0 }, // William Wallace
-  76: { tier: 1, category: 1, buffs: [2, 11, 8], meditationCity: 0 }, // Gawain
-  78: { tier: 1, category: 0, buffs: [1, 2, 6], meditationCity: 2 }, // El Cid
-  84: { tier: 1, category: 1, buffs: [3, 4, 5], meditationCity: 5 }, // Vasilisa the Wise
-  90: { tier: 1, category: 1, buffs: [15, 9, 3], meditationCity: 9 }, // Ali Baba
-  92: { tier: 1, category: 1, buffs: [2, 12, 4], meditationCity: 9 }, // Shirin
-  152: { tier: 1, category: 2, buffs: [15, 3, 4, 17], meditationCity: 0 }, // Degen
-  154: { tier: 1, category: 2, buffs: [2, 11, 8, 17], meditationCity: 0 }, // Wojak
-  212: { tier: 1, category: 4, buffs: [1, 15, 14], meditationCity: 5 }, // Ragnar Bloodaxe
-  261: { tier: 1, category: 4, buffs: [3, 12, 9], meditationCity: 7 }, // Layla Goldweaver
-  20: { tier: 2, category: 0, buffs: [1, 2, 6], meditationCity: 6 }, // Heraclius
-  21: { tier: 2, category: 0, buffs: [1, 14, 15], meditationCity: 5 }, // Attila the Hun
-  56: { tier: 2, category: 1, buffs: [2, 15, 16], meditationCity: 7 }, // Anubis
-  57: { tier: 2, category: 1, buffs: [1, 2, 9, 18], meditationCity: 3 }, // Poseidon
-  74: { tier: 2, category: 1, buffs: [2, 9, 4], meditationCity: 0 }, // Nimue
-  75: { tier: 2, category: 1, buffs: [1, 7, 14], meditationCity: 0 }, // Mordred
-  81: { tier: 2, category: 1, buffs: [2, 7, 14], meditationCity: 5 }, // Baba Yaga
-  83: { tier: 2, category: 1, buffs: [2, 11, 13], meditationCity: 5 }, // Ilya Muromets
-  85: { tier: 2, category: 1, buffs: [1, 2, 14], meditationCity: 5 }, // Dobrynya Nikitich
-  87: { tier: 2, category: 0, buffs: [4, 7, 5], meditationCity: 12 }, // Zhuge Liang
-  88: { tier: 2, category: 0, buffs: [2, 1, 16], meditationCity: 11 }, // Tomoe Gozen
-  91: { tier: 2, category: 1, buffs: [1, 14, 11], meditationCity: 9 }, // Rostam
-  203: { tier: 2, category: 4, buffs: [1, 7, 14], meditationCity: 6 }, // Alexios Shadowblade
-  210: { tier: 2, category: 4, buffs: [2, 16, 8], meditationCity: 5 }, // Bjorn Ironforge
-  211: { tier: 2, category: 4, buffs: [1, 2, 11, 7], meditationCity: 5 }, // Astrid Stormcaller
-  220: { tier: 2, category: 4, buffs: [1, 6, 2], meditationCity: 0 }, // Maeve of Ulster
-  240: { tier: 2, category: 4, buffs: [1, 7, 10], meditationCity: 11 }, // Akira Steelblossom
-  251: { tier: 2, category: 4, buffs: [2, 16, 8], meditationCity: 9 }, // Rashid the Defender
-  260: { tier: 2, category: 4, buffs: [1, 7, 14], meditationCity: 7 }, // Zara Moonblade
-  270: { tier: 2, category: 4, buffs: [2, 11, 16], meditationCity: 5 }, // Vladimir Ironheart
-  280: { tier: 2, category: 4, buffs: [17, 9, 2, 11], meditationCity: 22 }, // Durin Ironpick
-  281: { tier: 2, category: 4, buffs: [18, 12, 9, 11], meditationCity: 13 }, // Kai Tidecaller
-  290: { tier: 2, category: 4, buffs: [10, 14, 8], meditationCity: 11 }, // Hana Luckbringer
-  82: { tier: 3, category: 1, buffs: [1, 2, 7, 14], meditationCity: 5 }, // Koschei the Deathless
-  204: { tier: 3, category: 4, buffs: [3, 12, 9, 15], meditationCity: 6 }, // Chrysanthos the Golden
-  241: { tier: 3, category: 4, buffs: [3, 12, 9, 15], meditationCity: 12 }, // Li Wei the Prosperous
+  1: { name: "Roman Centurion", tier: 0, category: 0, buffs: [2, 13], meditationCity: 2 },
+  2: { name: "Viking Raider", tier: 0, category: 0, buffs: [1, 15], meditationCity: 5 },
+  3: { name: "Silk Road Merchant", tier: 0, category: 0, buffs: [3, 9], meditationCity: 12 },
+  4: { name: "Wandering Ronin", tier: 0, category: 0, buffs: [1, 2], meditationCity: 11 },
+  5: { name: "Ashenmere Ranger", tier: 0, category: 4, buffs: [2, 8], meditationCity: 0 },
+  6: { name: "Korthain Tomb-Hunter", tier: 0, category: 4, buffs: [1, 15], meditationCity: 9 },
+  7: { name: "Sunward Caravaneer", tier: 0, category: 4, buffs: [3, 9], meditationCity: 8 },
+  155: { name: "Paper Hands", tier: 0, category: 2, buffs: [3, 5, 17], meditationCity: 0 },
+  10: { name: "Alexander the Great", tier: 1, category: 0, buffs: [1, 6, 4], meditationCity: 3 },
+  11: { name: "Julius Caesar", tier: 1, category: 0, buffs: [1, 2, 3], meditationCity: 2 },
+  12: { name: "Leonidas", tier: 1, category: 0, buffs: [2, 16, 8], meditationCity: 3 },
+  13: { name: "Cleopatra", tier: 1, category: 0, buffs: [3, 12, 9], meditationCity: 7 },
+  15: { name: "Sun Tzu", tier: 1, category: 0, buffs: [7, 2, 4], meditationCity: 12 },
+  16: { name: "Joan of Arc", tier: 1, category: 0, buffs: [2, 8, 11], meditationCity: 1 },
+  72: { name: "Robin Hood", tier: 1, category: 0, buffs: [15, 3, 7], meditationCity: 0 },
+  79: { name: "Sinbad", tier: 1, category: 1, buffs: [3, 15, 9, 18], meditationCity: 9 },
+  86: { name: "Hua Mulan", tier: 1, category: 0, buffs: [1, 2, 8], meditationCity: 12 },
+  89: { name: "Aladdin", tier: 1, category: 1, buffs: [15, 3, 4], meditationCity: 8 },
+  151: { name: "Diamond Hands", tier: 1, category: 2, buffs: [2, 9, 11, 17], meditationCity: 0 },
+  200: { name: "Theophilos the Builder", tier: 1, category: 4, buffs: [12, 3, 9], meditationCity: 6 },
+  14: { name: "Genghis Khan", tier: 2, category: 0, buffs: [1, 14, 6, 15], meditationCity: 12 },
+  17: { name: "Napoleon Bonaparte", tier: 2, category: 0, buffs: [1, 7, 6, 4], meditationCity: 1 },
+  18: { name: "Hannibal Barca", tier: 2, category: 0, buffs: [1, 14, 7], meditationCity: 7 },
+  50: { name: "Zeus", tier: 2, category: 1, buffs: [1, 2, 7, 15], meditationCity: 3 },
+  51: { name: "Athena", tier: 2, category: 1, buffs: [2, 7, 4], meditationCity: 3 },
+  52: { name: "Ares", tier: 2, category: 1, buffs: [1, 14, 10], meditationCity: 3 },
+  54: { name: "Thor", tier: 2, category: 1, buffs: [1, 7, 11], meditationCity: 5 },
+  55: { name: "Ra", tier: 2, category: 1, buffs: [3, 12, 4], meditationCity: 7 },
+  71: { name: "Miyamoto Musashi", tier: 2, category: 0, buffs: [1, 7, 10], meditationCity: 11 },
+  77: { name: "Beowulf", tier: 2, category: 1, buffs: [1, 14, 2], meditationCity: 5 },
+  80: { name: "Scheherazade", tier: 2, category: 1, buffs: [4, 3, 8], meditationCity: 9 },
+  153: { name: "Bored Ape", tier: 2, category: 2, buffs: [3, 15, 8, 17], meditationCity: 0 },
+  201: { name: "Kassandra the Oracle", tier: 2, category: 4, buffs: [7, 2, 4, 15], meditationCity: 3 },
+  202: { name: "Nikephoros Ironside", tier: 2, category: 4, buffs: [2, 16, 8], meditationCity: 6 },
+  53: { name: "Odin", tier: 3, category: 1, buffs: [1, 2, 4, 7], meditationCity: 5 },
+  70: { name: "Sun Wukong", tier: 3, category: 1, buffs: [1, 7, 11, 14], meditationCity: 12 },
+  73: { name: "Merlin", tier: 3, category: 1, buffs: [4, 7, 2, 3], meditationCity: 0 },
+  230: { name: "Marcus Aurelius Maximus", tier: 3, category: 4, buffs: [1, 2, 4, 5], meditationCity: 2 },
+  250: { name: "Khalid the Warrior", tier: 3, category: 4, buffs: [1, 6, 14, 11], meditationCity: 8 },
+  271: { name: "Boris the Mountain", tier: 3, category: 4, buffs: [2, 16, 13, 11], meditationCity: 5 },
+  150: { name: "Satoshi Nakamoto", tier: 2, category: 2, buffs: [3, 15, 9, 17], meditationCity: 0 },
+  160: { name: "Gilgamesh", tier: 4, category: 1, buffs: [1, 2, 14, 11], meditationCity: 9 },
+  161: { name: "Amaterasu", tier: 4, category: 1, buffs: [3, 2, 4, 12], meditationCity: 11 },
+  162: { name: "Quetzalcoatl", tier: 4, category: 1, buffs: [1, 7, 6, 15], meditationCity: 19 },
+  163: { name: "Prometheus", tier: 4, category: 1, buffs: [4, 5, 3, 2], meditationCity: 3 },
+  252: { name: "Omar the Orator", tier: 4, category: 4, buffs: [8, 6, 4, 3], meditationCity: 9 },
+  19: { name: "William Wallace", tier: 1, category: 0, buffs: [2, 8, 11], meditationCity: 0 },
+  76: { name: "Gawain", tier: 1, category: 1, buffs: [2, 11, 8], meditationCity: 0 },
+  78: { name: "El Cid", tier: 1, category: 0, buffs: [1, 2, 6], meditationCity: 2 },
+  84: { name: "Vasilisa the Wise", tier: 1, category: 1, buffs: [3, 4, 5], meditationCity: 5 },
+  90: { name: "Ali Baba", tier: 1, category: 1, buffs: [15, 9, 3], meditationCity: 9 },
+  92: { name: "Shirin", tier: 1, category: 1, buffs: [2, 12, 4], meditationCity: 9 },
+  152: { name: "Degen", tier: 1, category: 2, buffs: [15, 3, 4, 17], meditationCity: 0 },
+  154: { name: "Wojak", tier: 1, category: 2, buffs: [2, 11, 8, 17], meditationCity: 0 },
+  212: { name: "Ragnar Bloodaxe", tier: 1, category: 4, buffs: [1, 15, 14], meditationCity: 5 },
+  261: { name: "Layla Goldweaver", tier: 1, category: 4, buffs: [3, 12, 9], meditationCity: 7 },
+  20: { name: "Heraclius", tier: 2, category: 0, buffs: [1, 2, 6], meditationCity: 6 },
+  21: { name: "Attila the Hun", tier: 2, category: 0, buffs: [1, 14, 15], meditationCity: 5 },
+  56: { name: "Anubis", tier: 2, category: 1, buffs: [2, 15, 16], meditationCity: 7 },
+  57: { name: "Poseidon", tier: 2, category: 1, buffs: [1, 2, 9, 18], meditationCity: 3 },
+  74: { name: "Nimue", tier: 2, category: 1, buffs: [2, 9, 4], meditationCity: 0 },
+  75: { name: "Mordred", tier: 2, category: 1, buffs: [1, 7, 14], meditationCity: 0 },
+  81: { name: "Baba Yaga", tier: 2, category: 1, buffs: [2, 7, 14], meditationCity: 5 },
+  83: { name: "Ilya Muromets", tier: 2, category: 1, buffs: [2, 11, 13], meditationCity: 5 },
+  85: { name: "Dobrynya Nikitich", tier: 2, category: 1, buffs: [1, 2, 14], meditationCity: 5 },
+  87: { name: "Zhuge Liang", tier: 2, category: 0, buffs: [4, 7, 5], meditationCity: 12 },
+  88: { name: "Tomoe Gozen", tier: 2, category: 0, buffs: [2, 1, 16], meditationCity: 11 },
+  91: { name: "Rostam", tier: 2, category: 1, buffs: [1, 14, 11], meditationCity: 9 },
+  203: { name: "Alexios Shadowblade", tier: 2, category: 4, buffs: [1, 7, 14], meditationCity: 6 },
+  210: { name: "Bjorn Ironforge", tier: 2, category: 4, buffs: [2, 16, 8], meditationCity: 5 },
+  211: { name: "Astrid Stormcaller", tier: 2, category: 4, buffs: [1, 2, 11, 7], meditationCity: 5 },
+  220: { name: "Maeve of Ulster", tier: 2, category: 4, buffs: [1, 6, 2], meditationCity: 0 },
+  240: { name: "Akira Steelblossom", tier: 2, category: 4, buffs: [1, 7, 10], meditationCity: 11 },
+  251: { name: "Rashid the Defender", tier: 2, category: 4, buffs: [2, 16, 8], meditationCity: 9 },
+  260: { name: "Zara Moonblade", tier: 2, category: 4, buffs: [1, 7, 14], meditationCity: 7 },
+  270: { name: "Vladimir Ironheart", tier: 2, category: 4, buffs: [2, 11, 16], meditationCity: 5 },
+  280: { name: "Durin Ironpick", tier: 2, category: 4, buffs: [17, 9, 2, 11], meditationCity: 22 },
+  281: { name: "Kai Tidecaller", tier: 2, category: 4, buffs: [18, 12, 9, 11], meditationCity: 13 },
+  290: { name: "Hana Luckbringer", tier: 2, category: 4, buffs: [10, 14, 8], meditationCity: 11 },
+  82: { name: "Koschei the Deathless", tier: 3, category: 1, buffs: [1, 2, 7, 14], meditationCity: 5 },
+  204: { name: "Chrysanthos the Golden", tier: 3, category: 4, buffs: [3, 12, 9, 15], meditationCity: 6 },
+  241: { name: "Li Wei the Prosperous", tier: 3, category: 4, buffs: [3, 12, 9, 15], meditationCity: 12 },
 };
 
 export function getTemplateMeta(templateId: number): TemplateMeta | null {

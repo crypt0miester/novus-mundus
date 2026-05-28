@@ -65,17 +65,40 @@ fi
 # Parse arguments
 RESET=false
 DEBUG=false
-for arg in "$@"; do
-    case $arg in
+# Defaults move gossip + dynamic port range off the validator defaults (UDP
+# 8000 / 1024+) so the Bonsai backend on TCP 127.0.0.1:8000 doesn't collide.
+# Override per-machine when running multiple validators in parallel.
+GOSSIP_PORT=11000
+DYNAMIC_PORT_RANGE="11001-11100"
+while [ $# -gt 0 ]; do
+    case $1 in
         --reset)
             RESET=true
+            shift
             ;;
         --debug)
             DEBUG=true
+            shift
+            ;;
+        --gossip-port)
+            GOSSIP_PORT="$2"
+            shift 2
+            ;;
+        --gossip-port=*)
+            GOSSIP_PORT="${1#*=}"
+            shift
+            ;;
+        --dynamic-port-range)
+            DYNAMIC_PORT_RANGE="$2"
+            shift 2
+            ;;
+        --dynamic-port-range=*)
+            DYNAMIC_PORT_RANGE="${1#*=}"
+            shift
             ;;
         *)
-            echo "Unknown argument: $arg"
-            echo "Usage: $0 [--reset] [--debug]"
+            echo "Unknown argument: $1"
+            echo "Usage: $0 [--reset] [--debug] [--gossip-port N] [--dynamic-port-range MIN-MAX]"
             exit 1
             ;;
     esac
@@ -104,6 +127,9 @@ echo ""
 CMD="solana-test-validator"
 CMD="$CMD --ledger $LEDGER_DIR"
 CMD="$CMD --reset"
+
+CMD="$CMD --gossip-port $GOSSIP_PORT"
+CMD="$CMD --dynamic-port-range $DYNAMIC_PORT_RANGE"
 
 # Load programs.
 # Novus Mundus is loaded as UPGRADEABLE with the DAO keypair as upgrade
