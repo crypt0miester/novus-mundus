@@ -5,6 +5,7 @@
 //! never reachable from `lib.rs`. They are not wired up here; they can be
 //! revived after a no_std cleanup pass.
 
+pub mod hero_uri;
 pub mod hint;
 pub mod io;
 pub mod log_format;

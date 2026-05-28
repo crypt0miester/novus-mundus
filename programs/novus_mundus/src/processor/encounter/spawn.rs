@@ -120,8 +120,8 @@ pub fn process(
     let game_engine_data = game_engine_account.try_borrow()?;
     let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data) };
 
-    // Check if this is an auto-spawn (authority is game_engine.authority)
-    let is_auto_spawn = authority.address() == &game_engine_data.authority;
+    // Check if this is an auto-spawn (authority is game_engine.game_authority)
+    let is_auto_spawn = authority.address() == &game_engine_data.game_authority;
 
     // 5. Validate Encounter Type Based on Spawn Mode
 

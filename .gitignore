@@ -37,3 +37,10 @@ images/bonsai/
 # Hero silhouette source generations — 1024px Bonsai raws. Re-export from
 # these via images/scripts/export-heroes-to-app.sh; never shipped to client.
 images/heroes/raw/
+
+# Bonsai-baked portrait layers (halos, frames, city sigils, ascension marks).
+# Re-export raws to the app via images/scripts/export-<type>-to-app.sh.
+images/halos/raw/
+images/frames/raw/
+images/sigils/raw/
+images/marks/raw/

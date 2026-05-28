@@ -1,7 +1,36 @@
 # Hero Portraits — Procedural Template Pipeline
 
-Status: design proposed · not yet implemented.
-Last touched: 2026-05-27.
+Status: slice 0 shipped (20 of 79 heroes baked + integrated).
+Last touched: 2026-05-28.
+
+> ### Slice-0 changelog (vs original design)
+>
+> What shipped diverges from the initial proposal in a few places. **The current
+> compositor is the source of truth**; this section is a quick "what changed":
+>
+> - **Frame layer dropped** (§5) — Bonsai's tier-frame bakes had wildly variable
+>   thickness across tiers, and tier was already conveyed by halo tint +
+>   silhouette underglow + sigil + buff tint. Frame ornaments competed with the
+>   halo for the same "ring around the figure" job. Five frame PNGs remain
+>   baked at `apps/web/public/img/heroes/frames/` as dead assets but no layer
+>   loads them.
+> - **Constellation layer dropped** (§4 layer 2) — programmatic dots felt
+>   noisy and didn't add signal once the Bonsai halo was rich.
+> - **Ascension marks rewritten** (§4 layer 9 / new §4.1) — switched from "16
+>   slots, fill in order" to a base-5 collapse system: at any level the
+>   portrait shows ONE tier of marks only (1-4 bronze → 1-4 silver → 1-3 gold
+>   → 1 crimson ascendant at level 100). Always ≤ 4 marks visible. Mark size
+>   grows by tier (bronze 64 px → crimson 148 px) so each upgrade reads
+>   visually.
+> - **Layout pinned** — sigil bottom-left (220 px), buffs right rim, marks
+>   top-right horizontal row. Halo at 40 % opacity so silhouette + marks
+>   read cleanly.
+> - **Image cache uses file mtime** (new `lib/hero-image/image-cache.ts`) —
+>   one `fs.stat` per lookup, invalidates automatically when an asset is
+>   re-baked. No more `pkill next dev` after every export.
+> - **All 30 Bonsai layer bakes shipped**: 8 halos, 17 city sigils, 16
+>   ascension marks (+ 5 unused frames). Plus 20 silhouettes (5 slice-0 +
+>   15 expansion batch).
 
 This document specifies how each minted Hero NFT is rendered as a square portrait
 served from `/api/hero/image/<hero_pubkey>`. The system is **procedural by
@@ -59,9 +88,9 @@ this doc is only about how those heroes are *drawn*.
    │                          │                                       │
    │                          ▼                                       │
    │  images/scripts/export-heroes-to-app.sh                          │
-   │     · alpha-strip the solid-black background                     │
-   │     · duotone-tint to (#000 shadow, tier-bright rim)             │
+   │     · alpha-strip the solid-white background                     │
    │     · trim + recenter on transparent 1024² canvas                │
+   │     · (no tint here — runtime applies tier wash via canvas)      │
    │  apps/web/public/img/heroes/templates/<templateId>.png           │
    └─────────────────────────────────────────────────────────────────┘
 
@@ -178,18 +207,39 @@ Final canvas: **1024 × 1024 RGBA PNG**. All overlays composite with
  └────────────────────────────────────────────────────────────────┘
 ```
 
-| # | Layer | Source | Color | Driven by |
-|---|-------|--------|-------|-----------|
-| 1 | Background | `fillRect` | `#000000` | constant |
-| 2 | Constellation field | `arc` × 8–16 | `STAR_TINT` @ 4–12% alpha | pubkey bytes 16..31 |
-| 3 | Halo ring | one of 8 pattern renderers (§7) | `TIER_ACCENT[tier].primary` | tier + pubkey bytes 0..7 |
-| 4 | Silhouette | `/img/heroes/templates/<templateId>.png` | duotone (`#000` shadow, `TIER_ACCENT[tier].bright` rim) | templateId + tier |
-| 5 | Meditation city sigil | `/img/heroes/city-sigils/<cityId>.png` | sigil's own gold engraving | template's `meditationCityId` (cairn icon if `0`) |
-| 6 | Category banner | one of 5 banner PNGs (`forge`/`sanctuary`/`market`/`barracks`/`camp`) | as authored | template's `category` |
-| 7 | Buff markers (1–4) | `/img/icons/game/buff-*.png` | as authored | template's `buffs[]` |
-| 8 | Tier frame | vector, 5 variants (§5) | `TIER_ACCENT[tier]` + `inlay` for Legendary/Mythic | tier |
-| 9 | Level marks | `fillRect` × N | `TIER_ACCENT[tier].bright` | hero's `level` (1 tick per 10 levels, max 10) |
-| 10 | State glow | outer rectangle shadow | `STATE_GLOW.locked` or `STATE_GLOW.threatened` | hero's lock/combat flags; omitted when idle |
+**Layer table (as shipped — see changelog at top):**
+
+| # | Layer | Source | Color | Position | Driven by |
+|---|-------|--------|-------|----------|-----------|
+| 1 | Background | `fillRect` | `#000000` | full canvas | constant |
+| ~~2~~ | ~~Constellation~~ | DROPPED — noisy once Bonsai halo landed | | | |
+| 3 | Halo | `/img/heroes/halos/halo-<kind>.png` (1 of 8) tinted to tier via offscreen canvas | `TIER_ACCENT[tier].primary`, **40% alpha** | centered, 8% inset | tier (color) + pubkey bytes 0..1 (which kind) |
+| 4 | Silhouette | `/img/heroes/templates/<templateId>.png` | native (deep-black body + antique-gold rim from Bonsai) + tier-bright shadow underglow | central 70% (15% inset) | templateId |
+| 5 | Meditation city sigil | `/img/heroes/city-sigils/<cityId>.png` tinted to tier-bright | `TIER_ACCENT[tier].bright` | **bottom-left, 220 px** | template's `meditationCityId` (cairn fallback if `0` or missing) |
+| ~~6~~ | ~~Category banner~~ | deferred (not in slice 0) | | | |
+| 7 | Buff icons (1–4) | `/img/icons/game/buff-*@2x.webp` | as authored | right rim, vertically centered, 80 px each | template's `buffs[]` |
+| ~~8~~ | ~~Tier frame~~ | DROPPED — see changelog | | | |
+| 9 | Ascension marks (1–4) | `/img/heroes/marks/<n>.png` (1 of 16) | native Bonsai gold; size varies by tier (64 / 96 / 128 / 148 px) | **top-right, horizontal row, right-aligned** | hero's `level` via base-5 collapse (§4.1) |
+| 10 | State glow | outer rectangle stroke + shadow | `STATE_GLOW.locked` (working brown) or `STATE_GLOW.threatened` (cairn red) | canvas edge | hero's lock / combat flags; omitted when idle |
+
+### 4.1 Ascension marks — base-5 collapse
+
+Pure single-tier display. At any level the portrait shows marks from ONE
+tier only — never mixed. Reaching a tier boundary upgrades to the next
+tier (replaces, never accumulates "1 silver + 1 bronze"). Max 4 marks
+visible at any time.
+
+```
+level 1..4    -> 1..4 bronze knot      (mark-04)
+level 5..24   -> 1..4 silver wreath    (mark-08)   count = floor(level / 5)
+level 25..99  -> 1..3 gold lion-head   (mark-12)   count = floor(level / 25)
+level 100     -> 1 crimson ascendant   (mark-16) — only at cap (u8 ≤ 100 per programs/novus_mundus/src/helpers/estate.rs)
+```
+
+Mark size grows by tier (64 → 96 → 128 → 148 px) so each upgrade reads
+visually as a step up. Levels within a tier band (e.g. 6, 7, 8, 9 all
+show 1 silver) are intentionally identical — the marks signal investment
+tier, not precise level. Precise level lives in surrounding UI text.
 
 Layers 4–7 reuse **existing repo assets** end-to-end:
 
@@ -222,7 +272,22 @@ Layers 4–7 reuse **existing repo assets** end-to-end:
 
 ---
 
-## 5. Tier frame ornamentation
+## 5. Tier frame ornamentation — DROPPED
+
+> **Removed in slice 0.** Bonsai's tier-frame bakes had wildly variable
+> thickness across tiers (Common ~ 50 px, Mythic ~ 150 px on each side),
+> which forced every other layer to be defensive about layout. And tier
+> was already conveyed by halo tint + silhouette underglow + sigil + buff
+> tint — the frame was duplicative ornament fighting the halo for the same
+> "ring around the figure" job.
+>
+> The 5 frame PNGs remain baked at
+> `apps/web/public/img/heroes/frames/frame-<tier>.png` as dead assets;
+> `compose.ts` no longer calls `drawFrame`. To resurrect the layer:
+> re-import `drawFrame` and `await drawFrame(...)` after layer 7. The
+> code path is intact in `frame.ts`.
+
+### Original design (kept for reference)
 
 | Tier | Frame |
 |------|-------|
@@ -264,10 +329,10 @@ stable `seed`, followed by an `export-*.sh` post-processing pass.
   "preamble": "Single game character silhouette. One isolated full-body figure, centered, no scene, no ground, no background details.",
 
   "style": {
-    "silhouette": "Style: a single full-body faceless figure rendered as a near-black silhouette with subtle antique gold edge lighting from the upper left. ABSOLUTELY no visible face — the face is fully concealed by a helmet, mask, hood, veil, or other culturally-appropriate covering. Color: deep matte black (#0a0a0a) silhouette with antique gold (#C9A961) rim light on a pure solid black (#000) background. Stance: relaxed heroic contrapposto, weight on one foot, weapons or signature gear visible but held at rest."
+    "silhouette": "Style: a single full-body faceless figure rendered as a near-black silhouette with subtle antique gold edge lighting from the upper left. ABSOLUTELY no visible face — the face is fully concealed by a helmet, mask, hood, veil, or other culturally-appropriate covering. Color: deep matte black (#0a0a0a) silhouette with antique gold (#C9A961) rim light on a pure solid white (#FFFFFF) background, so the figure can be cleanly alpha-keyed off the white background in post-processing."
   },
 
-  "tail": "Composition: perfectly centered, square 1:1, the figure fills roughly the central 70% of the frame on a clean uniform solid black background. Figure only — absolutely no text, no letters, no numbers, no scene, no decoration.",
+  "tail": "Composition: perfectly centered, square 1:1, the figure fills roughly the central 70% of the frame on a clean uniform solid white background. Figure only — absolutely no text, no letters, no numbers, no scene, no decoration, no shadow on the ground.",
 
   "heroes": [
     {
@@ -361,15 +426,19 @@ to that entry, which overrides `defaults.steps`.
 Post-processes raw Bonsai output into app-ready silhouettes. Mirrors
 `export-icons-to-app.sh`. Per hero:
 
-1. **Alpha-strip the solid black background.** ImageMagick `-fuzz 14%` on
-   `#000000` → transparent. Tuned with `PNG_FUZZ` env var like the icon
+1. **Alpha-strip the solid white background.** ImageMagick `-fuzz 14%` on
+   `#FFFFFF` → transparent. Tuned with `PNG_FUZZ` env var like the icon
    pipeline.
-2. **Duotone tint.** Map remaining pixels by luminance into the two-stop ramp
-   `#000000 → TIER_ACCENT[tier].bright`. This is what gives every silhouette
-   its tier-typed rim glow before runtime composition. Implementation:
-   ImageMagick `+level-colors` with the tier's bright hex.
-3. **Trim & recenter** to 1024² transparent canvas.
-4. **Write to** `apps/web/public/img/heroes/templates/<templateId>.png`.
+2. **Trim & recenter** to 1024² transparent canvas (so all templates share
+   aspect).
+3. **Write to** `apps/web/public/img/heroes/templates/<templateId>.png`.
+
+No duotone or tier tint is applied at this stage. The silhouette keeps its
+native colors (deep-black body + antique-gold rim from Bonsai) and the
+tier-accent ramp is layered on at runtime by the compositor (§4 layer 4 +
+`compose.ts`). That gives us one bake artifact per template; changing a
+tier accent never requires re-baking, and we can preview a hero at every
+tier without 5× the disk.
 
 The exporter is idempotent and per-hero — adding one hero re-runs only one
 PNG.
@@ -769,10 +838,17 @@ fixed origin. (Counted from
 18, 20, 21` are valid cities in the world but no current hero meditates
 there, so they get no sigil until a hero is added that uses them.)
 
-Each used city gets a **hand-authored heraldic sigil** at 1024², solid
-antique-gold engraving on transparent background, drawn in the existing icon
-style. These are committed once to
-`apps/web/public/img/heroes/city-sigils/<cityId>.png` and never regenerated.
+**Shipped as Bonsai bakes** (slice 0 — not hand-authored as originally
+proposed). Manifest at `images/sigils/sigils.json`, generated by
+`generate-sigils.sh`, exported by `export-sigils-to-app.sh`. Each sigil is
+a heraldic medallion appropriate to its city's lore region (Roman aquila
+for Solterrae, Byzantine star-crescent for Kaelindra, ashoka chakra for
+Maravhen, etc.) on transparent background. Output:
+`apps/web/public/img/heroes/city-sigils/<cityId>.png`. Tinted to the
+hero's tier-bright color at runtime via offscreen canvas.
+
+cityId 0 (the "everywhere" sentinel) reuses the existing
+`sanctuary-meditation` cairn icon from `apps/web/public/img/icons/game/`.
 
 | cityId | city | sigil subject (concept) |
 |--------|------|-------------------------|
@@ -897,37 +973,40 @@ the viewing player's identity or current city.
 
 ---
 
-## 11. File layout
+## 11. File layout — as shipped
 
 ```
-images/heroes/
-  heroes.json                          # manifest (§6.1)
-  raw/<id>.png                         # 1024² Bonsai output
+images/heroes/    heroes.json + raw/<id>.png     # 20 hero silhouettes (slice 0 + first expansion)
+images/halos/     halos.json  + raw/<id>.png     # 8 halo patterns
+images/sigils/    sigils.json + raw/<id>.png     # 17 city sigils
+images/marks/     marks.json  + raw/<id>.png     # 16 ascension marks
+images/frames/    frames.json + raw/<id>.png     # 5 tier frames (BAKED but currently unused — see §5)
 
 images/scripts/
-  generate-heroes.sh                   # Bonsai client driver (§6.2)
-  export-heroes-to-app.sh              # post-processing (§6.3)
+  generate-{heroes,halos,sigils,marks,frames}.sh   # one per layer
+  export-{heroes,halos,sigils,marks,frames}-to-app.sh
+  bonsai-{install,serve,health}.sh                 # local Bonsai daemon (§6.6)
 
 apps/web/public/img/heroes/
-  templates/<templateId>.png           # final tinted silhouettes (input to L4)
-  city-sigils/<cityId>.png             # hand-authored heraldic sigils (input to L5)
-  (frames are vector-drawn at runtime; no PNGs)
+  templates/<templateId>.png    # final tinted silhouettes (input to L4)
+  halos/halo-<kind>.png         # 8 halo PNGs (input to L3)
+  city-sigils/<cityId>.png      # 17 sigils + cairn fallback (input to L5)
+  marks/<n>.png                 # 16 ascension marks (input to L9)
+  frames/frame-<tier>.png       # 5 frame PNGs (unused — see §5)
 
 apps/web/src/lib/hero-image/
-  palette.ts                           # TIER_ACCENT, STATE_GLOW, BG_SOLID, STAR_TINT
-  fingerprint.ts                       # pubkey → CompositionParams
-  compose.ts                           # canvas pipeline orchestrator
-  frame.ts                             # 5 tier frames × 4 corner variants
+  palette.ts          # TIER_ACCENT, STATE_GLOW, BG_SOLID, STAR_TINT
+  fingerprint.ts      # pubkey -> CompositionParams (pure)
+  template-map.ts     # templateId -> {tier, category, buffs, meditationCity}
+  image-cache.ts      # mtime-aware loadImageCached (shared by compose + halo)
+  compose.ts          # canvas pipeline orchestrator
+  frame.ts            # 5 tier frames (kept as dead code — see §5)
   halo/
-    index.ts                           # dispatch table
-    concentric.ts
-    radial-spokes.ts
-    runic.ts
-    voronoi.ts
-    scale-mail.ts
-    isohypse.ts
-    herringbone.ts
-    sunburst.ts
+    index.ts          # dispatch — loads halo PNG, tints to tier via offscreen canvas
+    concentric.ts     # programmatic fallback when halo PNG missing
+
+apps/web/src/lib/chain/
+  heroes.ts           # fetchHero — getAccountInfo + parseAssetV1
 
 apps/web/src/app/api/hero/image/[pubkey]/route.ts
 ```

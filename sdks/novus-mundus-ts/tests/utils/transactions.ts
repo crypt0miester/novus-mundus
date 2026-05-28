@@ -10,16 +10,13 @@ import {
   Transaction,
   TransactionInstruction,
   ComputeBudgetProgram,
-  PublicKey,
   type TransactionSignature,
 } from '@solana/web3.js';
 import bs58 from 'bs58';
-import BN from 'bn.js';
 
-import { type LiteSVM, FailedTransactionMetadata, type TransactionMetadata } from '../fixtures/svm';
-import { parseEventsFromLogs, parseEventFromBase64, type NovusMundusEvent } from '../../src/events/index';
+import { type LiteSVM, FailedTransactionMetadata } from '../fixtures/svm';
+import { parseEventsFromLogs, type NovusMundusEvent } from '../../src/events/index';
 import { GameError, parseErrorMessage } from '../../src/errors';
-import { type TestConfig } from '../fixtures/setup';
 import { log } from './logger';
 
 // Transaction Metadata Cache
@@ -29,8 +26,6 @@ interface CachedTxMeta {
   computeUnitsConsumed: number;
   signature: string;
 }
-
-const _txCache = new Map<string, CachedTxMeta>();
 
 // Transaction Building
 
@@ -129,12 +124,7 @@ export async function sendTransaction(
   }
 
   const sig = bs58.encode(result.signature());
-  const txLogs = result.logs();
-  const cu = Number(result.computeUnitsConsumed());
-
-  // Cache metadata for later retrieval
-  _txCache.set(sig, { logs: txLogs, computeUnitsConsumed: cu, signature: sig });
-
+  
   // Expire blockhash so identical transactions can be sent again
   svm.expireBlockhash();
 
@@ -177,10 +167,6 @@ export async function getTransactionLogs(
   svm: LiteSVM,
   signature: TransactionSignature
 ): Promise<string[]> {
-  // Check cache first
-  const cached = _txCache.get(signature);
-  if (cached) return cached.logs;
-
   // Fall back to SVM transaction history
   const sigBytes = bs58.decode(signature);
   const txMeta = svm.getTransaction(sigBytes);
@@ -258,8 +244,6 @@ export async function sendTransactionWithResult(
   const logs = result.logs();
   const events = parseEventsFromLogs(logs);
   const cu = Number(result.computeUnitsConsumed());
-
-  _txCache.set(sig, { logs, computeUnitsConsumed: cu, signature: sig });
 
   return {
     signature: sig,

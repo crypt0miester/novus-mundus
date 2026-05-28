@@ -213,7 +213,10 @@ describe('Hero System', () => {
       // Verify owner and base fields
       expect(asset!.owner.equals(player.publicKey)).toBe(true);
       expect(asset!.name).toBe('Warrior');
-      expect(asset!.uri).toContain('novusmundus');
+      // URI = <heroes-base>/<base58(mint)>?v=<level> per utils/hero_uri.rs.
+      expect(asset!.uri).toContain('/heroes/');
+      expect(asset!.uri).toContain(heroMintKeypair.publicKey.toBase58());
+      expect(asset!.uri).toContain('?v=1');
 
       const attrs = asset!.attributes;
       console.log(`Hero NFT attributes: ${JSON.stringify(attrs)}`);

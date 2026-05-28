@@ -65,6 +65,25 @@ export function addr(pubkey: PublicKey | string): string {
   return `${s.slice(0, 4)}..${s.slice(-4)}`;
 }
 
+// Hero Portrait URL — `<heroes-base>/<pubkey>` where heroes-base matches the
+// on-chain template URI (programs/novus_mundus/src/processor/hero/mint.rs
+// `uri: b"https://novusmundus.gg/heroes/"`). The route at this path returns
+// a 1024² procedural PNG (see docs/design/HERO_PORTRAITS.md).
+//
+// Override the base via WEB_BASE_URL for local dev (e.g. http://localhost:3001/heroes).
+// Pass `level` for cache-busting on level-up (?v=<level>).
+export function heroPortraitUrl(
+  pubkey: PublicKey | string,
+  opts: { baseUrl?: string; level?: number } = {},
+): string {
+  const s = typeof pubkey === 'string' ? pubkey : pubkey.toBase58();
+  const base = (
+    opts.baseUrl ?? process.env.WEB_BASE_URL ?? 'https://novusmundus.gg/heroes'
+  ).replace(/\/$/, '');
+  const v = opts.level != null ? `?v=${opts.level}` : '';
+  return `${base}/${s}${v}`;
+}
+
 // Table Formatting
 
 export interface Column {

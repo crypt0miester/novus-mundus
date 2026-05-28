@@ -1,0 +1,41 @@
+{
+  "_comment": "Bonsai city-sigil bake manifest. One sigil per meditation city referenced by the current hero catalog (17 cities). Each sigil is a heraldic emblem appropriate to the city's lore region (city.ts Old Name). cityId 0 (the 'everywhere' sentinel for crypto-icon heroes) uses the existing sanctuary-meditation cairn icon and is NOT baked here.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   1024,
+    "steps":    28,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "preamble": "Single heraldic medallion emblem. One isolated symbolic device centered on the canvas, no scene, no figure, no character.",
+
+  "style": {
+    "sigil": "Style: a single heraldic emblem rendered as fine antique gold (#C9A961) line work on a pure solid white (#FFFFFF) background. ABSOLUTELY no figure, no character, no person, no face, no text, no letters, no numbers — only the symbolic emblem. Medieval heraldic engraving style. Single-weight strokes, no shading, no gradient, no fills. Symmetrical about the vertical axis."
+  },
+
+  "tail": "Composition: perfectly centered, square 1:1, the emblem fills the central 60% of the frame on a clean uniform solid white background. Emblem only — no text, no letters, no numbers, no clutter.",
+
+  "sigils": [
+    { "id": "city-01-coranthas",  "cityId": 1,  "seed": 5001, "subject": "A heraldic fleur-de-lis with a small crown above it, Frankish royal device." },
+    { "id": "city-02-solterrae",  "cityId": 2,  "seed": 5002, "subject": "A heraldic Roman aquila — a stylized eagle with outstretched wings perched on a horizontal staff, viewed from the front." },
+    { "id": "city-03-kael-mora",  "cityId": 3,  "seed": 5003, "subject": "A stylized Greek owl perched front-facing on an olive branch, with the bird's face turned away so no facial features are visible, ancient Athenian symbol." },
+    { "id": "city-04-thornmark",  "cityId": 4,  "seed": 5004, "subject": "A Germanic black-bear paw print inside a hexagonal heraldic boss, with small geometric flourishes at the hexagon vertices." },
+    { "id": "city-05-vraenholdt", "cityId": 5,  "seed": 5005, "subject": "A Slavic double-headed eagle silhouetted with wings outspread, both heads turned away from the viewer so no facial features are visible." },
+    { "id": "city-06-kaelindra",  "cityId": 6,  "seed": 5006, "subject": "A Byzantine star-and-crescent mark — a crescent moon embracing a stylized eight-pointed star, with a thin double-ring around them." },
+    { "id": "city-07-auren-khet", "cityId": 7,  "seed": 5007, "subject": "An Egyptian ankh symbol with a stylized sun disc above it, flanked by two outstretched falcon wings, the falcon's head replaced by the sun disc so no face is visible." },
+    { "id": "city-08-solvaran",   "cityId": 8,  "seed": 5008, "subject": "An Arabian crossed-scimitars-and-palm device — two curved scimitars crossed in saltire with a tall date palm rising between them and a small crescent moon at the top." },
+    { "id": "city-09-korthain",   "cityId": 9,  "seed": 5009, "subject": "A Mesopotamian winged-bull lamassu silhouette in profile, with the bull's head turned away so no facial features are visible, framed by stepped ziggurat outlines on each side." },
+    { "id": "city-10-duskara",    "cityId": 10, "seed": 5010, "subject": "A West African adinkra-style symbol — a stylized geometric mark resembling a stylized sankofa bird turning back on itself, with the bird's head obscured by a small heraldic disc." },
+    { "id": "city-11-shirevane",  "cityId": 11, "seed": 5011, "subject": "A Japanese mon-style family crest — a stylized circular emblem of three overlapping cherry-blossom petals arranged radially with a thin outer ring." },
+    { "id": "city-12-drenmire",   "cityId": 12, "seed": 5012, "subject": "A Chinese imperial dragon coiled into a circle biting its own tail, with the dragon's head turned away so no facial features are visible, framed by a thin double ring." },
+    { "id": "city-13-pelagora",   "cityId": 13, "seed": 5013, "subject": "A Chinese merchant junk ship silhouette with battened sails fully unfurled and a small pennant atop the mast, sailing across a stylized wave." },
+    { "id": "city-15-lyssandor",  "cityId": 15, "seed": 5015, "subject": "A heraldic merlion silhouette — the upper half a stylized lion with its face obscured by a deep mane shadow, the lower half a flowing fish tail, framed by a thin circular ring." },
+    { "id": "city-16-maravhen",   "cityId": 16, "seed": 5016, "subject": "An Indian heraldic ashoka chakra — a thin circular wheel with twenty-four evenly spaced spokes radiating from the hub, with a small lotus blossom at the very center." },
+    { "id": "city-19-tonalca",    "cityId": 19, "seed": 5019, "subject": "A Mesoamerican stylized stepped pyramid viewed from the front with a small sun disc above its apex, framed by two curving feathered-serpent silhouettes coiling up each side with their heads turned away so no facial features are visible." },
+    { "id": "city-22-grimhollow", "cityId": 22, "seed": 5022, "subject": "A Southern African heraldic device — two crossed assegai spears behind a tall oval Nguni-style shield with horizontal banded markings, framed by stylized acacia branches on each side." }
+  ]
+}

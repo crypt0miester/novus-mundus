@@ -1,0 +1,188 @@
+{
+  "_comment": "Hero silhouette manifest for the procedural portrait pipeline. Bonsai-Image-4B-generated faceless silhouettes, one per template. generate-heroes.sh reads this; export-heroes-to-app.sh post-processes raw output into apps/web/public/img/heroes/templates/<templateId>.png. Each hero has a fixed seed so re-runs are deterministic and regenerating one hero never disturbs the rest. Subject strings follow the §6.5 grammar in docs/design/HERO_PORTRAITS.md.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   1024,
+    "steps":    28,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "preamble": "Single game character silhouette. One isolated full-body figure, centered, no scene, no ground, no background details.",
+
+  "style": {
+    "silhouette": "Style: a single full-body faceless figure rendered as a near-black silhouette with subtle antique gold edge lighting from the upper left. ABSOLUTELY no visible face — the face is fully concealed by a helmet, mask, hood, veil, or other culturally-appropriate covering. Color: deep matte black (#0a0a0a) silhouette with antique gold (#C9A961) rim light on a pure solid white (#FFFFFF) background, so the figure can be cleanly alpha-keyed off the white background in post-processing."
+  },
+
+  "tail": "Composition: perfectly centered, square 1:1, the figure fills roughly the central 70% of the frame on a clean uniform solid white background. Figure only — absolutely no text, no letters, no numbers, no scene, no decoration, no shadow on the ground.",
+
+  "heroes": [
+    {
+      "id":           "tpl-001-roman-centurion",
+      "templateId":   1,
+      "tier":         0,
+      "category":     0,
+      "seed":         2001,
+      "subject":      "A Roman centurion, planted firmly with both feet apart and shoulders broad; the face entirely concealed by a transverse-crested galea, the visor a single dark band; wearing lorica segmentata in fluted steel bands; gladius lowered at the hip; scutum slung at the back."
+    },
+    {
+      "id":           "tpl-002-viking-raider",
+      "templateId":   2,
+      "tier":         0,
+      "category":     0,
+      "seed":         2002,
+      "subject":      "A Norse raider, in a battle-ready stance with feet shoulder-width and the body slightly squared; the face entirely concealed by an iron spangenhelm with a wide nose-guard and cheek-plates leaving only shadow; wearing chainmail under a fur-trimmed raider's cloak; a single-handed bearded axe raised in the right hand; a round wooden shield with iron boss strapped to the left arm."
+    },
+    {
+      "id":           "tpl-003-silk-road-merchant",
+      "templateId":   3,
+      "tier":         0,
+      "category":     0,
+      "seed":         2003,
+      "subject":      "A Silk Road caravan trader, in a watchful stance with the body half-turned and the head slightly inclined; the face entirely concealed by a wound turban with a long cloth tail drawn across the lower face as a desert veil; wearing a long brocaded silk merchant's robe with a wide sash; a heavy drawstring coin pouch held forward in one hand; a packed bedroll and waterskin slung diagonally across the back."
+    },
+    {
+      "id":           "tpl-004-wandering-ronin",
+      "templateId":   4,
+      "tier":         0,
+      "category":     0,
+      "seed":         2004,
+      "subject":      "A wandering ronin, standing in a heroic contrapposto with the weight on the back foot and one hip cocked; the face entirely concealed by a wide woven straw amigasa hat tilted low so the brim casts full shadow over the face; wearing a faded kimono over a battered dō chest cuirass with the breast laces hanging loose; a katana sheathed at the left hip with the hand resting on the saya; a bedroll and tea-flask slung at the back."
+    },
+    {
+      "id":           "tpl-155-paper-hands",
+      "templateId":   155,
+      "tier":         0,
+      "category":     2,
+      "seed":         2155,
+      "subject":      "A hooded crypto trader, in a watchful stance with the body half-turned and the head slightly inclined; the face entirely concealed by a deep merchant's cowl pulled low and a folded paper bandana drawn up over the mouth; wearing a worn long merchant's coat with a wide sash; two limp parchments held forward in one hand; a battered courier satchel hung at the hip."
+    },
+
+    {
+      "id":           "tpl-010-alexander-the-great",
+      "templateId":   10,
+      "tier":         1,
+      "category":     0,
+      "seed":         2010,
+      "subject":      "A Macedonian king, in a regal upright stance with the chin slightly raised and one hand on the hip; the face entirely concealed by a tall plumed Phrygian helmet whose brow band casts full shadow over the face; wearing a scaled linothorax over a short tunic; kopis sword raised high in the right hand; military cloak swept dramatically behind."
+    },
+    {
+      "id":           "tpl-011-julius-caesar",
+      "templateId":   11,
+      "tier":         1,
+      "category":     0,
+      "seed":         2011,
+      "subject":      "A Roman dictator-general, in a regal upright stance with the chin slightly raised and one hand on the hip; the face entirely concealed by a polished crested galea wrapped with a laurel wreath, the visor a dark band; wearing a sculpted muscle cuirass with a draped imperial paludamentum mantle; a gladius held level in the right hand; a rolled marshal's scroll tucked under the left arm."
+    },
+    {
+      "id":           "tpl-012-leonidas",
+      "templateId":   12,
+      "tier":         1,
+      "category":     0,
+      "seed":         2012,
+      "subject":      "A Spartan king, planted firmly with both feet apart and shoulders broad; the face entirely concealed by a transverse-crested Corinthian helm whose T-slot visor leaves only deep shadow where the face would be; wearing a bronze muscle cuirass over a short red tunic with leather pteruges; a long dory spear held upright at the right shoulder; a great round bronze aspis shield strapped to the left arm."
+    },
+    {
+      "id":           "tpl-013-cleopatra",
+      "templateId":   13,
+      "tier":         1,
+      "category":     0,
+      "seed":         2013,
+      "subject":      "An Egyptian pharaoh-queen, in a regal upright stance with the chin slightly raised and one hand on the hip; the face entirely concealed by a tall golden vulture-and-uraeus crown whose forehead band casts full shadow over the face; wearing a long pleated linen sheath dress with a broad usekh gold-and-lapis collar; a heqa crook scepter held upright in the right hand; a nekhakha flail tucked at the left hip."
+    },
+    {
+      "id":           "tpl-016-joan-of-arc",
+      "templateId":   16,
+      "tier":         1,
+      "category":     0,
+      "seed":         2016,
+      "subject":      "A holy maiden-knight, planted firmly with both feet apart and shoulders broad; the face entirely concealed by an armored bascinet helm with the pointed visor lowered flush, leaving only deep shadow; wearing full polished plate armor under a white surcoat embroidered with a single fleur-de-lis; a tall banner-pole topped with a fleur-de-lis pennant gripped upright in the right hand; an arming sword sheathed at the left hip."
+    },
+
+    {
+      "id":           "tpl-014-genghis-khan",
+      "templateId":   14,
+      "tier":         2,
+      "category":     0,
+      "seed":         2014,
+      "subject":      "A steppe conqueror, in a battle-ready stance with feet shoulder-width and the body slightly squared; the face entirely concealed by a fur-lined steppe helm with long iron cheekpieces and a brow band leaving only shadow; wearing a lamellar leather cuirass over a knee-length silk tunic; a curved cavalry saber lowered in the right hand; a recurve war bow and full arrow quiver slung diagonally across the back."
+    },
+    {
+      "id":           "tpl-018-hannibal-barca",
+      "templateId":   18,
+      "tier":         2,
+      "category":     0,
+      "seed":         2018,
+      "subject":      "A Carthaginian general, in a battle-ready stance with feet shoulder-width and the body slightly squared; the face entirely concealed by a Hellenistic Boeotian helm with a tall horsehair crest, the visor a single dark band; wearing a scaled bronze cuirass over a short tunic; a curved falcata sword held forward in the right hand; a long campaign cloak swept dramatically behind."
+    },
+    {
+      "id":           "tpl-054-thor",
+      "templateId":   54,
+      "tier":         2,
+      "category":     1,
+      "seed":         2054,
+      "subject":      "A Norse thunder-god, in a battle-ready stance with feet shoulder-width and the body slightly squared; the face entirely concealed by a winged iron helm with a broad nose-guard and braided cheek-plates leaving only shadow; wearing chainmail belted with a heavy gilded girdle of strength; a short-hafted war hammer raised high in the right hand crackling with lightning; a thick fur cloak clasped at the throat."
+    },
+    {
+      "id":           "tpl-087-zhuge-liang",
+      "templateId":   87,
+      "tier":         2,
+      "category":     0,
+      "seed":         2087,
+      "subject":      "A Han-era scholar-strategist, in a watchful stance with the body half-turned and the head slightly inclined; the face entirely concealed by a tall scholar's futou headpiece and a wide silk veil drawn across the lower face; wearing a long-sleeved flowing scholar's robe with embroidered borders; a feathered crane-fan held up before the chest; a rolled bamboo war-strategy scroll tucked at the hip sash."
+    },
+
+    {
+      "id":           "tpl-053-odin",
+      "templateId":   53,
+      "tier":         3,
+      "category":     1,
+      "seed":         2053,
+      "subject":      "A Norse all-father, planted firmly with both feet apart and shoulders broad; the face entirely concealed by a deep traveler's cowl beneath a wide-brimmed wanderer's hat, the brim casting full shadow over the face; wearing a long fur-trimmed wool cloak fastened with a great brooch over a knee-length tunic; a tall ash-wood spear gripped upright in the right hand; a great wolf-pelt mantle clasped at the throat and falling to the knees."
+    },
+    {
+      "id":           "tpl-073-merlin",
+      "templateId":   73,
+      "tier":         3,
+      "category":     1,
+      "seed":         2073,
+      "subject":      "A druidic mage-counselor, standing in a heroic contrapposto with the weight on the back foot and one hip cocked; the face entirely concealed by a deep pointed wizard's hood and a long beard veil that together cover everything above the chest, leaving only shadow; wearing a long star-strewn robe belted with a runed cord and a heavy travel cloak; a tall gnarled oak staff topped with a single faceted crystal gripped upright in the right hand; a heavy leather-bound spellbook tucked under the left arm."
+    },
+    {
+      "id":           "tpl-230-marcus-aurelius-maximus",
+      "templateId":   230,
+      "tier":         3,
+      "category":     4,
+      "seed":         2230,
+      "subject":      "A philosopher-emperor warrior, in a regal upright stance with the chin slightly raised and one hand on the hip; the face entirely concealed by a polished crested galea with a hinged face-mask lowered into place leaving only deep shadow; wearing a sculpted muscle cuirass over a kilt of leather pteruges with a draped imperial paludamentum mantle; a long spatha sword held level in the right hand; a rolled meditations scroll tucked under the left arm."
+    },
+
+    {
+      "id":           "tpl-160-gilgamesh",
+      "templateId":   160,
+      "tier":         4,
+      "category":     1,
+      "seed":         2160,
+      "subject":      "A Sumerian king-hero, in a regal upright stance with the chin slightly raised and one hand on the hip; the face entirely concealed by a tall lapis-and-gold ceremonial diadem whose front plate hangs down as a brow band leaving only shadow where the face would be; wearing a long pleated wool kaunakes robe banded with gold appliqué at the chest; a curved bronze sickle-sword raised level in the right hand; a heavy cedar-haft war mace slung at the hip."
+    },
+    {
+      "id":           "tpl-161-amaterasu",
+      "templateId":   161,
+      "tier":         4,
+      "category":     1,
+      "seed":         2161,
+      "subject":      "A Japanese sun-goddess, in a regal upright stance with the chin slightly raised and one hand on the hip; the face entirely concealed by a tall golden sun-disc diadem and a long sheer white silk veil cascading down over the face; wearing a flowing white-and-gold many-layered jūnihitoe court robe embroidered with a radiant sun motif at the chest; a round polished bronze sacred mirror held up before the chest in both hands; a long ceremonial tasseled fan tucked at the obi sash."
+    },
+    {
+      "id":           "tpl-163-prometheus",
+      "templateId":   163,
+      "tier":         4,
+      "category":     1,
+      "seed":         2163,
+      "subject":      "A titan firebringer, in a watchful stance with the body half-turned and the head slightly inclined; the face entirely concealed by a heavy laurel-wreath crown wrapped with strips of torn cloth that fall as a veil over the face; wearing a torn classical chiton draped over one shoulder with broken iron chains hanging from the wrists; a great burning torch held aloft in the raised right hand; the remnants of a shattered iron chain coiled and slung at the left hip."
+    }
+  ]
+}

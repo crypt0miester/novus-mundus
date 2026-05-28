@@ -1,0 +1,54 @@
+{
+  "_comment": "Bonsai tier-frame bake manifest. Five frames — one per hero tier. v2: thickness constrained to ~4-6% of canvas across ALL tiers so layout is tier-independent. Tier is conveyed by COLOR + ornament STYLE, NOT thickness. The runtime compositor alpha-strips white interior + exterior and composites over the assembled hero portrait.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   1024,
+    "steps":    28,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "preamble": "Single NARROW decorative square picture frame border. The frame is a THIN strip running along the four edges of the square with very small corner ornaments. The frame border is at most 6% of the frame width.",
+
+  "style": {
+    "frame": "Style: fine line work on a pure solid white (#FFFFFF) background. ABSOLUTELY no figure, no character, no scene inside the frame — the inside of the frame is completely empty pure solid white. The frame border itself is THIN and OCCUPIES ONLY THE OUTER 4 TO 6 PERCENT of the canvas on each side. Medieval heraldic engraving style. Single-weight strokes, no shading, no gradient, no fills. Symmetrical about both axes."
+  },
+
+  "tail": "Composition: perfectly centered, square 1:1. The empty pure white center of the canvas occupies AT LEAST 88% of the canvas area (i.e. the frame border itself touches only the outer ~6% on each edge). Corner ornaments are SMALL and RESTRAINED, never larger than 8% of the canvas. Inside the frame the center is a perfectly empty square of pure solid white with NO ornament, NO figure, NO text, NO letters, NO numbers — only empty white. The frame border runs along all four edges as a THIN strip.",
+
+  "frames": [
+    {
+      "id":      "frame-common",
+      "tier":    0,
+      "seed":    4100,
+      "subject": "A single thin austere antique gold (#C9A961) line tracing the four edges, with a very small simple dot ornament at each of the four corners. Minimal and clean."
+    },
+    {
+      "id":      "frame-rare",
+      "tier":    1,
+      "seed":    4101,
+      "subject": "Two parallel thin bronze (#CD7F32) lines running along each of the four edges, with a small geometric quatrefoil at each of the four corners. The two parallel lines are close together, both inside the outer 5% of the canvas."
+    },
+    {
+      "id":      "frame-epic",
+      "tier":    2,
+      "seed":    4102,
+      "subject": "A single thin sovereign gold (#daa520) line running along each edge with small heraldic fleur ornaments at each of the four corners and a tiny single rosette accent at the midpoint of each edge. All ornaments small, the line thin."
+    },
+    {
+      "id":      "frame-legendary",
+      "tier":    3,
+      "seed":    4103,
+      "subject": "Two parallel thin bright gold (#f1af09) lines running along each edge with a single very thin crimson (#9a2222) hairline running between the two gold lines. Small heraldic fleur-de-lis ornaments at each of the four corners, no larger than 6% of the canvas. Restrained and elegant."
+    },
+    {
+      "id":      "frame-mythic",
+      "tier":    4,
+      "seed":    4104,
+      "subject": "A single thin crimson (#8B1A1A) line running along each edge with a very thin bright gold (#f1af09) line running parallel just inside it. Small heraldic crown ornaments at each of the four corners, no larger than 7% of the canvas. The crimson line is THIN, not thick. Restrained."
+    }
+  ]
+}

@@ -13,6 +13,7 @@ use crate::{
         parse_hero_nft, HeroNftBuffers, HeroNftContext,
     },
     state::{calculate_fragment_cost, require_extension, HeroTemplate, PlayerAccount, EXT_HEROES},
+    utils::hero_uri::{build_hero_uri, MAX_URI_LEN},
     validation::{require_signer, require_writable},
 };
 
@@ -193,6 +194,29 @@ pub fn process(
         },
     }
     .invoke_signed(&[ge_signer])?;
+
+    // 16b. Bump the asset URI so external indexers / marketplaces re-fetch
+    //      the portrait. The runtime route at apps/web/src/app/heroes/<pk>/
+    //      reads the Level attribute anyway, but indexers cache by URI
+    //      string — without the `?v=<level>` change they'd serve the stale
+    //      cached PNG forever.
+    let mut uri_buf = [0u8; MAX_URI_LEN];
+    let uri_len = build_hero_uri(hero_mint.address().as_array(), new_level, &mut uri_buf);
+    let ge_signer2 = pinocchio::cpi::Signer::from(&game_engine_seeds);
+    p_core::instructions::UpdateV1 {
+        asset: hero_mint,
+        collection: hero_collection,
+        payer: owner,
+        authority: game_engine,
+        system_program,
+        log_wrapper: p_core_program,
+        args: p_core::instructions::UpdateV1Args {
+            new_name: &[],
+            new_uri: &uri_buf[..uri_len],
+            new_update_authority: p_core::instructions::UpdateAuthorityArg::NoUpdate,
+        },
+    }
+    .invoke_signed(&[ge_signer2])?;
 
     // 17. Emit HeroLeveledUp event
     let clock = Clock::get()?;

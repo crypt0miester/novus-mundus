@@ -12,7 +12,7 @@ use crate::{
         build_hero_nft_attributes, estate::get_sanctuary_level, HeroNftBuffers, HeroNftContext,
     },
     state::{calculate_mint_bonus, EstateAccount, GameEngine, HeroTemplate, PlayerAccount},
-    utils::read_u16,
+    utils::{hero_uri::{build_hero_uri, MAX_URI_LEN}, read_u16},
     validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
@@ -260,6 +260,14 @@ pub fn process(
     let template = unsafe { HeroTemplate::load(&template_data) };
     let name_slice = &template.name;
 
+    // Build per-asset URI: `<heroes-base>/<base58(asset_pubkey)>?v=<level>`.
+    // Initial level is 1 at mint time; level_up.rs re-writes the URI via
+    // UpdateV1 on each level-up so external indexers re-fetch (the `?v=`
+    // segment makes the URI string genuinely change for marketplace caches).
+    // See utils/hero_uri.rs for the URI_PREFIX (localhost for testing!).
+    let mut uri_buf = [0u8; MAX_URI_LEN];
+    let uri_len = build_hero_uri(hero_mint.address().as_array(), 1, &mut uri_buf);
+
     p_core::instructions::CreateV1 {
         asset: hero_mint,
         collection: hero_collection,
@@ -271,7 +279,7 @@ pub fn process(
         log_wrapper: p_core_program, // None placeholder
         data_state: p_core::instructions::DataState::AccountState,
         name: name_slice,
-        uri: b"https://novusmundus.gg/heroes/",
+        uri: &uri_buf[..uri_len],
         plugins: &[], // No inline plugins; Attributes is added via AddPluginV1 below
     }
     .invoke_signed(&[ge_signer])?;

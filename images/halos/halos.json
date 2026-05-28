@@ -1,0 +1,72 @@
+{
+  "_comment": "Bonsai halo pattern bake manifest. Eight kinds; the runtime compositor tints each PNG to the hero's tier accent color and rotates it by a pubkey-derived seed so two same-template heroes get visibly different halos even when they share a kind. See docs/design/HERO_PORTRAITS.md §7.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   1024,
+    "steps":    28,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "preamble": "Single abstract heraldic ornamental halo pattern. Symmetrical decorative motif filling the frame edge-to-edge with a clear empty round center.",
+
+  "style": {
+    "halo": "Style: a single ornamental halo design rendered as fine antique gold (#C9A961) line work on a pure solid white (#FFFFFF) background. ABSOLUTELY no figure, no character, no animal, no scene, no text, no letters, no numbers — only the ornamental pattern. Medieval heraldic engraving style. Single-weight strokes, no shading, no gradient, no fills. The pattern is perfectly symmetrical about the center."
+  },
+
+  "tail": "Composition: perfectly centered, square 1:1, the pattern fills the frame edge-to-edge with a clearly empty pure-white circular negative space in the very center roughly 35% of the frame diameter (where a figure can sit cleanly with no overlap). Symmetrical. No text, no letters, no numbers, no decoration in the center.",
+
+  "halos": [
+    {
+      "id":      "halo-concentric",
+      "kind":    0,
+      "seed":    3001,
+      "subject": "Concentric ornamental rings: many thin gold rings nested around the center with organically varying spacing between rings, austere and ceremonial."
+    },
+    {
+      "id":      "halo-radial-spokes",
+      "kind":    1,
+      "seed":    3002,
+      "subject": "Sixteen evenly-spaced radial spokes emanating from the empty central circle to the frame edge, martial and banner-like, with a small heraldic fleur or arrow tip terminating each spoke."
+    },
+    {
+      "id":      "halo-runic",
+      "kind":    2,
+      "seed":    3003,
+      "subject": "A circular band of mystical engraved runic glyphs evenly spaced around the perimeter at the same radius, bounded by one thin gold ring just inside the runes and one thin gold ring just outside, mystical and arcane."
+    },
+    {
+      "id":      "halo-voronoi",
+      "kind":    3,
+      "seed":    3004,
+      "subject": "An irregular tessellation of cellular polygon shapes radiating outward from the empty central circle, like a fractured stained-glass rose window or cracked enamel mosaic, only the cell edges are drawn (no fills), smaller cells near the rim and larger cells closer to the empty center."
+    },
+    {
+      "id":      "halo-scale-mail",
+      "kind":    4,
+      "seed":    3005,
+      "subject": "Overlapping armored scales arranged in concentric radial rings around the empty center, like the layered scale armor of a knight's hauberk viewed from above, each scale a simple rounded shape with a single outline."
+    },
+    {
+      "id":      "halo-isohypse",
+      "kind":    5,
+      "seed":    3006,
+      "subject": "Flowing topographic contour curves like a map's elevation lines, nested smoothly and organically around the empty central circle, occasionally branching, landscape-like and natural."
+    },
+    {
+      "id":      "halo-herringbone",
+      "kind":    6,
+      "seed":    3007,
+      "subject": "A woven herringbone diagonal weave pattern arranged in concentric radial bands around the empty center, the diagonal direction alternating between successive bands, dense and woven."
+    },
+    {
+      "id":      "halo-sunburst",
+      "kind":    7,
+      "seed":    3008,
+      "subject": "Radiating sunburst rays alternating long and short, sixteen long primary rays interleaved with sixteen short secondary rays all emanating from the empty central circle, heroic and celebratory."
+    }
+  ]
+}

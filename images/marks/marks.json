@@ -1,0 +1,40 @@
+{
+  "_comment": "Bonsai ascension-mark bake manifest. Sixteen unique heraldic ornaments per the §A2 + §B3 + bottom-row decision. Mark N unlocks at hero level ceil(100 * N / 16). The runtime compositor renders 16 fixed slots along the bottom inside the frame; lit slots draw the baked PNG tinted to the hero's tier accent, unlit slots draw a faint cairn-stone outline placeholder. See docs/design/HERO_PORTRAITS.md.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   1024,
+    "steps":    28,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "preamble": "Single small heraldic ornament — one isolated symbolic mark centered on the canvas, no scene, no figure, no character.",
+
+  "style": {
+    "mark": "Style: a single bold heraldic ornament rendered as solid antique gold (#C9A961) on a pure solid white (#FFFFFF) background. ABSOLUTELY no figure, no character, no person, no face, no text, no letters, no numbers — only the symbolic ornament. Medieval heraldic engraving style. Bold, simple silhouette readable at small size (no fine engraving detail). Single-weight strokes or solid filled shapes, no shading, no gradient. Symmetrical about the vertical axis."
+  },
+
+  "tail": "Composition: perfectly centered, square 1:1, the ornament fills the central 70% of the frame on a clean uniform solid white background. Ornament only — no text, no letters, no numbers, no clutter.",
+
+  "marks": [
+    { "id": "mark-01-bronze-notch",            "n": 1,  "unlocksAt": 7,   "tierGroup": "bronze",  "seed": 6001, "subject": "A single short horizontal heraldic notch or tally mark, austere and simple." },
+    { "id": "mark-02-bronze-laurel-sprig",     "n": 2,  "unlocksAt": 13,  "tierGroup": "bronze",  "seed": 6002, "subject": "A single small heraldic laurel sprig with three pairs of leaves, a humble victory token." },
+    { "id": "mark-03-bronze-crossed-swords",   "n": 3,  "unlocksAt": 19,  "tierGroup": "bronze",  "seed": 6003, "subject": "Two short heraldic swords crossed in a saltire, simple and martial." },
+    { "id": "mark-04-bronze-knot",             "n": 4,  "unlocksAt": 25,  "tierGroup": "bronze",  "seed": 6004, "subject": "A single small heraldic interlaced knot, a Celtic-style endless braid." },
+    { "id": "mark-05-silver-cross",            "n": 5,  "unlocksAt": 32,  "tierGroup": "silver",  "seed": 6005, "subject": "A heraldic cross pattée — a Greek cross with arms broadening outward at the tips." },
+    { "id": "mark-06-silver-fleur-de-lis",     "n": 6,  "unlocksAt": 38,  "tierGroup": "silver",  "seed": 6006, "subject": "A heraldic fleur-de-lis, the classic stylized three-petalled lily." },
+    { "id": "mark-07-silver-star",             "n": 7,  "unlocksAt": 44,  "tierGroup": "silver",  "seed": 6007, "subject": "A heraldic six-pointed star, the Star of David's points without filled center, just outlined arms." },
+    { "id": "mark-08-silver-laurel-wreath",    "n": 8,  "unlocksAt": 50,  "tierGroup": "silver",  "seed": 6008, "subject": "A small closed heraldic laurel wreath, a complete circular wreath of laurel leaves." },
+    { "id": "mark-09-gold-sunburst",           "n": 9,  "unlocksAt": 57,  "tierGroup": "gold",    "seed": 6009, "subject": "A heraldic sunburst — a small central disc with twelve alternating long-and-short rays radiating outward." },
+    { "id": "mark-10-gold-double-cross",       "n": 10, "unlocksAt": 63,  "tierGroup": "gold",    "seed": 6010, "subject": "A heraldic patriarchal cross — a Latin cross with a second shorter horizontal arm above the main crossbar." },
+    { "id": "mark-11-gold-heraldic-rose",      "n": 11, "unlocksAt": 69,  "tierGroup": "gold",    "seed": 6011, "subject": "A heraldic Tudor rose — a stylized open rose with five large petals seen from the front." },
+    { "id": "mark-12-gold-lion-head",          "n": 12, "unlocksAt": 75,  "tierGroup": "gold",    "seed": 6012, "subject": "A heraldic lion's head silhouette in profile facing left, with the lion's eye obscured by deep mane shadow so no facial features are visible — only the silhouette outline." },
+    { "id": "mark-13-crimson-crown",           "n": 13, "unlocksAt": 82,  "tierGroup": "jeweled", "seed": 6013, "subject": "A heraldic crown — a five-point coronet with stylized jewel insets along the band, drawn in crimson and bright gold." },
+    { "id": "mark-14-crimson-winged-sword",    "n": 14, "unlocksAt": 88,  "tierGroup": "jeweled", "seed": 6014, "subject": "A heraldic winged sword — a vertical sword with feathered wings spread to either side of the hilt, drawn in crimson and bright gold." },
+    { "id": "mark-15-crimson-eagle",           "n": 15, "unlocksAt": 94,  "tierGroup": "jeweled", "seed": 6015, "subject": "A heraldic spread eagle facing forward, wings fully outstretched and tail fanned, with the eagle's head turned away so no facial features are visible, drawn in crimson and bright gold." },
+    { "id": "mark-16-crimson-ascendant-star",  "n": 16, "unlocksAt": 100, "tierGroup": "jeweled", "seed": 6016, "subject": "A grand heraldic eight-pointed compass star with a central jewel cabochon and elaborate filigree between the points, the most ornate of all heraldic ornaments, drawn in crimson and bright gold." }
+  ]
+}
