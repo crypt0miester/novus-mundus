@@ -98,7 +98,7 @@ function toRgbaWithAlpha(color: string, alpha: number): string {
 
 export interface CityTerrainEntity {
   pubkey: string; // base58 pubkey of the LocationAccount's occupant
-  occupantType: number; // OCCUPANT_PLAYER | OCCUPANT_ENCOUNTER
+  occupantType: number; // OCCUPANT_PLAYER | OCCUPANT_ENCOUNTER | OCCUPANT_CASTLE
   gridLat: number;
   gridLong: number;
 }

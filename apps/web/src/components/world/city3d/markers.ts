@@ -39,12 +39,13 @@ type CityTerrain = unknown;
 export type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
 export type { WalkLine } from "./layers/walksLayer";
 
-export interface SelectedEntity {
-  pubkey: string;
-  occupantType: number;
-  gridLat: number;
-  gridLong: number;
-}
+/* `SelectedEntity` is the same shape as `CityTerrainEntity` (defined in
+ * the 2D fallback, the canonical occupant-identity record shared
+ * between both renderers). Re-export as an alias so the markers API
+ * surface stays unchanged but there's a single declaration to update
+ * when a new field lands on the occupant identity. */
+export type { CityTerrainEntity as SelectedEntity } from "../CityTerrainMap2DFallback";
+import type { CityTerrainEntity as SelectedEntity } from "../CityTerrainMap2DFallback";
 
 export interface MarkersConfig {
   scene: THREE.Scene;
