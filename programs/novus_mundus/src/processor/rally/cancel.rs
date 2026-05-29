@@ -98,6 +98,7 @@ pub fn process(
 
     // 6. Set rally status to Cancelled
     rally.status = RallyStatus::Cancelled as u8;
+    rally.membership_epoch = rally.membership_epoch.saturating_add(1); // rotate war-table key on access loss
 
     // 7. Load and update creator's RallyParticipant
     require_owner(creator_participant, program_id)?;

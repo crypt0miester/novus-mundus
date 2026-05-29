@@ -9,7 +9,9 @@ import {
   getEncounterStaminaCost,
   calculateDistanceMeters,
   ENCOUNTER_ATTACK_RANGE_METERS,
+  WarTableScope,
 } from "novus-mundus-sdk";
+import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
 import { buildAttackEncounterIx } from "@/lib/chain/travel";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
@@ -283,6 +285,19 @@ export function EncounterDetailPanel({ encounterPubkey }: { encounterPubkey: str
           >
             Buy Stamina &amp; Attack
           </TxButton>
+        </div>
+      )}
+
+      {/* War-table: plaintext call-outs on this encounter (no key fetch) */}
+      {encounter && (
+        <div className="rounded-lg bg-surface/60 p-3">
+          <div className="mb-2 text-[10px] uppercase tracking-wider text-text-muted">War-table</div>
+          <ThreadRenderer
+            threadPda={encounter.pubkey}
+            scope={WarTableScope.Encounter}
+            canPost={!!player}
+            placeholder="Call out the encounter..."
+          />
         </div>
       )}
     </div>

@@ -278,7 +278,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                       : "text-zinc-500 hover:text-zinc-400",
                   )}
                 >
-                  Convert to Locked
+                  Relock
                 </button>
                 <button
                   onClick={() => setActiveTab("withdraw")}
@@ -289,7 +289,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                       : "text-zinc-500 hover:text-zinc-400",
                   )}
                 >
-                  Withdraw to Wallet
+                  Withdraw
                 </button>
               </>
             )}
@@ -302,7 +302,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
                   : "text-zinc-500 hover:text-zinc-400",
               )}
             >
-              Deposit from Wallet
+              Deposit
             </button>
           </div>
 

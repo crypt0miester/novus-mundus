@@ -13,6 +13,7 @@ import { CombatOutcomeModal } from "@/components/combat/CombatOutcomeModal";
 import { useTransitionStore, exitMessage } from "@/lib/store/transition";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useActWatch } from "@/lib/hooks/useActWatch";
+import { UnreadSync } from "@/lib/hooks/useUnread";
 
 export default function GameLayout({ children }: { children: React.ReactNode }) {
   const { connected } = useWallet();
@@ -39,7 +40,7 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
   }, [connected, playerLoading, playerData, pathname, router]);
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden">
+    <div className="flex h-[100dvh] flex-col overflow-hidden">
       <TopBar />
       {/* Mobile: collapsible data bar + the draggable Cairn.
        *  /map renders a fullscreen disc with its own floating chrome, so
@@ -54,7 +55,7 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
         <aside className="hidden lg:block lg:w-72 flex-shrink-0 overflow-y-auto border-r border-border-default bg-[var(--nm-bg-bar)]">
           <LeftPanel />
         </aside>
-        <main className="flex-1 overflow-x-clip overflow-y-auto px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4 lg:p-6">
+        <main className="min-h-0 min-w-0 flex-1 overflow-x-clip overflow-y-auto px-4 pt-4 pb-[calc(5rem+env(safe-area-inset-bottom))] md:pb-4 lg:p-6">
           {children}
         </main>
         <RightPanel />
@@ -64,6 +65,8 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
       <MorphTabBar />
       {/* Centered win/lose breakdown after an attack */}
       <CombatOutcomeModal />
+      {/* Global unread-messages sync (DM discovery + team peek); renders nothing. */}
+      <UnreadSync />
     </div>
   );
 }

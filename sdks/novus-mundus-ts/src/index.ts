@@ -77,6 +77,17 @@ export * from './instructions/dungeon';
 export * from './instructions/castle';
 export * from './instructions/cosmetic';
 
+// War Table exports
+export * from './crypto/wartable';
+export * from './instructions/wartable';
+export * from './keyprovider/index';
+export * from './keyprovider/local';
+export * from './keyprovider/http';
+export * from './wartable';
+
+// War Table scope alias for the web layer (WtScope is the crypto-module name).
+export { WtScope as WarTableScope } from './crypto/wartable';
+
 // Event exports
 export * from './events/index';
 

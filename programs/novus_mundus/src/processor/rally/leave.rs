@@ -169,6 +169,7 @@ pub fn process(
 
     // 10. Decrement rally totals
     rally.participant_count = rally.participant_count.saturating_sub(1);
+    rally.membership_epoch = rally.membership_epoch.saturating_add(1); // rotate war-table key on access loss
     // Check both flag and time elapsed for arrived status
     if participant.arrived_at_rally || now >= participant.arrives_at_rally {
         rally.arrived_count = rally.arrived_count.saturating_sub(1);

@@ -33,6 +33,7 @@ use crate::{
 /// - [writable] invite: TeamInviteAccount PDA (to be created)
 /// - [signer, writable] inviter_owner: Inviter's wallet (pays for invite rent)
 /// - [] system_program: System program
+/// - [] leader: Team leader's PlayerAccount (read-only; drives tier-based capacity)
 ///
 /// # Instruction Data
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
@@ -64,6 +65,7 @@ pub fn process(
         invite_account,
         inviter_owner,
         system_program,
+        leader_account,
     ]);
 
     // 3. Validate Accounts
@@ -145,8 +147,17 @@ pub fn process(
         return Err(GameError::AlreadyInTeam.into());
     }
 
-    // Team full?
-    if team.is_full() {
+    // Team full? Gate against the effective capacity from the leader's current
+    // subscription tier. The stored max_members can lag (it is only rewritten
+    // on the next join/accept), so checking the live tier here lets a
+    // higher-tier leader's team grow past a stale cap. The leader's
+    // PlayerAccount is passed read-only and verified against the stored leader.
+    let now = Clock::get()?.unix_timestamp;
+    require_key_match(leader_account, &team.leader)?;
+    let leader_tier =
+        PlayerAccount::load_checked_by_key(leader_account, program_id)?.get_effective_tier(now);
+    let effective_cap = TeamAccount::tier_cap(leader_tier).max(team.member_count);
+    if team.member_count >= effective_cap {
         return Err(GameError::TeamFull.into());
     }
 
@@ -176,9 +187,6 @@ pub fn process(
     require_empty(invite_account).map_err(|_| GameError::AlreadyInvited)?;
 
     // 8. Create Invite Account
-
-    let clock = Clock::get()?;
-    let now = clock.unix_timestamp;
 
     let expires_at = if expires_in_seconds > 0 {
         now.saturating_add(expires_in_seconds)

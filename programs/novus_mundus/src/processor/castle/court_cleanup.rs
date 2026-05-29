@@ -118,6 +118,7 @@ pub fn process(
 
     // Decrement castle court count
     castle.court_count = castle.court_count.saturating_sub(1);
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on access loss
 
     // Get current timestamp
     let clock = Clock::get()?;

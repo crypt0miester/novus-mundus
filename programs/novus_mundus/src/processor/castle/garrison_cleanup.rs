@@ -255,6 +255,7 @@ pub fn process(
     // Update castle transition progress
     castle.transition_garrison_cleaned = castle.transition_garrison_cleaned.saturating_add(1);
     castle.garrison_count = castle.garrison_count.saturating_sub(1);
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on access loss
 
     // Get current timestamp
     let clock = Clock::get()?;

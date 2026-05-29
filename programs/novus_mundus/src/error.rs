@@ -496,6 +496,17 @@ pub enum GameError {
 
     // Account Discriminator Errors (8200+)
     InvalidAccountKey = 8200, // Account discriminator byte mismatch
+
+    // War Table Errors (8300+)
+    WtBadScope = 8300,            // scope tag > 4
+    WtThreadScopeMismatch = 8301, // thread account discriminator != claimed scope
+    WtNotInScope = 8302,          // sender not a member/participant/combatant of scope
+    WtBadMagic = 8303,            // envelope[0..3] != b"wt1"
+    WtThreadPdaMismatch = 8304,   // envelope.thread_pda != thread.key
+    WtSenderMismatch = 8305,      // envelope.sender_wallet != signer
+    WtBodyLenMismatch = 8306,     // declared body_len != actual bytes
+    WtKeyVersionMismatch = 8307,  // key_version != required value for scope
+    WtEncryptedFlagRequired = 8308, // encrypted scope received flags bit0 == 0 (plaintext)
 }
 
 impl From<GameError> for ProgramError {

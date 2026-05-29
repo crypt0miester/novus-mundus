@@ -119,6 +119,7 @@ pub const NOVI_MINT_ADDRESS: [u8; 32] = NOVI_MINT_PDA.0;
 pub const NOVI_MINT_BUMP: u8 = NOVI_MINT_PDA.1;
 pub const PLAYER_SEED: &[u8] = b"player";
 pub const USER_SEED: &[u8] = b"user";
+pub const DM_THREAD_SEED: &[u8] = b"wt_dm";
 pub const CITY_SEED: &[u8] = b"city";
 pub const TEAM_SEED: &[u8] = b"team";
 pub const TEAM_SLOT_SEED: &[u8] = b"team_slot";

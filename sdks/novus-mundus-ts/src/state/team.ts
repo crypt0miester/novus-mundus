@@ -50,6 +50,8 @@ export interface TeamAccount {
   treasuryInstantLimit: BN[];
   treasuryDailyCap: BN[];
   treasuryCooldownHours: number;
+  /** War-table key version; bumps on every access-loss event (kick/leave/disband). */
+  membershipEpoch: number;
 }
 
 /** TeamAccount size in bytes */
@@ -64,6 +66,8 @@ export interface TeamMemberSlot {
   slotIndex: number;
   bump: number;
   rank: TeamMemberRank;
+  /** membership_epoch snapshotted at join (servable key range starts here). */
+  joinedAtEpoch: number;
   treasuryWithdrawnToday: BN;
   lastTreasuryDay: number;
 }
@@ -144,7 +148,8 @@ export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
   const treasuryInstantLimit = reader.readU64Array(4);
   const treasuryDailyCap = reader.readU64Array(4);
   const treasuryCooldownHours = reader.readU8();
-  reader.skip(7); // _treasury_reserved
+  reader.skip(3); // _pad_epoch_align
+  const membershipEpoch = reader.readU32();
 
   return {
     id,
@@ -164,6 +169,7 @@ export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
     treasuryInstantLimit,
     treasuryDailyCap,
     treasuryCooldownHours,
+    membershipEpoch,
   };
 }
 
@@ -180,7 +186,7 @@ export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMember
   const slotIndex = reader.readU16();
   const bump = reader.readU8();
   const rank = reader.readU8() as TeamMemberRank;
-  reader.skip(4); // _reserved
+  const joinedAtEpoch = reader.readU32();
 
   const treasuryWithdrawnToday = reader.readU64();
   const lastTreasuryDay = reader.readU16();
@@ -193,6 +199,7 @@ export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMember
     slotIndex,
     bump,
     rank,
+    joinedAtEpoch,
     treasuryWithdrawnToday,
     lastTreasuryDay,
   };

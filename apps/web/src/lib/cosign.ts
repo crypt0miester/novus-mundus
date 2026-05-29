@@ -70,6 +70,16 @@ async function establishSession(signIn: SignIn): Promise<void> {
   }
 }
 
+/**
+ * Establish the SIWS session cookie if one is needed (one wallet prompt).
+ *
+ * Exposed for the war-table key provider flow: a `HttpKeyProvider` 401 means
+ * the session lapsed, so the hook calls this once and retries the key fetch.
+ */
+export async function ensureSession(signIn: SignIn): Promise<void> {
+  await establishSession(signIn);
+}
+
 /** Decode a base64 co-signed transaction from a co-sign endpoint response. */
 export function deserializeCoSignTx(base64: string): VersionedTransaction {
   return VersionedTransaction.deserialize(base64ToBytes(base64));

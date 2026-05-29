@@ -28,6 +28,7 @@ use crate::{
 /// - [writable] member_slot: TeamMemberSlot PDA to be created
 /// - [signer, writable] owner: Player wallet (pays for slot rent)
 /// - [] system_program: System program
+/// - [] leader: Team leader's PlayerAccount (read-only; drives tier-based capacity)
 ///
 /// # Instruction Data
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
@@ -50,6 +51,7 @@ pub fn process(
         member_slot_account,
         owner,
         system_program,
+        leader_account,
     ]);
 
     // 3. Validate Accounts
@@ -83,6 +85,16 @@ pub fn process(
     if player.game_engine != team.game_engine {
         return Err(GameError::KingdomMismatch.into());
     }
+
+    // 4b. Refresh capacity from the leader's current subscription tier.
+    // The leader's PlayerAccount is passed read-only; verify it matches the
+    // team's stored leader before trusting its tier so a higher-tier leader's
+    // team can grow (and a lapsed sub never strands existing members).
+    let now = Clock::get()?.unix_timestamp;
+    require_key_match(leader_account, &team.leader)?;
+    let leader_tier =
+        PlayerAccount::load_checked_by_key(leader_account, program_id)?.get_effective_tier(now);
+    team.refresh_capacity(leader_tier);
 
     // 5. Validate Player Can Join
 
@@ -130,8 +142,6 @@ pub fn process(
 
     // 7. Create Member Slot Account
 
-    let now = Clock::get()?.unix_timestamp;
-
     let slot_lamports = crate::utils::rent_exempt_const(TeamMemberSlot::LEN);
 
     let slot_bump_seed = [slot_bump];
@@ -165,6 +175,7 @@ pub fn process(
         slot_index,
         slot_bump,
         TeamMemberSlot::RANK_4, // New members join at lowest rank
+        team.membership_epoch,  // joined_at_epoch: snapshot current war-table epoch
     );
 
     drop(slot_data);

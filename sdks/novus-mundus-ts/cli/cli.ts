@@ -43,6 +43,7 @@ import { handlePlayer } from './lib/commands/player';
 import { handleSnapshot } from './lib/commands/snapshot';
 import { handleNuke } from './lib/commands/nuke';
 import { handleTeam } from './lib/commands/team';
+import { handleWartable } from './lib/commands/wartable';
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -118,6 +119,9 @@ async function main(): Promise<void> {
       break;
     case 'team':
       await handleTeam(ctx, args);
+      break;
+    case 'wartable':
+      await handleWartable(ctx, args);
       break;
     default:
       log.error(`Unknown command: ${args.command}`);
@@ -210,6 +214,11 @@ Commands:
   team join                 Have test players join a public team
                             --team-id <id> --count <n>
                             [--start-slot <s>]  (default: 0)
+  wartable read <thread>     Decode + decrypt a war-table thread
+                            --scope <team|rally|castle|encounter|dm>
+                            --limit <n> --master-secret <hex>
+  wartable dm-threads <pk>   List DM threads for a player (sender-side)
+  wartable thread-key <t>    Derive and print a thread key (--version N --master-secret <hex>)
   nuke                      Full reset + init + populate
                             --tier <tier>  (default: advanced)
                             --count <n>    (default: 10)

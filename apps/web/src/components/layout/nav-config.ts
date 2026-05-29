@@ -41,6 +41,7 @@ export const SECONDARY: NavItem[] = [
   { section: "Shop", href: "/shop?tab=subscribe", label: "Subscription", feature: "subscription" },
 
   { href: "/cosmetics", label: "Wardrobe" },
+  { href: "/messages", label: "Messages" },
   { href: "/settings", label: "Settings" },
   { href: "/world/leaderboard", label: "Leaderboard" },
   { href: "/events", label: "Events" },

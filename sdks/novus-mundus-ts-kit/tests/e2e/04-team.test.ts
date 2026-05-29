@@ -204,6 +204,7 @@ describe('Team System', () => {
         teamId,
         inviterSlotIndex: 0, // Leader is at slot 0
         inviteePlayer: invitee.playerPda,
+        leaderPlayer: leader.playerPda,
       });
       const inviteTx = [inviteIx];
       await sendTransaction(ctx.svm, inviteTx, [leader.keypair]);
@@ -235,6 +236,7 @@ describe('Team System', () => {
         teamId,
         inviterSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
+        leaderPlayer: leader.playerPda,
       });
       await sendTransaction(ctx.svm, [inviteIx], [leader.keypair]);
 
@@ -246,6 +248,7 @@ describe('Team System', () => {
         teamId,
         slotIndex: 1, // Slot 0 is leader
         inviteRefund: leader.publicKey, // Refund to inviter
+        leaderPlayer: leader.playerPda,
       });
       await sendTransaction(ctx.svm, [acceptIx], [invitee.keypair]);
 
@@ -276,6 +279,7 @@ describe('Team System', () => {
         teamId,
         inviterSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
+        leaderPlayer: leader.playerPda,
       });
       await sendTransaction(ctx.svm, [inviteIx], [leader.keypair]);
 
@@ -315,6 +319,7 @@ describe('Team System', () => {
         teamId,
         inviterSlotIndex: 0,
         inviteePlayer: invitee.playerPda,
+        leaderPlayer: leader.playerPda,
       });
       await sendTransaction(ctx.svm, [inviteIx], [leader.keypair]);
 
@@ -337,6 +342,7 @@ describe('Team System', () => {
         teamId,
         slotIndex: 1,
         inviteRefund: leader.publicKey,
+        leaderPlayer: leader.playerPda,
       });
       await expectTransactionToFail(
         ctx.svm,
@@ -375,6 +381,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -383,7 +390,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -432,6 +439,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -440,7 +448,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -486,6 +494,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -494,7 +503,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -542,6 +551,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:officer.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -550,7 +560,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: officer.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: officer.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [officer.keypair]
       );
@@ -614,6 +624,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:newLeader.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -622,7 +633,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: newLeader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: newLeader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [newLeader.keypair]
       );
@@ -729,6 +740,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -737,7 +749,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -893,6 +905,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -901,7 +914,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -965,6 +978,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -973,7 +987,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -1054,6 +1068,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer:member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -1062,7 +1077,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -1165,6 +1180,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer: member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -1173,7 +1189,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -1259,6 +1275,7 @@ describe('Team System', () => {
             teamId,
             inviterSlotIndex: 0,
             inviteePlayer: member.playerPda,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -1267,7 +1284,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         [
-          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ],
         [member.keypair]
       );
@@ -1390,6 +1407,7 @@ describe('Team System', () => {
         team: teamPda,
         teamId,
         slotIndex: 1,
+        leaderPlayer: leader.playerPda,
       });
       await sendTransaction(ctx.svm, [joinIx], [joiner.keypair]);
 
@@ -1433,6 +1451,7 @@ describe('Team System', () => {
         team: teamPda,
         teamId,
         slotIndex: 1,
+        leaderPlayer: leader.playerPda,
       });
       await expectTransactionToFail(
         ctx.svm,
@@ -1464,6 +1483,7 @@ describe('Team System', () => {
         team: teamPda,
         teamId,
         slotIndex: 1,
+        leaderPlayer: leader.playerPda,
       });
       await expectTransactionToFail(
         ctx.svm,

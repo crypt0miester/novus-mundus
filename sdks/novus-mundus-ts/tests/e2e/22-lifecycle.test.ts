@@ -672,6 +672,7 @@ describe('Full Game Lifecycle', () => {
         teamId: TEAM_ID,
         inviterSlotIndex: 0,
         inviteePlayer: bravo.playerPda,
+        leaderPlayer: alpha.playerPda,
       });
       await sendTx(ctx.svm, new Transaction().add(inviteBravoIx), [alpha.keypair], ctx.config);
 
@@ -682,6 +683,7 @@ describe('Full Game Lifecycle', () => {
         teamId: TEAM_ID,
         slotIndex: 1,
         inviteRefund: alpha.publicKey,
+        leaderPlayer: alpha.playerPda,
       });
       await sendTx(ctx.svm, new Transaction().add(acceptBravoIx), [bravo.keypair], ctx.config);
       log.txSuccess('Bravo: accepted invite (slot 1)');
@@ -696,6 +698,7 @@ describe('Full Game Lifecycle', () => {
         teamId: TEAM_ID,
         inviterSlotIndex: 0,
         inviteePlayer: charlie.playerPda,
+        leaderPlayer: alpha.playerPda,
       });
       await sendTx(ctx.svm, new Transaction().add(inviteCharlieIx), [alpha.keypair], ctx.config);
 
@@ -706,6 +709,7 @@ describe('Full Game Lifecycle', () => {
         teamId: TEAM_ID,
         slotIndex: 2,
         inviteRefund: alpha.publicKey,
+        leaderPlayer: alpha.playerPda,
       });
       await sendTx(ctx.svm, new Transaction().add(acceptCharlieIx), [charlie.keypair], ctx.config);
       log.txSuccess('Charlie: accepted invite (slot 2)');
@@ -720,6 +724,7 @@ describe('Full Game Lifecycle', () => {
         teamId: TEAM_ID,
         inviterSlotIndex: 0,
         inviteePlayer: foxtrot.playerPda,
+        leaderPlayer: alpha.playerPda,
       });
       await sendTx(ctx.svm, new Transaction().add(inviteFoxtrotIx), [alpha.keypair], ctx.config);
 
@@ -730,6 +735,7 @@ describe('Full Game Lifecycle', () => {
         teamId: TEAM_ID,
         slotIndex: 3,
         inviteRefund: alpha.publicKey,
+        leaderPlayer: alpha.playerPda,
       });
       await sendTx(ctx.svm, new Transaction().add(acceptFoxtrotIx), [foxtrot.keypair], ctx.config);
       log.txSuccess('Foxtrot: accepted invite (slot 3)');

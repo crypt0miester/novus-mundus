@@ -144,7 +144,7 @@ export function FeatureView({ buildingId }: FeatureViewProps) {
     return (
       <div className="mx-auto flex h-full w-full max-w-5xl flex-col gap-3">
         <BuildingStrip buildingId={buildingId} />
-        <div className="min-h-0 flex-1 overflow-y-auto pb-24 md:pb-0">
+        <div className="min-h-0 flex-1 overflow-y-auto pb-18 md:pb-0">
           <div className="card text-center">
             <p className="text-sm text-text-muted">No feature view available for {buildingName}.</p>
           </div>

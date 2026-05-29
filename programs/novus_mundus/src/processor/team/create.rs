@@ -6,7 +6,7 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{MAX_TEAM_MEMBERS_BY_TIER, PLAYER_SEED, TEAM_SEED, TEAM_SLOT_SEED, TIER_ROOKIE},
+    constants::{PLAYER_SEED, TEAM_SEED, TEAM_SLOT_SEED},
     emit,
     error::GameError,
     events::TeamCreated,
@@ -107,7 +107,9 @@ pub fn process(
     unlock_extension_if_eligible(player_account, owner, EXT_TEAM)?;
 
     // 5. Validate Player Can Create Team + calculate cost (scoped borrow - dropped before CPI)
-    let (adjusted_creation_cost, player_bump) = {
+    let now = Clock::get()?.unix_timestamp;
+
+    let (adjusted_creation_cost, player_bump, leader_tier) = {
         let player = PlayerAccount::load_checked_mut(
             player_account,
             game_engine_account.address(),
@@ -127,7 +129,12 @@ pub fn process(
         )
         .ok_or(GameError::MathOverflow)?;
 
-        (adjusted_creation_cost, player.bump)
+        // Capacity tracks the leader's subscription tier (refreshed on each join)
+        (
+            adjusted_creation_cost,
+            player.bump,
+            player.get_effective_tier(now),
+        )
     }; // player borrow dropped here
 
     // 6. Burn Team Creation Cost (CPI - requires no active borrows on player_account)
@@ -148,11 +155,6 @@ pub fn process(
         adjusted_creation_cost,
         &[player_signer],
     )?;
-
-    // 7. Get clock for timestamps
-
-    let clock = Clock::get()?;
-    let now = clock.unix_timestamp;
 
     // 8. Derive and Verify Team PDA (kingdom-scoped)
     // team_id is provided by the client in instruction data
@@ -202,8 +204,9 @@ pub fn process(
     let mut team_account_data = team_account.try_borrow_mut()?;
     let team_data = unsafe { TeamAccount::load_mut(&mut team_account_data) };
 
-    // Get max members for rookie tier
-    let max_members = MAX_TEAM_MEMBERS_BY_TIER[TIER_ROOKIE as usize] as u16;
+    // Initial capacity from the creator's effective subscription tier.
+    // Refreshed against the leader's current tier on every join/invite.
+    let max_members = TeamAccount::tier_cap(leader_tier);
 
     *team_data = TeamAccount::init(
         *game_engine_account.address(), // kingdom-scoped
@@ -253,6 +256,7 @@ pub fn process(
         slot_index,
         slot_bump,
         TeamMemberSlot::RANK_0, // Leader rank
+        0,                      // joined_at_epoch: fresh team starts at membership_epoch 0
     );
 
     drop(slot_data);

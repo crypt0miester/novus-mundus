@@ -97,6 +97,7 @@ pub fn process(
 
     // Set disbanded flag (CRITICAL: prevents orphaned member issues)
     team.disbanded = true;
+    team.membership_epoch = team.membership_epoch.saturating_add(1); // rotate war-table key on access loss
 
     // Zero out member count
     team.member_count = 0;

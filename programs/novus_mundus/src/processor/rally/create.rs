@@ -489,7 +489,7 @@ pub fn process(
         fallback_triggered: false,
         attacker_won: false,
         bump: rally_bump,
-        _padding5: [0; 4],
+        membership_epoch: 0, // War-table key rotation epoch starts at 0 for a fresh rally
     };
 
     drop(rally_data_ref);
@@ -561,7 +561,8 @@ pub fn process(
         contribution_power: 0, // Calculated during execute
         contribution_bps: 0,
         bump: participant_bump,
-        _padding6: [0; 5],
+        _pad_join_align: 0,
+        joined_at_epoch: 0, // joined_at_epoch: fresh rally starts at membership_epoch 0
     };
 
     // Emit RallyCreated event

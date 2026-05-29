@@ -4,7 +4,7 @@ Working backlog for `apps/web` (the Next.js client). Each item records the
 problem, the current state with file references, and the plan. Status keys:
 `DONE` shipped this pass · `WIP` in progress · `TODO` not started.
 
-Last touched: 2026-05-26.
+Last touched: 2026-05-29.
 
 ## #6 Make spectate actually spectate — `TODO`
 
@@ -37,11 +37,39 @@ specific failures are reproduced.
 
 ---
 
-## #12 Team chat — `TODO`
+## #12 Team chat / War Table - `DONE`
 
-`app/(game)/team/_components/team-tab.tsx:1130-1139` shows a "Team chat coming
-soon" placeholder. No chat component exists. Decide on transport (on-chain
-memo, off-chain relay, NFT-gated channel) before committing to scope.
+Resolved by the War Table feature. The "Team chat coming soon" placeholder in
+`app/(game)/team/_components/team-tab.tsx` is replaced by a `ThreadRenderer`
+embed. Transport is the on-chain `novus_mundus` `POST_WAR_TABLE_MESSAGE = 323`
+instruction emitting `sol_log_data`, bodies encrypted per-thread under a key
+derived from `WT_MASTER_SECRET` keyed on the on-chain `membership_epoch`.
+
+**Shipped (chain + SDK + web, all five scopes).**
+- Chain: the post instruction, all five scope access predicates, envelope
+  validation, the `key_version == membership_epoch` rule plus the encrypted-flag
+  rule, the `membership_epoch` / `joined_at_epoch` account fields, and the
+  thirteen epoch-bump sites.
+- SDK + crypto: envelope encode/decode, HMAC KDF, XChaCha20-Poly1305 with the
+  72-byte AAD, `WarTableClient` (`postMessage` with priority-fee ceiling,
+  `readThread`, `subscribeThread`, `discoverDmThreads`), the `ThreadKeyProvider`
+  implementations, updated state parsers, crypto unit suite + e2e suite.
+- Web: SIWS-authed key route, Zustand store, `useWarTable` / `useDmInbox`,
+  `ThreadRenderer`, and the team / rally / encounter / DM / PvP embeds + the
+  Messages nav entry.
+
+See `docs/WAR_TABLE_DESIGN.md` (as-built design) and
+`docs/WAR_TABLE_IMPL_SPEC.md` (authoritative spec) for details.
+
+**Deferred follow-ups.**
+1. **Castle web embed.** Scope 2 (castle) is wired in chain + SDK but not
+   surfaced in any web panel, because no `CastleDetailPanel` exists yet. Add a
+   `ThreadRenderer scope={WarTableScope.Castle}` embed when that panel is built.
+2. **True cross-kingdom encounter e2e.** The current e2e seeds one game engine,
+   so the out-of-kingdom access path is exercised by proxy (a player with
+   no/foreign `PlayerAccount`). A genuine cross-kingdom test needs a second
+   `init_game_engine` in the same SVM to assert
+   `sender_player.game_engine != encounter.game_engine`.
 
 
 ---

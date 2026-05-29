@@ -120,6 +120,7 @@ describe('Rally System', () => {
             inviteePlayer: member.playerPda,
             teamId,
             inviterSlotIndex: 0,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [leader.keypair]
@@ -137,6 +138,7 @@ describe('Rally System', () => {
             slotIndex: i + 1,
             teamId,
             inviteRefund: leader.publicKey,
+            leaderPlayer: leader.playerPda,
           })
         ],
         [member.keypair]

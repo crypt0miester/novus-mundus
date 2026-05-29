@@ -16,9 +16,6 @@ import { useSheetStore } from "@/lib/store/sheet";
 // The content area hugs its content but never grows past this slice of the
 // viewport; taller content scrolls inside instead.
 const MAX_HEIGHT_VH = 0.92;
-// Background painted below the content so dragging up past full reveals more
-// sheet, never the backdrop. Generous — over-drag is rubber-banded well short.
-const FILLER_VH = 0.6;
 const BACKDROP_MAX = 0.55;
 // On release, the drag velocity is projected this far ahead to pick a detent.
 const PROJECTION_MS = 150;
@@ -66,11 +63,18 @@ export function BottomSheet({
   onClose,
   title,
   children,
+  fillerVh = 0,
 }: {
   open: boolean;
   onClose: () => void;
   title?: string;
   children: ReactNode;
+  // vh fraction of the over-drag background filler below the sheet. Defaults to
+  // 0 (sheet sits flush at the bottom) because the filler otherwise renders as
+  // dead space below the content for any sheet whose content is shorter than
+  // the viewport. Pass a fraction (e.g. 0.6) to opt back into the over-drag
+  // cushion for a specific sheet.
+  fillerVh?: number;
 }) {
   const [mounted, setMounted] = useState(false);
   // The sheet only renders below the `lg` breakpoint (it is `lg:hidden`).
@@ -443,8 +447,8 @@ export function BottomSheet({
         ref={sheetRef}
         className="absolute inset-x-0 overflow-hidden rounded-t-2xl border-t border-border-default bg-surface-raised shadow-2xl shadow-black/50"
         style={{
-          bottom: `-${FILLER_VH * 100}vh`,
-          paddingBottom: `${FILLER_VH * 100}vh`,
+          bottom: `-${fillerVh * 100}vh`,
+          paddingBottom: `${fillerVh * 100}vh`,
           transform: "translateY(100%)",
           willChange: "transform",
         }}
@@ -475,10 +479,7 @@ export function BottomSheet({
             </div>
           )}
 
-          {/* Bottom padding (`pb-24`) reserves clearance for the floating
-              MorphTabBar (h-14 pill + safe-area offset, ~80px). Without it
-              the bar at z-[60] would visually cover the tail of the content. */}
-          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-2 pb-24">{children}</div>
+          <div className="min-h-0 space-y-4 overflow-y-auto px-2 pb-18">{children}</div>
         </div>
       </div>
     </div>

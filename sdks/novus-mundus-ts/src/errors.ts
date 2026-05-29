@@ -480,6 +480,17 @@ export enum GameError {
   InvalidCastleStatus = 8134,
   ContestNotEnded = 8135,
   CastleUpgradeNotReady = 8136,
+
+  // War Table Errors (8300-8308)
+  WtBadScope = 8300,
+  WtThreadScopeMismatch = 8301,
+  WtNotInScope = 8302,
+  WtBadMagic = 8303,
+  WtThreadPdaMismatch = 8304,
+  WtSenderMismatch = 8305,
+  WtBodyLenMismatch = 8306,
+  WtKeyVersionMismatch = 8307,
+  WtEncryptedFlagRequired = 8308,
 }
 
 // Human-Readable Error Messages
@@ -890,6 +901,17 @@ export const ERROR_MESSAGES: Record<number, string> = {
   [GameError.HeroAbilityOnCooldown]: 'Hero ability is still on cooldown',
   [GameError.HeroAbilityInvalidKind]: 'Unknown hero ability type',
   [GameError.HeroAbilityBadParams]: 'Hero ability parameters are invalid',
+
+  // War Table Errors
+  [GameError.WtBadScope]: 'War-table scope tag is out of range',
+  [GameError.WtThreadScopeMismatch]: 'War-table thread does not match the claimed scope',
+  [GameError.WtNotInScope]: 'You are not a member of this war-table scope',
+  [GameError.WtBadMagic]: 'War-table envelope has bad magic',
+  [GameError.WtThreadPdaMismatch]: 'War-table envelope thread PDA mismatch',
+  [GameError.WtSenderMismatch]: 'War-table envelope sender mismatch',
+  [GameError.WtBodyLenMismatch]: 'War-table envelope body length mismatch',
+  [GameError.WtKeyVersionMismatch]: 'War-table key version mismatch',
+  [GameError.WtEncryptedFlagRequired]: 'War-table encrypted flag required for this scope',
 };
 
 // Error Parsing Functions
@@ -996,5 +1018,6 @@ export function getErrorCategory(code: number): string {
   if (code >= 7900 && code < 8000) return 'Arena';
   if (code >= 8000 && code < 8100) return 'Dungeon';
   if (code >= 8100 && code < 8200) return 'Castle';
+  if (code >= 8300 && code < 8400) return 'WarTable';
   return 'Unknown';
 }

@@ -14,10 +14,13 @@ import {
   createRallyProcessReturnInstruction,
   createRallyCloseInstruction,
   canCloseRally,
+  deriveRallyParticipantPda,
   RallyStatus,
+  WarTableScope,
   isNullPubkey,
   isTraveling,
 } from "novus-mundus-sdk";
+import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useEncounters } from "@/lib/hooks/useEncounters";
@@ -104,6 +107,26 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
     if (!rally || rally.targetType !== 1) return null;
     return (encounters ?? []).find((e) => e.pubkey.equals(rally.target)) ?? null;
   }, [encounters, rally]);
+
+  // War-table post access: the viewer may post only if their RallyParticipant
+  // account exists. The participant PDA is keyed on the WALLET, not the player
+  // PDA (rally.rs gate), so derive it from publicKey and probe for existence.
+  const { data: isParticipant = false } = useQuery({
+    queryKey: ["rally", "participant", rallyPubkey, publicKey?.toBase58() ?? ""],
+    enabled: !!publicKey && !!rally,
+    queryFn: async () => {
+      if (!publicKey || !rally) return false;
+      const [participantPda] = deriveRallyParticipantPda(
+        client.gameEngine,
+        rally.creator,
+        rally.id.toNumber(),
+        publicKey,
+      );
+      const info = await connection.getAccountInfo(participantPda);
+      return info !== null;
+    },
+    staleTime: 10_000,
+  });
 
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -576,6 +599,21 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             {full ? "Rally is full" : noCommit ? "Commit troops to join" : "Join Rally"}
           </TxButton>
         </>
+      )}
+
+      {/* War-table: coordinate the rally while it gathers or marches */}
+      {rally && (rally.status === RallyStatus.Gathering || inFlight) && (
+        <div className="rounded-lg border border-zinc-800 bg-surface/60 p-3">
+          <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            War-table
+          </div>
+          <ThreadRenderer
+            threadPda={rallyKey}
+            scope={WarTableScope.Rally}
+            canPost={isParticipant}
+            placeholder="Coordinate the rally..."
+          />
+        </div>
       )}
     </div>
   );

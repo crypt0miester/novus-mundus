@@ -113,6 +113,7 @@ describe('Reinforcement System', () => {
             inviteePlayer: member.playerPda,
             teamId,
             inviterSlotIndex: 0,
+            leaderPlayer: leader.playerPda,
           })
         ),
         [leader.keypair]
@@ -130,6 +131,7 @@ describe('Reinforcement System', () => {
             slotIndex: i + 1,
             teamId,
             inviteRefund: leader.publicKey,
+            leaderPlayer: leader.playerPda,
           })
         ),
         [member.keypair]

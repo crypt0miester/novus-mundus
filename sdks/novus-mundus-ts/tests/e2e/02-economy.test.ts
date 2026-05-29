@@ -474,6 +474,7 @@ describe('Economy', () => {
         teamId: testTeamId,
         inviterSlotIndex: 0,
         inviteePlayer: receiver.playerPda,
+        leaderPlayer: sender.playerPda,
       });
       const inviteTx = buildTransaction([inviteIx]);
       await sendTransaction(ctx.svm, inviteTx, [sender.keypair]);
@@ -485,6 +486,7 @@ describe('Economy', () => {
         teamId: testTeamId,
         slotIndex: 1,
         inviteRefund: sender.publicKey,
+        leaderPlayer: sender.playerPda,
       });
       const acceptTx = buildTransaction([acceptIx]);
       await sendTransaction(ctx.svm, acceptTx, [receiver.keypair]);

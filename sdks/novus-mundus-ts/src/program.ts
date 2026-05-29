@@ -121,6 +121,9 @@ export const SEEDS = {
   COURT: Buffer.from('court'),
   KING_REGISTRY: Buffer.from('king_registry'),
   TEAM_CASTLE_REWARD: Buffer.from('team_castle_reward'),
+
+  // War Table system
+  DM_THREAD: Buffer.from('wt_dm'),
 } as const;
 
 // Instruction Discriminators (little-endian u16)
@@ -374,6 +377,9 @@ export const DISCRIMINATORS = {
 
   // Cosmetics (322)
   COSMETIC_EQUIP: 322,
+
+  // War Table (323)
+  POST_WAR_TABLE_MESSAGE: 323,
 } as const;
 
 /** Type for discriminator values */

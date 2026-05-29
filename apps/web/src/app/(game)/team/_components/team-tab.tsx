@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { MapPin } from "lucide-react";
+import { MapPin, MessageSquare } from "lucide-react";
+import { usePlayerActions } from "@/lib/hooks/usePlayerActions";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
@@ -29,6 +30,8 @@ import { InfoGrid } from "@/components/shared/InfoGrid";
 import { NumberField } from "@/components/shared/NumberField";
 import { UnitGrid } from "@/components/shared/UnitGrid";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useChainNow } from "@/lib/hooks/useChainTime";
+import { effectiveTeamCapacity } from "@/lib/teamCapacity";
 import { formatTime, shortenAddress } from "@/lib/utils";
 import { useWorldPlayers } from "@/lib/hooks/world";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
@@ -64,7 +67,10 @@ import {
   createRemoveTeamNameInstruction,
   calculateDefensivePower,
   isTraveling,
+  WarTableScope,
 } from "novus-mundus-sdk";
+import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
+import { MobileTeamDock } from "@/components/war-table/MobileTeamDock";
 
 const RANK_LABELS: Record<number, string> = {
   0: "Leader",
@@ -132,6 +138,18 @@ function Stat({ label, value, highlight }: { label: string; value: number; highl
   );
 }
 
+// Per-row Message action. usePlayerActions is keyed by one PDA, so it can't be
+// called inside the members .map (rules of hooks) — it lives in this child.
+function MemberMessageButton({ playerPda }: { playerPda: string }) {
+  const { sendDm } = usePlayerActions(playerPda);
+  return (
+    <ActionButton tone="neutral" onClick={sendDm} title="Message">
+      <MessageSquare className="h-3.5 w-3.5" />
+      <span className="hidden sm:inline">Message</span>
+    </ActionButton>
+  );
+}
+
 export function TeamTab() {
   const { data: playerData } = usePlayer();
   const { data: geData } = useGameEngine();
@@ -166,6 +184,21 @@ export function TeamTab() {
   const traveling = player ? isTraveling(player) : false;
   const otherPlayers = useAccountStore((s) => s.otherPlayers);
   const { connection } = useConnection();
+  const nowSec = useChainNow();
+
+  // Team capacity follows the leader's live subscription tier (the on-chain
+  // program refreshes it on every join/invite/accept). Resolve the leader's
+  // PlayerCore — the current player when they lead, else from the world store —
+  // so the UI gates on the effective cap instead of a possibly-stale stored one.
+  const leaderCore = useMemo(() => {
+    if (!team) return null;
+    const key = team.leader.toBase58();
+    if (playerData && playerData.pubkey.toBase58() === key) return playerData.account;
+    return otherPlayers.get(key)?.account ?? null;
+  }, [team, playerData, otherPlayers]);
+
+  const teamCapacity = team ? effectiveTeamCapacity(team, leaderCore, nowSec) : 0;
+  const teamFull = !!team && team.memberCount >= teamCapacity;
 
   // On-demand RPC backfills (extracted to hooks): seed the member players,
   // treasury requests, and incoming invites the WS hasn't delivered to a
@@ -373,7 +406,7 @@ export function TeamTab() {
   };
 
   const handleInvite = async (inviteeWallet: PublicKey, reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
+    if (!publicKey || !teamPubkey || !teamId || !player || !team) throw new Error("Missing data");
     const ge = client.gameEngine;
     const [inviteePlayerPda] = derivePlayerPda(ge, inviteeWallet);
     const ix = createTeamInviteInstruction({
@@ -383,6 +416,7 @@ export function TeamTab() {
       teamId,
       inviterSlotIndex: player.teamSlotIndex,
       inviteePlayer: inviteePlayerPda,
+      leaderPlayer: team.leader,
     });
     return transact
       .mutateAsync({
@@ -872,10 +906,15 @@ export function TeamTab() {
     const inviteTeamAccount = parseTeam(inviteTeamInfo);
     if (!inviteTeamAccount) throw new Error("Failed to parse inviting team");
 
+    // Capacity follows the inviting team's leader tier, not its stored cap.
+    const leaderInfo = await connection.getAccountInfo(inviteTeamAccount.leader);
+    const leaderCore = leaderInfo ? parsePlayer(leaderInfo) : null;
+    const capacity = effectiveTeamCapacity(inviteTeamAccount, leaderCore, nowSec);
+
     const slots = await client.fetchTeamMembers(inviteTeam);
     const usedSlots = new Set(slots.map((s) => s.account.slotIndex));
     let freeSlot = -1;
-    for (let i = 0; i < inviteTeamAccount.maxMembers; i++) {
+    for (let i = 0; i < capacity; i++) {
       if (!usedSlots.has(i)) {
         freeSlot = i;
         break;
@@ -890,6 +929,7 @@ export function TeamTab() {
       teamId: inviteTeamAccount.id.toNumber(),
       slotIndex: freeSlot,
       inviteRefund: inviterRefund,
+      leaderPlayer: inviteTeamAccount.leader,
     });
     return transact
       .mutateAsync({
@@ -929,6 +969,7 @@ export function TeamTab() {
   };
 
   const [sidebarSection, setSidebarSection] = useState<"chat" | "treasury" | "settings">("chat");
+  const [mobileTeamOpen, setMobileTeamOpen] = useState(false);
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -1028,7 +1069,7 @@ export function TeamTab() {
                 </div>
                 <div className="text-right">
                   <div className="text-xs text-text-muted">Members</div>
-                  <GoldNumber value={team.memberCount} suffix={`/${team.maxMembers}`} />
+                  <GoldNumber value={team.memberCount} suffix={`/${teamCapacity}`} />
                 </div>
               </div>
             </div>
@@ -1036,33 +1077,8 @@ export function TeamTab() {
 
           {/* Main area: left content + right sidebar */}
           <div className="min-h-0 flex-1 grid grid-cols-1 lg:grid-cols-3 gap-3 overflow-hidden">
-            {/* Left — team info, MOTD, members (scrollable) */}
-            <div className="lg:col-span-2 overflow-y-auto space-y-4">
-              {/* MOTD */}
-              <div className="card">
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                  Message of the Day
-                </h3>
-                {team.motd ? (
-                  <p className="mb-3 text-sm text-text-secondary">{team.motd}</p>
-                ) : (
-                  <p className="mb-3 text-sm text-text-muted italic">No message set</p>
-                )}
-                <div className="flex items-center gap-3 flex-col">
-                  <input
-                    type="text"
-                    value={motd}
-                    onChange={(e) => setMotd(e.target.value)}
-                    placeholder="Set new MOTD..."
-                    className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-                    maxLength={32}
-                  />
-                  <TxButton onClick={handleSetMotd} variant="secondary" disabled={!motd.trim()}>
-                    Set MOTD
-                  </TxButton>
-                </div>
-              </div>
-
+            {/* Left — team info, members (scrollable). pb clears the fixed mobile dock strip. */}
+            <div className="lg:col-span-2 overflow-y-auto space-y-4 pb-18 lg:pb-0 px-1">
               {/* Members */}
               <div className="card">
                 <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -1223,6 +1239,9 @@ export function TeamTab() {
                                 <MapPin className="h-3.5 w-3.5" />
                                 <span className="hidden sm:inline">Locate</span>
                               </ActionButton>
+                              {!isCurrentPlayer && (
+                                <MemberMessageButton playerPda={memberPda.toBase58()} />
+                              )}
                               {canReinforce && (
                                 <ActionButton
                                   tone="primary"
@@ -1348,7 +1367,7 @@ export function TeamTab() {
 
             {/* Right — sidebar with tabbed sections */}
             <div className="hidden lg:flex lg:flex-col overflow-y-auto">
-              <div className="sticky top-0 rounded-lg border border-border-default bg-surface-raised p-4 flex-1 space-y-4">
+              <div className="flex flex-1 flex-col gap-4 overflow-hidden rounded-lg border border-border-default bg-surface-raised p-4">
                 {/* Section tabs */}
                 <div className="flex gap-1 rounded-lg bg-surface/60 p-1">
                   {(["chat", "treasury", "settings"] as const).map((s) => (
@@ -1366,20 +1385,23 @@ export function TeamTab() {
                   ))}
                 </div>
 
-                {/* Chat (disabled) */}
-                {sidebarSection === "chat" && (
-                  <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                    <div className="text-2xl text-text-muted">&#128172;</div>
-                    <p className="text-sm text-text-muted">Team chat coming soon</p>
-                    <p className="text-[11px] text-text-muted">
-                      Coordinate with your team in real-time
-                    </p>
+                {/* War-table thread for the House */}
+                {sidebarSection === "chat" && team && teamData?.pubkey && (
+                  <div className="flex min-h-0 flex-1 flex-col">
+                    <ThreadRenderer
+                      threadPda={teamData.pubkey}
+                      scope={WarTableScope.Team}
+                      canPost={true}
+                      canPin={(m) => isOfficerPlus || m.senderWallet === publicKey?.toBase58()}
+                      placeholder="write a message..."
+                      maxHeightClass="max-h-none"
+                    />
                   </div>
                 )}
 
                 {/* Treasury */}
                 {sidebarSection === "treasury" && (
-                  <div className="space-y-4">
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
                     {/* Balance */}
                     <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
                       <div className="text-[10px] text-text-muted">Treasury Balance</div>
@@ -1495,9 +1517,9 @@ export function TeamTab() {
 
                 {/* Settings */}
                 {sidebarSection === "settings" && (
-                  <div className="space-y-4">
+                  <div className="min-h-0 flex-1 space-y-4 overflow-y-auto">
                     <InvitePlayerPanel
-                      teamFull={(team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}
+                      teamFull={teamFull}
                       invitedPdas={myTeamInvitePdas}
                       gameEngine={client.gameEngine}
                       selfWallet={publicKey}
@@ -1536,6 +1558,33 @@ export function TeamTab() {
                       </div>
                     )}
 
+                    {/* Message of the Day */}
+                    <div className="border-t border-border-default pt-3 space-y-2">
+                      <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                        Message of the Day
+                      </div>
+                      {team.motd ? (
+                        <p className="text-sm text-text-secondary">{team.motd}</p>
+                      ) : (
+                        <p className="text-sm text-text-muted italic">No message set</p>
+                      )}
+                      {isOfficerPlus && (
+                        <div className="flex flex-col gap-2">
+                          <input
+                            type="text"
+                            value={motd}
+                            onChange={(e) => setMotd(e.target.value)}
+                            placeholder="Set new MOTD..."
+                            className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                            maxLength={32}
+                          />
+                          <TxButton onClick={handleSetMotd} variant="secondary" disabled={!motd.trim()}>
+                            Set MOTD
+                          </TxButton>
+                        </div>
+                      )}
+                    </div>
+
                     {/* Domain Name (Leader Only) */}
                     {isLeader && (
                       <div className="border-t border-border-default pt-3 space-y-2">
@@ -1571,8 +1620,13 @@ export function TeamTab() {
             </div>
           </div>
 
-          {/* Mobile: same tabbed sidebar, shown below content */}
-          <div className="lg:hidden rounded-lg border border-border-default bg-surface-raised p-4 space-y-4">
+          {/* Mobile: collapsible docked strip that expands into a bottom sheet */}
+          <MobileTeamDock
+            threadPda={teamData?.pubkey ?? null}
+            title={team?.name ?? "House"}
+            open={mobileTeamOpen}
+            onOpenChange={setMobileTeamOpen}
+          >
             {/* Section tabs */}
             <div className="flex gap-1 rounded-lg bg-surface/60 p-1">
               {(["chat", "treasury", "settings"] as const).map((s) => (
@@ -1590,14 +1644,22 @@ export function TeamTab() {
               ))}
             </div>
 
-            {/* War-table (disabled) */}
-            {sidebarSection === "chat" && (
-              <div className="flex flex-col items-center justify-center gap-2 py-12 text-center">
-                <div className="text-2xl text-text-muted">&#128737;</div>
-                <p className="text-sm text-text-muted">The war-table is not yet set</p>
-                <p className="text-[11px] text-text-muted">
-                  A place to read the map and plan the next move with your House
-                </p>
+            {/* War-table. The BottomSheet content is content-sized, so a
+                definite viewport-relative height is needed here — otherwise
+                ThreadRenderer's h-full has no bounded parent to resolve against
+                and collapses to its min height with dead space below. h-[60dvh]
+                gives the list a real height to fill (it scrolls internally) and
+                keeps the composer pinned, and the sheet sizes to it under 92vh. */}
+            {sidebarSection === "chat" && team && teamData?.pubkey && (
+              <div>
+                <ThreadRenderer
+                  threadPda={teamData.pubkey}
+                  scope={WarTableScope.Team}
+                  canPost={true}
+                  canPin={(m) => isOfficerPlus || m.senderWallet === publicKey?.toBase58()}
+                  placeholder="write a message..."
+                  maxHeightClass="max-h-none"
+                />
               </div>
             )}
 
@@ -1710,7 +1772,7 @@ export function TeamTab() {
             {sidebarSection === "settings" && (
               <div className="space-y-4">
                 <InvitePlayerPanel
-                  teamFull={(team?.memberCount ?? 0) >= (team?.maxMembers ?? 0)}
+                  teamFull={teamFull}
                   invitedPdas={myTeamInvitePdas}
                   gameEngine={client.gameEngine}
                   selfWallet={publicKey}
@@ -1747,6 +1809,33 @@ export function TeamTab() {
                   </div>
                 )}
 
+                {/* Message of the Day */}
+                <div className="border-t border-border-default pt-3 space-y-2">
+                  <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                    Message of the Day
+                  </div>
+                  {team.motd ? (
+                    <p className="text-sm text-text-secondary">{team.motd}</p>
+                  ) : (
+                    <p className="text-sm text-text-muted italic">No message set</p>
+                  )}
+                  {isOfficerPlus && (
+                    <div className="flex flex-col gap-2">
+                      <input
+                        type="text"
+                        value={motd}
+                        onChange={(e) => setMotd(e.target.value)}
+                        placeholder="Set new MOTD..."
+                        className="w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                        maxLength={32}
+                      />
+                      <TxButton onClick={handleSetMotd} variant="secondary" disabled={!motd.trim()}>
+                        Set MOTD
+                      </TxButton>
+                    </div>
+                  )}
+                </div>
+
                 {isLeader && (
                   <div className="border-t border-border-default pt-3 space-y-2">
                     <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
@@ -1776,7 +1865,7 @@ export function TeamTab() {
                 </div>
               </div>
             )}
-          </div>
+          </MobileTeamDock>
         </>
       )}
     </div>
@@ -1860,7 +1949,7 @@ function InvitePlayerPanel({
       />
 
       {teamFull ? (
-        <p className="text-xs text-danger">Your House is full — free a slot before inviting.</p>
+        <p className="text-xs text-danger">House is full</p>
       ) : !players ? (
         <p className="text-xs text-text-muted">Loading players...</p>
       ) : (

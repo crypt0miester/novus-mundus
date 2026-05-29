@@ -1306,6 +1306,19 @@ export function MapTab() {
           },
         });
       }
+      // Message — DM any other player (not team-gated; mirrors the desktop button).
+      if (!isEnc && !isCastleEntity && !isSelfEntity && otherPlayerAcc) {
+        const peerPda = selectedEntity.pubkey;
+        morphActions.push({
+          id: "message",
+          label: "Message",
+          variant: "secondary",
+          onClick: async () => {
+            router.push(`/messages/${peerPda}`);
+            return "";
+          },
+        });
+      }
       // Rally — I have a team, target is enemy (encounter, non-teammate player, opposing castle).
       const canRally = !!myTeamStr && !sameTeam && (isEnc || isCastleEntity || !!otherPlayerAcc);
       if (canRally) {
@@ -1497,6 +1510,7 @@ export function MapTab() {
           onFocus={(gridLat, gridLong) => mapRef.current?.focusCell(gridLat, gridLong)}
           sameCity={sameCity}
           onOpenComposer={setComposer}
+          onMessage={() => router.push(`/messages/${selectedEntity.pubkey}`)}
           onOpenInCastles={(castleId, cityId) =>
             /* Pass cityId too — castle-tab derives the PDA via
              * `useCastle(cityId, castleId)`; the previous version
@@ -2311,6 +2325,11 @@ interface EntityPanelProps {
    */
   onOpenComposer?: (spec: ComposerSpec) => void;
   /**
+   * Open a direct-message thread with this entity (a player). Navigation,
+   * not a transaction; the parent owns the router.
+   */
+  onMessage?: () => void;
+  /**
    * Open the dedicated Castles tab pre-selected on this castle.
    * The inspect panel is read-only by design — court appointments,
    * upgrades, attack, claim, garrison composer all live in the
@@ -2435,6 +2454,7 @@ function EntityPanel({
   onFocus,
   sameCity = false,
   onOpenComposer,
+  onMessage,
   onOpenInCastles,
 }: EntityPanelProps) {
   const isEncounter = entity.occupantType === 2;
@@ -3293,6 +3313,16 @@ function EntityPanel({
                 style={sameCity ? enabledStyle : disabledStyle}
               >
                 Reinforce
+              </button>,
+            );
+          }
+
+          // Message — DM any other player. Not gated by team or co-location: a
+          // DM thread exists for any pair of players, so this is always live.
+          if (!isEncounter && !isCastle && !isSelf && account?.owner && onMessage) {
+            buttons.push(
+              <button key="message" type="button" onClick={() => onMessage()} style={enabledStyle}>
+                Message
               </button>,
             );
           }

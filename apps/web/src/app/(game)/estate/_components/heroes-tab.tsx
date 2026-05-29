@@ -479,7 +479,7 @@ export function HeroesTab() {
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:grid-rows-1 lg:h-full">
       {/* Left: lists — scrolls independently of the detail column */}
-      <div className="space-y-4 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto">
+      <div className="space-y-4 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto px-1">
         <PendingEffectBadge variant="block" />
 
         {heroBuffs.length > 0 && (

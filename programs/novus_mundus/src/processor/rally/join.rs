@@ -128,6 +128,7 @@ pub fn process(
     let rally_creator = rally.creator;
     let rally_city = rally.rally_city;
     let rally_team = rally.team;
+    let rally_membership_epoch = rally.membership_epoch;
 
     // 7. Check extensions and unlock RALLY before mutable load (avoids borrow conflict with resize)
     {
@@ -442,7 +443,8 @@ pub fn process(
         contribution_power: 0, // Calculated during execute
         contribution_bps: 0,
         bump: participant_bump,
-        _padding6: [0; 5],
+        _pad_join_align: 0,
+        joined_at_epoch: rally_membership_epoch, // snapshot current war-table epoch at join time
     };
 
     // Reload rally to get updated participant count for event

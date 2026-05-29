@@ -290,6 +290,8 @@ pub fn process(
         castle.transition_court_cleaned = false;
         castle.transition_rewards_cleaned = 0;
         castle.transition_new_king = pinocchio::Address::new_from_array([0u8; 32]);
+
+        castle.membership_epoch = 0; // War-table key rotation epoch starts at 0
     }
 
     // 9. Create N² LocationAccounts, one per footprint cell. Row-major:

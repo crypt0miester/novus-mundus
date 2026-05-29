@@ -35,6 +35,7 @@ use crate::{
 /// - [writable] invite_refund: Account to receive invite rent refund (usually inviter)
 /// - [signer, writable] owner: Player wallet (pays for slot rent)
 /// - [] system_program: System program
+/// - [] leader: Team leader's PlayerAccount (read-only; drives tier-based capacity)
 ///
 /// # Instruction Data
 /// - team_id: u64 (8 bytes) - Team ID for PDA validation
@@ -59,6 +60,7 @@ pub fn process(
         invite_refund,
         owner,
         system_program,
+        leader_account,
     ]);
 
     // 3. Validate Accounts
@@ -157,6 +159,14 @@ pub fn process(
         return Err(GameError::AlreadyInTeam.into());
     }
 
+    // Refresh capacity from the leader's current subscription tier. The leader's
+    // PlayerAccount is passed read-only; verify it matches the team's stored
+    // leader before trusting its tier.
+    require_key_match(leader_account, &team.leader)?;
+    let leader_tier =
+        PlayerAccount::load_checked_by_key(leader_account, program_id)?.get_effective_tier(now);
+    team.refresh_capacity(leader_tier);
+
     // Team full?
     if team.is_full() {
         // Close invite
@@ -220,6 +230,7 @@ pub fn process(
         slot_index,
         slot_bump,
         TeamMemberSlot::RANK_3, // Invited members join at rank 3 (higher than public join)
+        team.membership_epoch,  // joined_at_epoch: snapshot current war-table epoch
     );
 
     drop(slot_data);

@@ -345,6 +345,8 @@ pub fn process(
     garrison.loot_ranged = 0;
     garrison.loot_siege = 0;
     garrison.loot_claimed = false;
+    garrison._pad_garrison_align = [0; 3];
+    garrison.joined_at_epoch = castle.membership_epoch; // snapshot current war-table epoch at join
 
     // Update castle garrison count
     castle.garrison_count = castle.garrison_count.saturating_add(1);

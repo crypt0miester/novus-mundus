@@ -120,6 +120,8 @@ export interface TeamJoinAccounts {
   teamId: BN | number | bigint;
   /** Slot index to use */
   slotIndex: number;
+  /** Team leader's PlayerAccount (read-only; drives tier-based capacity) */
+  leaderPlayer: PublicKey;
 }
 
 /** ~5,000 CU */
@@ -128,12 +130,13 @@ export interface TeamJoinAccounts {
  *
  * Prerequisites: Player must have EXT_RALLY unlocked.
  *
- * On-chain accounts (5):
+ * On-chain accounts (6):
  * 0. [writable] player: PlayerAccount PDA
  * 1. [writable] team: TeamAccount PDA
  * 2. [writable] member_slot: TeamMemberSlot PDA (to be created)
  * 3. [signer, writable] owner: Player's wallet (pays for slot rent)
  * 4. [] system_program: System Program
+ * 5. [] leader: Team leader's PlayerAccount (read-only)
  *
  * On-chain data (10 bytes):
  * - team_id: u64 (8)
@@ -151,6 +154,7 @@ export function createTeamJoinInstruction(
     { pubkey: memberSlot, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: accounts.leaderPlayer, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
@@ -291,6 +295,8 @@ export interface TeamInviteAccounts {
   inviterSlotIndex: number;
   /** Player to invite (PlayerAccount PDA) */
   inviteePlayer: PublicKey;
+  /** Team leader's PlayerAccount (read-only; drives tier-based capacity) */
+  leaderPlayer: PublicKey;
 }
 
 export interface TeamInviteParams {
@@ -313,6 +319,7 @@ export interface TeamInviteParams {
  * 4. [writable] invite: TeamInviteAccount PDA (to be created)
  * 5. [signer, writable] inviter_owner: Inviter's wallet (pays for invite rent)
  * 6. [] system_program: System program
+ * 7. [] leader: Team leader's PlayerAccount (read-only)
  *
  * On-chain data (10-18 bytes):
  * - team_id: u64 (8)
@@ -335,6 +342,7 @@ export function createTeamInviteInstruction(
     { pubkey: invite, isSigner: false, isWritable: true },
     { pubkey: accounts.inviter, isSigner: true, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: accounts.leaderPlayer, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16) + optional expires_in_seconds (i64)
@@ -371,6 +379,8 @@ export interface TeamAcceptInviteAccounts {
   slotIndex: number;
   /** Account to receive invite rent refund (usually inviter's wallet) */
   inviteRefund: PublicKey;
+  /** Team leader's PlayerAccount (read-only; drives tier-based capacity) */
+  leaderPlayer: PublicKey;
 }
 
 /** ~35,000 CU */
@@ -389,6 +399,7 @@ export interface TeamAcceptInviteAccounts {
  * 4. [writable] invite_refund: Account to receive invite rent refund (usually inviter)
  * 5. [signer, writable] owner: Player wallet (pays for slot rent)
  * 6. [] system_program: System program
+ * 7. [] leader: Team leader's PlayerAccount (read-only)
  *
  * On-chain data (10 bytes):
  * - team_id: u64 (8)
@@ -409,6 +420,7 @@ export function createTeamAcceptInviteInstruction(
     { pubkey: accounts.inviteRefund, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: accounts.leaderPlayer, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)

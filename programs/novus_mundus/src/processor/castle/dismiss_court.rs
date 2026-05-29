@@ -136,6 +136,7 @@ pub fn process(
 
     // Update castle court count
     castle.court_count = castle.court_count.saturating_sub(1);
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on access loss
 
     // Drop borrows before closing
     drop(court_data);

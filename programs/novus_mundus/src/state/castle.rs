@@ -297,8 +297,9 @@ pub struct CastleAccount {
     pub activates_at: i64,
     pub _activation_padding: [u8; 8],
 
-    // Reserved (16 bytes)
-    pub _reserved: [u8; 16],
+    // War-table key rotation epoch + Reserved (16 bytes)
+    pub membership_epoch: u32, // Consumes first 4 bytes of the old 16-byte _reserved
+    pub _reserved: [u8; 12],
 }
 
 impl CastleAccount {
@@ -862,7 +863,8 @@ pub struct GarrisonContributionAccount {
 
     // Flags (8 bytes)
     pub loot_claimed: bool,
-    pub _padding3: [u8; 7],
+    pub _pad_garrison_align: [u8; 3], // alignment pad so joined_at_epoch is 4-byte aligned
+    pub joined_at_epoch: u32,         // War-table membership epoch at join time
 }
 
 impl GarrisonContributionAccount {

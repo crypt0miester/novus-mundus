@@ -117,6 +117,7 @@ async function addPlayerToTeam(
     teamId,
     inviterSlotIndex: 0, // leader is always slot 0
     inviteePlayer: memberPlayerPda,
+    leaderPlayer: leader.playerPda,
   });
   await sendInstructions(ctx.svm, [inviteIx], [leader.keypair]);
 
@@ -128,6 +129,7 @@ async function addPlayerToTeam(
     teamId,
     slotIndex,
     inviteRefund: leader.publicKey,
+    leaderPlayer: leader.playerPda,
   });
   await sendInstructions(ctx.svm, [acceptIx], [member.keypair]);
 }

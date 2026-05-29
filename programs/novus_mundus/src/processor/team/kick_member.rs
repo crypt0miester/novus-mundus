@@ -175,6 +175,7 @@ pub fn process(
 
     let now = Clock::get()?.unix_timestamp;
     team.member_count = team.member_count.saturating_sub(1);
+    team.membership_epoch = team.membership_epoch.saturating_add(1); // rotate war-table key on access loss
     team.last_activity = now;
 
     // 10. Update Kicked Player Account

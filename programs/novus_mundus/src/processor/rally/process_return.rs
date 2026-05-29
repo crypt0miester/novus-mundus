@@ -438,6 +438,8 @@ pub fn process(
     // 12. Update counters and status
     participant.returned = true;
     rally.returned_count = rally.returned_count.saturating_add(1);
+    // note: one bump per return; over-rotation is harmless
+    rally.membership_epoch = rally.membership_epoch.saturating_add(1); // rotate war-table key on access loss
     // Skip decrement for leader of cancelled rallies — already decremented in cancel.rs
     if !(rally_status == RallyStatus::Cancelled as u8 && participant.is_leader) {
         if let Some(rs) = player.rally_stats_mut() {

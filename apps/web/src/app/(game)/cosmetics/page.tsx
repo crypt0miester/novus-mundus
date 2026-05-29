@@ -13,7 +13,7 @@ function CosmeticsContent() {
             WARDROBE
           </h1>
         </div>
-        <div className="min-h-0 flex-1 overflow-x-clip overflow-y-auto">
+        <div className="min-h-0 flex-1 overflow-x-clip overflow-y-auto px-1">
           <WardrobeTab />
         </div>
       </div>

@@ -204,6 +204,17 @@ body::before {
   background: color-mix(in srgb, var(--tier-scrollbar) 70%, white);
 }
 
+/* Opt-out for elements that size themselves to their content (e.g. an
+   auto-growing composer textarea), where the global 4px bar shows up as a
+   stray vertical line on subpixel overflow. Scrolling still works. */
+.no-scrollbar {
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
 /* ─── Gold effects ─── */
 
 .tier-title {

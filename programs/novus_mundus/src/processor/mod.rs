@@ -38,3 +38,4 @@ pub mod subscription;
 pub mod team;
 pub mod token;
 pub mod travel;
+pub mod war_table;

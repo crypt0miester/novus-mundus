@@ -132,7 +132,7 @@ pub struct RallyAccount {
     pub fallback_triggered: bool, // True if target had no garrison
     pub attacker_won: bool,       // True if rally won the battle
     pub bump: u8,
-    pub _padding5: [u8; 4],
+    pub membership_epoch: u32, // War-table key rotation epoch (consumes the old 4-byte _padding5)
 }
 
 impl RallyAccount {
@@ -385,7 +385,8 @@ pub struct RallyParticipant {
     pub contribution_power: u64, // Total power contributed
     pub contribution_bps: u16,   // Percentage of rally power (for loot share)
     pub bump: u8,
-    pub _padding6: [u8; 5],
+    pub _pad_join_align: u8,     // 1 byte alignment pad so joined_at_epoch is 4-byte aligned
+    pub joined_at_epoch: u32,    // War-table membership epoch at join time
 }
 
 impl RallyParticipant {

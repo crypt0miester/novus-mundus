@@ -133,7 +133,7 @@ export function HeroDetailPanel({
         </div>
       )}
 
-      <div className="space-y-1 text-[10px] text-text-muted">
+      <div className="space-y-1 flex flex-row text-[10px] text-text-muted gap-2">
         {attrs.Template && (
           <div>
             Template: <span className="font-mono">{attrs.Template}</span>

@@ -83,6 +83,8 @@ export interface RallyAccount {
   fallbackTriggered: boolean;
   attackerWon: boolean;
   bump: number;
+  /** War-table key version; bumps on every access-loss event (leave/cancel/return). */
+  membershipEpoch: number;
 }
 
 /** RallyAccount size in bytes (repr(C) layout with alignment padding) */
@@ -161,6 +163,8 @@ export interface RallyParticipant {
   contributionPower: BN;
   contributionBps: number;
   bump: number;
+  /** rally.membership_epoch snapshotted at join (servable key range starts here). */
+  joinedAtEpoch: number;
 }
 
 /** RallyParticipant size in bytes (repr(C) layout with alignment padding) */
@@ -254,7 +258,7 @@ export function deserializeRally(data: Uint8Array | Buffer): RallyAccount {
   const fallbackTriggered = reader.readBool();
   const attackerWon = reader.readBool();
   const bump = reader.readU8();
-  reader.skip(4); // padding
+  const membershipEpoch = reader.readU32();
 
   return {
     id,
@@ -304,6 +308,7 @@ export function deserializeRally(data: Uint8Array | Buffer): RallyAccount {
     fallbackTriggered,
     attackerWon,
     bump,
+    membershipEpoch,
   };
 }
 
@@ -389,7 +394,8 @@ export function deserializeRallyParticipant(data: Uint8Array | Buffer): RallyPar
   const contributionPower = reader.readU64();
   const contributionBps = reader.readU16();
   const bump = reader.readU8();
-  reader.skip(5); // padding
+  reader.skip(1); // _pad_join_align (alignment pad before the u32)
+  const joinedAtEpoch = reader.readU32();
 
   return {
     rallyId,
@@ -435,6 +441,7 @@ export function deserializeRallyParticipant(data: Uint8Array | Buffer): RallyPar
     contributionPower,
     contributionBps,
     bump,
+    joinedAtEpoch,
   };
 }
 

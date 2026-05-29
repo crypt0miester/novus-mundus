@@ -257,6 +257,7 @@ pub fn process(
 
     // Update castle garrison count
     castle.garrison_count = castle.garrison_count.saturating_sub(1);
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on access loss
     let garrison_count = castle.garrison_count;
 
     let total_weapons = melee.saturating_add(ranged).saturating_add(siege);

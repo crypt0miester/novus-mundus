@@ -594,6 +594,29 @@ export function deriveTeamCastleRewardPda(
   );
 }
 
+// War Table PDAs
+
+/**
+ * Derive the DM thread PDA from the two participants' PlayerAccount PDAs.
+ *
+ * The operands are the PLAYER PDAs (not wallets), sorted lexicographically by
+ * their raw 32 bytes so the result is symmetric: deriveDmThreadPda(A,B) ===
+ * deriveDmThreadPda(B,A). Seeds [b"wt_dm", lo, hi]. Throws on equal players.
+ */
+export function deriveDmThreadPda(
+  playerPdaA: PublicKey,
+  playerPdaB: PublicKey,
+): [PublicKey, number] {
+  const a = playerPdaA.toBuffer();
+  const b = playerPdaB.toBuffer();
+  const cmp = Buffer.compare(a as Uint8Array, b as Uint8Array);
+  if (cmp === 0) {
+    throw new Error('DM thread requires two distinct players');
+  }
+  const [lo, hi] = cmp < 0 ? [a, b] : [b, a];
+  return PublicKey.findProgramAddressSync([SEEDS.DM_THREAD, lo, hi], PROGRAM_ID);
+}
+
 // Name Service PDAs (ANS / TLD House)
 
 /** Hash prefix for ALT Name Service */

@@ -188,6 +188,7 @@ pub fn process(
 
     // Update castle ownership
     castle.king = *player_account.address();
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on ownership change
     castle.team = player.team_address();
     castle.claimed_at = now;
     castle.contest_end_at = now + CASTLE_CONTEST_DURATION;

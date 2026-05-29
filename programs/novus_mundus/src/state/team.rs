@@ -1,4 +1,4 @@
-use crate::constants::{TEAM_INVITE_SEED, TEAM_SEED, TEAM_SLOT_SEED};
+use crate::constants::{MAX_TEAM_MEMBERS_BY_TIER, TEAM_INVITE_SEED, TEAM_SEED, TEAM_SLOT_SEED};
 use pinocchio::error::ProgramError;
 use pinocchio::AccountView;
 use pinocchio::Address;
@@ -55,7 +55,8 @@ pub struct TeamAccount {
     pub treasury_instant_limit: [u64; 4], // 32 - Max per-tx instant withdrawal per rank
     pub treasury_daily_cap: [u64; 4],     // 32 - Max daily instant withdrawal per rank
     pub treasury_cooldown_hours: u8,      // 1  - Hours before large request executable (1-72)
-    pub _treasury_reserved: [u8; 7],      // 7  - Alignment to 8 bytes
+    pub _pad_epoch_align: [u8; 3],        // 3  - Explicit alignment pad (repr(C) would insert these anyway)
+    pub membership_epoch: u32,            // 4  - War-table key rotation epoch (4-byte aligned at offset 276)
 }
 
 // Settings bitfield constants
@@ -339,6 +340,25 @@ impl TeamAccount {
         self.member_count >= self.max_members
     }
 
+    /// Member-capacity ceiling for a leader of the given effective tier. The
+    /// `.min(3)` clamps any out-of-range tier to the top (Legendary) slot. This
+    /// is the single source of the tier->cap mapping shared by team creation,
+    /// the invite gate, and `refresh_capacity`.
+    pub fn tier_cap(leader_tier: u8) -> u16 {
+        MAX_TEAM_MEMBERS_BY_TIER[(leader_tier as usize).min(3)] as u16
+    }
+
+    /// Recompute `max_members` from the team leader's effective subscription tier.
+    ///
+    /// Capacity ratchets to the leader's current tier but is floored at the
+    /// current `member_count`, so a lapsed or downgraded leader subscription
+    /// never strands existing members; it only blocks new joins until attrition
+    /// brings the count back below the new tier cap. `leader_tier` is the
+    /// leader's effective tier (see `PlayerAccount::get_effective_tier`).
+    pub fn refresh_capacity(&mut self, leader_tier: u8) {
+        self.max_members = Self::tier_cap(leader_tier).max(self.member_count);
+    }
+
     /// Initialize a new team
     pub fn init(
         game_engine: Address,
@@ -377,7 +397,8 @@ impl TeamAccount {
             treasury_instant_limit: Self::DEFAULT_INSTANT_LIMIT,
             treasury_daily_cap: Self::DEFAULT_DAILY_CAP,
             treasury_cooldown_hours: Self::DEFAULT_COOLDOWN_HOURS,
-            _treasury_reserved: [0; 7],
+            _pad_epoch_align: [0; 3],
+            membership_epoch: 0,
         };
 
         let name_len = name.len().min(Self::MAX_NAME_LEN);
@@ -411,10 +432,10 @@ pub struct TeamMemberSlot {
     pub joined_at: i64, // 8 - When member joined
 
     // METADATA (8 bytes)
-    pub slot_index: u16,    // 2 - Slot index (0 to max_members-1)
-    pub bump: u8,           // 1 - PDA bump seed
-    pub rank: u8,           // 1 - Rank level (0=highest to 4=lowest)
-    pub _reserved: [u8; 4], // 4 - Future use
+    pub slot_index: u16,       // 2 - Slot index (0 to max_members-1)
+    pub bump: u8,              // 1 - PDA bump seed
+    pub rank: u8,              // 1 - Rank level (0=highest to 4=lowest)
+    pub joined_at_epoch: u32,  // 4 - War-table membership epoch at join time (4-byte aligned)
 
     // TREASURY TRACKING (16 bytes)
     pub treasury_withdrawn_today: u64, // 8 - Amount withdrawn via instant today
@@ -505,6 +526,7 @@ impl TeamMemberSlot {
         slot_index: u16,
         bump: u8,
         rank: u8,
+        joined_at_epoch: u32,
     ) -> Self {
         Self {
             account_key: crate::state::AccountKey::TeamMemberSlot as u8,
@@ -514,7 +536,7 @@ impl TeamMemberSlot {
             slot_index,
             bump,
             rank,
-            _reserved: [0; 4],
+            joined_at_epoch,
             treasury_withdrawn_today: 0,
             last_treasury_day: 0,
             _treasury_padding: [0; 6],

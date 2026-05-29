@@ -15,6 +15,7 @@ import { useSheetStore } from "@/lib/store/sheet";
 import { cn } from "@/lib/utils";
 import { TxButton } from "@/components/shared/TxButton";
 import { PRIMARY, SECONDARY, computePageLocks } from "./nav-config";
+import { useUnread } from "@/lib/hooks/useUnread";
 
 const ICON_BY_LABEL: Record<string, GameIconId> = {
   Home: "nav-home",
@@ -77,6 +78,7 @@ function prefersReducedMotion(): boolean {
 export function MorphTabBar() {
   const pathname = usePathname();
   const router = useRouter();
+  const unread = useUnread();
   const { data: playerData, isSuccess } = usePlayer();
   const { data: estateData } = useEstate();
   const showPanel = useRightPanelStore((s) => s.show);
@@ -443,8 +445,14 @@ export function MorphTabBar() {
                   key={item.href}
                   href={item.href!}
                   onClick={() => setOverflowOpen(false)}
-                  className={tileClass}
+                  className={cn(tileClass, "relative")}
                 >
+                  {item.href === "/messages" && unread.total > 0 && (
+                    <span
+                      className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent"
+                      aria-hidden
+                    />
+                  )}
                   <GameIcon id={iconId} title={item.label} size={16} className="shrink-0" />
                   <span className="w-full truncate text-center text-[10px] font-medium">
                     {item.label}
@@ -560,13 +568,20 @@ export function MorphTabBar() {
             disabled={disabled}
             onClick={() => setOverflowOpen((v) => !v)}
             className={cn(
-              "pointer-events-auto flex h-14 w-14 shrink-0 items-center justify-center rounded-full border shadow-xl shadow-black/40 backdrop-blur transition-colors",
+              "pointer-events-auto relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border shadow-xl shadow-black/40 backdrop-blur transition-colors",
               overflowOpen
                 ? "tier-accent-border tier-accent-text bg-surface-overlay/80"
                 : "border-border-default bg-[var(--nm-bg-bar)]/95 text-text-secondary active:bg-surface-overlay/60",
               disabled && "opacity-40",
             )}
           >
+            {/* Unread dot so mobile sees new messages before opening the overflow. */}
+            {!overflowOpen && unread.total > 0 && (
+              <span
+                className="absolute right-3 top-3 h-2.5 w-2.5 rounded-full border-2 border-[var(--nm-bg-bar)] bg-accent"
+                aria-hidden
+              />
+            )}
             <Plus ref={plusIconRef} className="h-6 w-6" style={{ willChange: "transform" }} />
           </button>
         )}

@@ -115,6 +115,7 @@ pub fn process(
     // Set castle to transitioning state (will become vacant after cleanup)
     castle.status = CASTLE_STATUS_TRANSITIONING;
     castle.king = NULL_PUBKEY;
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on access loss
     castle.team = NULL_PUBKEY;
     castle.transition_new_king = NULL_PUBKEY; // No new king - will be vacant
 

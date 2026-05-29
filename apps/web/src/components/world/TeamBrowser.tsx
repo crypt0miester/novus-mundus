@@ -13,12 +13,14 @@ import { useViewMode } from "@/lib/hooks/useViewMode";
 import Link from "next/link";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { useWallet } from "@solana/wallet-adapter-react";
+import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useTransact } from "@/lib/hooks/useTransact";
+import { useChainNow } from "@/lib/hooks/useChainTime";
+import { effectiveTeamCapacity } from "@/lib/teamCapacity";
 import { systemFraming } from "@/lib/narrative";
 import { useTransitionStore } from "@/lib/store/transition";
-import { createTeamJoinInstruction } from "novus-mundus-sdk";
+import { createTeamJoinInstruction, parsePlayer } from "novus-mundus-sdk";
 
 const HOUSE_FRAMING = systemFraming("house");
 
@@ -33,8 +35,10 @@ export function TeamBrowser() {
   const [view, setView] = useViewMode("teams");
 
   const { publicKey } = useWallet();
+  const { connection } = useConnection();
   const client = useNovusMundusClient();
   const transact = useTransact();
+  const nowSec = useChainNow();
 
   const filtered = useMemo(() => {
     if (!teams) return [];
@@ -74,10 +78,14 @@ export function TeamBrowser() {
 
   const handleJoin = async (t: (typeof filtered)[number], reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    // Capacity follows the leader's live subscription tier, not the stored cap.
+    const leaderInfo = await connection.getAccountInfo(t.account.leader);
+    const leaderCore = leaderInfo ? parsePlayer(leaderInfo) : null;
+    const capacity = effectiveTeamCapacity(t.account, leaderCore, nowSec);
     const slots = await client.fetchTeamMembers(t.pubkey);
     const usedSlots = new Set(slots.map((s) => s.account.slotIndex));
     let freeSlot = -1;
-    for (let i = 0; i < t.account.maxMembers; i++) {
+    for (let i = 0; i < capacity; i++) {
       if (!usedSlots.has(i)) {
         freeSlot = i;
         break;
@@ -90,6 +98,7 @@ export function TeamBrowser() {
       team: t.pubkey,
       teamId: t.account.id.toNumber(),
       slotIndex: freeSlot,
+      leaderPlayer: t.account.leader,
     });
     return transact
       .mutateAsync({

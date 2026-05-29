@@ -91,6 +91,7 @@ pub fn process(
         castle.status = CASTLE_STATUS_VACANT;
         castle.claimed_at = 0;
         castle.contest_end_at = 0;
+        castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on ownership change
 
         // Reset transition counters
         castle.transition_garrison_cleaned = 0;
@@ -166,6 +167,7 @@ pub fn process(
     castle.team = new_king.team_address();
     castle.transition_new_king = NULL_PUBKEY;
     castle.status = CASTLE_STATUS_PROTECTED;
+    castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on ownership change
     castle.claimed_at = now;
     // Protection period: now to now + protection_duration
     // is_protected() checks: now < contest_end_at + protection_duration

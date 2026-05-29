@@ -77,7 +77,7 @@ export function AssignmentGame({ presentation, submitting, onSubmit }: Assignmen
       </div>
       <GameFooter
         progress={{ done: sorted, total: items.length, noun: "sorted" }}
-        submitLabel={allSorted ? "Submit roll" : "Submit (unsorted count as wrong)"}
+        submitLabel={allSorted ? "Submit roll" : "Submit"}
         submitting={submitting}
         disabled={false}
         onSubmit={fireSubmit}

@@ -92,6 +92,9 @@ export interface CastleAccount {
   // Activation
   activatesAt: BN;
 
+  // War-table key version; bumps on every access-loss event.
+  membershipEpoch: number;
+
   // Computed helpers
   isVacant: boolean;
   hasKing: boolean;
@@ -127,6 +130,8 @@ export interface GarrisonContributionAccount {
   joinedAt: BN;
   lastClaimedAt: BN;
   bump: number;
+  /** castle.membership_epoch snapshotted at join (servable key range starts here). */
+  joinedAtEpoch: number;
 }
 
 // Team Castle Reward Account
@@ -240,8 +245,9 @@ export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
 
   // Activation (16 bytes)
   const activatesAt = reader.readI64();
-  // reader.skip(8); // _activation_padding
-  // reader.skip(16); // _reserved
+  reader.skip(8); // _activation_padding
+  const membershipEpoch = reader.readU32(); // first 4 bytes of _reserved
+  // remaining 12 bytes of _reserved are not read
 
   const isVacant = isNullPubkey(king);
   const hasKing = !isVacant;
@@ -294,6 +300,7 @@ export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
     transitionRewardsCleaned,
     transitionNewKing,
     activatesAt,
+    membershipEpoch,
     isVacant,
     hasKing,
   };
@@ -341,10 +348,12 @@ export function deserializeGarrisonContribution(data: Uint8Array | Buffer): Garr
   reader.skip(32); // hero_mint
   reader.skip(8); // hero_defense_bps, hero_weapon_eff_bps, _padding2
   reader.skip(24); // loot_melee, loot_ranged, loot_siege
-  reader.skip(8); // loot_claimed, _padding3
+  reader.skip(1); // loot_claimed (bool)
+  reader.skip(3); // _pad_garrison_align
+  const joinedAtEpoch = reader.readU32();
   const lastClaimedAt = joinedAt; // Not in Rust struct; using joinedAt for compatibility
 
-  return { castle, contributor, du1, du2, du3, joinedAt, lastClaimedAt, bump };
+  return { castle, contributor, du1, du2, du3, joinedAt, lastClaimedAt, bump, joinedAtEpoch };
 }
 
 export function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCastleRewardAccount {

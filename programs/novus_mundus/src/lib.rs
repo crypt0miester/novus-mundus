@@ -960,6 +960,12 @@ pub fn process_instruction(
             processor::cosmetic::equip::process(program_id, accounts, instruction_data)
         }
 
+        // War Table (323)
+        323 => {
+            msg!("post war table message");
+            processor::war_table::post::process(program_id, accounts, instruction_data)
+        }
+
         _ => Err(ProgramError::InvalidInstructionData),
     }
 }

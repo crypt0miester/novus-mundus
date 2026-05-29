@@ -2,7 +2,10 @@
  * team command — Manage team membership for test players
  *
  * Usage:
- *   novus team join --team-id <id> --count <n> [--start-slot <s>]
+ *   novus team join --team-id <id> --count <n> [--start-slot <s>] [--city <id>]
+ *
+ * `--city <id>` only joins candidate players whose current city matches — handy
+ * for seeding a team with same-city members. Open-join needs a PUBLIC team.
  */
 
 import { Keypair, PublicKey } from '@solana/web3.js';
@@ -15,13 +18,21 @@ import { sendWithRetry, log } from '../helpers';
 import {
   NovusMundusClient,
   createTeamJoinInstruction,
+  createPurchaseItemInstruction,
   deriveTeamPda,
   deriveTeamSlotPda,
   derivePlayerPda,
 } from '../../../src/index';
-import { deserializePlayer } from '../../../src/state/player';
+import { deserializePlayer, ExtensionFlags } from '../../../src/state/player';
+import { TeamSettings } from '../../../src/state/team';
 
 const NULL_PUBKEY = '11111111111111111111111111111111';
+
+// Team join requires EXT_INVENTORY (extension chain: research → inventory →
+// team). Beginner test players only have research unlocked; buying a gem pack
+// (item 1, item_type 50 — bypasses the Market gate) unlocks inventory as a side
+// effect, so the join can proceed.
+const INVENTORY_UNLOCK_ITEM_ID = 1;
 
 function getFlag(flags: string[], name: string): string | undefined {
   const idx = flags.indexOf(name);
@@ -35,7 +46,7 @@ export async function handleTeam(ctx: CLIContext, args: ParsedArgs): Promise<voi
       break;
     default:
       log.error(`Unknown subcommand: ${args.target || '(none)'}`);
-      log.info('  Usage: novus team join --team-id <id> --count <n> [--start-slot <s>]');
+      log.info('  Usage: novus team join --team-id <id> --count <n> [--start-slot <s>] [--city <id>]');
   }
 }
 
@@ -43,6 +54,8 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const teamIdStr = getFlag(args.flags, '--team-id');
   const count = parseInt(getFlag(args.flags, '--count') || '1', 10);
   const startSlot = parseInt(getFlag(args.flags, '--start-slot') || '0', 10);
+  const cityStr = getFlag(args.flags, '--city');
+  const cityFilter = cityStr !== undefined ? parseInt(cityStr, 10) : undefined;
 
   if (!teamIdStr) {
     log.error('Specify --team-id <id>');
@@ -72,9 +85,21 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
+  // Open-join is only valid for PUBLIC teams (join.rs rejects others with
+  // TeamNotPublic). Bail with one clear message instead of per-player spam.
+  if ((team.settings & TeamSettings.PUBLIC) === 0) {
+    log.error(
+      `Team ${teamId} ("${team.name || '(unnamed)'}") is invite-only. The leader can make it public (team settings) for open join, or use invites.`,
+    );
+    return;
+  }
+
   const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
 
-  log.info(`\nTeam "${team.name || '(unnamed)'}" — ${team.memberCount}/${team.maxMembers} members`);
+  log.info(
+    `\nTeam "${team.name || '(unnamed)'}" — ${team.memberCount}/${team.maxMembers} members` +
+      (cityFilter !== undefined ? ` (joining city ${cityFilter} only)` : ''),
+  );
 
   const freeSlots: number[] = [];
   for (let s = startSlot; s < team.maxMembers; s++) {
@@ -110,6 +135,28 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     const player = deserializePlayer(info.data);
     if (player.team.toBase58() !== NULL_PUBKEY) continue;
     if (player.level < team.minLevelToJoin) continue;
+    if (cityFilter !== undefined && player.currentCity !== cityFilter) continue;
+
+    // Seed EXT_INVENTORY when missing — the join reverts with the inventory
+    // prerequisite (0x1d7e) otherwise. A cheap gem-pack buy unlocks it.
+    if ((player.extensions & ExtensionFlags.INVENTORY) === 0) {
+      try {
+        const buyIx = createPurchaseItemInstruction(
+          {
+            buyer: kp.publicKey,
+            gameEngine: ctx.gameEngine,
+            itemId: INVENTORY_UNLOCK_ITEM_ID,
+            treasury: ctx.treasury.publicKey,
+          },
+          { quantity: 1 },
+        );
+        await sendWithRetry(ctx, buyIx, [kp]);
+        log.info(`    ${file}: unlocked inventory (shop item ${INVENTORY_UNLOCK_ITEM_ID})`);
+      } catch (e: any) {
+        log.info(`  ! ${file}: inventory unlock failed — ${String(e?.message || e).split('\n')[0]}`);
+        continue;
+      }
+    }
 
     const slot = freeSlots.shift()!;
     try {

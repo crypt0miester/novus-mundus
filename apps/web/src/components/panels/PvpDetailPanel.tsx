@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
@@ -38,6 +39,7 @@ const PVP_RANGE = PVP_ATTACK_RANGE_METERS;
  */
 export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
   const { publicKey } = useWallet();
+  const router = useRouter();
   const client = useNovusMundusClient();
   const transact = useTransact();
   const { data: playerData } = usePlayer();
@@ -252,6 +254,15 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
               : `Garrison may break — ${targetOps.toLocaleString()} ops exposed`}
           </div>
         )}
+
+      {/* Open a direct-message thread with this player (navigation, not a tx). */}
+      <button
+        type="button"
+        className="w-full rounded-md border border-zinc-700 px-3 py-1.5 text-sm text-text-muted hover:text-text-primary"
+        onClick={() => router.push(`/messages/${target.pubkey.toBase58()}`)}
+      >
+        Message
+      </button>
 
       {!playerTraveling && (
         <div className="hidden space-y-2 lg:block">

@@ -12,6 +12,7 @@ import { useRightPanelStore } from "@/lib/store/right-panel";
 import { useSheetStore } from "@/lib/store/sheet";
 import { cn } from "@/lib/utils";
 import { PRIMARY, SECONDARY, computePageLocks } from "./nav-config";
+import { useUnread } from "@/lib/hooks/useUnread";
 
 function NavLink({
   href,
@@ -20,6 +21,7 @@ function NavLink({
   active,
   locked,
   disabled,
+  badge,
 }: {
   href: string;
   label: string;
@@ -27,6 +29,7 @@ function NavLink({
   active: boolean;
   locked: boolean;
   disabled: boolean;
+  badge?: boolean;
 }) {
   const sizeClass = size === "primary" ? "text-sm font-semibold" : "text-[11px] font-medium";
 
@@ -48,6 +51,12 @@ function NavLink({
       )}
     >
       {label}
+      {badge && (
+        <span
+          className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-accent align-middle"
+          aria-hidden
+        />
+      )}
       {locked && <span className="ml-0.5 text-[9px] text-zinc-700">&#9676;</span>}
     </Link>
   );
@@ -55,6 +64,7 @@ function NavLink({
 
 export function TopBar() {
   const pathname = usePathname();
+  const unread = useUnread();
   const { data: playerData, isSuccess } = usePlayer();
   const { data: estateData } = useEstate();
   const player = playerData?.account;
@@ -185,6 +195,7 @@ export function TopBar() {
                 active={isActive(item.href!)}
                 locked={!!pageLocked[item.href!]}
                 disabled={disabled}
+                badge={item.href === "/messages" && unread.total > 0}
               />
             ),
           )}

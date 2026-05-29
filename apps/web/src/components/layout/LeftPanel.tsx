@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
+import { MessageSquare } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
@@ -22,10 +24,12 @@ import { useSheetStore } from "@/lib/store/sheet";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import { CairnReport } from "@/components/cairn/CairnReport";
 import { createUpdateLockedNoviInstruction, deciToNovi } from "novus-mundus-sdk";
+import { useUnread } from "@/lib/hooks/useUnread";
 
 /** Desktop left sidebar — vertical card stack with player data + resources. */
 export function LeftPanel() {
   const { publicKey } = useWallet();
+  const unread = useUnread();
   const { data: playerData } = usePlayer();
   const { data: estateData } = useEstate();
   const client = useNovusMundusClient();
@@ -91,6 +95,22 @@ export function LeftPanel() {
         </div>
         <div className="mt-1 text-xs text-text-muted">Level {player.level}</div>
       </div>
+
+      {/* Messages — unread DMs + team war-room (count from useUnread). */}
+      <Link
+        href="/messages"
+        className="flex items-center justify-between rounded-lg border border-border-default bg-surface-raised p-3 transition-colors hover:border-[var(--seal)]"
+      >
+        <span className="flex items-center gap-1.5 text-xs text-text-muted">
+          <MessageSquare className="h-3.5 w-3.5" />
+          Messages
+        </span>
+        {unread.total > 0 && (
+          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-bold text-surface">
+            {unread.total}
+          </span>
+        )}
+      </Link>
 
       {/* Stamina */}
       <div className="rounded-lg border border-border-default bg-surface-raised p-3">
@@ -248,17 +268,13 @@ export function LeftPanelMobile() {
   if (!player) return null;
 
   return (
-    // On /map the bar sits above the fullscreen disc (z-30) so the
-    // player identity stays readable; elsewhere we keep the default
-    // stacking so the bar doesn't poke through wallet/auth modals
-    // (z-50).
     <div
       className={cn(
         "border-b border-border-default bg-[var(--nm-bg-bar)]",
         mapFullscreen && "relative z-[55]",
       )}
     >
-      <div className="flex h-10 w-full items-center gap-2 px-4 text-xs">
+      <div className="flex h-10 w-full items-center gap-2 px-2 text-xs">
         <button
           onClick={() => setExpanded(!expanded)}
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
