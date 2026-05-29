@@ -121,10 +121,7 @@ export function DungeonClaimPanel() {
   if (!run) {
     return <p className="text-sm text-text-muted">No dungeon run to claim.</p>;
   }
-  const score =
-    run.currentFloor * 10000 +
-    run.enemiesKilled * 100 +
-    run.relicsCollected * 500;
+  const score = run.currentFloor * 10000 + run.enemiesKilled * 100 + run.relicsCollected * 500;
   const stats = [
     { label: "Floors", value: fmt(run.currentFloor) },
     { label: "Rooms cleared", value: fmt(run.roomsCleared) },
@@ -138,28 +135,18 @@ export function DungeonClaimPanel() {
     <div className="space-y-4">
       <div
         className={`rounded-lg border p-3 ${
-          won
-            ? "border-emerald-700/50 bg-emerald-950/20"
-            : "border-red-800/50 bg-red-950/20"
+          won ? "border-emerald-700/50 bg-emerald-950/20" : "border-red-800/50 bg-red-950/20"
         }`}
       >
-        <div
-          className={`text-base font-bold ${won ? "text-emerald-400" : "text-red-400"}`}
-        >
+        <div className={`text-base font-bold ${won ? "text-emerald-400" : "text-red-400"}`}>
           {won ? "Dungeon Cleared" : "Run Ended"}
         </div>
-        <div className="mt-0.5 text-xs text-text-muted">
-          Run score: {fmt(score)}
-        </div>
+        <div className="mt-0.5 text-xs text-text-muted">Run score: {fmt(score)}</div>
         <div className="mt-3 grid grid-cols-2 gap-3">
           {stats.map((s) => (
             <div key={s.label}>
-              <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                {s.label}
-              </div>
-              <div className="text-sm font-semibold text-text-primary">
-                {s.value}
-              </div>
+              <div className="text-[10px] uppercase tracking-wider text-text-muted">{s.label}</div>
+              <div className="text-sm font-semibold text-text-primary">{s.value}</div>
             </div>
           ))}
         </div>
@@ -174,8 +161,8 @@ export function DungeonClaimPanel() {
       {failed && (
         <div className="space-y-2">
           <p className="text-xs text-text-muted">
-            Resume from the last checkpoint (floor {run.lastCheckpoint ?? 0}) —
-            costs gems — or claim what you carried.
+            Resume from the last checkpoint (floor {run.lastCheckpoint ?? 0}) — costs gems — or
+            claim what you carried.
           </p>
           <TxButton onClick={handleResume} className="hidden w-full lg:block">
             Resume from Checkpoint

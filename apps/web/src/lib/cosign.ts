@@ -3,10 +3,7 @@
 import { useCallback } from "react";
 import { VersionedTransaction } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import type {
-  SolanaSignInInput,
-  SolanaSignInOutput,
-} from "@solana/wallet-standard-features";
+import type { SolanaSignInInput, SolanaSignInOutput } from "@solana/wallet-standard-features";
 
 /**
  * Client helpers for the game_authority co-sign API (`/api/cosign/*`).
@@ -78,34 +75,20 @@ export function deserializeCoSignTx(base64: string): VersionedTransaction {
   return VersionedTransaction.deserialize(base64ToBytes(base64));
 }
 
-/** GET a co-sign endpoint — used for ungated previews (e.g. the relic offer). */
-export async function fetchCoSign<T>(endpoint: string): Promise<T> {
-  const res = await fetch(endpoint);
-  const json = (await res.json().catch(() => ({}))) as T & { error?: string };
-  if (!res.ok) {
-    throw new Error(json.error ?? `request failed (${res.status})`);
-  }
-  return json;
-}
-
 /**
- * POST a session-gated endpoint. On a 401 it runs the SIWS flow once (via
- * `signIn`) and retries; the resulting `Response` is returned undecoded so the
- * caller can parse it however it needs.
+ * Fetch a session-gated endpoint. On a 401 it runs the SIWS flow once (via
+ * `signIn`) and retries; the `Response` is returned undecoded so the caller can
+ * parse it however it needs. Used by both the POST co-sign endpoints and the
+ * GET previews (e.g. the relic offer), which are session-gated too.
  */
-async function postWithSiws(
+async function fetchWithSiws(
   endpoint: string,
-  body: Record<string, unknown>,
+  init: RequestInit | undefined,
   signIn: SignIn | undefined,
 ): Promise<Response> {
-  const post = () =>
-    fetch(endpoint, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(body),
-    });
+  const run = () => fetch(endpoint, init);
 
-  const res = await post();
+  const res = await run();
   if (res.status !== 401) return res;
 
   if (!signIn) {
@@ -114,7 +97,15 @@ async function postWithSiws(
     );
   }
   await establishSession(signIn);
-  return post();
+  return run();
+}
+
+function jsonPost(body: Record<string, unknown>): RequestInit {
+  return {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  };
 }
 
 /**
@@ -125,11 +116,8 @@ export function useCoSign() {
   const { signIn } = useWallet();
 
   const requestCoSign = useCallback(
-    async (
-      endpoint: string,
-      body: Record<string, unknown> = {},
-    ): Promise<VersionedTransaction> => {
-      const res = await postWithSiws(endpoint, body, signIn);
+    async (endpoint: string, body: Record<string, unknown> = {}): Promise<VersionedTransaction> => {
+      const res = await fetchWithSiws(endpoint, jsonPost(body), signIn);
 
       const json = (await res.json().catch(() => ({}))) as {
         transaction?: string;
@@ -149,11 +137,8 @@ export function useCoSign() {
    * lazy-SIWS handling as `requestCoSign`.
    */
   const requestJson = useCallback(
-    async <T>(
-      endpoint: string,
-      body: Record<string, unknown> = {},
-    ): Promise<T> => {
-      const res = await postWithSiws(endpoint, body, signIn);
+    async <T>(endpoint: string, body: Record<string, unknown> = {}): Promise<T> => {
+      const res = await fetchWithSiws(endpoint, jsonPost(body), signIn);
 
       const json = (await res.json().catch(() => ({}))) as T & {
         error?: string;
@@ -166,5 +151,25 @@ export function useCoSign() {
     [signIn],
   );
 
-  return { requestCoSign, requestJson };
+  /**
+   * Hook variant for session-gated GET previews (e.g. the dungeon relic offer).
+   * Same lazy-SIWS handling as `requestJson`; owner is derived from the session
+   * server-side, so no query param is needed.
+   */
+  const requestGetJson = useCallback(
+    async <T>(endpoint: string): Promise<T> => {
+      const res = await fetchWithSiws(endpoint, undefined, signIn);
+
+      const json = (await res.json().catch(() => ({}))) as T & {
+        error?: string;
+      };
+      if (!res.ok) {
+        throw new Error(json.error ?? `request failed (${res.status})`);
+      }
+      return json;
+    },
+    [signIn],
+  );
+
+  return { requestCoSign, requestJson, requestGetJson };
 }

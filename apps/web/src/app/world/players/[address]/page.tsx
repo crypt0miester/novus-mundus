@@ -2,6 +2,7 @@
 
 import { use, useMemo, useState } from "react";
 import Link from "next/link";
+import { PublicKey } from "@solana/web3.js";
 import { Copy, Check, Share2 } from "lucide-react";
 import { useWorldPlayer, useWorldCities, useWorldTeams, useCitizenStatus } from "@/lib/hooks/world";
 import { GoldNumber } from "@/components/shared/GoldNumber";
@@ -9,7 +10,7 @@ import { Badge } from "@/components/shared/Badge";
 import { ProgressRing } from "@/components/shared/ProgressRing";
 import { UnitGrid } from "@/components/shared/UnitGrid";
 import { PageTransition } from "@/components/shared/PageTransition";
-import { cn, shortenAddress } from "@/lib/utils";
+import { shortenAddress } from "@/lib/utils";
 import { useDomainName } from "@/lib/hooks/useDomainName";
 import {
   isNullPubkey,
@@ -73,9 +74,21 @@ function initialOf(name: string): string {
   return first ? first.toUpperCase() : "?";
 }
 
+/** Parse a base58 wallet param to a PublicKey, or null if malformed. */
+function parsePubkeyParam(value: string): PublicKey | null {
+  try {
+    return new PublicKey(value);
+  } catch {
+    return null;
+  }
+}
+
 export default function PlayerProfilePage({ params }: { params: Promise<{ address: string }> }) {
   const { address } = use(params);
-  const { data: result, isLoading } = useWorldPlayer(address);
+  // Narrow the route param before any query so a malformed address is a clean
+  // not-found here instead of a thrown `new PublicKey(...)` inside the queryFn.
+  const parsedAddress = useMemo(() => parsePubkeyParam(address), [address]);
+  const { data: result, isLoading } = useWorldPlayer(parsedAddress ? address : undefined);
   const { data: cities } = useWorldCities();
   const { data: teams } = useWorldTeams();
   const citizen = useCitizenStatus();
@@ -118,6 +131,30 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
     setTimeout(() => setCopiedLink(false), 1500);
   };
 
+  if (!parsedAddress) {
+    return (
+      <PageTransition>
+        <div className="mx-auto max-w-3xl space-y-6">
+          <h1 className="tier-title font-display text-3xl font-bold tracking-wide">
+            PLAYER NOT FOUND
+          </h1>
+          <div className="card">
+            <p className="text-sm text-text-muted">
+              <span className="font-mono text-text-secondary">{shortenAddress(address, 8)}</span> is
+              not a valid wallet address.
+            </p>
+            <Link
+              href="/world"
+              className="mt-3 inline-block text-sm text-text-gold hover:underline"
+            >
+              Back to Realm Overview
+            </Link>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
+
   if (isLoading) {
     return (
       <div className="flex min-h-[60vh] items-center justify-center text-text-muted">
@@ -126,7 +163,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
     );
   }
 
-  if (!result || !result.exists || !result.account) {
+  if (!result?.exists || !result.account) {
     return (
       <PageTransition>
         <div className="mx-auto max-w-3xl space-y-6">
@@ -174,8 +211,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
   const xpToNext = xpRequiredForLevel(player.level + 1);
   const xpCurrent = player.currentXp.toNumber();
 
-  const isSelf =
-    citizen.isCitizen && citizen.player && citizen.player.owner.toBase58() === address;
+  const isSelf = citizen.isCitizen && citizen.player && citizen.player.owner.toBase58() === address;
 
   const sameCity =
     citizen.isCitizen &&

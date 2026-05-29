@@ -12,20 +12,14 @@ import {
   BuildingType,
 } from "novus-mundus-sdk";
 import { gameAuthorityKeypair } from "@/lib/server/game-authority";
-import {
-  estatePda,
-  gameEnginePda,
-  getEstate,
-  getPlayer,
-  playerPda,
-} from "@/lib/server/chain";
+import { estatePda, gameEnginePda, getEstate, getPlayer, playerPda } from "@/lib/server/chain";
 import { coSign } from "@/lib/server/cosign";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollScore } from "@/lib/server/score-logic";
 import { coSignResponse, fail, parseSessionBody } from "@/lib/server/route-helpers";
 import { ARCHETYPES } from "@/lib/server/minigame/archetypes";
 import { getBuildingMinigame } from "@/lib/server/minigame/buildings";
-import { finalScore } from "@/lib/server/minigame/grade";
+import { finalScore, validateAnswer } from "@/lib/server/minigame/grade";
 import { activityPreconditionError } from "@/lib/server/minigame/preconditions";
 import {
   claimSubmit,
@@ -105,9 +99,7 @@ export async function POST(req: Request) {
     // Sanctuary: bless the player's chosen hero, validated against the roster;
     // fall back to the first locked hero (keeps the pre-choice-screen UI working).
     const playerAccount = await getPlayer(owner);
-    const activeHeroes = (playerAccount?.activeHeroes ?? []).filter(
-      (h) => !isNullPubkey(h),
-    );
+    const activeHeroes = (playerAccount?.activeHeroes ?? []).filter((h) => !isNullPubkey(h));
     if (body.heroMint != null) {
       let chosen: PublicKey;
       try {
@@ -173,10 +165,7 @@ export async function POST(req: Request) {
   // completes its window. Excluded for Citadel (the score *is* the stance) and
   // Sanctuary (Class A — the program ignores its score anyway).
   let windowBonus = 0;
-  if (
-    buildingType !== BuildingType.Citadel &&
-    buildingType !== BuildingType.MeditationChamber
-  ) {
+  if (buildingType !== BuildingType.Citadel && buildingType !== BuildingType.MeditationChamber) {
     windowBonus = windowCompletionBonus(estate, buildingType, now);
     score = Math.min(100, score + windowBonus);
   }
@@ -253,10 +242,14 @@ async function gradeSession(
     return { error: fail("this mini-game was already submitted", 409, "ALREADY_SUBMITTED") };
   }
   if (Date.now() > session.deadline) {
-    return { error: fail("the mini-game session has expired — start it again", 409, "SESSION_EXPIRED") };
+    return {
+      error: fail("the mini-game session has expired — start it again", 409, "SESSION_EXPIRED"),
+    };
   }
   if (session.window !== currentWindow) {
-    return { error: fail("the activity window changed — refresh and replay", 409, "WINDOW_CHANGED") };
+    return {
+      error: fail("the activity window changed — refresh and replay", 409, "WINDOW_CHANGED"),
+    };
   }
 
   // Atomically claim the right to co-sign this session (double-submit guard).
@@ -281,7 +274,13 @@ async function gradeSession(
     }
     return { score: session.score, session };
   }
-  // Single-submit: grade the answer now.
+  // Single-submit: validate the answer's shape and range before grading, so a
+  // malformed answer is rejected cleanly rather than coerced to a silent zero.
+  const invalid = validateAnswer(session.archetype, session.puzzle, session.presentation, answer);
+  if (invalid) {
+    await releaseSubmit(session.id).catch(() => {});
+    return { error: fail(`malformed answer: ${invalid}`, 400, "BAD_ANSWER") };
+  }
   return {
     score: finalScore(archetype.grade(session.puzzle, session.progress, answer)),
     session,

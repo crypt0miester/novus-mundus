@@ -46,11 +46,7 @@ export function GoldCountdown({
         barRef.current.style.width = `${pct}%`;
       }
 
-      if (
-        remaining > 0 &&
-        remaining <= urgentThreshold &&
-        timerRef.current
-      ) {
+      if (remaining > 0 && remaining <= urgentThreshold && timerRef.current) {
         timerRef.current.classList.add("text-danger");
         timerRef.current.classList.remove("text-text-gold");
       }
@@ -75,19 +71,12 @@ export function GoldCountdown({
 
   return (
     <div className="flex flex-col gap-1">
-      {label && (
-        <span className="text-xs uppercase tracking-wider text-zinc-500">
-          {label}
-        </span>
-      )}
+      {label && <span className="text-xs uppercase tracking-wider text-zinc-500">{label}</span>}
       <div className="flex items-center gap-2">
         <span className="text-zinc-500">◷</span>
         <span
           ref={timerRef}
-          className={cn(
-            "font-mono tabular-nums text-text-gold",
-            sizeClasses[size]
-          )}
+          className={cn("font-mono tabular-nums text-text-gold", sizeClasses[size])}
         />
       </div>
       {showProgress && (

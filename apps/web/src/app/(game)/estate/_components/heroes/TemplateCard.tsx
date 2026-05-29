@@ -26,9 +26,7 @@ export function TemplateCard({ template: t, isSelected, onClick }: TemplateCardP
     >
       <div className="flex items-center justify-between">
         <div className="min-w-0">
-          <div className="truncate text-sm font-semibold text-text-primary">
-            {t.account.name}
-          </div>
+          <div className="truncate text-sm font-semibold text-text-primary">{t.account.name}</div>
           <div className="text-[10px] text-text-muted">
             #{t.account.templateId} · {supply}
           </div>
@@ -51,7 +49,7 @@ export function TemplateCard({ template: t, isSelected, onClick }: TemplateCardP
                 {icon ? (
                   <GameIcon id={icon} title={getBuffStatMeta(b.stat)?.name} size={13} />
                 ) : (
-                  <>{getBuffStatMeta(b.stat)?.abbr ?? "?"}</>
+                  (getBuffStatMeta(b.stat)?.abbr ?? "?")
                 )}
                 <span className="font-mono text-text-secondary">{b.baseBps}</span>
               </span>

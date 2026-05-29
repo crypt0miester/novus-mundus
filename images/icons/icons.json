@@ -61,6 +61,13 @@
 
     { "id": "sanctuary-meditation",         "set": "relief", "seed": 1742, "subject": "A cairn — a stack of smooth flat weathered stones balanced into a tapering tower, the largest stone at the bottom and the smallest on top. Just the stack of stones and nothing else. No people, no figures, no face." },
 
+    { "id": "ability-buff-next",            "set": "relief", "seed": 1771, "generator": "bonsai", "subject": "A radiant compass star with a single arrowhead replacing the north tip, pointing forward and slightly upward. No coin, no disc, no medallion behind it." },
+    { "id": "ability-crit-next",            "set": "relief", "seed": 1772, "generator": "bonsai", "subject": "A single broad arrowhead embedded dead-center in a concentric struck target, the rings cracked outward from the impact." },
+    { "id": "ability-shield-next",          "set": "relief", "seed": 1773, "generator": "bonsai", "subject": "A heavy heater shield face-forward, a single arrow snapped in half across its face with both broken pieces hanging loose against the shield." },
+    { "id": "ability-encounter-skip",       "set": "relief", "seed": 1774, "generator": "bonsai", "subject": "An open stone doorway cut into a wall, a heavy iron key resting in the lock at the latch, light spilling forward through the open gap." },
+    { "id": "ability-instant-resource",     "set": "relief", "seed": 1775, "generator": "bonsai", "subject": "A burst leather coin pouch with three coins lifting in mid-air above its open mouth, the drawstring snapped and trailing." },
+    { "id": "ability-fragment-refund",      "set": "relief", "seed": 1776, "generator": "bonsai", "subject": "Three jagged crystal shards arranged in a tight triangular cluster, the largest shard upright in the centre and the two smaller shards flanking it." },
+
     { "id": "weapon-melee",                 "set": "flat",   "seed": 1801, "subject": "Two swords crossed in a saltire." },
     { "id": "weapon-ranged",                "set": "flat",   "seed": 1802, "subject": "A drawn longbow with a single nocked arrow." },
     { "id": "weapon-siege",                 "set": "flat",   "seed": 1803, "subject": "A torsion catapult with its throwing arm cocked back." },

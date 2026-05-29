@@ -12,18 +12,13 @@ import { useDomainStore } from "@/lib/store/domains";
  *
  * Use for leaderboards, garrison lists, team rosters, combat logs.
  */
-export function useDomainNames(
-  owners: (PublicKey | string)[] | null | undefined,
-) {
+export function useDomainNames(owners: (PublicKey | string)[] | null | undefined) {
   const { connection } = useConnection();
   const resolveBatch = useDomainStore((s) => s.resolveBatch);
   const names = useDomainStore((s) => s.names);
 
   const keys = useMemo(
-    () =>
-      (owners ?? []).map((o) =>
-        typeof o === "string" ? o : o.toBase58(),
-      ),
+    () => (owners ?? []).map((o) => (typeof o === "string" ? o : o.toBase58())),
     [owners],
   );
 

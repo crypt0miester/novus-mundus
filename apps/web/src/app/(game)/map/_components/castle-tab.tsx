@@ -8,11 +8,13 @@ import { useCastle } from "@/lib/hooks/useCastle";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
+import { useCourtRoster, useGarrisonRoster } from "@/lib/hooks/useCastleRosters";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { systemFraming } from "@/lib/narrative";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
+import { CastleBanner } from "@/components/castles/CastleBanner";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
@@ -31,7 +33,6 @@ import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransitionStore } from "@/lib/store/transition";
 import { bpsToPercent, formatTime, shortenAddress } from "@/lib/utils";
 import {
-  deriveCourtPda,
   createClaimVacantCastleInstruction,
   createJoinGarrisonInstruction,
   createLeaveGarrisonInstruction,
@@ -44,15 +45,8 @@ import {
   createRelieveGarrisonInstruction,
   createClaimGarrisonLootInstruction,
   createAttackCastleInstruction,
-  parseCourtPosition,
-  parseGarrisonContribution,
   parsePlayer,
-  AccountKey,
-  PROGRAM_ID as NOVUS_PROGRAM_ID,
-  type CourtPositionAccount,
-  type GarrisonContributionAccount,
 } from "novus-mundus-sdk";
-import bs58 from "bs58";
 import {
   CASTLE_TIER_NAMES,
   CASTLE_STATUS_NAMES,
@@ -139,15 +133,6 @@ export function CastleTab() {
       : null;
   const { data: houseMembers } = useTeamMembers(houseKey);
 
-  // Court roster — court positions are enumerable: 5 fixed slots per castle.
-  // Each entry carries the holder's player PDA + resolved owner wallet.
-  const [courtRoster, setCourtRoster] = useState<
-    { position: number; account: CourtPositionAccount; ownerWallet: PublicKey | null }[]
-  >([]);
-  // Garrison roster — fetched via getProgramAccounts filtered on the castle pubkey.
-  const [garrisonRoster, setGarrisonRoster] = useState<
-    { account: GarrisonContributionAccount; ownerWallet: PublicKey | null }[]
-  >([]);
   // House members eligible for court appointment — sworn members resolved to
   // their owner wallets, with the king's own wallet excluded.
   const [courtCandidates, setCourtCandidates] = useState<
@@ -168,76 +153,20 @@ export function CastleTab() {
     return out;
   };
 
-  // Fetch court roster: derive all 5 court PDAs, fetch + parse, resolve holder wallets.
-  useEffect(() => {
-    if (!castlePda) {
-      setCourtRoster([]);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const courtPdas = [0, 1, 2, 3, 4].map((i) => deriveCourtPda(castlePda, i)[0]);
-      const infos = await connection.getMultipleAccountsInfo(courtPdas);
-      const occupied: { position: number; account: CourtPositionAccount }[] = [];
-      for (let i = 0; i < infos.length; i++) {
-        const info = infos[i];
-        if (!info) continue;
-        const parsed = parseCourtPosition(info);
-        if (parsed) occupied.push({ position: i, account: parsed });
-      }
-      const wallets = await resolveWallets(occupied.map((c) => c.account.holder));
-      if (cancelled) return;
-      setCourtRoster(
-        occupied.map((c) => ({
-          position: c.position,
-          account: c.account,
-          ownerWallet: wallets.get(c.account.holder.toBase58()) ?? null,
-        })),
-      );
-    })().catch(() => {
-      if (!cancelled) setCourtRoster([]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [castlePda?.toBase58(), connection, transact.isPending]);
-
-  // Fetch garrison roster via getProgramAccounts filtered on castle pubkey.
-  useEffect(() => {
-    if (!castlePda) {
-      setGarrisonRoster([]);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      const keyByte = bs58.encode(Buffer.from([AccountKey.CastleGarrison]));
-      const accounts = await connection.getProgramAccounts(NOVUS_PROGRAM_ID, {
-        filters: [
-          { memcmp: { offset: 0, bytes: keyByte } },
-          // castle pubkey is the first field after the 1-byte account_key
-          { memcmp: { offset: 1, bytes: castlePda.toBase58() } },
-        ],
-      });
-      const parsedList: GarrisonContributionAccount[] = [];
-      for (const { account } of accounts) {
-        const parsed = parseGarrisonContribution(account);
-        if (parsed) parsedList.push(parsed);
-      }
-      const wallets = await resolveWallets(parsedList.map((g) => g.contributor));
-      if (cancelled) return;
-      setGarrisonRoster(
-        parsedList.map((g) => ({
-          account: g,
-          ownerWallet: wallets.get(g.contributor.toBase58()) ?? null,
-        })),
-      );
-    })().catch(() => {
-      if (!cancelled) setGarrisonRoster([]);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [castlePda?.toBase58(), connection, transact.isPending]);
+  // Court roster — court positions are enumerable: 5 fixed slots per castle.
+  // Each entry carries the holder's player PDA + resolved owner wallet.
+  // Garrison roster — fetched via getProgramAccounts filtered on the castle
+  // pubkey. Both re-fetch when a transaction settles (transact.isPending).
+  const courtRoster = useCourtRoster({
+    castlePda,
+    refresh: transact.isPending,
+    resolveWallets,
+  });
+  const garrisonRoster = useGarrisonRoster({
+    castlePda,
+    refresh: transact.isPending,
+    resolveWallets,
+  });
 
   // Resolve the king's House members to owner wallets for the court picker.
   // The king cannot appoint themselves, so their own wallet is dropped.
@@ -623,6 +552,7 @@ export function CastleTab() {
       {/* Castle Info */}
       {castle ? (
         <>
+          <CastleBanner castle={castle} />
           <div className="card accent-border">
             <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
               <div>
@@ -682,7 +612,7 @@ export function CastleTab() {
                     ) : (
                       <div className="mt-1 text-xs text-text-secondary">Vacant</div>
                     )}
-                    {isKing && member && member.ownerWallet && (
+                    {isKing && member?.ownerWallet && (
                       <TxButton
                         onClick={(rp) => handleDismissCourt(i, member.ownerWallet!, rp)}
                         variant="danger"

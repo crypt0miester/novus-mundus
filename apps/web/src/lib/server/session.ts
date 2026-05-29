@@ -1,5 +1,6 @@
 import "server-only";
 import { createHmac, timingSafeEqual } from "node:crypto";
+import { redis } from "./redis";
 
 /**
  * Stateless Sign-In-With-Solana session primitives for the co-sign API.
@@ -11,19 +12,17 @@ import { createHmac, timingSafeEqual } from "node:crypto";
  * token are self-verifying: signed with `SESSION_SECRET` and time-bounded.
  */
 
-const SECRET =
-  process.env.SESSION_SECRET ?? process.env.GAME_AUTHORITY_RNG_SECRET ?? "";
+const SESSION_SECRET = process.env.SESSION_SECRET;
+if (!SESSION_SECRET) throw new Error("SESSION_SECRET must be set");
+// Re-bind with an explicit type so the value stays `string` inside closures
+// like hmac(); TS otherwise widens a captured const back to `string | undefined`.
+const SECRET: string = SESSION_SECRET;
 
 const NONCE_TTL_MS = 5 * 60_000;
 export const SESSION_TTL_MS = 30 * 60_000;
 export const SESSION_COOKIE = "cosign_session";
 
 function hmac(data: string): string {
-  if (!SECRET) {
-    throw new Error(
-      "SESSION_SECRET (or GAME_AUTHORITY_RNG_SECRET) must be set for co-sign auth",
-    );
-  }
   return createHmac("sha256", SECRET).update(data).digest("hex");
 }
 
@@ -53,6 +52,22 @@ export function verifyNonce(nonce: string): boolean {
   if (!ts || !safeEqual(sig, hmac(`nonce:${ts}`))) return false;
   const issued = parseInt(ts, 36);
   return Number.isFinite(issued) && Date.now() - issued < NONCE_TTL_MS;
+}
+
+/**
+ * Atomically claim a login nonce for single use, returning true if the caller
+ * won the claim. A captured SIWS payload can then mint at most one session
+ * within its TTL. Fails open (returns true) when Redis is unreachable: this is
+ * a bounded-severity replay guard, not a fund boundary, so login must not
+ * depend on Redis availability — matching `rate-limit.ts`'s fail-open posture.
+ */
+export async function claimNonce(nonce: string): Promise<boolean> {
+  try {
+    const claimed = await redis.set(`siws:nonce:${nonce}`, "1", "EX", 300, "NX");
+    return claimed !== null;
+  } catch {
+    return true;
+  }
 }
 
 /** Mint a session token bound to `owner` (base58 wallet address). */

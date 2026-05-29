@@ -15,10 +15,6 @@ import { Rng } from "./rng";
  * The roll lands in a fair "engaged play" band (60-95, avg ~77): a real reward
  * for taking the action, never a guaranteed perfect 100.
  */
-export function rollScore(
-  domain: string,
-  account: string,
-  discriminator: string,
-): number {
+export function rollScore(domain: string, account: string, discriminator: string): number {
   return 60 + new Rng(domain, account, discriminator).nextInt(36);
 }

@@ -9,7 +9,7 @@
  * where the user clicks).
  */
 
-import * as THREE from "three";
+import type * as THREE from "three";
 
 // Terrain elevation retired with the flat-strategy cut — the mesh is a
 // single flat quad now, so the previously-analytical `getElevationAt`
@@ -56,11 +56,7 @@ export const GRID_OVERLAY_MIN_CSS_PX_PER_CELL = 5;
  * world -Z). Without the flip, players land on the cell mirrored
  * across the equator from where they clicked.
  */
-export function worldToGrid(
-  wx: number,
-  wz: number,
-  rgu: number,
-): { ox: number; oy: number } {
+export function worldToGrid(wx: number, wz: number, rgu: number): { ox: number; oy: number } {
   const halfSide = MESH_SIZE / 2;
   return {
     ox: Math.round((wx / halfSide) * rgu),
@@ -72,11 +68,7 @@ export function worldToGrid(
  * Integer grid offset -> world-XZ (at Y=0; callers add elevation
  * separately via getElevationAt).
  */
-export function gridToWorld(
-  ox: number,
-  oy: number,
-  rgu: number,
-): { wx: number; wz: number } {
+export function gridToWorld(ox: number, oy: number, rgu: number): { wx: number; wz: number } {
   const halfSide = MESH_SIZE / 2;
   return {
     wx: (ox / rgu) * halfSide,
@@ -114,8 +106,7 @@ export function cssPxPerCellAt(
 ): number {
   const cellWorld = cellWorldFor(rgu);
   const distance = camera.position.distanceTo(target);
-  const visibleWorldH =
-    2 * distance * Math.tan(((camera.fov * Math.PI) / 180) / 2);
+  const visibleWorldH = 2 * distance * Math.tan((camera.fov * Math.PI) / 180 / 2);
   if (visibleWorldH <= 0) return 0;
   return (cellWorld / visibleWorldH) * canvasHeightPx;
 }
@@ -160,7 +151,7 @@ export const MARKER_FLAT_SCALE_Y = 0.001;
  * output color space (which would break MagicRing and LaserFlow).
  */
 export function srgbToLinear(c: number): number {
-  return c <= 0.04045 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4);
+  return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
 }
 
 /**

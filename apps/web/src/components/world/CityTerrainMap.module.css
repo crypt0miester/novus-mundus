@@ -301,8 +301,14 @@
   animation: noticeFadeIn 0.18s ease;
 }
 @keyframes noticeFadeIn {
-  0% { opacity: 0; transform: translate(-50%, 4px); }
-  100% { opacity: 1; transform: translate(-50%, 0); }
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 4px);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
 }
 
 /* Dot tooltip — small bubble that floats next to the occupant under
@@ -354,8 +360,14 @@
   line-height: 1.1;
 }
 @keyframes dotTooltipFadeIn {
-  0% { opacity: 0; transform: translate(0.6rem, calc(-120% + 4px)); }
-  100% { opacity: 1; transform: translate(0.6rem, -120%); }
+  0% {
+    opacity: 0;
+    transform: translate(0.6rem, calc(-120% + 4px));
+  }
+  100% {
+    opacity: 1;
+    transform: translate(0.6rem, -120%);
+  }
 }
 
 /* Scale legend — cartographic scale bar in the bottom-left corner of
@@ -395,14 +407,13 @@
    * connecting line is a 1px-tall background centred vertically. */
   border-left: 1px solid rgba(252, 244, 220, 0.95);
   border-right: 1px solid rgba(252, 244, 220, 0.95);
-  background:
-    linear-gradient(
-      to bottom,
-      transparent calc(50% - 0.5px),
-      rgba(252, 244, 220, 0.95) calc(50% - 0.5px),
-      rgba(252, 244, 220, 0.95) calc(50% + 0.5px),
-      transparent calc(50% + 0.5px)
-    );
+  background: linear-gradient(
+    to bottom,
+    transparent calc(50% - 0.5px),
+    rgba(252, 244, 220, 0.95) calc(50% - 0.5px),
+    rgba(252, 244, 220, 0.95) calc(50% + 0.5px),
+    transparent calc(50% + 0.5px)
+  );
 }
 .scaleLegendLabel {
   font-weight: 600;
@@ -443,33 +454,52 @@
   gap: 0.3rem;
 }
 
-.swatch {
-  width: 0.55rem;
-  height: 0.55rem;
+/* Occupancy fetch states. Three visually-distinct surfaces below the
+ * readout: scanning (pulsing, with the .scouting keyframe), failed (a
+ * retry affordance), and — by absence — an empty disc that simply shows
+ * no status row. Both sit in the readout column so they share the
+ * centred, parchment-ink vocabulary of the readout above them. */
+.occupancyStatus {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.3rem;
+  font-size: 0.62rem;
+  color: var(--ink-soft, #6b4a2a);
+}
+.occupancyError {
+  margin-top: 0.4rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  font-size: 0.62rem;
+  color: rgba(160, 30, 30, 0.95);
+  font-weight: 600;
+}
+.occupancyRetry {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.15rem 0.45rem;
   border-radius: 999px;
-  display: inline-block;
+  border: 1px solid var(--ink-faint, #b89a72);
+  background: var(--parchment, #efe2c4);
+  color: var(--ink-soft, #6b4a2a);
+  font-family: inherit;
+  font-size: 0.6rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    opacity 0.18s ease,
+    color 0.18s ease;
+  opacity: 0.9;
 }
-/* Swatch colors mirror the canvas glyphs — same hex values as the antique
- * palette in CityTerrainMap.tsx so the legend reads as a true legend. */
-.swCtr {
-  background: rgba(70, 50, 28, 0.95);
-  box-shadow: 0 0 0 1px rgba(252, 244, 220, 0.9);
-}
-.swMe {
-  background: rgba(20, 14, 8, 1);
-  box-shadow: 0 0 0 1px rgba(252, 244, 220, 0.9);
-}
-.swPlayer {
-  background: rgba(160, 100, 45, 1);
-}
-.swEnc {
-  background: rgba(115, 55, 30, 1);
-  /* Diamond-ish hint via 45° rotation — disambiguates from .swPlayer at a
-   * glance even though both are warm browns. */
-  border-radius: 2px;
-  transform: rotate(45deg);
-}
-.swSel {
-  background: transparent;
-  box-shadow: inset 0 0 0 2px var(--seal, #b45309);
+.occupancyRetry:hover {
+  opacity: 1;
+  color: var(--ink, #2e1f10);
 }

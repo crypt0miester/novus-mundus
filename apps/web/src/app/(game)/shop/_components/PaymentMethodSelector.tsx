@@ -144,9 +144,7 @@ export function PaymentMethodSelector({
 
   return (
     <div className={className}>
-      <div className="mb-1.5 text-[10px] uppercase tracking-wider text-text-muted">
-        Pay with
-      </div>
+      <div className="mb-1.5 text-[10px] uppercase tracking-wider text-text-muted">Pay with</div>
       <div
         className="inline-flex rounded-lg border border-zinc-800 bg-surface p-0.5"
         role="tablist"
@@ -167,13 +165,9 @@ export function PaymentMethodSelector({
                   : "text-text-muted hover:text-text-secondary"
               }`}
             >
-              <div className={`font-semibold ${active ? "text-text-gold" : ""}`}>
-                {opt.label}
-              </div>
+              <div className={`font-semibold ${active ? "text-text-gold" : ""}`}>{opt.label}</div>
               {opt.sublabel && (
-                <div className="text-[9px] uppercase tracking-wider opacity-70">
-                  {opt.sublabel}
-                </div>
+                <div className="text-[9px] uppercase tracking-wider opacity-70">{opt.sublabel}</div>
               )}
             </button>
           );

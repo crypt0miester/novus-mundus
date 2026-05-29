@@ -20,7 +20,7 @@ export function WorldNav() {
       {NAV_ITEMS.map((item) => {
         const active = item.exact
           ? pathname === item.href
-          : pathname === item.href || pathname?.startsWith(item.href + "/");
+          : pathname === item.href || pathname?.startsWith(`${item.href}/`);
         return (
           <Link
             key={item.href}

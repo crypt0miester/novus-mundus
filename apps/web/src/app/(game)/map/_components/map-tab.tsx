@@ -1,25 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import { ChevronRight } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useWallet } from "@solana/wallet-adapter-react";
 import {
-  deriveLocationPda,
-  derivePlayerPda,
-  deriveLootPda,
   toGrid,
-  createIntercityStartInstruction,
-  createIntercityCompleteInstruction,
-  createIntercityCancelInstruction,
-  createIntercityTeleportInstruction,
-  createIntracityStartInstruction,
-  createIntracityCompleteInstruction,
-  createIntracityCancelInstruction,
-  createTravelSpeedupInstruction,
-  createAttackEncounterInstruction,
-  createAttackPlayerInstruction,
   calculateDistance,
   calculateDistanceMeters,
   calculateIntercityTravelTime,
@@ -41,6 +28,19 @@ import {
   deciToNovi,
   isNullPubkey,
 } from "novus-mundus-sdk";
+import {
+  buildAttackEncounterIx,
+  buildAttackPlayerIx,
+  buildIntercityCancelIx,
+  buildIntercityCompleteIx,
+  buildIntercityStartIx,
+  buildIntercityTeleportIx,
+  buildIntracityCancelIx,
+  buildIntracityCompleteIx,
+  buildIntracityStartIx,
+  buildTravelSpeedupIxs,
+  cellLocationPda,
+} from "@/lib/chain/travel";
 import { useWorldPlayers, useWorldCastles } from "@/lib/hooks/world";
 import { useCityPlayers } from "@/lib/hooks/useCityPlayers";
 import { useTeam } from "@/lib/hooks/useTeam";
@@ -138,7 +138,8 @@ const PANEL_RESOLVERS: Record<
     const targetPubkey = sp.get("targetPubkey");
     const targetType = parseInt(sp.get("targetType") ?? "", 10);
     const targetCityId = parseInt(sp.get("targetCityId") ?? "", 10);
-    if (!targetPubkey || !Number.isFinite(targetType) || !Number.isFinite(targetCityId)) return null;
+    if (!targetPubkey || !Number.isFinite(targetType) || !Number.isFinite(targetCityId))
+      return null;
     return {
       title: "Raise Rally",
       props: {
@@ -255,7 +256,8 @@ export function MapTab() {
       occupantType: number;
     } | null = null;
     if (playerParam) preselected = { pubkey: playerParam, occupantType: OCCUPANT_PLAYER };
-    else if (encounterParam) preselected = { pubkey: encounterParam, occupantType: OCCUPANT_ENCOUNTER };
+    else if (encounterParam)
+      preselected = { pubkey: encounterParam, occupantType: OCCUPANT_ENCOUNTER };
     else if (castleParam) preselected = { pubkey: castleParam, occupantType: OCCUPANT_CASTLE };
 
     if (cityParam) {
@@ -376,8 +378,7 @@ export function MapTab() {
   /* Local team affiliation — base58 of `player.team` if the local
    * player has joined a team, else null. Drives the same-team dot
    * colour and the "Same Team" / "Rival" tooltip suffix below. */
-  const myTeamStr =
-    player && !isNullPubkey(player.team) ? player.team.toBase58() : null;
+  const myTeamStr = player && !isNullPubkey(player.team) ? player.team.toBase58() : null;
   /* On-demand fetch of the local team's account so we can surface its
    * NAME (not just slot index) on team-mate tooltips. The hook is a
    * no-op when myTeam is null. */
@@ -437,9 +438,7 @@ export function MapTab() {
           const colorEntry = getCosmeticColor(player.equippedNameColor);
           return {
             primary: displayName,
-            secondary: tier
-              ? `lv ${player.level ?? 0} · ${tier}`
-              : `lv ${player.level ?? 0}`,
+            secondary: tier ? `lv ${player.level ?? 0} · ${tier}` : `lv ${player.level ?? 0}`,
             badgeId: player.equippedBadge,
             frameId: player.equippedAvatarFrame,
             titleId: player.equippedTitle,
@@ -457,9 +456,7 @@ export function MapTab() {
         const name = p.account.name?.trim() || "Unnamed player";
         const tier = TIER_NAMES[p.account.subscriptionTier] ?? null;
         // Team status — same as my team, rival, or solo.
-        const theirTeamStr = isNullPubkey(p.account.team)
-          ? null
-          : p.account.team.toBase58();
+        const theirTeamStr = isNullPubkey(p.account.team) ? null : p.account.team.toBase58();
         let teamSuffix = "";
         let accent: string | undefined;
         if (theirTeamStr && myTeamStr && theirTeamStr === myTeamStr) {
@@ -501,9 +498,7 @@ export function MapTab() {
         const hpBig = BigInt(e.account.health.toString());
         const maxHpBig = BigInt(e.account.maxHealth.toString());
         const hpPct =
-          maxHpBig > 0n
-            ? Math.max(0, Math.min(100, Number((hpBig * 100n) / maxHpBig)))
-            : 0;
+          maxHpBig > 0n ? Math.max(0, Math.min(100, Number((hpBig * 100n) / maxHpBig))) : 0;
         return {
           primary: `${rarity} wild`,
           secondary: `lv ${level} · HP ${hpPct}%`,
@@ -520,11 +515,10 @@ export function MapTab() {
          * castle read as "Protected" in the hover bubble while the
          * inspect panel correctly said "Vulnerable" — directly
          * contradicting each other on the same castle's attackability. */
-        const tierName =
-          CASTLE_TIER_NAMES[c.account.tier] ?? `T${c.account.tier}`;
+        const tierName = CASTLE_TIER_NAMES[c.account.tier] ?? `T${c.account.tier}`;
         const statusName = c.account.isVacant
           ? "Vacant"
-          : CASTLE_STATUS_NAMES[c.account.status] ?? `S${c.account.status}`;
+          : (CASTLE_STATUS_NAMES[c.account.status] ?? `S${c.account.status}`);
         const displayName = c.account.name?.trim() || `Castle #${c.account.castleId}`;
         /* Slate accent ties the bubble border to the on-disc castle
          * fill (rgba(95, 105, 120) — same vocabulary). Selection-aware
@@ -584,8 +578,10 @@ export function MapTab() {
     );
     const baseSpeedKmh = ge.gameplayConfig?.themeTravelSpeedsKmh?.[0] ?? 50;
     const travelTimeSec = calculateIntercityTravelTime(distanceKm, baseSpeedKmh);
-    const baseTeleportCost = deciToNovi(ge.gameplayConfig?.teleportBaseCost?.toNumber?.()) ?? 100_000;
-    const costPer100km = deciToNovi(ge.gameplayConfig?.teleportCostPer100km?.toNumber?.()) ?? 10_000;
+    const baseTeleportCost =
+      deciToNovi(ge.gameplayConfig?.teleportBaseCost?.toNumber?.()) ?? 100_000;
+    const costPer100km =
+      deciToNovi(ge.gameplayConfig?.teleportCostPer100km?.toNumber?.()) ?? 10_000;
     const teleportCost = calculateTeleportCost(distanceKm, baseTeleportCost, costPer100km);
     const tod = getCurrentTimeOfDay(chainNow, origin.longitude);
     const travelMult = getActivityMultiplier(ActivityType.Traveling, tod);
@@ -624,27 +620,14 @@ export function MapTab() {
   const startTravel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
-    const geKey = client.gameEngine;
-    const ix = createIntercityStartInstruction({
+    const ix = buildIntercityStartIx({
       owner: publicKey,
-      gameEngine: geKey,
-      originCityId: player.currentCity,
+      gameEngine: client.gameEngine,
+      gameAuthority: ge?.authority,
+      player,
       destinationCityId: destinationCity,
       destGridLat: destCell.gridLat,
       destGridLong: destCell.gridLong,
-      originLocation: deriveLocationPda(
-        geKey,
-        player.currentCity,
-        toGrid(player.currentLat),
-        toGrid(player.currentLong),
-      )[0],
-      destinationLocation: deriveLocationPda(
-        geKey,
-        destinationCity,
-        destCell.gridLat,
-        destCell.gridLong,
-      )[0],
-      originCreatorRefund: ge?.authority ?? publicKey,
     });
     const destName = destCityData?.account.name ?? `City ${destinationCity}`;
     const res = await transact.mutateAsync({
@@ -662,29 +645,11 @@ export function MapTab() {
 
   const completeTravel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const geKey = client.gameEngine;
-    // intercity_cancel sends the player back to the origin city CENTRE and
-    // sets destination_city = current_city, but leaves traveling_to_lat/long
-    // pointing at the original forward destination. On that return leg the
-    // reserved cell is the city centre — deriving from traveling_to_lat/long
-    // would pass a non-existent (System-owned) PDA and the ix would fail.
-    const returningHome = player.destinationCity === player.currentCity;
-    const homeCity = currentCityData?.account;
-    if (returningHome && !homeCity) throw new Error("Origin city not loaded");
-    const destCityId = player.destinationCity;
-    const destLat = returningHome ? homeCity!.latitude : player.travelingToLat;
-    const destLong = returningHome ? homeCity!.longitude : player.travelingToLong;
-    const ix = createIntercityCompleteInstruction({
+    const { ix, destinationCityId, destLat, destLong } = buildIntercityCompleteIx({
       owner: publicKey,
-      gameEngine: geKey,
-      originCityId: player.currentCity,
-      destinationCityId: destCityId,
-      destinationLocation: deriveLocationPda(
-        geKey,
-        destCityId,
-        toGrid(destLat),
-        toGrid(destLong),
-      )[0],
+      gameEngine: client.gameEngine,
+      player,
+      homeCity: currentCityData?.account,
     });
     const sig = await transact
       .mutateAsync({
@@ -702,7 +667,7 @@ export function MapTab() {
     if (cur) {
       store.setPlayer(cur.pubkey, {
         ...cur.account,
-        currentCity: destCityId,
+        currentCity: destinationCityId,
         currentLat: destLat,
         currentLong: destLong,
       });
@@ -714,28 +679,11 @@ export function MapTab() {
     if (!publicKey || !player) throw new Error("Not ready");
     const origin = currentCityData?.account;
     if (!origin) throw new Error("Origin city not loaded");
-    const geKey = client.gameEngine;
-    const ix = createIntercityCancelInstruction({
+    const ix = buildIntercityCancelIx({
       owner: publicKey,
-      gameEngine: geKey,
-      originCityId: player.currentCity,
-      destinationCityId: player.destinationCity,
-      originLocation: deriveLocationPda(
-        geKey,
-        player.currentCity,
-        toGrid(origin.latitude),
-        toGrid(origin.longitude),
-      )[0],
-      destinationLocation: deriveLocationPda(
-        geKey,
-        player.destinationCity,
-        toGrid(player.travelingToLat),
-        toGrid(player.travelingToLong),
-      )[0],
-      // intercity_start stamps the destination cell's location_creator with
-      // the traveling player's wallet and intercity_cancel refunds its rent
-      // there — any other account trips GameError::InvalidParameter (6007).
-      destinationCreatorRefund: publicKey,
+      gameEngine: client.gameEngine,
+      player,
+      originCity: origin,
     });
     return transact
       .mutateAsync({
@@ -750,24 +698,13 @@ export function MapTab() {
   const teleport = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
-    const geKey = client.gameEngine;
-    const ix = createIntercityTeleportInstruction({
+    const ix = buildIntercityTeleportIx({
       owner: publicKey,
-      gameEngine: geKey,
-      originCityId: player.currentCity,
+      gameEngine: client.gameEngine,
+      player,
       destinationCityId: destinationCity,
-      originLocation: deriveLocationPda(
-        geKey,
-        player.currentCity,
-        toGrid(player.currentLat),
-        toGrid(player.currentLong),
-      )[0],
-      destinationLocation: deriveLocationPda(
-        geKey,
-        destinationCity,
-        destCell.gridLat,
-        destCell.gridLong,
-      )[0],
+      destGridLat: destCell.gridLat,
+      destGridLong: destCell.gridLong,
     });
     const destName = destCityData?.account.name ?? `City ${destinationCity}`;
     const res = await transact.mutateAsync({
@@ -786,12 +723,12 @@ export function MapTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
     const n = Math.max(1, Math.floor(count));
-    const instructions = Array.from({ length: n }, () =>
-      createTravelSpeedupInstruction(
-        { owner: publicKey, gameEngine: client.gameEngine },
-        { speedupTier: tier as 1 | 2 },
-      ),
-    );
+    const instructions = buildTravelSpeedupIxs({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      tier: tier as 1 | 2,
+      count: n,
+    });
     return transact
       .mutateAsync({
         instructions,
@@ -805,32 +742,20 @@ export function MapTab() {
   const startAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
-    const geKey = client.gameEngine;
-    const startIx = createIntercityStartInstruction({
+    const startIx = buildIntercityStartIx({
       owner: publicKey,
-      gameEngine: geKey,
-      originCityId: player.currentCity,
+      gameEngine: client.gameEngine,
+      gameAuthority: ge?.authority,
+      player,
       destinationCityId: destinationCity,
       destGridLat: destCell.gridLat,
       destGridLong: destCell.gridLong,
-      originLocation: deriveLocationPda(
-        geKey,
-        player.currentCity,
-        toGrid(player.currentLat),
-        toGrid(player.currentLong),
-      )[0],
-      destinationLocation: deriveLocationPda(
-        geKey,
-        destinationCity,
-        destCell.gridLat,
-        destCell.gridLong,
-      )[0],
-      originCreatorRefund: ge?.authority ?? publicKey,
     });
-    const speedupIx = createTravelSpeedupInstruction(
-      { owner: publicKey, gameEngine: geKey },
-      { speedupTier: tier as 1 | 2 },
-    );
+    const [speedupIx] = buildTravelSpeedupIxs({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      tier: tier as 1 | 2,
+    });
     const destName = destCityData?.account.name ?? `City ${destinationCity}`;
     const res = await transact.mutateAsync({
       instructions: [startIx, speedupIx],
@@ -904,10 +829,8 @@ export function MapTab() {
     // health=0 — the chain has killed it but hasn't closed the Location
     // PDA yet, so it's still in viewedOccupied for a moment.
     if (selectedEntity.occupantType === 2) {
-      const enc = viewedEncounters.find(
-        (e) => e.pubkey.toBase58() === selectedEntity.pubkey,
-      );
-      if (enc && enc.account.health.isZero()) {
+      const enc = viewedEncounters.find((e) => e.pubkey.toBase58() === selectedEntity.pubkey);
+      if (enc?.account.health.isZero()) {
         setSelectedEntity(null);
         return;
       }
@@ -962,12 +885,9 @@ export function MapTab() {
     /* PvP — no level gate on attack_player today; the program checks range +
      * unit count only. Drive-by / overrun branch is left to a follow-up since
      * the morph bar only fits one Strike action. */
-    const target = (cityPlayers ?? []).find(
-      (p) => p.pubkey.toBase58() === selectedEntity.pubkey,
-    );
+    const target = (cityPlayers ?? []).find((p) => p.pubkey.toBase58() === selectedEntity.pubkey);
     if (!target) return null;
-    const inRange =
-      selectedEntityDistMeters != null && selectedEntityDistMeters <= pvpRangeMeters;
+    const inRange = selectedEntityDistMeters != null && selectedEntityDistMeters <= pvpRangeMeters;
     const hasUnits = getTotalDefensiveUnits(player).toNumber() > 0;
     return {
       kind: "pvp" as const,
@@ -995,28 +915,14 @@ export function MapTab() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const geKey = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      geKey,
-      cityId,
-      toGrid(player.currentLat),
-      toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(geKey, cityId, targetGridLat, targetGridLong);
-    const targetLat = targetGridLat / 10000;
-    const targetLong = targetGridLong / 10000;
-    const ix = createIntracityStartInstruction(
-      {
-        owner: publicKey,
-        gameEngine: geKey,
-        cityId,
-        originLocation,
-        destinationLocation,
-        originCreatorRefund: ge?.authority ?? publicKey,
-      },
-      { destinationLat: targetLat, destinationLong: targetLong },
-    );
+    const ix = buildIntracityStartIx({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      gameAuthority: ge?.authority,
+      player,
+      targetGridLat,
+      targetGridLong,
+    });
     const res = await transact.mutateAsync({
       instructions: [ix],
       invalidateKeys: [["player"]],
@@ -1067,11 +973,9 @@ export function MapTab() {
       }
     }
     candidates.sort((a, b) => a.dist - b.dist);
-    const pdas = candidates.map(
-      (c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0],
-    );
+    const pdas = candidates.map((c) => cellLocationPda(ge, cityId, c.gridLat, c.gridLong));
     const infos = await client.connection.getMultipleAccountsInfo(pdas);
-    const idx = infos.findIndex((info) => info === null);
+    const idx = infos.indexOf(null);
     if (idx === -1) throw new Error("All cells around the target are occupied");
     const chosen = candidates[idx]!;
     return startIntraTravel(
@@ -1084,30 +988,16 @@ export function MapTab() {
 
   const strikeSelectedEncounter = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || !selectedEntity) throw new Error("Not ready");
-    const enc = (viewedEncounters ?? []).find(
-      (e) => e.pubkey.toBase58() === selectedEntity.pubkey,
-    );
+    const enc = (viewedEncounters ?? []).find((e) => e.pubkey.toBase58() === selectedEntity.pubkey);
     if (!enc) throw new Error("Encounter not found");
-    const geKey = client.gameEngine;
-    const [playerPda] = derivePlayerPda(geKey, publicKey);
-    const [loot] = deriveLootPda(playerPda, player.lootCounter.toNumber());
-    const [encounterLocation] = deriveLocationPda(
-      geKey,
-      enc.account.cityId,
-      toGrid(enc.account.locationLat),
-      toGrid(enc.account.locationLong),
-    );
-    const ix = createAttackEncounterInstruction(
-      {
-        owner: publicKey,
-        gameEngine: geKey,
-        encounter: enc.pubkey,
-        loot,
-        encounterLocation,
-        locationCreatorRefund: ge?.authority ?? publicKey,
-      },
-      { encounterId: enc.account.id.toNumber() },
-    );
+    const ix = buildAttackEncounterIx({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      gameAuthority: ge?.authority,
+      player,
+      encounterPubkey: enc.pubkey,
+      encounter: enc.account,
+    });
     const maxHealth = enc.account.maxHealth.toNumber();
     return transact
       .mutateAsync({
@@ -1117,29 +1007,23 @@ export function MapTab() {
         onPhase: reportPhase,
       })
       .then((r) => {
-        useCombatOutcome
-          .getState()
-          .show(r.events, strikeSelectedEncounter, { maxHealth });
+        useCombatOutcome.getState().show(r.events, strikeSelectedEncounter, { maxHealth });
         return r.signature;
       });
   };
 
   const strikeSelectedPlayer = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || !selectedEntity) throw new Error("Not ready");
-    const target = (cityPlayers ?? []).find(
-      (p) => p.pubkey.toBase58() === selectedEntity.pubkey,
-    );
+    const target = (cityPlayers ?? []).find((p) => p.pubkey.toBase58() === selectedEntity.pubkey);
     if (!target) throw new Error("Target player not found in this city");
-    const ix = createAttackPlayerInstruction(
-      {
-        attacker: publicKey,
-        gameEngine: client.gameEngine,
-        defenderPlayer: target.pubkey,
-        attackerCityId: player.currentCity,
-        defenderCityId: target.account.currentCity,
-      },
-      { driveBy: false },
-    );
+    const ix = buildAttackPlayerIx({
+      attacker: publicKey,
+      gameEngine: client.gameEngine,
+      attackerCityId: player.currentCity,
+      defenderPlayer: target.pubkey,
+      defenderCityId: target.account.currentCity,
+      driveBy: false,
+    });
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -1155,24 +1039,13 @@ export function MapTab() {
 
   const completeIntra = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const geKey = client.gameEngine;
-    const cityId = player.currentCity;
-    // Capture the destination up-front for the optimistic store update
-    // below — by the time the success callback fires, `player` in this
-    // closure is still the pre-tx snapshot, which is what we want.
-    const destLat = player.travelingToLat;
-    const destLong = player.travelingToLong;
-    const [destinationLocation] = deriveLocationPda(
-      geKey,
-      cityId,
-      toGrid(destLat),
-      toGrid(destLong),
-    );
-    const ix = createIntracityCompleteInstruction({
+    // Destination is captured for the optimistic store update below — by the
+    // time the success callback fires, `player` here is still the pre-tx
+    // snapshot, which is what we want.
+    const { ix, destLat, destLong } = buildIntracityCompleteIx({
       owner: publicKey,
-      gameEngine: geKey,
-      cityId,
-      destinationLocation,
+      gameEngine: client.gameEngine,
+      player,
     });
     const sig = await transact
       .mutateAsync({
@@ -1202,29 +1075,10 @@ export function MapTab() {
 
   const cancelIntra = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const geKey = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      geKey,
-      cityId,
-      toGrid(player.currentLat),
-      toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(
-      geKey,
-      cityId,
-      toGrid(player.travelingToLat),
-      toGrid(player.travelingToLong),
-    );
-    const ix = createIntracityCancelInstruction({
+    const ix = buildIntracityCancelIx({
       owner: publicKey,
-      gameEngine: geKey,
-      cityId,
-      originLocation,
-      destinationLocation,
-      // intracity_start sets dest_location.location_creator = owner, so the
-      // refund of the freed destination cell must go to the player wallet.
-      destinationCreatorRefund: publicKey,
+      gameEngine: client.gameEngine,
+      player,
     });
     return transact
       .mutateAsync({
@@ -1453,14 +1307,11 @@ export function MapTab() {
         });
       }
       // Rally — I have a team, target is enemy (encounter, non-teammate player, opposing castle).
-      const canRally =
-        !!myTeamStr &&
-        !sameTeam &&
-        (isEnc || isCastleEntity || !!otherPlayerAcc);
+      const canRally = !!myTeamStr && !sameTeam && (isEnc || isCastleEntity || !!otherPlayerAcc);
       if (canRally) {
         const targetType = isEnc ? 1 : isCastleEntity ? 2 : 0;
         const targetCityId = isCastleEntity
-          ? castleAcc?.cityId ?? player!.currentCity
+          ? (castleAcc?.cityId ?? player!.currentCity)
           : player!.currentCity;
         const targetPubkey = selectedEntity.pubkey;
         morphActions.push({
@@ -1772,9 +1623,7 @@ export function MapTab() {
                   lineHeight: 1.5,
                 }}
               >
-                {destCell
-                  ? "destination chosen, walk below."
-                  : "touch a cell to walk there."}
+                {destCell ? "destination chosen, walk below." : "touch a cell to walk there."}
               </p>
 
               {/* Travel preview — distance + time for the chosen walk.
@@ -1881,9 +1730,7 @@ export function MapTab() {
                 lineHeight: 1.5,
               }}
             >
-              {destCell
-                ? "landing cell chosen."
-                : "touch the map to pick where to alight."}
+              {destCell ? "landing cell chosen." : "touch the map to pick where to alight."}
             </p>
 
             {/* On-chain terrain bonuses for the chosen landing cell in the
@@ -2114,10 +1961,7 @@ export function MapTab() {
         const dep = a.departureTime.toNumber();
         const arr = a.arrivalTime.toNumber();
         const total = arr - dep;
-        const pct =
-          total > 0
-            ? Math.min(100, Math.max(0, ((chainNow - dep) / total) * 100))
-            : 0;
+        const pct = total > 0 ? Math.min(100, Math.max(0, ((chainNow - dep) / total) * 100)) : 0;
         // Walker's cosmetic identity travels with the line + marker.
         // Color comes from the catalog (animated when the entry sets
         // `animation`); frame ring color comes from the catalog frame
@@ -2331,11 +2175,7 @@ function StatCard({
   tone?: "danger";
 }) {
   const valueColor =
-    tone === "danger"
-      ? "rgba(180, 60, 60, 0.95)"
-      : accent
-        ? "var(--seal)"
-        : "var(--ink)";
+    tone === "danger" ? "rgba(180, 60, 60, 0.95)" : accent ? "var(--seal)" : "var(--ink)";
   return (
     <div style={PANEL_VARS.card}>
       <div
@@ -2402,9 +2242,7 @@ interface EntityPanelProps {
    * entity is a castle. Castles aren't in worldPlayers/encounters because
    * their lat/long lives directly on the CastleAccount, not a Location PDA.
    */
-  worldCastles?:
-    | { pubkey: { toBase58: () => string }; account: CastleSnapshot }[]
-    | undefined;
+  worldCastles?: { pubkey: { toBase58: () => string }; account: CastleSnapshot }[] | undefined;
   encounters: { pubkey: { toBase58: () => string }; account: EncounterSnapshot }[] | undefined;
   myPlayerPda: string | undefined;
   /**
@@ -2611,9 +2449,10 @@ function EntityPanel({
 
   // Player resolution only when the entity actually is a player; castles
   // and encounters skip the worldPlayers lookup entirely.
-  const playerHit = !isEncounter && !isCastle
-    ? worldPlayers?.find((p) => p.pubkey.toBase58() === entity.pubkey)
-    : undefined;
+  const playerHit =
+    !isEncounter && !isCastle
+      ? worldPlayers?.find((p) => p.pubkey.toBase58() === entity.pubkey)
+      : undefined;
   const account = (playerHit?.account ?? null) as PlayerSnapshot | null;
   const isSelf = !isCastle && myPlayerPda === entity.pubkey;
 
@@ -2680,21 +2519,19 @@ function EntityPanel({
 
   // Cosmetic name colour — falls through `var(--ink)` until the player
   // has equipped a colour AND the catalog has the matching entry.
-  const nameColorEntry = !isEncounter && !isCastle
-    ? getCosmeticColor(account?.equippedNameColor)
-    : null;
+  const nameColorEntry =
+    !isEncounter && !isCastle ? getCosmeticColor(account?.equippedNameColor) : null;
   const nameColor = nameColorEntry?.hex ?? "var(--ink)";
   // CSS class for animated colors (pulse / embered / glimmer / vesper /
   // cinder). Null for static colors and non-player entities.
   const nameAnimClass = cosmeticColorAnimationClass(nameColorEntry);
   // Avatar frame — replaces the default seal border on the level pip
   // when set. Glow halo wraps the pip when the catalog entry defines one.
-  const frameEntry = !isEncounter && !isCastle
-    ? getCosmeticFrame(account?.equippedAvatarFrame)
-    : null;
+  const frameEntry =
+    !isEncounter && !isCastle ? getCosmeticFrame(account?.equippedAvatarFrame) : null;
   const pipBorderColor = isEncounter
     ? encRarityColor
-    : frameEntry?.ring.borderColor ?? "var(--seal)";
+    : (frameEntry?.ring.borderColor ?? "var(--seal)");
   const pipBorderStyle = frameEntry?.ring.borderStyle ?? "solid";
   const pipBorderWidth = frameEntry ? frameEntry.ring.borderWidth : 2;
   const pipGlow = frameEntry?.ring.glow;
@@ -2716,7 +2553,11 @@ function EntityPanel({
             avatar surface in the panel surfaces frame ownership at
             first glance. */}
         <div
-          title={frameEntry ? `${frameEntry.name}${frameEntry.flavorText ? ` — ${frameEntry.flavorText}` : ""}` : undefined}
+          title={
+            frameEntry
+              ? `${frameEntry.name}${frameEntry.flavorText ? ` — ${frameEntry.flavorText}` : ""}`
+              : undefined
+          }
           style={{
             width: "48px",
             height: "48px",
@@ -2741,9 +2582,7 @@ function EntityPanel({
               // Encounter pip stacks: ⚔ glyph on top, level numeral below.
               <div style={{ textAlign: "center", lineHeight: 1 }}>
                 <div style={{ fontSize: "0.9rem" }}>⚔</div>
-                <div
-                  style={{ fontSize: "0.65rem", marginTop: "0.1rem", letterSpacing: "0.04em" }}
-                >
+                <div style={{ fontSize: "0.65rem", marginTop: "0.1rem", letterSpacing: "0.04em" }}>
                   lv{enc.level}
                 </div>
               </div>
@@ -2823,7 +2662,7 @@ function EntityPanel({
               const same = !!myTeamStr && theirTeam === myTeamStr;
               const teamName = same
                 ? (myTeamName ?? "Team")
-                : (teamsByPda?.get(theirTeam)?.name?.trim() || "Rival");
+                : teamsByPda?.get(theirTeam)?.name?.trim() || "Rival";
               return <> · {teamName}</>;
             })()}
           </div>
@@ -2867,10 +2706,8 @@ function EntityPanel({
                   const same = !!myTeamStr && theirTeam === myTeamStr;
                   const teamName = same
                     ? (myTeamName ?? "Team")
-                    : (teamsByPda?.get(theirTeam)?.name?.trim() || "Rival");
-                  const color = same
-                    ? "rgba(220, 175, 60, 0.95)"
-                    : "rgba(180, 60, 60, 0.95)";
+                    : teamsByPda?.get(theirTeam)?.name?.trim() || "Rival";
+                  const color = same ? "rgba(220, 175, 60, 0.95)" : "rgba(180, 60, 60, 0.95)";
                   return (
                     <div
                       title={`${teamName} · slot ${account?.teamSlotIndex ?? 0}`}
@@ -3027,19 +2864,13 @@ function EntityPanel({
               gap: "0.4rem",
             }}
           >
-            <StatCard
-              label="tier"
-              value={CASTLE_TIER_NAMES[castle.tier] ?? `T${castle.tier}`}
-            />
+            <StatCard label="tier" value={CASTLE_TIER_NAMES[castle.tier] ?? `T${castle.tier}`} />
             <StatCard
               label="status"
               value={CASTLE_STATUS_NAMES[castle.status] ?? `S${castle.status}`}
               tone={isCastleStatusDanger(castle.status) ? "danger" : undefined}
             />
-            <StatCard
-              label="garrison"
-              value={`${castle.garrisonCount}/${castle.maxGarrison}`}
-            />
+            <StatCard label="garrison" value={`${castle.garrisonCount}/${castle.maxGarrison}`} />
           </div>
 
           {/* Status narration — one-line story so the seat's current
@@ -3053,44 +2884,42 @@ function EntityPanel({
               color: "var(--ink-soft)",
             }}
           >
-            {CASTLE_STATUS_NARRATION[castle.status] ??
-              "The condition of the seat is unclear."}
+            {CASTLE_STATUS_NARRATION[castle.status] ?? "The condition of the seat is unclear."}
           </p>
 
           {/* Garrison strength bar — visual reinforcement of the
            * numerical N/M stat-card above. Filled portion uses the
            * danger tone when the castle is in Contest or Vulnerable
            * (states where garrison strength matters most). */}
-          {castle.maxGarrison > 0 && (() => {
-            const pct = Math.min(
-              100,
-              Math.round((castle.garrisonCount / castle.maxGarrison) * 100),
-            );
-            const dangerState = isCastleStatusDanger(castle.status);
-            return (
-              <div
-                style={{
-                  marginTop: "0.4rem",
-                  height: "6px",
-                  borderRadius: "3px",
-                  background: "var(--readout-tint)",
-                  border: "1px solid var(--parchment-edge)",
-                  overflow: "hidden",
-                }}
-                title={`Garrison ${castle.garrisonCount}/${castle.maxGarrison}`}
-              >
+          {castle.maxGarrison > 0 &&
+            (() => {
+              const pct = Math.min(
+                100,
+                Math.round((castle.garrisonCount / castle.maxGarrison) * 100),
+              );
+              const dangerState = isCastleStatusDanger(castle.status);
+              return (
                 <div
                   style={{
-                    width: `${pct}%`,
-                    height: "100%",
-                    background: dangerState
-                      ? "rgba(180, 60, 30, 0.85)"
-                      : "var(--seal)",
+                    marginTop: "0.4rem",
+                    height: "6px",
+                    borderRadius: "3px",
+                    background: "var(--readout-tint)",
+                    border: "1px solid var(--parchment-edge)",
+                    overflow: "hidden",
                   }}
-                />
-              </div>
-            );
-          })()}
+                  title={`Garrison ${castle.garrisonCount}/${castle.maxGarrison}`}
+                >
+                  <div
+                    style={{
+                      width: `${pct}%`,
+                      height: "100%",
+                      background: dangerState ? "rgba(180, 60, 30, 0.85)" : "var(--seal)",
+                    }}
+                  />
+                </div>
+              );
+            })()}
 
           {/* Castle row 2 — ownership chips */}
           <div
@@ -3108,7 +2937,11 @@ function EntityPanel({
             }}
           >
             <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
-              {castle.isVacant ? "vacant — claimable" : castle.hasKing ? "held by" : "garrisoned by"}
+              {castle.isVacant
+                ? "vacant — claimable"
+                : castle.hasKing
+                  ? "held by"
+                  : "garrisoned by"}
             </span>
             <span
               style={{
@@ -3123,7 +2956,7 @@ function EntityPanel({
                     if (teamStr === "11111111111111111111111111111111") return "solo king";
                     const same = !!myTeamStr && teamStr === myTeamStr;
                     return same
-                      ? myTeamName ?? "Your team"
+                      ? (myTeamName ?? "Your team")
                       : teamsByPda?.get(teamStr)?.name?.trim() || "Rival team";
                   })()}
             </span>
@@ -3144,13 +2977,10 @@ function EntityPanel({
                 letterSpacing: "0.04em",
               }}
             >
-              <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
-                king
-              </span>
+              <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>king</span>
               <span
                 style={{
-                  fontFamily:
-                    "var(--font-jetbrains), ui-monospace, monospace",
+                  fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
                 }}
               >
                 <DomainName pubkey={castle.king.toBase58()} chars={6} />
@@ -3210,48 +3040,45 @@ function EntityPanel({
            * strike, so an out-of-range fight is legible at a glance.
            * Mirrors the chain-side check at programs/.../attack_encounter:
            * |encounter.level - player.level| must be ≤ maxLevelDiff. */}
-          {myPlayerLevel != null && (() => {
-            const diff = Math.abs(enc.level - myPlayerLevel);
-            const overCap = maxLevelDiff != null && diff > maxLevelDiff;
-            const borderColor = overCap
-              ? "rgba(180, 30, 30, 0.6)"
-              : "var(--parchment-edge)";
-            const deltaColor = overCap
-              ? "rgba(220, 60, 60, 0.95)"
-              : "var(--ink)";
-            return (
-              <div
-                style={{
-                  marginTop: "0.7rem",
-                  padding: "0.45rem 0.6rem",
-                  background: "var(--readout-tint)",
-                  border: `1px solid ${borderColor}`,
-                  fontSize: "0.7rem",
-                  letterSpacing: "0.04em",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "baseline",
-                  gap: "0.5rem",
-                }}
-              >
-                <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
-                  lv {enc.level} vs you (lv {myPlayerLevel})
-                </span>
-                <span
+          {myPlayerLevel != null &&
+            (() => {
+              const diff = Math.abs(enc.level - myPlayerLevel);
+              const overCap = maxLevelDiff != null && diff > maxLevelDiff;
+              const borderColor = overCap ? "rgba(180, 30, 30, 0.6)" : "var(--parchment-edge)";
+              const deltaColor = overCap ? "rgba(220, 60, 60, 0.95)" : "var(--ink)";
+              return (
+                <div
                   style={{
-                    fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
-                    fontVariantNumeric: "tabular-nums",
-                    fontWeight: 700,
-                    color: deltaColor,
+                    marginTop: "0.7rem",
+                    padding: "0.45rem 0.6rem",
+                    background: "var(--readout-tint)",
+                    border: `1px solid ${borderColor}`,
+                    fontSize: "0.7rem",
+                    letterSpacing: "0.04em",
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "baseline",
+                    gap: "0.5rem",
                   }}
                 >
-                  Δ {diff}
-                  {maxLevelDiff != null && ` / ${maxLevelDiff}`}
-                  {overCap && " · too wide"}
-                </span>
-              </div>
-            );
-          })()}
+                  <span style={{ color: "var(--ink-soft)", fontStyle: "italic" }}>
+                    lv {enc.level} vs you (lv {myPlayerLevel})
+                  </span>
+                  <span
+                    style={{
+                      fontFamily: "var(--font-jetbrains), ui-monospace, monospace",
+                      fontVariantNumeric: "tabular-nums",
+                      fontWeight: 700,
+                      color: deltaColor,
+                    }}
+                  >
+                    Δ {diff}
+                    {maxLevelDiff != null && ` / ${maxLevelDiff}`}
+                    {overCap && " · too wide"}
+                  </span>
+                </div>
+              );
+            })()}
 
           {/* Health bar — visual first, number second. */}
           <div style={{ marginTop: "0.7rem" }}>
@@ -3353,10 +3180,7 @@ function EntityPanel({
           <TxButton
             onClick={onStrike}
             className={styles.seal}
-            disabled={
-              !!strikeDisabledReason ||
-              (isEncounter && !!enc && encHealthPct <= 0)
-            }
+            disabled={!!strikeDisabledReason || (isEncounter && !!enc && encHealthPct <= 0)}
           >
             <span>Strike</span>
             <span>
@@ -3423,124 +3247,119 @@ function EntityPanel({
        *  doesn't double them up. Chain-side rules per button match what
        *  the morph-action registration below enforces. */}
       <div className="hidden md:block">
-      {(() => {
-        const buttons: React.ReactNode[] = [];
-        const enabledStyle = {
-          fontSize: "0.65rem",
-          letterSpacing: "0.08em",
-          textTransform: "uppercase" as const,
-          padding: "0.4rem 0.7rem",
-          border: "1px solid var(--seal)",
-          color: "var(--seal)",
-          background: "var(--readout-tint)",
-          cursor: "pointer",
-        };
-        const disabledStyle = {
-          ...enabledStyle,
-          opacity: 0.4,
-          cursor: "not-allowed",
-        };
-        const gatedTitle = sameCity
-          ? undefined
-          : "Travel to this city first.";
-        const theirPlayerTeam = !isEncounter && !isCastle ? account?.team?.toBase58?.() : null;
-        const theirCastleTeam = isCastle ? castle?.team?.toBase58?.() : null;
-        const onSameTeam =
-          !!myTeamStr &&
-          ((!!theirPlayerTeam &&
-            theirPlayerTeam !== "11111111111111111111111111111111" &&
-            theirPlayerTeam === myTeamStr) ||
-            (!!theirCastleTeam &&
-              theirCastleTeam !== "11111111111111111111111111111111" &&
-              theirCastleTeam === myTeamStr));
+        {(() => {
+          const buttons: React.ReactNode[] = [];
+          const enabledStyle = {
+            fontSize: "0.65rem",
+            letterSpacing: "0.08em",
+            textTransform: "uppercase" as const,
+            padding: "0.4rem 0.7rem",
+            border: "1px solid var(--seal)",
+            color: "var(--seal)",
+            background: "var(--readout-tint)",
+            cursor: "pointer",
+          };
+          const disabledStyle = {
+            ...enabledStyle,
+            opacity: 0.4,
+            cursor: "not-allowed",
+          };
+          const gatedTitle = sameCity ? undefined : "Travel to this city first.";
+          const theirPlayerTeam = !isEncounter && !isCastle ? account?.team?.toBase58?.() : null;
+          const theirCastleTeam = isCastle ? castle?.team?.toBase58?.() : null;
+          const onSameTeam =
+            !!myTeamStr &&
+            ((!!theirPlayerTeam &&
+              theirPlayerTeam !== "11111111111111111111111111111111" &&
+              theirPlayerTeam === myTeamStr) ||
+              (!!theirCastleTeam &&
+                theirCastleTeam !== "11111111111111111111111111111111" &&
+                theirCastleTeam === myTeamStr));
 
-        // Reinforce — same-team player, both in the same city.
-        if (!isEncounter && !isCastle && !isSelf && account?.owner && onSameTeam) {
-          const owner = account.owner;
-          buttons.push(
-            <button
-              key="reinforce"
-              type="button"
-              disabled={!sameCity}
-              aria-disabled={!sameCity}
-              title={gatedTitle}
-              onClick={() =>
-                sameCity &&
-                onOpenComposer?.({ kind: "reinforce", targetWallet: owner.toBase58() })
-              }
-              style={sameCity ? enabledStyle : disabledStyle}
-            >
-              Reinforce
-            </button>,
+          // Reinforce — same-team player, both in the same city.
+          if (!isEncounter && !isCastle && !isSelf && account?.owner && onSameTeam) {
+            const owner = account.owner;
+            buttons.push(
+              <button
+                key="reinforce"
+                type="button"
+                disabled={!sameCity}
+                aria-disabled={!sameCity}
+                title={gatedTitle}
+                onClick={() =>
+                  sameCity &&
+                  onOpenComposer?.({ kind: "reinforce", targetWallet: owner.toBase58() })
+                }
+                style={sameCity ? enabledStyle : disabledStyle}
+              >
+                Reinforce
+              </button>,
+            );
+          }
+
+          // Rally — I have a team, target is enemy (non-self, non-teammate),
+          // we're in the same city as the target.
+          const canRally =
+            !!myTeamStr && !isSelf && !onSameTeam && (isEncounter || isCastle || !!account);
+          if (canRally) {
+            const targetType = isEncounter ? 1 : isCastle ? 2 : 0;
+            const targetCityId = isCastle ? (castle?.cityId ?? city.cityId) : city.cityId;
+            const targetLabel = displayName;
+            buttons.push(
+              <button
+                key="rally"
+                type="button"
+                disabled={!sameCity}
+                aria-disabled={!sameCity}
+                title={gatedTitle}
+                onClick={() =>
+                  sameCity &&
+                  onOpenComposer?.({
+                    kind: "rally",
+                    targetPubkey: entity.pubkey,
+                    targetType,
+                    targetCityId,
+                    targetLabel,
+                  })
+                }
+                style={sameCity ? enabledStyle : disabledStyle}
+              >
+                Rally
+              </button>,
+            );
+          }
+
+          // Garrison — castle whose team matches mine, in the same city.
+          if (isCastle && castle && onSameTeam) {
+            buttons.push(
+              <button
+                key="garrison"
+                type="button"
+                disabled={!sameCity}
+                aria-disabled={!sameCity}
+                title={gatedTitle}
+                onClick={() =>
+                  sameCity &&
+                  onOpenComposer?.({
+                    kind: "garrison",
+                    cityId: castle.cityId,
+                    castleId: castle.castleId,
+                  })
+                }
+                style={sameCity ? enabledStyle : disabledStyle}
+              >
+                Garrison
+              </button>,
+            );
+          }
+
+          if (buttons.length === 0) return null;
+          return (
+            <div style={{ marginTop: "0.7rem", display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
+              {buttons}
+            </div>
           );
-        }
-
-        // Rally — I have a team, target is enemy (non-self, non-teammate),
-        // we're in the same city as the target.
-        const canRally =
-          !!myTeamStr &&
-          !isSelf &&
-          !onSameTeam &&
-          (isEncounter || isCastle || !!account);
-        if (canRally) {
-          const targetType = isEncounter ? 1 : isCastle ? 2 : 0;
-          const targetCityId = isCastle ? castle?.cityId ?? city.cityId : city.cityId;
-          const targetLabel = displayName;
-          buttons.push(
-            <button
-              key="rally"
-              type="button"
-              disabled={!sameCity}
-              aria-disabled={!sameCity}
-              title={gatedTitle}
-              onClick={() =>
-                sameCity &&
-                onOpenComposer?.({
-                  kind: "rally",
-                  targetPubkey: entity.pubkey,
-                  targetType,
-                  targetCityId,
-                  targetLabel,
-                })
-              }
-              style={sameCity ? enabledStyle : disabledStyle}
-            >
-              Rally
-            </button>,
-          );
-        }
-
-        // Garrison — castle whose team matches mine, in the same city.
-        if (isCastle && castle && onSameTeam) {
-          buttons.push(
-            <button
-              key="garrison"
-              type="button"
-              disabled={!sameCity}
-              aria-disabled={!sameCity}
-              title={gatedTitle}
-              onClick={() =>
-                sameCity &&
-                onOpenComposer?.({
-                  kind: "garrison",
-                  cityId: castle.cityId,
-                  castleId: castle.castleId,
-                })
-              }
-              style={sameCity ? enabledStyle : disabledStyle}
-            >
-              Garrison
-            </button>,
-          );
-        }
-
-        if (buttons.length === 0) return null;
-        return (
-          <div style={{ marginTop: "0.7rem", display: "flex", flexWrap: "wrap", gap: "0.4rem" }}>
-            {buttons}
-          </div>
-        );
-      })()}
+        })()}
       </div>
 
       {/* Footnotes — fine print, kept out of the way. */}

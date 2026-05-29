@@ -68,7 +68,13 @@ export const RELICS: RelicInfo[] = [
   { id: 13, name: "Unbreakable Oath", effect: "Cannot be one-shot", synergy: 1, flag: true },
   { id: 14, name: "Twin-Strike Glyph", effect: "15% chance to strike twice", synergy: 0 },
   { id: 15, name: "Midas Coin", effect: "Doubles NOVI rewards", synergy: 5 },
-  { id: 16, name: "Void-Touched Eye", effect: "Immune to darkness crit penalty", synergy: 4, flag: true },
+  {
+    id: 16,
+    name: "Void-Touched Eye",
+    effect: "Immune to darkness crit penalty",
+    synergy: 4,
+    flag: true,
+  },
   { id: 17, name: "Glass Cannon", effect: "+50% attack, −30% defense", synergy: 0 },
   { id: 18, name: "Last Stand Idol", effect: "+40% attack below half units", synergy: 3 },
   { id: 19, name: "Seer's Dice", effect: "+1 relic choice next time", synergy: 8, flag: true },
@@ -100,11 +106,7 @@ export function synergyStates(relics: RelicInfo[]): SynergyState[] {
     const count = relics.filter((r) => r.synergy === s.id).length;
     const tier: 0 | 2 | 3 = count >= 3 ? 3 : count >= 2 ? 2 : 0;
     const bonus =
-      tier === 3
-        ? SYNERGY_BONUS[s.id].three
-        : tier === 2
-          ? SYNERGY_BONUS[s.id].two
-          : "";
+      tier === 3 ? SYNERGY_BONUS[s.id].three : tier === 2 ? SYNERGY_BONUS[s.id].two : "";
     return { id: s.id, name: s.name, count, tier, bonus };
   });
 }
@@ -135,8 +137,28 @@ export const ROOM_INFO: Record<
   { name: string; icon: string; blurb: string; combat: boolean }
 > = {
   0: { name: "Combat", icon: "⚔", blurb: "A foe blocks the way — strike it down.", combat: true },
-  1: { name: "Treasure", icon: "💰", blurb: "An untouched cache. Take the loot — no fight.", combat: false },
-  2: { name: "Camp", icon: "⛺", blurb: "An abandoned camp. Found supplies grant a temporary buff.", combat: false },
-  3: { name: "Rest", icon: "🛏", blurb: "A moment's safety — heal 20% of your fallen units.", combat: false },
-  4: { name: "Trap", icon: "⚡", blurb: "A sprung trap. Take damage, but the ordeal grants bonus XP.", combat: false },
+  1: {
+    name: "Treasure",
+    icon: "💰",
+    blurb: "An untouched cache. Take the loot — no fight.",
+    combat: false,
+  },
+  2: {
+    name: "Camp",
+    icon: "⛺",
+    blurb: "An abandoned camp. Found supplies grant a temporary buff.",
+    combat: false,
+  },
+  3: {
+    name: "Rest",
+    icon: "🛏",
+    blurb: "A moment's safety — heal 20% of your fallen units.",
+    combat: false,
+  },
+  4: {
+    name: "Trap",
+    icon: "⚡",
+    blurb: "A sprung trap. Take damage, but the ordeal grants bonus XP.",
+    combat: false,
+  },
 };

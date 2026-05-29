@@ -79,9 +79,7 @@ export const INITIAL_DISTANCE_3D = 4.5;
  * (initial mount, mode-toggle, focusRequest) needs the same clamp
  * or the camera framing diverges between paths. */
 const REF_WIDTH_GRID = 8782;
-export function cityCameraSizeFactor(cityAccount: {
-  widthGrid: number;
-}): number {
+export function cityCameraSizeFactor(cityAccount: { widthGrid: number }): number {
   return Math.min(1, Math.max(0.45, cityAccount.widthGrid / REF_WIDTH_GRID));
 }
 
@@ -121,11 +119,22 @@ export const TOUCH_DRAG_THRESHOLD_PX = 6;
 // each frame by applyKeyboard. preventDefault so arrows don't scroll
 // the page and ± don't zoom the browser.
 const HELD_KEYS = new Set([
-  "w", "a", "s", "d",
-  "arrowup", "arrowdown", "arrowleft", "arrowright",
-  "q", "e",
-  "pageup", "pagedown",
-  "=", "+", "-", "_",
+  "w",
+  "a",
+  "s",
+  "d",
+  "arrowup",
+  "arrowdown",
+  "arrowleft",
+  "arrowright",
+  "q",
+  "e",
+  "pageup",
+  "pagedown",
+  "=",
+  "+",
+  "-",
+  "_",
 ]);
 
 export interface ControllerOptions {
@@ -231,11 +240,7 @@ export class CityCameraController {
 
     this.pitch = this.mode === "iso" ? PITCH_3D : PITCH_2D;
     this.distance = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    this.target = new THREE.Vector3(
-      0,
-      this.mode === "iso" ? midpointElevation() : 0,
-      0,
-    );
+    this.target = new THREE.Vector3(0, this.mode === "iso" ? midpointElevation() : 0, 0);
 
     this.sYaw = this.yaw;
     this.sPitch = this.pitch;
@@ -342,8 +347,7 @@ export class CityCameraController {
   }
 
   getDisplayZoom(): number {
-    const base =
-      this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const base = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     return base / this.sDistance;
   }
 
@@ -511,8 +515,7 @@ export class CityCameraController {
    * lerps target.y and we don't want to fight it. */
   private clampTarget(v: THREE.Vector3): void {
     const halfSide = MESH_SIZE / 2;
-    const visibleHalf =
-      this.sDistance * Math.tan((this.camera.fov * DEG) / 2);
+    const visibleHalf = this.sDistance * Math.tan((this.camera.fov * DEG) / 2);
     const maxOffset = Math.max(0, halfSide - visibleHalf);
     v.x = Math.max(-maxOffset, Math.min(maxOffset, v.x));
     v.z = Math.max(-maxOffset, Math.min(maxOffset, v.z));
@@ -570,7 +573,7 @@ export class CityCameraController {
     if (this.keys.has("q")) {
       this.distance = this.clampDistance(this.distance - this.sDistance * 0.8 * dt);
     }
-    if (this.keys.has("e")) 
+    if (this.keys.has("e"))
       this.distance = this.clampDistance(this.distance + this.sDistance * 0.8 * dt);
     if (this.mode === "iso") {
       if (this.keys.has("pageup")) {
@@ -605,20 +608,25 @@ export class CityCameraController {
   private bindEvents(): void {
     const dom = this.dom;
 
-    this.listen(dom, "wheel", (e: WheelEvent) => {
-      e.preventDefault();
-      if (this.isTransitioning) return;
-      this.cfg.onGestureStart?.();
-      /* Wheel delta -> zoom velocity. ctrlKey indicates trackpad
-       * pinch (browsers synthesise wheel with ctrlKey for pinch); use
-       * a smaller multiplier to keep pinch feeling proportional. */
-      const intensity = Math.min(Math.abs(e.deltaY) / 100, 2.5);
-      const mult = e.ctrlKey ? 0.35 : 1.0;
-      const stepSign = e.deltaY > 0 ? +1 : -1;
-      const step = stepSign * ZOOM_SPEED * intensity * mult * this.sDistance;
-      this.applyZoomDelta(step);
-      this.cfg.onChange();
-    }, { passive: false });
+    this.listen(
+      dom,
+      "wheel",
+      (e: WheelEvent) => {
+        e.preventDefault();
+        if (this.isTransitioning) return;
+        this.cfg.onGestureStart?.();
+        /* Wheel delta -> zoom velocity. ctrlKey indicates trackpad
+         * pinch (browsers synthesise wheel with ctrlKey for pinch); use
+         * a smaller multiplier to keep pinch feeling proportional. */
+        const intensity = Math.min(Math.abs(e.deltaY) / 100, 2.5);
+        const mult = e.ctrlKey ? 0.35 : 1.0;
+        const stepSign = e.deltaY > 0 ? +1 : -1;
+        const step = stepSign * ZOOM_SPEED * intensity * mult * this.sDistance;
+        this.applyZoomDelta(step);
+        this.cfg.onChange();
+      },
+      { passive: false },
+    );
 
     this.listen(dom, "mousedown", (e: MouseEvent) => {
       if (this.isTransitioning) return;
@@ -661,10 +669,7 @@ export class CityCameraController {
       this.dragLastX = e.clientX;
       this.dragLastY = e.clientY;
       if (!this.didDrag) {
-        const total = Math.hypot(
-          e.clientX - this.dragStartX,
-          e.clientY - this.dragStartY,
-        );
+        const total = Math.hypot(e.clientX - this.dragStartX, e.clientY - this.dragStartY);
         if (total < PAN_THRESHOLD_PX) return;
         this.didDrag = true;
       }
@@ -720,103 +725,123 @@ export class CityCameraController {
 
     /* ── Touch ───────────────────────────────────────────────── */
 
-    this.listen(dom, "touchstart", (e: TouchEvent) => {
-      if (this.isTransitioning) return;
-      this.cfg.onGestureStart?.();
-      const t = e.touches;
-      if (t.length === 1) {
-        this.dragMode = "pan";
-        this.dragStartX = t[0]!.clientX;
-        this.dragStartY = t[0]!.clientY;
-        this.dragLastX = t[0]!.clientX;
-        this.dragLastY = t[0]!.clientY;
-        this.didDrag = false;
-      } else if (t.length === 2) {
-        const dx = t[1]!.clientX - t[0]!.clientX;
-        const dy = t[1]!.clientY - t[0]!.clientY;
-        this.pinchDist = Math.hypot(dx, dy);
-        this.dragMode = this.touchOrbitEnabled ? "orbit" : "none";
-        this.dragStartX = (t[0]!.clientX + t[1]!.clientX) / 2;
-        this.dragStartY = (t[0]!.clientY + t[1]!.clientY) / 2;
-        this.dragLastX = this.dragStartX;
-        this.dragLastY = this.dragStartY;
-        this.didDrag = false;
-      }
-    }, { passive: true });
-
-    this.listen(dom, "touchmove", (e: TouchEvent) => {
-      if (this.isTransitioning) return;
-      const t = e.touches;
-      if (t.length === 1 && this.dragMode === "pan") {
-        const dx = t[0]!.clientX - this.dragLastX;
-        const dy = t[0]!.clientY - this.dragLastY;
-        if (!this.didDrag) {
-          const total = Math.hypot(
-            t[0]!.clientX - this.dragStartX,
-            t[0]!.clientY - this.dragStartY,
-          );
-          if (total < TOUCH_DRAG_THRESHOLD_PX) return;
-          this.didDrag = true;
+    this.listen(
+      dom,
+      "touchstart",
+      (e: TouchEvent) => {
+        if (this.isTransitioning) return;
+        this.cfg.onGestureStart?.();
+        const t = e.touches;
+        if (t.length === 1) {
+          this.dragMode = "pan";
+          this.dragStartX = t[0]!.clientX;
+          this.dragStartY = t[0]!.clientY;
+          this.dragLastX = t[0]!.clientX;
+          this.dragLastY = t[0]!.clientY;
+          this.didDrag = false;
+        } else if (t.length === 2) {
+          const dx = t[1]!.clientX - t[0]!.clientX;
+          const dy = t[1]!.clientY - t[0]!.clientY;
+          this.pinchDist = Math.hypot(dx, dy);
+          this.dragMode = this.touchOrbitEnabled ? "orbit" : "none";
+          this.dragStartX = (t[0]!.clientX + t[1]!.clientX) / 2;
+          this.dragStartY = (t[0]!.clientY + t[1]!.clientY) / 2;
+          this.dragLastX = this.dragStartX;
+          this.dragLastY = this.dragStartY;
+          this.didDrag = false;
         }
-        e.preventDefault();
-        this.dragLastX = t[0]!.clientX;
-        this.dragLastY = t[0]!.clientY;
-        this.applyPan(dx, dy);
-      } else if (t.length === 2 && this.pinchDist != null) {
-        e.preventDefault();
-        const dx = t[1]!.clientX - t[0]!.clientX;
-        const dy = t[1]!.clientY - t[0]!.clientY;
-        const dist = Math.hypot(dx, dy);
-        // Two-finger touches that resolve to the same coordinate produce
-        // pinchDist=0; the divide would propagate Infinity → NaN through
-        // applyZoomDelta into the camera distance, blacking the scene
-        // until the gesture ends. Re-seed and skip the frame instead.
-        if (this.pinchDist <= 0) {
+      },
+      { passive: true },
+    );
+
+    this.listen(
+      dom,
+      "touchmove",
+      (e: TouchEvent) => {
+        if (this.isTransitioning) return;
+        const t = e.touches;
+        if (t.length === 1 && this.dragMode === "pan") {
+          const dx = t[0]!.clientX - this.dragLastX;
+          const dy = t[0]!.clientY - this.dragLastY;
+          if (!this.didDrag) {
+            const total = Math.hypot(
+              t[0]!.clientX - this.dragStartX,
+              t[0]!.clientY - this.dragStartY,
+            );
+            if (total < TOUCH_DRAG_THRESHOLD_PX) return;
+            this.didDrag = true;
+          }
+          e.preventDefault();
+          this.dragLastX = t[0]!.clientX;
+          this.dragLastY = t[0]!.clientY;
+          this.applyPan(dx, dy);
+        } else if (t.length === 2 && this.pinchDist != null) {
+          e.preventDefault();
+          const dx = t[1]!.clientX - t[0]!.clientX;
+          const dy = t[1]!.clientY - t[0]!.clientY;
+          const dist = Math.hypot(dx, dy);
+          // Two-finger touches that resolve to the same coordinate produce
+          // pinchDist=0; the divide would propagate Infinity → NaN through
+          // applyZoomDelta into the camera distance, blacking the scene
+          // until the gesture ends. Re-seed and skip the frame instead.
+          if (this.pinchDist <= 0) {
+            this.pinchDist = dist;
+            return;
+          }
+          const factor = dist / this.pinchDist;
+          /* Pinch out (factor > 1) -> distance shrinks (zoom in). */
+          const step = -(factor - 1) * this.sDistance;
+          this.applyZoomDelta(step);
           this.pinchDist = dist;
-          return;
-        }
-        const factor = dist / this.pinchDist;
-        /* Pinch out (factor > 1) -> distance shrinks (zoom in). */
-        const step = -(factor - 1) * this.sDistance;
-        this.applyZoomDelta(step);
-        this.pinchDist = dist;
 
-        if (this.touchOrbitEnabled && this.dragMode === "orbit") {
-          const cx = (t[0]!.clientX + t[1]!.clientX) / 2;
-          const cy = (t[0]!.clientY + t[1]!.clientY) / 2;
-          const odx = cx - this.dragLastX;
-          const ody = cy - this.dragLastY;
-          this.dragLastX = cx;
-          this.dragLastY = cy;
-          this.applyOrbit(odx, ody);
+          if (this.touchOrbitEnabled && this.dragMode === "orbit") {
+            const cx = (t[0]!.clientX + t[1]!.clientX) / 2;
+            const cy = (t[0]!.clientY + t[1]!.clientY) / 2;
+            const odx = cx - this.dragLastX;
+            const ody = cy - this.dragLastY;
+            this.dragLastX = cx;
+            this.dragLastY = cy;
+            this.applyOrbit(odx, ody);
+          }
+          this.cfg.onChange();
         }
-        this.cfg.onChange();
-      }
-    }, { passive: false });
+      },
+      { passive: false },
+    );
 
-    this.listen(dom, "touchend", (e: TouchEvent) => {
-      if (e.touches.length < 2 && this.pinchDist != null) {
-        this.pinchDist = null;
-        /* Phantom-click suppression after pinch-end on iOS. */
-        this.touchClickSuppressUntil = performance.now() + TOUCH_CLICK_SUPPRESS_MS;
-      }
-      if (e.touches.length === 0) {
-        if (this.didDrag) {
-          this.touchClickSuppressUntil = Math.max(
-            this.touchClickSuppressUntil,
-            performance.now() + TOUCH_CLICK_SUPPRESS_MS,
-          );
+    this.listen(
+      dom,
+      "touchend",
+      (e: TouchEvent) => {
+        if (e.touches.length < 2 && this.pinchDist != null) {
+          this.pinchDist = null;
+          /* Phantom-click suppression after pinch-end on iOS. */
+          this.touchClickSuppressUntil = performance.now() + TOUCH_CLICK_SUPPRESS_MS;
         }
+        if (e.touches.length === 0) {
+          if (this.didDrag) {
+            this.touchClickSuppressUntil = Math.max(
+              this.touchClickSuppressUntil,
+              performance.now() + TOUCH_CLICK_SUPPRESS_MS,
+            );
+          }
+          this.dragMode = "none";
+          this.didDrag = false;
+        }
+      },
+      { passive: true },
+    );
+
+    this.listen(
+      dom,
+      "touchcancel",
+      () => {
         this.dragMode = "none";
         this.didDrag = false;
-      }
-    }, { passive: true });
-
-    this.listen(dom, "touchcancel", () => {
-      this.dragMode = "none";
-      this.didDrag = false;
-      this.pinchDist = null;
-    }, { passive: true });
+        this.pinchDist = null;
+      },
+      { passive: true },
+    );
 
     /* ── Keyboard ───────────────────────────────────────────── */
 

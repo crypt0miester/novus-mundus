@@ -76,10 +76,7 @@ export class WalksLayer {
 
     /* Own walk — line + marker + halo. */
     const ownLineGeom = new THREE.BufferGeometry();
-    ownLineGeom.setAttribute(
-      "position",
-      new THREE.BufferAttribute(new Float32Array(6), 3),
-    );
+    ownLineGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
     const ownLineMat = new THREE.LineDashedMaterial({
       color: COLOR_SEAL,
       transparent: true,
@@ -121,10 +118,7 @@ export class WalksLayer {
     this.otherPool = [];
     for (let i = 0; i < MAX_OTHER_WALKS; i++) {
       const lineGeom = new THREE.BufferGeometry();
-      lineGeom.setAttribute(
-        "position",
-        new THREE.BufferAttribute(new Float32Array(6), 3),
-      );
+      lineGeom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(6), 3));
       const lineMat = new THREE.LineDashedMaterial({
         color: COLOR_SEAL,
         transparent: true,
@@ -183,9 +177,7 @@ export class WalksLayer {
     const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
     const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
 
-    const posAttr = this.ownLine.geometry.getAttribute(
-      "position",
-    ) as THREE.BufferAttribute;
+    const posAttr = this.ownLine.geometry.getAttribute("position") as THREE.BufferAttribute;
     posAttr.setXYZ(0, from.wx, yF, from.wz);
     posAttr.setXYZ(1, to.wx, yT, to.wz);
     posAttr.needsUpdate = true;
@@ -197,9 +189,7 @@ export class WalksLayer {
      * walker's identity follows them across the disc — same rule the
      * 2D fallback applies. Falls through to the canonical seal-orange
      * when the walker has no colour equipped. */
-    const walkColor = walk.nameColorHex
-      ? parseHexLinear(walk.nameColorHex)
-      : null;
+    const walkColor = walk.nameColorHex ? parseHexLinear(walk.nameColorHex) : null;
     const lineMat = this.ownLine.material as THREE.LineBasicMaterial;
     lineMat.color.copy(walkColor ?? COLOR_SEAL);
     const markerMat = this.ownMarker.material as THREE.MeshBasicMaterial;
@@ -240,9 +230,7 @@ export class WalksLayer {
       const to = gridToWorld(oxT, oyT, this.rgu);
       const yF = getElevationAt(oxF, oyF) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
       const yT = getElevationAt(oxT, oyT) + OVERLAY_Y_BIAS + WALK_LINE_LIFT;
-      const posAttr = entry.line.geometry.getAttribute(
-        "position",
-      ) as THREE.BufferAttribute;
+      const posAttr = entry.line.geometry.getAttribute("position") as THREE.BufferAttribute;
       posAttr.setXYZ(0, from.wx, yF, from.wz);
       posAttr.setXYZ(1, to.wx, yT, to.wz);
       posAttr.needsUpdate = true;
@@ -250,9 +238,7 @@ export class WalksLayer {
       entry.line.computeLineDistances();
       entry.line.visible = true;
 
-      const walkColor = w.nameColorHex
-        ? parseHexLinear(w.nameColorHex)
-        : null;
+      const walkColor = w.nameColorHex ? parseHexLinear(w.nameColorHex) : null;
       const lineMat = entry.line.material as THREE.LineBasicMaterial;
       lineMat.color.copy(walkColor ?? COLOR_SEAL);
       const markerMat = entry.marker.material as THREE.MeshBasicMaterial;

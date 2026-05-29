@@ -1,4 +1,4 @@
-import React, { Suspense, useSyncExternalStore } from "react";
+import { Suspense, useSyncExternalStore } from "react";
 
 import { BaseWalletMultiButton } from "./BaseWalletMultiButton";
 import type { ButtonProps } from "./Button";

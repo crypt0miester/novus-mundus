@@ -144,8 +144,7 @@ export function ExpeditionTab() {
 
   // Can only start once stamina + at least one operative are committed, and the
   // tier's required building is in place.
-  const canStartNow =
-    canStart && hasStamina && buildingReq.ok && expeditionOps.some((n) => n > 0);
+  const canStartNow = canStart && hasStamina && buildingReq.ok && expeditionOps.some((n) => n > 0);
 
   // Expedition time remaining
   const expeditionRemaining = hasExpedition
@@ -685,9 +684,7 @@ export function ExpeditionTab() {
               </div>
             )}
             {!hasExpedition && buildingReq.message && (
-              <div className="mt-3 text-center text-[11px] text-red-400">
-                {buildingReq.message}
-              </div>
+              <div className="mt-3 text-center text-[11px] text-red-400">{buildingReq.message}</div>
             )}
 
             <div className="mt-4 space-y-3">

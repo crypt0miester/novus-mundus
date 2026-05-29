@@ -34,7 +34,9 @@ function TeamContent() {
     <PageTransition>
       <div className="flex h-full flex-col gap-3">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
-          <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">TEAM</h1>
+          <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">
+            TEAM
+          </h1>
           <TabNav tabs={TABS} activeTab={tab} onTabChange={setTab} />
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -52,7 +54,13 @@ function TeamContent() {
 
 export default function TeamPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center text-text-muted">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[60vh] items-center justify-center text-text-muted">
+          Loading...
+        </div>
+      }
+    >
       <TeamContent />
     </Suspense>
   );

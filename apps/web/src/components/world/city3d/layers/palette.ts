@@ -43,11 +43,7 @@ export const STATUS_TRANSITIONING_SRGB = [80, 100, 160] as const;
 
 export function linearColor(rgb: readonly [number, number, number]): THREE.Color {
   const c = new THREE.Color();
-  c.setRGB(
-    srgbToLinear(rgb[0] / 255),
-    srgbToLinear(rgb[1] / 255),
-    srgbToLinear(rgb[2] / 255),
-  );
+  c.setRGB(srgbToLinear(rgb[0] / 255), srgbToLinear(rgb[1] / 255), srgbToLinear(rgb[2] / 255));
   return c;
 }
 

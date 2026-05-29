@@ -27,12 +27,7 @@ export function useRevealOnMount(
   ref: RefObject<HTMLElement | null>,
   options: RevealOptions = {},
 ): void {
-  const {
-    staggerStep = 300,
-    staggerStart = 0,
-    translateY = 12,
-    duration = 700,
-  } = options;
+  const { staggerStep = 300, staggerStart = 0, translateY = 12, duration = 700 } = options;
 
   useEffect(() => {
     const el = ref.current;

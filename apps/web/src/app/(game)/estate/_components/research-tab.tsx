@@ -32,6 +32,7 @@ import {
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount } from "novus-mundus-sdk";
 import { ActivityForecast } from "./activity-forecast";
+import { BuildingShowcase } from "./building-showcase";
 
 // Category icons are UI-only; node names/descriptions come from the SDK catalog.
 const CATEGORY_ICONS: Record<number, string> = { 0: "\u2694", 1: "\uD83D\uDCE6", 2: "\u26A1" };
@@ -51,7 +52,7 @@ function useResearchTemplates() {
         const info = infos[i];
         if (!info) continue;
         const parsed = parseResearchTemplate(info);
-        if (parsed && parsed.isActive) {
+        if (parsed?.isActive) {
           templates.push({ ...parsed, pda: pdas[i].toBase58() });
         }
       }
@@ -111,7 +112,7 @@ export function ResearchTab() {
     return isTraveling(player) ? "Cannot research while traveling" : null;
   }, [player]);
 
-  // Templates grouped by category, ordered by category number (Battle to 
+  // Templates grouped by category, ordered by category number (Battle to
   // Economy to Growth). The view shows one category at a time.
   const categories = useMemo(() => {
     if (!templates) return [];
@@ -155,6 +156,7 @@ export function ResearchTab() {
 
   return (
     <div className="flex h-full flex-col gap-3">
+      <BuildingShowcase buildingId={BuildingId.Academy} icon="buff-xp-gain" />
       {travelWarning && (
         <div className="rounded-lg border border-border-gold/50 bg-accent/20 p-3 text-sm text-danger">
           {travelWarning}

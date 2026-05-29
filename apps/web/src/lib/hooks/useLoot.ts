@@ -17,12 +17,15 @@ export function useLoot() {
   useEffect(() => {
     if (!publicKey || !playerData?.exists) return;
 
-    client.fetchPlayerLoot(playerData.pubkey, { unclaimedOnly: true }).then((results) => {
-      const store = useAccountStore.getState();
-      for (const r of results) {
-        if (r.account) store.upsertLoot(r.pubkey, r.account);
-      }
-    }).catch(() => {});
+    client
+      .fetchPlayerLoot(playerData.pubkey, { unclaimedOnly: true })
+      .then((results) => {
+        const store = useAccountStore.getState();
+        for (const r of results) {
+          if (r.account) store.upsertLoot(r.pubkey, r.account);
+        }
+      })
+      .catch(() => {});
   }, [publicKey, playerData?.pubkey?.toBase58(), client]);
 
   const data = useMemo(() => Array.from(loot.values()), [loot]);

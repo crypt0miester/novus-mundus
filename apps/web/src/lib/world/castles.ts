@@ -30,16 +30,12 @@ export const CASTLE_STATUS_NAMES: Record<number, string> = {
  *  this seat's current disposition, in the EntityPanel's tighter
  *  voice. */
 export const CASTLE_STATUS_NARRATION: Record<number, string> = {
-  [CastleStatus.Vacant]:
-    "The seat stands empty. A banner could be planted here today.",
-  [CastleStatus.Contest]:
-    "Blades are already in the field for this seat.",
+  [CastleStatus.Vacant]: "The seat stands empty. A banner could be planted here today.",
+  [CastleStatus.Contest]: "Blades are already in the field for this seat.",
   [CastleStatus.Protected]:
     "The seat is held, and protection still wraps it. No one may move against it yet.",
-  [CastleStatus.Vulnerable]:
-    "The seat is held, but its protection has lapsed. It can be taken.",
-  [CastleStatus.Transitioning]:
-    "The seat is changing hands. Wait for the dust to settle.",
+  [CastleStatus.Vulnerable]: "The seat is held, but its protection has lapsed. It can be taken.",
+  [CastleStatus.Transitioning]: "The seat is changing hands. Wait for the dust to settle.",
 };
 
 /** `true` for the two states that demand a decision from the viewer:

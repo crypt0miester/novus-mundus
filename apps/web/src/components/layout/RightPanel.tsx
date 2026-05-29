@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useCallback, lazy, Suspense, type ComponentType } from "react";
+import { Suspense, type ComponentType } from "react";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingUpgradePanel } from "@/components/panels/BuildingUpgradePanel";
 import { ResearchPanel } from "@/components/panels/ResearchDetailPanel";
@@ -21,15 +21,15 @@ import { BottomSheet } from "@/components/shared/BottomSheet";
 // Components resolved by contentKey from the store.
 const PANELS: Record<string, ComponentType<any>> = {
   "building-detail": BuildingUpgradePanel,
-  "research": ResearchPanel,
+  research: ResearchPanel,
   "rally-detail": RallyDetailPanel,
   "daily-activities": DailyActivityListPanel,
-  "chronicle": ChroniclePanel,
+  chronicle: ChroniclePanel,
   "encounter-detail": EncounterDetailPanel,
   "pvp-detail": PvpDetailPanel,
   "dungeon-hero": DungeonHeroPanel,
   "dungeon-claim": DungeonClaimPanel,
-  "inventory": InventoryPanel,
+  inventory: InventoryPanel,
   "reinforce-composer": ReinforceComposerPanel,
   "rally-composer": RallyComposerPanel,
   "garrison-composer": GarrisonComposerPanel,
@@ -74,30 +74,8 @@ export function RightPanel() {
   const title = useRightPanelStore((s) => s.title);
   const close = useRightPanelStore((s) => s.close);
 
-  // Close on Escape
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") close();
-    },
-    [close]
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [open, handleKey]);
-
-  // Lock body scroll on mobile when open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    const mql = window.matchMedia("(min-width: 1024px)");
-    if (!mql.matches) document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  // Escape-to-close and mobile body-scroll-lock are owned by BottomSheet,
+  // which is always mounted below — no need to duplicate them here.
 
   return (
     <>

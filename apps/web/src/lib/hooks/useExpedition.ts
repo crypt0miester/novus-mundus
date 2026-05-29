@@ -22,16 +22,18 @@ export function useExpedition() {
     }
 
     setFetchDone(false);
-    client.fetchExpedition(playerData.pubkey).then((result) => {
-      if (result.account) {
-        useAccountStore.getState().setExpedition(result.pubkey, result.account);
-      }
-    }).catch(() => {}).finally(() => setFetchDone(true));
+    client
+      .fetchExpedition(playerData.pubkey)
+      .then((result) => {
+        if (result.account) {
+          useAccountStore.getState().setExpedition(result.pubkey, result.account);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFetchDone(true));
   }, [publicKey, playerData?.pubkey?.toBase58(), client]);
 
-  const data = entry
-    ? { pubkey: entry.pubkey, account: entry.account, exists: true }
-    : null;
+  const data = entry ? { pubkey: entry.pubkey, account: entry.account, exists: true } : null;
 
   return {
     data,

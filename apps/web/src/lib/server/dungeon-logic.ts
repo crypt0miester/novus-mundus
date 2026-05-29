@@ -71,10 +71,7 @@ export function rollEnterRoom(
   owner: string,
   dungeonId: number,
 ): number {
-  return rollNextRoomType(
-    new Rng(RNG_ROOM, owner, `enter:${dungeonId}:${Date.now()}`),
-    template,
-  );
+  return rollNextRoomType(new Rng(RNG_ROOM, owner, `enter:${dungeonId}:${Date.now()}`), template);
 }
 
 /**
@@ -82,16 +79,9 @@ export function rollEnterRoom(
  * instruction has no game_authority signer — advisory only. Seeded off the
  * run's checkpoint + resume count so a retry of one resume reproduces the roll.
  */
-export function rollResumeRoom(
-  run: DungeonRunAccount,
-  template: DungeonTemplateAccount,
-): number {
+export function rollResumeRoom(run: DungeonRunAccount, template: DungeonTemplateAccount): number {
   return rollNextRoomType(
-    new Rng(
-      RNG_ROOM,
-      run.player.toBase58(),
-      `resume:${run.lastCheckpoint}:${run.resumeCount}`,
-    ),
+    new Rng(RNG_ROOM, run.player.toBase58(), `resume:${run.lastCheckpoint}:${run.resumeCount}`),
     template,
   );
 }
@@ -114,10 +104,7 @@ export function rollDungeonAttack(
   const relics = ownedRelicIds(run.relicMask);
   const isTactician = run.heroSpecialization === HeroSpecialization.Tactician;
 
-  const nextRoomType = rollNextRoomType(
-    new Rng(RNG_ROOM, account, disc),
-    template,
-  );
+  const nextRoomType = rollNextRoomType(new Rng(RNG_ROOM, account, disc), template);
 
   let doubleStrike = false;
   if (relics.includes(RELIC_DOUBLE_ATTACK)) {
@@ -126,12 +113,8 @@ export function rollDungeonAttack(
     );
   }
 
-  let critBps = relics.includes(RELIC_CRIT)
-    ? applyTactician(CRIT_BASE_BPS, isTactician)
-    : 0;
-  const offensePieces = relics.filter(
-    (id) => RELIC_SYNERGY_TAGS[id] === SYNERGY_OFFENSE,
-  ).length;
+  let critBps = relics.includes(RELIC_CRIT) ? applyTactician(CRIT_BASE_BPS, isTactician) : 0;
+  const offensePieces = relics.filter((id) => RELIC_SYNERGY_TAGS[id] === SYNERGY_OFFENSE).length;
   if (offensePieces >= 3) {
     critBps += SYNERGY_3_BONUS_BPS[SYNERGY_OFFENSE] ?? 0;
   }
@@ -139,15 +122,10 @@ export function rollDungeonAttack(
     run.currentFloor >= DARKNESS_CRIT_PENALTY_START_FLOOR &&
     !relics.includes(RELIC_DARKNESS_WARD)
   ) {
-    const floorsAffected =
-      run.currentFloor - DARKNESS_CRIT_PENALTY_START_FLOOR + 1;
-    critBps = Math.max(
-      0,
-      critBps - floorsAffected * DARKNESS_CRIT_PENALTY_PER_FLOOR_BPS,
-    );
+    const floorsAffected = run.currentFloor - DARKNESS_CRIT_PENALTY_START_FLOOR + 1;
+    critBps = Math.max(0, critBps - floorsAffected * DARKNESS_CRIT_PENALTY_PER_FLOOR_BPS);
   }
-  const crit =
-    critBps > 0 && new Rng(RNG_CRIT, account, disc).rollBps(critBps);
+  const crit = critBps > 0 && new Rng(RNG_CRIT, account, disc).rollBps(critBps);
 
   return { nextRoomType, doubleStrike, crit };
 }
@@ -170,14 +148,10 @@ export function rollDungeonInteract(
 ): InteractRolls {
   const account = run.player.toBase58();
   const disc = `${run.currentFloor}:${run.currentRoom}`;
-  const nextRoomType = rollNextRoomType(
-    new Rng(RNG_ROOM, account, disc),
-    template,
-  );
+  const nextRoomType = rollNextRoomType(new Rng(RNG_ROOM, account, disc), template);
   // The program applies no cap on the camp bonus — the backend owns the range.
   // A modest rest-of-floor attack buff: +5% .. +15%.
-  const campBonusBps =
-    500 + new Rng(RNG_CAMP, account, disc).nextInt(1001);
+  const campBonusBps = 500 + new Rng(RNG_CAMP, account, disc).nextInt(1001);
   return { campBonusBps, nextRoomType };
 }
 
@@ -208,15 +182,11 @@ export function rollRelicOffer(
     if (!owned.has(i)) unowned.push(i);
   }
 
-  const count =
-    run.timePeriod === TIME_PERIOD_DAWN || owned.has(RELIC_EXTRA_CHOICE) ? 4 : 3;
+  const count = run.timePeriod === TIME_PERIOD_DAWN || owned.has(RELIC_EXTRA_CHOICE) ? 4 : 3;
   const relicOptions = new Rng(RNG_RELIC, account, disc).sampleDistinct(
     unowned,
     Math.min(count, unowned.length),
   );
-  const firstRoomType = rollNextRoomType(
-    new Rng(RNG_ROOM, account, disc),
-    template,
-  );
+  const firstRoomType = rollNextRoomType(new Rng(RNG_ROOM, account, disc), template);
   return { relicOptions, firstRoomType };
 }

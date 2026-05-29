@@ -1,6 +1,6 @@
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import {
-  NovusMundusClient,
+  type NovusMundusClient,
   GameSubscriptionManager,
   AccountKey,
   derivePlayerPda,
@@ -58,6 +58,13 @@ import { useEventStore, serializeEventData, type EventEntry } from "./events";
 import { classifyEvent } from "@/lib/events/classify";
 import { resolvePendingTx } from "@/lib/hooks/useTransact";
 
+/** RallyTargetType.Player — a rally aimed at a defender. */
+const RALLY_TARGET_PLAYER = 0;
+/** RallyTargetType.Castle — a rally aimed at a held castle. */
+const RALLY_TARGET_CASTLE = 2;
+/** RallyStatus.Combat — statuses 0/1/2 are still live; 3+ (Returning/Completed/Cancelled) are over. */
+const RALLY_LIVE_MAX_STATUS = 2;
+
 // Subscription Bridge
 
 /**
@@ -71,10 +78,7 @@ import { resolvePendingTx } from "@/lib/hooks/useTransact";
  *
  * @returns Cleanup function to stop subscriptions
  */
-export function startGameSubscriptions(
-  client: NovusMundusClient,
-  wallet: PublicKey
-): () => void {
+export function startGameSubscriptions(client: NovusMundusClient, wallet: PublicKey): () => void {
   const store = useAccountStore.getState;
 
   // Derive the current user's player PDA for WS routing
@@ -98,52 +102,52 @@ export function startGameSubscriptions(
    * rejections are logged so they're not silently swallowed.
    */
   const tasks = [
-    ['gameEngine',      client.fetchGameEngine()],
-    ['player',          client.fetchPlayer(wallet)],
-    ['user',            client.fetchUser(wallet)],
-    ['cities',          client.fetchAllCities()],
-    ['shopConfig',      client.fetchShopConfig()],
-    ['shopItems',       client.fetchAllShopItems()],
-    ['bundles',         client.fetchAllBundles()],
-    ['flashSales',      client.fetchAllFlashSales()],
-    ['dailyDeals',      client.fetchAllDailyDeals()],
-    ['weeklySales',     client.fetchAllWeeklySales()],
-    ['seasonalSales',   client.fetchAllSeasonalSales()],
-    ['daoPromotions',   client.fetchAllDaoPromotions()],
-    ['playerPurchases', client.fetchPlayerPurchases(wallet, playerPurchasePdaToId)],
-    ['heroTemplates',   client.fetchAllHeroTemplates()],
+    ["gameEngine", client.fetchGameEngine()],
+    ["player", client.fetchPlayer(wallet)],
+    ["user", client.fetchUser(wallet)],
+    ["cities", client.fetchAllCities()],
+    ["shopConfig", client.fetchShopConfig()],
+    ["shopItems", client.fetchAllShopItems()],
+    ["bundles", client.fetchAllBundles()],
+    ["flashSales", client.fetchAllFlashSales()],
+    ["dailyDeals", client.fetchAllDailyDeals()],
+    ["weeklySales", client.fetchAllWeeklySales()],
+    ["seasonalSales", client.fetchAllSeasonalSales()],
+    ["daoPromotions", client.fetchAllDaoPromotions()],
+    ["playerPurchases", client.fetchPlayerPurchases(wallet, playerPurchasePdaToId)],
+    ["heroTemplates", client.fetchAllHeroTemplates()],
     /*
      * Seed the full player population once at boot so the otherPlayers map is
      * warm by the time the user drills into any city. After this, the program-
      * wide WS keeps every player account live — no per-city or 30-second
      * refetches anywhere downstream.
      */
-    ['allPlayers',      client.fetchAllPlayers()],
+    ["allPlayers", client.fetchAllPlayers()],
   ] as const;
 
   Promise.allSettled(tasks.map(([, p]) => p)).then((results) => {
     const ok = <T>(i: number): T | null => {
       const r = results[i];
-      if (r.status === 'fulfilled') return r.value as T;
+      if (r.status === "fulfilled") return r.value as T;
       console.warn(`[boot] fetch ${tasks[i][0]} failed:`, r.reason);
       return null;
     };
 
-    const ge             = ok<Awaited<ReturnType<typeof client.fetchGameEngine>>>(0);
-    const player         = ok<Awaited<ReturnType<typeof client.fetchPlayer>>>(1);
-    const user           = ok<Awaited<ReturnType<typeof client.fetchUser>>>(2);
-    const cities         = ok<Awaited<ReturnType<typeof client.fetchAllCities>>>(3) ?? [];
-    const shopConfig     = ok<Awaited<ReturnType<typeof client.fetchShopConfig>>>(4);
-    const shopItems      = ok<Awaited<ReturnType<typeof client.fetchAllShopItems>>>(5) ?? [];
-    const bundles        = ok<Awaited<ReturnType<typeof client.fetchAllBundles>>>(6) ?? [];
-    const flashSales     = ok<Awaited<ReturnType<typeof client.fetchAllFlashSales>>>(7) ?? [];
-    const dailyDeals     = ok<Awaited<ReturnType<typeof client.fetchAllDailyDeals>>>(8) ?? [];
-    const weeklySales    = ok<Awaited<ReturnType<typeof client.fetchAllWeeklySales>>>(9) ?? [];
-    const seasonalSales  = ok<Awaited<ReturnType<typeof client.fetchAllSeasonalSales>>>(10) ?? [];
-    const daoPromotions  = ok<Awaited<ReturnType<typeof client.fetchAllDaoPromotions>>>(11) ?? [];
+    const ge = ok<Awaited<ReturnType<typeof client.fetchGameEngine>>>(0);
+    const player = ok<Awaited<ReturnType<typeof client.fetchPlayer>>>(1);
+    const user = ok<Awaited<ReturnType<typeof client.fetchUser>>>(2);
+    const cities = ok<Awaited<ReturnType<typeof client.fetchAllCities>>>(3) ?? [];
+    const shopConfig = ok<Awaited<ReturnType<typeof client.fetchShopConfig>>>(4);
+    const shopItems = ok<Awaited<ReturnType<typeof client.fetchAllShopItems>>>(5) ?? [];
+    const bundles = ok<Awaited<ReturnType<typeof client.fetchAllBundles>>>(6) ?? [];
+    const flashSales = ok<Awaited<ReturnType<typeof client.fetchAllFlashSales>>>(7) ?? [];
+    const dailyDeals = ok<Awaited<ReturnType<typeof client.fetchAllDailyDeals>>>(8) ?? [];
+    const weeklySales = ok<Awaited<ReturnType<typeof client.fetchAllWeeklySales>>>(9) ?? [];
+    const seasonalSales = ok<Awaited<ReturnType<typeof client.fetchAllSeasonalSales>>>(10) ?? [];
+    const daoPromotions = ok<Awaited<ReturnType<typeof client.fetchAllDaoPromotions>>>(11) ?? [];
     const playerPurchases = ok<Awaited<ReturnType<typeof client.fetchPlayerPurchases>>>(12) ?? [];
-    const heroTemplates  = ok<Awaited<ReturnType<typeof client.fetchAllHeroTemplates>>>(13) ?? [];
-    const allPlayers     = ok<Awaited<ReturnType<typeof client.fetchAllPlayers>>>(14) ?? [];
+    const heroTemplates = ok<Awaited<ReturnType<typeof client.fetchAllHeroTemplates>>>(13) ?? [];
+    const allPlayers = ok<Awaited<ReturnType<typeof client.fetchAllPlayers>>>(14) ?? [];
 
     if (ge?.account) store().setGameEngine(ge.pubkey, ge.account);
     if (player?.account) store().setPlayer(player.pubkey, player.account);
@@ -151,16 +155,20 @@ export function startGameSubscriptions(
     for (const city of cities) store().upsertCity(city.pubkey, city.account);
     if (shopConfig?.account) store().setShopConfig(shopConfig.pubkey, shopConfig.account);
     for (const item of shopItems) store().upsertShopItem(item.pubkey, item.account, item.itemId);
-    for (const bundle of bundles) store().upsertBundle(bundle.pubkey, bundle.account, bundle.bundleId);
+    for (const bundle of bundles)
+      store().upsertBundle(bundle.pubkey, bundle.account, bundle.bundleId);
     for (const sale of flashSales) store().upsertFlashSale(sale.pubkey, sale.account, sale.saleId);
     for (const deal of dailyDeals) store().upsertDailyDeal(deal.pubkey, deal.account, deal.slot);
     const nowSec = Math.floor(Date.now() / 1000);
-    const activeWeekly = weeklySales.find((w) => isWeeklySaleActive(w.account, nowSec)) ?? weeklySales[0];
+    const activeWeekly =
+      weeklySales.find((w) => isWeeklySaleActive(w.account, nowSec)) ?? weeklySales[0];
     if (activeWeekly) store().setWeeklySale(activeWeekly.pubkey, activeWeekly.account);
-    const activeSeasonal = seasonalSales.find((s) => isSeasonalSaleActive(s.account, nowSec)) ?? seasonalSales[0];
+    const activeSeasonal =
+      seasonalSales.find((s) => isSeasonalSaleActive(s.account, nowSec)) ?? seasonalSales[0];
     if (activeSeasonal) store().setSeasonalSale(activeSeasonal.pubkey, activeSeasonal.account);
     for (const promo of daoPromotions) store().upsertDaoPromotion(promo.pubkey, promo.account);
-    for (const pp of playerPurchases) store().upsertPlayerPurchase(pp.pubkey, pp.account, pp.itemId);
+    for (const pp of playerPurchases)
+      store().upsertPlayerPurchase(pp.pubkey, pp.account, pp.itemId);
     for (const t of heroTemplates) store().upsertHeroTemplate(t.pubkey, t.account);
     /* Skip self — that one's already owned by setPlayer above. */
     for (const p of allPlayers) {
@@ -172,11 +180,9 @@ export function startGameSubscriptions(
   });
 
   // ── 2. Program-wide WebSocket ───────────────────────────────
-  const manager = new GameSubscriptionManager(
-    client.connection,
-    client.gameEngine,
-    { commitment: "confirmed" }
-  );
+  const manager = new GameSubscriptionManager(client.connection, client.gameEngine, {
+    commitment: "confirmed",
+  });
 
   const geKey = client.gameEngine.toBase58();
 
@@ -292,11 +298,26 @@ export function startGameSubscriptions(
 
   // ── Rally ──────────────────────────────────────────────────
 
-  // Rally: only from my team
+  // Rally: my team's into `rally`; any war-band aimed at me into `incomingRallies`.
   manager.on(AccountKey.Rally, (account: RallyAccount, pubkey) => {
     const myTeam = store().team;
     if (myTeam && account.team.toBase58() === myTeam.pubkey.toBase58()) {
       store().setRally(pubkey, account);
+    }
+    // The program-wide WS already delivers every team's rally; keep the ones
+    // aimed at you (your defender) or at the castle you hold, and drop them again
+    // once they resolve. A rally pointed at you or your seat is hostile by
+    // definition, so no team check is needed here.
+    const target = account.target.toBase58();
+    const aimedAtMe =
+      (account.targetType === RALLY_TARGET_PLAYER && target === myPlayerKey) ||
+      (account.targetType === RALLY_TARGET_CASTLE && target === store().myCastlePda);
+    if (aimedAtMe) {
+      if (account.status <= RALLY_LIVE_MAX_STATUS) {
+        store().upsertIncomingRally(pubkey, account);
+      } else {
+        store().removeIncomingRally(pubkey.toBase58());
+      }
     }
   });
   // RallyParticipant: only my participations
@@ -365,11 +386,14 @@ export function startGameSubscriptions(
     const isNew = !store().bundles.has(pubkey.toBase58());
     store().upsertBundle(pubkey, account);
     if (isNew) {
-      client.fetchAllBundles().then((results) => {
-        store().replaceAllBundles(
-          results.map((r) => ({ pubkey: r.pubkey, account: r.account, bundleId: r.bundleId }))
-        );
-      }).catch(() => {});
+      client
+        .fetchAllBundles()
+        .then((results) => {
+          store().replaceAllBundles(
+            results.map((r) => ({ pubkey: r.pubkey, account: r.account, bundleId: r.bundleId })),
+          );
+        })
+        .catch(() => {});
     }
   });
 
@@ -378,11 +402,14 @@ export function startGameSubscriptions(
     const isNew = !store().flashSales.has(pubkey.toBase58());
     store().upsertFlashSale(pubkey, account);
     if (isNew) {
-      client.fetchAllFlashSales().then((results) => {
-        store().replaceAllFlashSales(
-          results.map((r) => ({ pubkey: r.pubkey, account: r.account, saleId: r.saleId }))
-        );
-      }).catch(() => {});
+      client
+        .fetchAllFlashSales()
+        .then((results) => {
+          store().replaceAllFlashSales(
+            results.map((r) => ({ pubkey: r.pubkey, account: r.account, saleId: r.saleId })),
+          );
+        })
+        .catch(() => {});
     }
   });
 
@@ -391,11 +418,14 @@ export function startGameSubscriptions(
     const isNew = !store().dailyDeals.has(pubkey.toBase58());
     store().upsertDailyDeal(pubkey, account);
     if (isNew) {
-      client.fetchAllDailyDeals().then((results) => {
-        store().replaceAllDailyDeals(
-          results.map((r) => ({ pubkey: r.pubkey, account: r.account, slot: r.slot }))
-        );
-      }).catch(() => {});
+      client
+        .fetchAllDailyDeals()
+        .then((results) => {
+          store().replaceAllDailyDeals(
+            results.map((r) => ({ pubkey: r.pubkey, account: r.account, slot: r.slot })),
+          );
+        })
+        .catch(() => {});
     }
   });
   // WeeklySale: unfiltered (global shop)
@@ -455,11 +485,7 @@ export function startGameSubscriptions(
     client.connection,
     (logsPayload) => {
       // First: try to resolve a pending tx (WebSocket-based confirmation)
-      const wasPending = resolvePendingTx(
-        logsPayload.signature,
-        logsPayload.logs,
-        logsPayload.err,
-      );
+      const wasPending = resolvePendingTx(logsPayload.signature, logsPayload.logs, logsPayload.err);
 
       // Skip failed txs for event parsing
       if (logsPayload.err) return;
@@ -503,7 +529,8 @@ export function startGameSubscriptions(
 
       // Only store events that are relevant to us (team or city scope)
       const relevant = entries.filter(
-        (e) => e.scopes.includes("team") || e.scopes.includes("city") || e.scopes.includes("personal"),
+        (e) =>
+          e.scopes.includes("team") || e.scopes.includes("city") || e.scopes.includes("personal"),
       );
       if (relevant.length > 0) {
         useEventStore.getState().addEvents(relevant);

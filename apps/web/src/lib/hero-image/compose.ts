@@ -8,11 +8,7 @@
 // 8 frame (Bonsai), 9 ascension marks (Bonsai, programmatic outline placeholder
 // for unlit), 10 state glow (programmatic). Layer 6 category banner deferred.
 
-import {
-  createCanvas,
-  type Image,
-  type SKRSContext2D,
-} from "@napi-rs/canvas";
+import { createCanvas, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import path from "node:path";
 import { BG_SOLID, STATE_GLOW, TIER_ACCENT, type HeroTier } from "./palette";
 import type { CompositionParams } from "./fingerprint";
@@ -73,8 +69,8 @@ const MARK_GAP = 12;
 const MARK_RIGHT_INSET = 32;
 const MARK_TOP_INSET = 32;
 const MARK_TIER_SIZE: Record<1 | 2 | 3 | 4, number> = {
-  1: 64,  // bronze
-  2: 96,  // silver
+  1: 64, // bronze
+  2: 96, // silver
   3: 128, // gold
   4: 128, // crimson
 };
@@ -82,8 +78,8 @@ const MARK_TIER_SIZE: Record<1 | 2 | 3 | 4, number> = {
 // group. Marks render in their native Bonsai color (no runtime tint).
 // The other 12 baked marks are unused for now (kept as alternates).
 const MARK_TIER_PNG: Record<1 | 2 | 3 | 4, number> = {
-  1: 4,  // mark-04-bronze-knot
-  2: 8,  // mark-08-silver-laurel-wreath
+  1: 4, // mark-04-bronze-knot
+  2: 8, // mark-08-silver-laurel-wreath
   3: 12, // mark-12-gold-lion-head
   4: 16, // mark-16-crimson-ascendant-star
 };
@@ -111,12 +107,7 @@ export async function composeHeroImage(input: ComposeInput): Promise<Buffer> {
     seed: input.params.haloSeed,
   });
   await drawSilhouette(ctx, input.templateId, input.tier, input.params);
-  await drawCitySigil(
-    ctx,
-    input.meditationCity,
-    input.tier,
-    input.params.citySigilRotateDeg,
-  );
+  await drawCitySigil(ctx, input.meditationCity, input.tier, input.params.citySigilRotateDeg);
   await drawBuffIcons(ctx, input.buffs, input.params.buffNudges);
   await drawAscensionMarks(ctx, input.level);
   drawStateGlow(ctx, input.locked, input.threatened ?? false);
@@ -214,8 +205,7 @@ async function drawBuffIcons(
 ): Promise<void> {
   if (buffs.length === 0) return;
   const visible = buffs.slice(0, 4);
-  const totalH =
-    visible.length * BUFF_ICON_SIZE + (visible.length - 1) * BUFF_ICON_VGAP;
+  const totalH = visible.length * BUFF_ICON_SIZE + (visible.length - 1) * BUFF_ICON_VGAP;
   const startY = (CANVAS_SIZE - totalH) / 2;
   const x = CANVAS_SIZE - BUFF_ICON_RIGHT_INSET - BUFF_ICON_SIZE;
 
@@ -235,10 +225,7 @@ async function drawBuffIcons(
   }
 }
 
-async function drawAscensionMarks(
-  ctx: SKRSContext2D,
-  level: number,
-): Promise<void> {
+async function drawAscensionMarks(ctx: SKRSContext2D, level: number): Promise<void> {
   if (level < 1) return;
 
   // Pick the single tier and count for this level.
@@ -266,12 +253,7 @@ async function drawAscensionMarks(
   const startX = CANVAS_SIZE - MARK_RIGHT_INSET - totalW;
   const y = MARK_TOP_INSET;
 
-  const markPath = appPath(
-    "img",
-    "heroes",
-    "marks",
-    `${MARK_TIER_PNG[tier]}.png`,
-  );
+  const markPath = appPath("img", "heroes", "marks", `${MARK_TIER_PNG[tier]}.png`);
   let img: Image | null = null;
   try {
     img = await loadImageCached(markPath);
@@ -285,11 +267,7 @@ async function drawAscensionMarks(
   }
 }
 
-function drawStateGlow(
-  ctx: SKRSContext2D,
-  locked: boolean,
-  threatened: boolean,
-): void {
+function drawStateGlow(ctx: SKRSContext2D, locked: boolean, threatened: boolean): void {
   if (!locked && !threatened) return;
   const color = threatened ? STATE_GLOW.threatened : STATE_GLOW.locked;
   ctx.save();
@@ -325,4 +303,3 @@ function tintToColor(img: Image, color: string, size: number): import("@napi-rs/
   tmpCtx.fillRect(0, 0, size, size);
   return tmp;
 }
-

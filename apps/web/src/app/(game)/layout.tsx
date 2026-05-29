@@ -14,11 +14,7 @@ import { useTransitionStore, exitMessage } from "@/lib/store/transition";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useActWatch } from "@/lib/hooks/useActWatch";
 
-export default function GameLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function GameLayout({ children }: { children: React.ReactNode }) {
   const { connected } = useWallet();
   const { data: playerData, isLoading: playerLoading } = usePlayer();
   const pathname = usePathname();

@@ -18,10 +18,7 @@ Object.defineProperty(DEFAULT_CONTEXT, "visible", {
   },
 });
 
-function constructMissingProviderErrorMessage(
-  action: string,
-  valueName: string,
-) {
+function constructMissingProviderErrorMessage(action: string, valueName: string) {
   return (
     "You have tried to " +
     ` ${action} "${valueName}"` +

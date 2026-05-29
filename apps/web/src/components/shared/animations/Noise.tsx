@@ -1,5 +1,6 @@
 "use client";
-import React, { useRef, useEffect } from 'react';
+import type React from "react";
+import { useRef, useEffect } from "react";
 
 interface NoiseProps {
   /** Frames between regenerated grain. Higher = calmer and cheaper. */
@@ -8,17 +9,14 @@ interface NoiseProps {
   patternAlpha?: number;
 }
 
-const Noise: React.FC<NoiseProps> = ({
-  patternRefreshInterval = 2,
-  patternAlpha = 15,
-}) => {
+const Noise: React.FC<NoiseProps> = ({ patternRefreshInterval = 2, patternAlpha = 15 }) => {
   const grainRef = useRef<HTMLCanvasElement | null>(null);
 
   useEffect(() => {
     const canvas = grainRef.current;
     if (!canvas) return;
 
-    const ctx = canvas.getContext('2d', { alpha: true });
+    const ctx = canvas.getContext("2d", { alpha: true });
     if (!ctx) return;
 
     let frame = 0;
@@ -30,9 +28,7 @@ const Noise: React.FC<NoiseProps> = ({
     // 0.04 is treated as full strength; tier 4 disables the grain entirely.
     let strength = 1;
     const readStrength = () => {
-      const raw = getComputedStyle(document.body)
-        .getPropertyValue('--tier-noise')
-        .trim();
+      const raw = getComputedStyle(document.body).getPropertyValue("--tier-noise").trim();
       const v = parseFloat(raw);
       strength = Number.isFinite(v) ? Math.min(v / 0.04, 1) : 1;
     };
@@ -42,14 +38,14 @@ const Noise: React.FC<NoiseProps> = ({
     const observer = new MutationObserver(readStrength);
     observer.observe(document.body, {
       attributes: true,
-      attributeFilter: ['data-tier'],
+      attributeFilter: ["data-tier"],
     });
 
     const resize = () => {
       canvas.width = canvasSize;
       canvas.height = canvasSize;
-      canvas.style.width = '100vw';
-      canvas.style.height = '100vh';
+      canvas.style.width = "100vw";
+      canvas.style.height = "100vh";
     };
 
     const drawGrain = () => {
@@ -82,12 +78,12 @@ const Noise: React.FC<NoiseProps> = ({
       animationId = window.requestAnimationFrame(loop);
     };
 
-    window.addEventListener('resize', resize);
+    window.addEventListener("resize", resize);
     resize();
     loop();
 
     return () => {
-      window.removeEventListener('resize', resize);
+      window.removeEventListener("resize", resize);
       window.cancelAnimationFrame(animationId);
       observer.disconnect();
     };
@@ -98,7 +94,7 @@ const Noise: React.FC<NoiseProps> = ({
       className="pointer-events-none fixed top-0 left-0 h-screen w-screen"
       ref={grainRef}
       style={{
-        imageRendering: 'pixelated',
+        imageRendering: "pixelated",
         zIndex: 9998,
       }}
     />

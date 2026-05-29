@@ -7,9 +7,7 @@ export function useGameEngine() {
   const loading = useAccountStore((s) => s.loading);
   const active = useAccountStore((s) => s.subscriptionActive);
 
-  const data = entry
-    ? { pubkey: entry.pubkey, account: entry.account, exists: true }
-    : null;
+  const data = entry ? { pubkey: entry.pubkey, account: entry.account, exists: true } : null;
 
   return {
     data,

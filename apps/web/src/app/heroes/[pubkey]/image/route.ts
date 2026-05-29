@@ -66,17 +66,13 @@ export async function GET(
   return new Response(new Uint8Array(png), {
     headers: {
       "Content-Type": "image/png",
-      "ETag": etag,
-      "Cache-Control":
-        "public, max-age=60, s-maxage=86400, stale-while-revalidate=604800",
+      ETag: etag,
+      "Cache-Control": "public, max-age=60, s-maxage=86400, stale-while-revalidate=604800",
     },
   });
 }
 
-async function renderPreview(
-  pubkeyParam: string,
-  url: URL,
-): Promise<Response> {
+async function renderPreview(pubkeyParam: string, url: URL): Promise<Response> {
   const tplStr = url.searchParams.get("template");
   if (!tplStr) {
     return new Response("preview mode requires ?template=N", { status: 400 });

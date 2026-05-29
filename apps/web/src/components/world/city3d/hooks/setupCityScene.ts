@@ -186,12 +186,7 @@ export function setupCityScene(args: SetupCitySceneArgs): {
   /* Build the terrain mesh. Synchronous 512² preview lands in
    * ~250 ms so the city is visible immediately; the full 4096²
    * bake runs on the Worker and swaps in when ready. */
-  const built = buildTerrainMesh(
-    terrain.biomeSeed,
-    rgu,
-    terrain.knobs,
-    COLOR_TEXTURE_SIZE_PREVIEW,
-  );
+  const built = buildTerrainMesh(terrain.biomeSeed, rgu, terrain.knobs, COLOR_TEXTURE_SIZE_PREVIEW);
   scene.add(built.mesh);
   /* Mode-aware initial flatten — uniform multiplies into transformed.y
    * in the vertex shader; mesh scale stays at 1 so raycasts work. */
@@ -267,11 +262,7 @@ export function setupCityScene(args: SetupCitySceneArgs): {
     const dTarget = maxD0 / 16;
     controller.setDistanceHard(dTarget);
     controller.setTargetHard(
-      new THREE.Vector3(
-        wx,
-        mapMode === "iso" ? getElevationAt(ox, oy) : 0,
-        wz,
-      ),
+      new THREE.Vector3(wx, mapMode === "iso" ? getElevationAt(ox, oy) : 0, wz),
     );
     /* Force-apply so the first paint reflects the snapped state. */
     controller.applyToCamera();

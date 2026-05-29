@@ -10,10 +10,7 @@ import { estatePda, getEstate } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { fail, requireSession } from "@/lib/server/route-helpers";
 import { ARCHETYPES } from "@/lib/server/minigame/archetypes";
-import {
-  getBuildingMinigame,
-  type BuildingMinigame,
-} from "@/lib/server/minigame/buildings";
+import { getBuildingMinigame, type BuildingMinigame } from "@/lib/server/minigame/buildings";
 import { activityPreconditionError } from "@/lib/server/minigame/preconditions";
 import { generatePuzzle } from "@/lib/server/minigame/puzzle";
 import {
@@ -39,10 +36,7 @@ export const runtime = "nodejs";
  * presentation. Generation is seed-deterministic, so a player who abandons and
  * restarts gets the identical puzzle.
  */
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ building: string }> },
-) {
+export async function POST(req: Request, ctx: { params: Promise<{ building: string }> }) {
   const limited = await rateLimited(req);
   if (limited) return limited;
 
@@ -99,12 +93,7 @@ export async function POST(
     // Mint a fresh session, claiming the lock first — two concurrent /start
     // calls for a clean window race the atomic claim, and only the winner
     // persists a session.
-    const generated = generatePuzzle(
-      building,
-      estatePda(owner).toBase58(),
-      day,
-      window,
-    );
+    const generated = generatePuzzle(building, estatePda(owner).toBase58(), day, window);
     const createdAt = Date.now();
     const fresh: MinigameSession = {
       id: newSessionId(),
@@ -141,21 +130,13 @@ export async function POST(
       const winnerId = await getLock(ownerKey, day, window, building);
       const resumed = winnerId ? await resumeSession(winnerId, ownerKey) : null;
       if (resumed) return NextResponse.json(sessionResponse(resumed, config));
-      return fail(
-        "the mini-game service is unavailable — try again shortly",
-        503,
-        "SERVICE_DOWN",
-      );
+      return fail("the mini-game service is unavailable — try again shortly", 503, "SERVICE_DOWN");
     }
     await saveSession(fresh, SESSION_TTL_SECONDS);
     return NextResponse.json(sessionResponse(fresh, config));
   } catch (e) {
     console.error("minigame start failed", e);
-    return fail(
-      "the mini-game service is unavailable — try again shortly",
-      503,
-      "SERVICE_DOWN",
-    );
+    return fail("the mini-game service is unavailable — try again shortly", 503, "SERVICE_DOWN");
   }
 }
 
@@ -164,17 +145,12 @@ export async function POST(
  * race claims the lock before its `saveSession` lands, so a loser briefly
  * retries the read to give that write time to settle.
  */
-async function resumeSession(
-  id: string,
-  ownerKey: string,
-): Promise<MinigameSession | null> {
+async function resumeSession(id: string, ownerKey: string): Promise<MinigameSession | null> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const session = await loadSession(id);
     if (session) {
       const live =
-        session.status === "active" &&
-        session.owner === ownerKey &&
-        Date.now() < session.deadline;
+        session.status === "active" && session.owner === ownerKey && Date.now() < session.deadline;
       return live ? session : null;
     }
     await new Promise((r) => setTimeout(r, 50));

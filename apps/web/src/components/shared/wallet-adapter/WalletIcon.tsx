@@ -1,6 +1,5 @@
 import type { Wallet } from "@solana/wallet-adapter-react";
 import type { FC } from "react";
-import React from "react";
 import Image from "next/image";
 
 interface WalletIconProps {
@@ -8,10 +7,7 @@ interface WalletIconProps {
   connectionButtonClass?: string;
 }
 
-export const WalletIcon: FC<WalletIconProps> = ({
-  wallet,
-  connectionButtonClass,
-}) => {
+export const WalletIcon: FC<WalletIconProps> = ({ wallet, connectionButtonClass }) => {
   if (!wallet) return null;
 
   if (wallet.adapter.icon.includes("wallet-white.svg")) {

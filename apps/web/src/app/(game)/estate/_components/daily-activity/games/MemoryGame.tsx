@@ -2,12 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
-import {
-  GameHeader,
-  GameTimer,
-  ResultBadge,
-  tierFromMemoryMoves,
-} from "./_shell";
+import { GameHeader, GameTimer, ResultBadge, tierFromMemoryMoves } from "./_shell";
 
 /** Client-safe Memory presentation (server `memory` archetype). */
 export interface MemoryPresentation {
@@ -142,20 +137,16 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
   );
 
   const cols = tiles <= 12 ? 4 : 6;
-  const summaryTier = summary
-    ? tierFromMemoryMoves(summary.moves, summary.pairs)
-    : null;
+  const summaryTier = summary ? tierFromMemoryMoves(summary.moves, summary.pairs) : null;
 
   return (
     <div className="space-y-3">
       <GameHeader
-        current={Math.min(matchedPairs + 1, pairs)}
+        current={summary ? pairs + 1 : Math.min(matchedPairs + 1, pairs)}
         total={pairs}
         noun="Pair"
         trailing={
-          <span className="font-mono text-[10px] tabular-nums text-text-muted">
-            {moves} flips
-          </span>
+          <span className="font-mono text-[10px] tabular-nums text-text-muted">{moves} flips</span>
         }
       />
       <GameTimer totalMs={MS_PER_PAIR * pairs} paused={submitting || !!summary} />
@@ -196,9 +187,7 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
 
       {summary && summaryTier ? (
         <div className="card accent-border animate-in fade-in zoom-in-95 text-center duration-300">
-          <div className="text-xs uppercase tracking-wider text-text-muted">
-            Ledger reconciled
-          </div>
+          <div className="text-xs uppercase tracking-wider text-text-muted">Ledger reconciled</div>
           <div className="mt-2 font-display text-3xl font-bold tabular-nums text-text-gold">
             {summary.moves} flips
           </div>
@@ -206,7 +195,7 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
             <ResultBadge tier={summaryTier} />
           </div>
           <p className="mt-2 text-[11px] text-text-muted">
-            Optimal pace is {summary.pairs} flips · you closed in {summary.moves}.
+            Optimal pace is {summary.pairs * 2} flips · you closed in {summary.moves}.
           </p>
         </div>
       ) : (

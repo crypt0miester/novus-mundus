@@ -21,13 +21,7 @@ const HERO_DESCRIPTION =
   "A hero in Novus Mundus. Procedural portrait composed from baked Bonsai layers; attributes are read directly from the on-chain MPL Core Asset.";
 
 const TIER_NAME = ["Common", "Rare", "Epic", "Legendary", "Mythic"] as const;
-const CATEGORY_NAME = [
-  "Historical",
-  "Mythological",
-  "CryptoIcons",
-  "Gaming",
-  "Original",
-] as const;
+const CATEGORY_NAME = ["Historical", "Mythological", "CryptoIcons", "Gaming", "Original"] as const;
 
 interface HeroMetadata {
   name: string;
@@ -104,8 +98,7 @@ export async function GET(
   return Response.json(metadata, {
     headers: {
       ETag: etag,
-      "Cache-Control":
-        "public, max-age=60, s-maxage=86400, stale-while-revalidate=604800",
+      "Cache-Control": "public, max-age=60, s-maxage=86400, stale-while-revalidate=604800",
     },
   });
 }
@@ -114,10 +107,7 @@ function buildImageUrl(reqUrl: URL, pubkey: string, level: number): string {
   return `${reqUrl.origin}/heroes/${pubkey}/image?v=${level}`;
 }
 
-async function renderPreview(
-  pubkeyParam: string,
-  url: URL,
-): Promise<Response> {
+async function renderPreview(pubkeyParam: string, url: URL): Promise<Response> {
   const tplStr = url.searchParams.get("template");
   if (!tplStr) {
     return new Response("preview mode requires ?template=N", { status: 400 });

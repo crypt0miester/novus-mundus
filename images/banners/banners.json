@@ -1,0 +1,56 @@
+{
+  "_comment": "Building banner manifest. 16:9 full-color painterly building illustrations (no alpha key, opaque as generated) used both as the ShowcaseBanner backdrop on estate tabs that have a view AND as the BuildingMilestoneFlash celebration art on construction/upgrade. Per docs/design/BANNERS_BUILDING.md. Generated at 1024x576 then 2x upscaled to 2048x1152 webp in post (export step). Each entry has a fixed seed so re-runs are deterministic and regenerating one banner never disturbs the rest. Buildings split into two groups: view (15 tabs that need chrome) and no-view (6 buildings that only ever show their banner at the founding/upgrade flash). The ShowcaseBanner overlays its own left-to-right scrim for text legibility, so the art itself stays fully lit edge to edge with no baked-in dark band.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   576,
+    "steps":    4,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "export": {
+    "subdir":   "banners",
+    "filename": "id",
+    "canvas":   [2048, 1152],
+    "upscale":  2,
+    "alphaKey": false,
+    "format":   "webp",
+    "quality":  82
+  },
+
+  "preamble": "Single building illustration. One isolated medieval-fantasy structure at golden hour, viewed in 3/4 perspective, no people, no animals, no foreground props.",
+
+  "style": {
+    "banner": "Style: richly detailed painterly fantasy game illustration of the building in full color, warm golden-hour light with a subtle antique gold (#C9A961) glow, crisp architectural and material detail on the structure, soft atmospheric depth behind it, cohesive matte-painting finish. No flat black silhouette, no cut-out look, full natural sky and ground."
+  },
+
+  "tail": "Composition: 16:9 landscape, the building fills the frame at a generous scale with clear architectural detail, fully and evenly lit from foreground to sky. Building only, absolutely no text, no letters, no numbers, no UI, no people, no animals, no scene clutter, no black bars or dark empty bands.",
+
+  "entries": [
+    { "id": "arena-banner",       "group": "view",    "buildingType": "arena",       "seed": 3101, "subject": "A Roman-style oval coliseum with stacked arched arcades, two crossed gladii planted upright in sand at the foreground arch." },
+    { "id": "catacombs-banner",   "group": "view",    "buildingType": "catacombs",   "seed": 3102, "subject": "A weathered stone archway descending into shadow, a single lit oil lantern hung from a rusted iron hook above the threshold." },
+    { "id": "dock-banner",        "group": "view",    "buildingType": "dock",        "seed": 3103, "subject": "A long wooden pier extending into still water at dusk, a tall single-masted galley moored at the end with its sail furled." },
+    { "id": "farm-banner",        "group": "view",    "buildingType": "farm",        "seed": 3104, "subject": "A wide ripe wheat field with neat furrows, a single timber barn with peaked roof at the far edge of the field." },
+    { "id": "mansion-banner",     "group": "view",    "buildingType": "mansion",     "seed": 3105, "subject": "A two-story manor house with a steep peaked roof and three lit upper windows at twilight, low garden wall in the foreground." },
+    { "id": "mine-banner",        "group": "view",    "buildingType": "mine",        "seed": 617617, "subject": "A dark mine tunnel entrance cut directly into a steep rocky cliff face, a heavy timber A-frame headframe bracing the tunnel mouth, two small loaded ore carts on wooden rail tracks running out of the tunnel toward the foreground." },
+    { "id": "academy-banner",     "group": "view",    "buildingType": "academy",     "seed": 3107, "subject": "A great domed library with arched windows and a circular oculus, set against a starry pre-dawn sky." },
+    { "id": "vault-banner",       "group": "view",    "buildingType": "vault",       "seed": 3108, "subject": "A massive round iron vault door set into a thick stone wall, heavy hinges and a central spoked wheel visible." },
+    { "id": "workshop-banner",    "group": "view",    "buildingType": "workshop",    "seed": 3109, "subject": "A timber workshop interior viewed through a wide open doorway, a workbench centered with hanging tools arrayed above it." },
+    { "id": "barracks-banner",    "group": "view",    "buildingType": "barracks",    "seed": 3117, "subject": "A long stone-and-timber barracks hall with a steep shingled roof and a row of arched doorways down its front, a weapon rack and a wooden training dummy standing beside the entrance, small pennants on short poles along the roofline." },
+    { "id": "camp-banner",        "group": "view",    "buildingType": "camp",        "seed": 3118, "subject": "A cluster of peaked canvas campaign tents pitched around a central banked campfire, stacked wooden supply crates and a single planted standard pole, a low palisade of sharpened timber stakes ringing the camp." },
+    { "id": "forge-banner",       "group": "view",    "buildingType": "forge",       "seed": 3119, "subject": "A stone blacksmith's forge with a tall brick chimney and a glowing open hearth, a heavy anvil and a quenching trough in the open work bay, hammers and tongs hung on the wall behind." },
+    { "id": "infirmary-banner",   "group": "view",    "buildingType": "infirmary",   "seed": 3120, "subject": "A timber-framed infirmary lodge with a peaked roof and a healer's banner over the door, rows of shuttered windows, bundles of drying herbs hung under the eaves and a low stone well beside the entrance." },
+    { "id": "market-banner",      "group": "view",    "buildingType": "market",      "seed": 3121, "subject": "A covered market arcade with striped awnings over rows of empty wooden stalls, baskets of produce and stacked barrels along the aisle, a tall carved stone market cross at the centre." },
+    { "id": "sanctuary-banner",   "group": "view",    "buildingType": "sanctuary",   "seed": 3122, "subject": "A serene domed stone sanctuary temple with a colonnaded portico, a wide flight of steps leading up to an arched doorway, twin stone braziers with gentle golden flames flanking the stairs." },
+
+    { "id": "citadel-banner",         "group": "no-view", "buildingType": "citadel",          "seed": 3111, "subject": "A tall fortified central tower with crenellated battlements and a single banner flying at the peak, lit from below by braziers at its base." },
+    { "id": "observatory-banner",     "group": "no-view", "buildingType": "observatory",      "seed": 3112, "subject": "A slender stone observatory tower with a domed roof slit open to the sky, a long brass telescope angled out of the opening." },
+    { "id": "treasury-banner",        "group": "no-view", "buildingType": "treasury",         "seed": 733733, "subject": "A vaulted hall lined with stacked iron-bound treasure chests, a single high arched window casting a shaft of golden light across the room." },
+    { "id": "meditation-banner",      "group": "no-view", "buildingType": "meditation",       "seed": 3114, "subject": "A peaked-roof meditation pavilion on a still water pool, a single bell hung from the eaves, lotus pads on the water." },
+    { "id": "transport-bay-banner",   "group": "no-view", "buildingType": "transport-bay",    "seed": 3115, "subject": "A long timber wagon-shed with four wide open bays, three loaded supply wagons parked under the eaves and a single road curving away from the bays." },
+    { "id": "stables-banner",         "group": "no-view", "buildingType": "stables",          "seed": 3116, "subject": "A long timber stables with four open stall doors, hay-bales stacked against the outer wall, no animals visible inside the stalls." }
+  ]
+}

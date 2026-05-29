@@ -39,7 +39,7 @@ export function DungeonHeroPanel() {
         const mint = hero.mint.toBase58();
         const selected = mint === selectedMint;
         const attrs = hero.asset.attributes;
-        const level = attrs["Level"] ?? null;
+        const level = attrs.Level ?? null;
         const buffs = Object.entries(attrs).filter(([k]) => !META_ATTRS.has(k));
         return (
           <button
@@ -74,7 +74,7 @@ export function DungeonHeroPanel() {
                       {icon ? (
                         <GameIcon id={icon} title={meta?.name} size={15} />
                       ) : (
-                        <>{meta?.abbr ?? k}</>
+                        (meta?.abbr ?? k)
                       )}
                       <span className="font-mono">{v}</span>
                     </span>

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { animate, spring } from "animejs";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
+import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 import { TxButton } from "@/components/shared/TxButton";
 import { formatNoviAmount } from "novus-mundus-sdk";
 
@@ -131,8 +132,14 @@ function buildView(
     if (fragments > 0) rows.push({ label: "Loot · fragments", value: fmt(fragments) });
     if (gems > 0) rows.push({ label: "Loot · gems", value: fmt(gems) });
     const hasLockedLoot =
-      novi > 0 || produce > 0 || drays > 0 || melee > 0 || ranged > 0 || siege > 0 ||
-      fragments > 0 || gems > 0;
+      novi > 0 ||
+      produce > 0 ||
+      drays > 0 ||
+      melee > 0 ||
+      ranged > 0 ||
+      siege > 0 ||
+      fragments > 0 ||
+      gems > 0;
     if (hasLockedLoot) hint = "Unclaimed loot is waiting in your Inventory.";
   } else {
     tone = "survive";
@@ -281,15 +288,11 @@ export function CombatOutcomeModal() {
     }
   }, [view]);
 
-  useEffect(() => {
-    if (!view) return;
-    const onKey = (e: KeyboardEvent) => {
-      // Only Escape — Enter must not fire a stamina/NOVI-costing attack.
-      if (e.key === "Escape") close();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [view, close]);
+  // Contain focus inside the card while the modal is up, move focus in on open,
+  // restore it on close, and close on Escape. Only Escape closes — Enter must
+  // not fire a stamina/NOVI-costing attack, so the trap's Tab cycling keeps
+  // the keyboard on the modal's own buttons.
+  useFocusTrap(cardRef, { active: Boolean(view), onEscape: close });
 
   if (!view) return null;
 

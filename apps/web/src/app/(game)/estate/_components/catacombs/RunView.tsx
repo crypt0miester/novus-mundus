@@ -13,10 +13,11 @@ import {
 } from "novus-mundus-sdk";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { useCoSign, fetchCoSign } from "@/lib/cosign";
+import { useCoSign } from "@/lib/cosign";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { ROOM_INFO, THEMES, relicById, relicsFromMask, synergyStates } from "@/lib/dungeon-lore";
+import { DungeonSplash } from "@/components/dungeons/DungeonSplash";
 import { DEFENSIVE_UNIT_LABELS } from "@/components/shared/TripleCountInput";
 
 const SPEC_NAMES = ["Warrior", "Guardian", "Scout", "Tactician"];
@@ -330,7 +331,7 @@ export function RunView({ run, template, playerStamina, playerMaxStamina }: RunV
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
   const transact = useTransact();
-  const { requestCoSign } = useCoSign();
+  const { requestCoSign, requestGetJson } = useCoSign();
   const ownerStr = publicKey?.toBase58() ?? null;
 
   const totalFloors = template?.totalFloors ?? 10;
@@ -371,8 +372,8 @@ export function RunView({ run, template, playerStamina, playerMaxStamina }: RunV
   const { data: relicOffer } = useQuery({
     queryKey: ["dungeonRelicOffer", ownerStr, run.currentFloor],
     queryFn: () =>
-      fetchCoSign<{ relicOptions: number[]; firstRoomType: number }>(
-        `/api/cosign/dungeon/choose-relic?owner=${ownerStr}`,
+      requestGetJson<{ relicOptions: number[]; firstRoomType: number }>(
+        "/api/cosign/dungeon/choose-relic",
       ),
     enabled: !!ownerStr && awaitingRelic,
     staleTime: 10_000,
@@ -471,6 +472,12 @@ export function RunView({ run, template, playerStamina, playerMaxStamina }: RunV
 
   return (
     <div className="space-y-3">
+      <DungeonSplash
+        dungeonId={run.dungeonId}
+        boss={isBossFight}
+        title={isBossFight ? "Floor Boss" : template?.name}
+        subtitle={isBossFight ? "The master stands before you" : theme.name}
+      />
       {/* Slim header — theme, depth, stamina on one line */}
       <div className="card accent-border flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
         <div className="flex items-baseline gap-2">

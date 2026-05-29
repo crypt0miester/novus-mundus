@@ -13,7 +13,7 @@ import { TxButton } from "@/components/shared/TxButton";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToPercent } from "@/lib/utils";
-import { isTraveling, findBuilding, BuildingStatus, type BuildingSlot } from "novus-mundus-sdk";
+import { findBuilding, BuildingStatus, type BuildingSlot } from "novus-mundus-sdk";
 import { BuildingGrid } from "./_components/building-grid";
 import { FeatureView, hasCenterView } from "./_components/feature-view";
 import {

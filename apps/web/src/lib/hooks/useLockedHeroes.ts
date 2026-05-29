@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import { isNullPubkey, parseAssetV1 } from "novus-mundus-sdk";
 import { usePlayer } from "./usePlayer";
 
@@ -24,11 +24,7 @@ export function useLockedHeroes(): (LockedHero | null)[] {
   const { connection } = useConnection();
   const player = playerData?.account;
 
-  const [lockedHeroes, setLockedHeroes] = useState<(LockedHero | null)[]>([
-    null,
-    null,
-    null,
-  ]);
+  const [lockedHeroes, setLockedHeroes] = useState<(LockedHero | null)[]>([null, null, null]);
 
   // Stable key so unrelated player updates don't trigger a refetch.
   const heroKey = (player?.activeHeroes ?? []).map((h) => h.toBase58()).join(",");
@@ -48,9 +44,7 @@ export function useLockedHeroes(): (LockedHero | null)[] {
       const resolved: (LockedHero | null)[] = [null, null, null];
       if (filled.length > 0) {
         try {
-          const infos = await connection.getMultipleAccountsInfo(
-            filled.map((e) => e.mint),
-          );
+          const infos = await connection.getMultipleAccountsInfo(filled.map((e) => e.mint));
           filled.forEach((e, i) => {
             const info = infos[i];
             if (!info?.data) return;
@@ -59,7 +53,7 @@ export function useLockedHeroes(): (LockedHero | null)[] {
             resolved[e.slot] = {
               mint: e.mint,
               name: asset.name || "Hero",
-              templateId: parseInt(asset.attributes["Template"] ?? "0", 10),
+              templateId: parseInt(asset.attributes.Template ?? "0", 10),
             };
           });
         } catch {

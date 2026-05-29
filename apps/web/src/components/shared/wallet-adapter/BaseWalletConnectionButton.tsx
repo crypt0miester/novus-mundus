@@ -1,5 +1,5 @@
 import type { WalletName } from "@solana/wallet-adapter-base";
-import React, { useContext } from "react";
+import type React from "react";
 
 import { Button } from "./Button";
 import { WalletIcon } from "./WalletIcon";
@@ -9,11 +9,7 @@ type Props = React.ComponentProps<typeof Button> & {
   walletName?: WalletName;
 };
 
-export function BaseWalletConnectionButton({
-  walletIcon,
-  walletName,
-  ...props
-}: Props) {
+export function BaseWalletConnectionButton({ walletIcon, walletName, ...props }: Props) {
   return (
     <Button
       {...props}

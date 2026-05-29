@@ -46,10 +46,7 @@ export function useFireOnce(fn: () => void): () => void {
 // is the neutral fallback; games pass their own flavored label when present.
 export type ScoreTier = "razor" | "sharp" | "steady" | "slow";
 
-const TIER_STYLE: Record<
-  ScoreTier,
-  { label: string; tone: string; chip: string }
-> = {
+const TIER_STYLE: Record<ScoreTier, { label: string; tone: string; chip: string }> = {
   razor: {
     label: "Razor sharp",
     tone: "text-text-gold",
@@ -138,13 +135,7 @@ export function GameHeader({
 }
 
 /** Gold-ramp chip used at per-round / per-completion summary moments. */
-export function ResultBadge({
-  tier,
-  label,
-}: {
-  tier: ScoreTier;
-  label?: string;
-}) {
+export function ResultBadge({ tier, label }: { tier: ScoreTier; label?: string }) {
   const s = TIER_STYLE[tier];
   return (
     <span
@@ -205,11 +196,7 @@ export function GameTimer({
   const frac = totalMs > 0 ? remaining / totalMs : 0;
   const danger = frac <= 0.2;
   const warning = !danger && frac <= 0.5;
-  const barColor = danger
-    ? "bg-red-500"
-    : warning
-      ? "bg-amber-400"
-      : "bg-gold-400";
+  const barColor = danger ? "bg-red-500" : warning ? "bg-amber-400" : "bg-gold-400";
 
   return (
     <div className="space-y-0.5">

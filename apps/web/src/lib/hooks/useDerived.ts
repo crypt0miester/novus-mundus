@@ -149,7 +149,7 @@ export function useSubscriptionStatus() {
       tier: player.subscriptionTier,
       active,
       expiresAt: end,
-      tierName: active ? tierNames[player.subscriptionTier] ?? "Rookie" : "No Charter",
+      tierName: active ? (tierNames[player.subscriptionTier] ?? "Rookie") : "No Charter",
     };
   }, [player]);
 }

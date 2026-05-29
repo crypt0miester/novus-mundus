@@ -35,10 +35,7 @@ interface PlayerLike {
  * `raised` / `improved` matter: construction never auto-finishes, so a building
  * can sit done-but-not-finalized, awaiting a manual Complete.
  */
-export function buildingPhase(
-  slot: SlotLike | null | undefined,
-  nowSec: number,
-): BuildingPhase {
+export function buildingPhase(slot: SlotLike | null | undefined, nowSec: number): BuildingPhase {
   if (!slot || slot.status === BuildingStatus.Empty) return "unbuilt";
   const ends = slot.constructionEnds?.toNumber?.() ?? 0;
   const timerDone = nowSec >= ends;
@@ -90,10 +87,7 @@ export function deriveAct(
  * reserve signals from the Phase 2 comeback Report; until then mood resolves
  * across raw to working to thriving from build state alone.
  */
-export function deriveMood(
-  estate: EstateLike | null | undefined,
-  nowSec: number,
-): Mood {
+export function deriveMood(estate: EstateLike | null | undefined, nowSec: number): Mood {
   if (!estate) return "raw";
   const b = estate.buildings ?? [];
   const active = b.filter(

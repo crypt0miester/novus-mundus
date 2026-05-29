@@ -17,13 +17,14 @@ interface ShowcaseBannerProps {
 /**
  * A wide illustration-backed panel that doubles as the selected-item showcase
  * on estate tabs. The backdrop image is dark-graded left-to-right so the icon
- * and text stay legible while the art shows through on the right. Height is
- * content-driven with a floor, so it never clips on narrow screens.
+ * and text stay legible while the art shows through on the right. The panel
+ * holds the art's native 16:9 ratio so the full illustration shows with no
+ * crop and no letterbox bars; it scales with the column width.
  */
 export function ShowcaseBanner({ image, icon, title, tag, children }: ShowcaseBannerProps) {
   return (
     <div
-      className="relative flex min-h-[150px] items-center overflow-hidden rounded-lg border border-border-default sm:min-h-[200px]"
+      className="relative flex aspect-[16/9] items-center overflow-hidden rounded-lg border border-border-default"
       style={{
         backgroundImage: `url(${image})`,
         backgroundSize: "cover",
@@ -32,11 +33,17 @@ export function ShowcaseBanner({ image, icon, title, tag, children }: ShowcaseBa
     >
       <div className="absolute inset-0 bg-gradient-to-r from-black/95 via-black/80 to-black/40" />
       <div className="relative flex items-center gap-3 p-4 sm:gap-4 sm:p-5">
-        <GameIcon id={icon} size={72} className="shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]" />
+        <GameIcon
+          id={icon}
+          size={72}
+          className="shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]"
+        />
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
             <span className="text-base font-semibold text-zinc-50">{title}</span>
-            {tag && <span className="text-[10px] uppercase tracking-wider text-text-gold/80">{tag}</span>}
+            {tag && (
+              <span className="text-[10px] uppercase tracking-wider text-text-gold/80">{tag}</span>
+            )}
           </div>
           {children}
         </div>

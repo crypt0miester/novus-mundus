@@ -1,11 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  createJoinGarrisonInstruction,
-  isNullPubkey,
-  isTraveling,
-} from "novus-mundus-sdk";
+import { createJoinGarrisonInstruction, isNullPubkey, isTraveling } from "novus-mundus-sdk";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
@@ -125,8 +121,7 @@ export function GarrisonComposerPanel({ cityId, castleId, onClose }: GarrisonCom
   };
 
   // Submit lives on the MorphTabBar — matches the rally/reinforce composers.
-  const submitDisabled =
-    !castle || !teamId || !sameTeam || traveling || !hasAnyCommitment;
+  const submitDisabled = !castle || !teamId || !sameTeam || traveling || !hasAnyCommitment;
   useMorphActions([
     {
       id: "join-garrison",
@@ -144,17 +139,11 @@ export function GarrisonComposerPanel({ cityId, castleId, onClose }: GarrisonCom
   }
 
   if (!teamId) {
-    return (
-      <p className="text-sm text-text-muted">Join a team to garrison a castle.</p>
-    );
+    return <p className="text-sm text-text-muted">Join a team to garrison a castle.</p>;
   }
 
   if (!sameTeam) {
-    return (
-      <p className="text-sm text-text-muted">
-        Only the castle&apos;s team may garrison it.
-      </p>
-    );
+    return <p className="text-sm text-text-muted">Only the castle&apos;s team may garrison it.</p>;
   }
 
   return (
@@ -240,11 +229,7 @@ export function GarrisonComposerPanel({ cityId, castleId, onClose }: GarrisonCom
         </div>
       )}
 
-      <TxButton
-        onClick={handleJoin}
-        disabled={submitDisabled}
-        className="hidden md:block"
-      >
+      <TxButton onClick={handleJoin} disabled={submitDisabled} className="hidden md:block">
         Join Garrison
       </TxButton>
     </div>

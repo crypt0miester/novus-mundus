@@ -110,8 +110,7 @@ export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceCompo
   const isSelf = publicKey ? publicKey.equals(targetKey) : false;
   const traveling = player ? isTraveling(player) : false;
   const hasAnyCommitment = units.some((n) => n > 0) || weapons.some((n) => n > 0);
-  const submitDisabled =
-    isSelf || !teamId || !targetPlayer || traveling || !hasAnyCommitment;
+  const submitDisabled = isSelf || !teamId || !targetPlayer || traveling || !hasAnyCommitment;
 
   const handleSend = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Wallet not connected");
@@ -167,19 +166,11 @@ export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceCompo
   // ─── Early states ───────────────────────────────────────────────
 
   if (isSelf) {
-    return (
-      <p className="text-sm text-text-muted">
-        You can&apos;t reinforce yourself.
-      </p>
-    );
+    return <p className="text-sm text-text-muted">You can&apos;t reinforce yourself.</p>;
   }
 
   if (!teamId) {
-    return (
-      <p className="text-sm text-text-muted">
-        Join a team to send reinforcements.
-      </p>
-    );
+    return <p className="text-sm text-text-muted">Join a team to send reinforcements.</p>;
   }
 
   // Same-team gate — chain-side check at programs/.../reinforcement/send.rs:
@@ -195,9 +186,7 @@ export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceCompo
       targetTeamStr === myTeamStr;
     if (!sameTeam) {
       return (
-        <p className="text-sm text-text-muted">
-          Reinforcements can only be sent to teammates.
-        </p>
+        <p className="text-sm text-text-muted">Reinforcements can only be sent to teammates.</p>
       );
     }
   }
@@ -293,11 +282,7 @@ export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceCompo
 
       {/* Desktop submit — mirrors the morph-bar action so users without a
           mobile morph bar (md+ viewport) still have a primary button. */}
-      <TxButton
-        onClick={handleSend}
-        disabled={submitDisabled}
-        className="hidden md:block"
-      >
+      <TxButton onClick={handleSend} disabled={submitDisabled} className="hidden md:block">
         Send Reinforcement
       </TxButton>
     </div>

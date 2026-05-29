@@ -14,21 +14,22 @@ export function useTeamMembers(teamPubkey: PublicKey | null | undefined) {
   useEffect(() => {
     if (!teamPubkey) return;
 
-    client.fetchTeamMembers(teamPubkey).then((results) => {
-      const store = useAccountStore.getState();
-      for (const m of results) {
-        store.upsertTeamMember(m.pubkey, m.account);
-      }
-    }).catch(() => {});
+    client
+      .fetchTeamMembers(teamPubkey)
+      .then((results) => {
+        const store = useAccountStore.getState();
+        for (const m of results) {
+          store.upsertTeamMember(m.pubkey, m.account);
+        }
+      })
+      .catch(() => {});
   }, [teamPubkey?.toBase58(), client]);
 
   // Filter members for this team
   const data = useMemo(() => {
     if (!teamPubkey) return [];
     const teamKey = teamPubkey.toBase58();
-    return Array.from(teamMembers.values()).filter(
-      (m) => m.account.team?.toBase58() === teamKey
-    );
+    return Array.from(teamMembers.values()).filter((m) => m.account.team?.toBase58() === teamKey);
   }, [teamMembers, teamPubkey]);
 
   return {

@@ -19,11 +19,7 @@
  */
 import { useCallback } from "react";
 import type { CityTerrainMapWebGLProps } from "../CityTerrainMapWebGL";
-import {
-  GRID_OVERLAY_MIN_CSS_PX_PER_CELL,
-  MARKER_FLAT_SCALE_Y,
-  cssPxPerCellAt,
-} from "../coords";
+import { GRID_OVERLAY_MIN_CSS_PX_PER_CELL, MARKER_FLAT_SCALE_Y, cssPxPerCellAt } from "../coords";
 import type { SceneRefs } from "./setupCityScene";
 
 type RefObject<T> = { current: T };
@@ -65,18 +61,11 @@ export function usePaintLoop(
     /* Push CSS-px-per-cell to markers so they swap dot/tile mode if
      * threshold crossed. */
     const canvasH = r.renderer.domElement.clientHeight;
-    const cssPx = cssPxPerCellAt(
-      r.camera,
-      r.controller.getTarget(),
-      r.rgu,
-      canvasH,
-    );
+    const cssPx = cssPxPerCellAt(r.camera, r.controller.getTarget(), r.rgu, canvasH);
     /* Markers follow the terrain's effective height scale but with a
      * MARKER_FLAT_SCALE_Y floor — their raycaster needs a non-singular
      * world matrix to dispatch hits in 2D mode. */
-    r.markers.setTerrainScaleY(
-      Math.max(MARKER_FLAT_SCALE_Y, r.terrain.heightScale.value),
-    );
+    r.markers.setTerrainScaleY(Math.max(MARKER_FLAT_SCALE_Y, r.terrain.heightScale.value));
     r.markers.updateCentreScale(cssPx);
     r.markers.updateGrid(cssPx, r.controller.getTarget());
 
@@ -84,12 +73,7 @@ export function usePaintLoop(
      * markers.updateOccupants is the canonical entry but it requires
      * the latest props. Just re-fire it with current props. */
     const p = propsRef.current;
-    r.markers.updateOccupants(
-      p.occupied,
-      p.selectedEntity ?? null,
-      p.myPlayerPubkey,
-      cssPx,
-    );
+    r.markers.updateOccupants(p.occupied, p.selectedEntity ?? null, p.myPlayerPubkey, cssPx);
     r.markers.updateLanding(p.selected, cssPx);
 
     /* Inspection-band labels — refresh every paint so projected

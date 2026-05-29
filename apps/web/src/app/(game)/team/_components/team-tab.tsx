@@ -6,6 +6,11 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
+import {
+  useIncomingInvites,
+  useTeamMemberBackfill,
+  useTreasuryRequests,
+} from "@/lib/hooks/useTeamBackfills";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -30,13 +35,9 @@ import { useDomainNames } from "@/lib/hooks/useDomainNames";
 import { matchesPlayerQuery } from "@/lib/players";
 import {
   derivePlayerPda,
-  deriveTreasuryRequestPda,
-  deriveTeamInvitePda,
   isNullPubkey,
   parsePlayer,
   parseTeam,
-  parseTreasuryRequest,
-  parseTeamInvite,
   createTeamCreateInstruction,
   createTeamLeaveInstruction,
   createTeamDisbandInstruction,
@@ -87,14 +88,10 @@ function formatStat(n: number): string {
 }
 
 const ACTION_TONES: Record<"primary" | "neutral" | "info" | "danger", string> = {
-  primary:
-    "border-border-gold/50 bg-accent/20 text-text-gold hover:bg-accent/40",
-  neutral:
-    "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70",
-  info:
-    "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20",
-  danger:
-    "border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20",
+  primary: "border-border-gold/50 bg-accent/20 text-text-gold hover:bg-accent/40",
+  neutral: "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70",
+  info: "border-blue-500/40 bg-blue-500/10 text-blue-300 hover:bg-blue-500/20",
+  danger: "border-red-500/40 bg-red-500/10 text-red-300 hover:bg-red-500/20",
 };
 
 function ActionButton({
@@ -168,92 +165,15 @@ export function TeamTab() {
 
   const traveling = player ? isTraveling(player) : false;
   const otherPlayers = useAccountStore((s) => s.otherPlayers);
-  const upsertOtherPlayer = useAccountStore((s) => s.upsertOtherPlayer);
   const { connection } = useConnection();
 
-  // Batch-fetch player accounts for members missing from the Zustand cache.
-  // `otherPlayers` must be in deps — if it's evicted (wallet disconnect /
-  // kingdom switch / explicit reset) while `members` stays referentially
-  // stable, the effect must re-fire so the missing members get refetched.
-  // Otherwise the roster would lock to blank "Lv 0" rows until the user
-  // navigates away and back.
-  useEffect(() => {
-    if (!members || members.length === 0) return;
-    const missing = members
-      .map((m) => m.account.player)
-      .filter((pda) => !otherPlayers.has(pda.toBase58()));
-    if (missing.length === 0) return;
-
-    let cancelled = false;
-    connection
-      .getMultipleAccountsInfo(missing)
-      .then((infos) => {
-        if (cancelled) return;
-        for (let i = 0; i < infos.length; i++) {
-          const info = infos[i];
-          if (!info) continue;
-          const parsed = parsePlayer(info);
-          if (parsed) upsertOtherPlayer(missing[i], parsed);
-        }
-      })
-      .catch(() => {});
-
-    return () => {
-      cancelled = true;
-    };
-  }, [members, connection, otherPlayers, upsertOtherPlayer]);
-
-  // On-demand fetch: treasury requests are PDA-derivable per (team, requester).
-  // The store is otherwise only seeded by the WebSocket, so a freshly loaded
-  // page would show nothing — derive + fetch one request PDA per member.
-  useEffect(() => {
-    if (!teamData?.pubkey || !members || members.length === 0) return;
-    const teamKey = teamData.pubkey;
-    const requestPdas = members.map((m) => deriveTreasuryRequestPda(teamKey, m.account.player)[0]);
-    connection
-      .getMultipleAccountsInfo(requestPdas)
-      .then((infos) => {
-        const store = useAccountStore.getState();
-        for (let i = 0; i < infos.length; i++) {
-          const info = infos[i];
-          if (!info) continue;
-          const parsed = parseTreasuryRequest(info);
-          if (parsed) store.upsertTreasuryRequest(requestPdas[i], parsed);
-        }
-      })
-      .catch(() => {});
-  }, [teamData?.pubkey?.toBase58(), members, connection, transact.isPending]);
-
-  // On-demand fetch: incoming team invites for the current player. Invites
-  // addressed to us are streamed by subscriptions.ts, but a freshly loaded
-  // page has nothing until a WS event fires. The invite PDA is derivable from
-  // (team, invitee player), so derive one per active team and fetch in bulk.
-  useEffect(() => {
-    if (!publicKey) return;
-    const ge = client.gameEngine;
-    const [meiPlayerPda] = derivePlayerPda(ge, publicKey);
-    let cancelled = false;
-    client
-      .fetchAllTeams({ activeOnly: true })
-      .then((teams) => {
-        if (cancelled || teams.length === 0) return;
-        const invitePdas = teams.map((t) => deriveTeamInvitePda(t.pubkey, meiPlayerPda)[0]);
-        return connection.getMultipleAccountsInfo(invitePdas).then((infos) => {
-          if (cancelled) return;
-          const store = useAccountStore.getState();
-          for (let i = 0; i < infos.length; i++) {
-            const info = infos[i];
-            if (!info) continue;
-            const parsed = parseTeamInvite(info);
-            if (parsed) store.upsertTeamInvite(invitePdas[i], parsed);
-          }
-        });
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [publicKey?.toBase58(), client, connection, transact.isPending]);
+  // On-demand RPC backfills (extracted to hooks): seed the member players,
+  // treasury requests, and incoming invites the WS hasn't delivered to a
+  // freshly loaded page. The tx-pending flag re-fires the request/invite
+  // fetches around a transaction.
+  useTeamMemberBackfill(members);
+  useTreasuryRequests(teamData?.pubkey, members, transact.isPending);
+  useIncomingInvites(transact.isPending);
 
   const [teamName, setTeamName] = useState("");
   const [depositAmount, setDepositAmount] = useState(0);
@@ -315,7 +235,7 @@ export function TeamTab() {
   }, [teamInvites, teamPubkey]);
 
   const currentTeamDomainName = useMemo(() => {
-    if (!team || !team.name || !team.name.includes(".")) return null;
+    if (!team?.name?.includes(".")) return null;
     return team.name;
   }, [team]);
 
@@ -816,8 +736,7 @@ export function TeamTab() {
   const getMemberNetworth = (playerPda: PublicKey): number =>
     getMemberAccount(playerPda)?.networth?.toNumber?.() ?? 0;
 
-  const getMemberLevel = (playerPda: PublicKey): number =>
-    getMemberAccount(playerPda)?.level ?? 0;
+  const getMemberLevel = (playerPda: PublicKey): number => getMemberAccount(playerPda)?.level ?? 0;
 
   const getMemberName = (playerPda: PublicKey): string =>
     getMemberAccount(playerPda)?.name?.trim() || "";
@@ -835,21 +754,13 @@ export function TeamTab() {
   const getMemberDefensiveUnits = (playerPda: PublicKey): number => {
     const p = getMemberAccount(playerPda);
     if (!p) return 0;
-    return (
-      p.defensiveUnit1.toNumber() +
-      p.defensiveUnit2.toNumber() +
-      p.defensiveUnit3.toNumber()
-    );
+    return p.defensiveUnit1.toNumber() + p.defensiveUnit2.toNumber() + p.defensiveUnit3.toNumber();
   };
 
   const getMemberOffensiveUnits = (playerPda: PublicKey): number => {
     const p = getMemberAccount(playerPda);
     if (!p) return 0;
-    return (
-      p.operativeUnit1.toNumber() +
-      p.operativeUnit2.toNumber() +
-      p.operativeUnit3.toNumber()
-    );
+    return p.operativeUnit1.toNumber() + p.operativeUnit2.toNumber() + p.operativeUnit3.toNumber();
   };
 
   const getMemberReinforcements = (playerPda: PublicKey): number => {
@@ -866,9 +777,7 @@ export function TeamTab() {
   // leaders see who's been asked and can cancel.
   const pendingInvites = useMemo(() => {
     if (!teamPubkey) return [];
-    return Array.from(teamInvites.values()).filter((inv) =>
-      inv.account.team.equals(teamPubkey),
-    );
+    return Array.from(teamInvites.values()).filter((inv) => inv.account.team.equals(teamPubkey));
   }, [teamInvites, teamPubkey]);
 
   // Sort by combat power desc, with networth and slotIndex as stable tiebreakers
@@ -1174,8 +1083,10 @@ export function TeamTab() {
                     const reinf = getMemberReinforcements(memberPda);
                     const isExpanded = expandedSlot === m.account.slotIndex;
 
-                    const canPromote = !isCurrentPlayer && myRank < m.account.rank && m.account.rank > 1;
-                    const canDemote = !isCurrentPlayer && myRank < m.account.rank && m.account.rank < 4;
+                    const canPromote =
+                      !isCurrentPlayer && myRank < m.account.rank && m.account.rank > 1;
+                    const canDemote =
+                      !isCurrentPlayer && myRank < m.account.rank && m.account.rank < 4;
                     const canKick = isLeader && !isCurrentPlayer && m.account.rank !== 0;
                     const canTransfer = isLeader && !isCurrentPlayer && m.account.rank !== 0;
                     const canReinforce = !isCurrentPlayer && !!memberAccount?.owner;
@@ -1192,9 +1103,7 @@ export function TeamTab() {
                         {/* Collapsed header — full row is a tap target */}
                         <button
                           type="button"
-                          onClick={() =>
-                            setExpandedSlot(isExpanded ? null : m.account.slotIndex)
-                          }
+                          onClick={() => setExpandedSlot(isExpanded ? null : m.account.slotIndex)}
                           className="flex w-full flex-col gap-2 px-3 py-2 text-left sm:flex-row sm:items-center sm:justify-between sm:gap-3"
                           aria-expanded={isExpanded}
                         >
@@ -1330,47 +1239,43 @@ export function TeamTab() {
                                   Reinforce
                                 </ActionButton>
                               )}
-                                {canPromote && (
-                                  <ActionButton
-                                    tone="primary"
-                                    onClick={() =>
-                                      handlePromote(m.account.slotIndex, m.account.rank)
-                                    }
-                                  >
-                                    Promote
-                                  </ActionButton>
-                                )}
-                                {canDemote && (
-                                  <ActionButton
-                                    tone="neutral"
-                                    onClick={() =>
-                                      handleDemote(m.account.slotIndex, m.account.rank)
-                                    }
-                                  >
-                                    Demote
-                                  </ActionButton>
-                                )}
-                                {canTransfer && (
-                                  <ActionButton
-                                    tone="info"
-                                    onClick={() =>
-                                      handleTransferLeadership(memberPda, m.account.slotIndex)
-                                    }
-                                  >
-                                    Transfer Lead
-                                  </ActionButton>
-                                )}
-                                {canKick && (
-                                  <ActionButton
-                                    tone="danger"
-                                    onClick={() =>
-                                      handleKick(memberPda, m.account.slotIndex, memberPda)
-                                    }
-                                  >
-                                    Kick
-                                  </ActionButton>
-                                )}
-                              </div>
+                              {canPromote && (
+                                <ActionButton
+                                  tone="primary"
+                                  onClick={() => handlePromote(m.account.slotIndex, m.account.rank)}
+                                >
+                                  Promote
+                                </ActionButton>
+                              )}
+                              {canDemote && (
+                                <ActionButton
+                                  tone="neutral"
+                                  onClick={() => handleDemote(m.account.slotIndex, m.account.rank)}
+                                >
+                                  Demote
+                                </ActionButton>
+                              )}
+                              {canTransfer && (
+                                <ActionButton
+                                  tone="info"
+                                  onClick={() =>
+                                    handleTransferLeadership(memberPda, m.account.slotIndex)
+                                  }
+                                >
+                                  Transfer Lead
+                                </ActionButton>
+                              )}
+                              {canKick && (
+                                <ActionButton
+                                  tone="danger"
+                                  onClick={() =>
+                                    handleKick(memberPda, m.account.slotIndex, memberPda)
+                                  }
+                                >
+                                  Kick
+                                </ActionButton>
+                              )}
+                            </div>
                           </div>
                         )}
                       </div>
@@ -2054,9 +1959,7 @@ function TeamSettingsPanel({
         </span>
         <span
           className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors ${
-            isPublic
-              ? "border-border-gold/60 bg-accent/50"
-              : "border-zinc-700 bg-surface-raised"
+            isPublic ? "border-border-gold/60 bg-accent/50" : "border-zinc-700 bg-surface-raised"
           }`}
         >
           <span

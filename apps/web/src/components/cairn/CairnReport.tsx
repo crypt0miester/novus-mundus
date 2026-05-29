@@ -24,9 +24,7 @@ export function CairnReport() {
     lines.push(cairnReport.buildingsRose(buildingNames(report.buildingsRisen)));
   }
   if (report.buildingsImproved.length > 0) {
-    lines.push(
-      cairnReport.buildingsImproved(buildingNames(report.buildingsImproved)),
-    );
+    lines.push(cairnReport.buildingsImproved(buildingNames(report.buildingsImproved)));
   }
   if (report.attacked > 0) lines.push(cairnReport.attacked(report.attacked));
   if (report.protectionEnded) lines.push(cairnReport.protectionEnded());
@@ -54,10 +52,7 @@ export function CairnReport() {
       </p>
       <ul className="space-y-1.5">
         {lines.map((line, i) => (
-          <li
-            key={i}
-            className="flex gap-2 text-sm leading-relaxed text-text-secondary"
-          >
+          <li key={i} className="flex gap-2 text-sm leading-relaxed text-text-secondary">
             <span className="select-none text-text-muted">—</span>
             <span>{line}</span>
           </li>

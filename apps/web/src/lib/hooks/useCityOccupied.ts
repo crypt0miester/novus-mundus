@@ -1,14 +1,12 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useShallow } from "zustand/react/shallow";
 import { toGrid, OCCUPANT_CASTLE } from "novus-mundus-sdk";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWorldCastles } from "@/lib/hooks/world/useWorldCastles";
-import {
-  getCosmeticColor,
-  type CosmeticColorAnimation,
-} from "@/lib/config/cosmetics-catalog";
+import { getCosmeticColor, type CosmeticColorAnimation } from "@/lib/config/cosmetics-catalog";
 
 export interface OccupiedCell {
   gridLat: number;
@@ -89,7 +87,21 @@ export function useCityOccupied(cityId: number | null | undefined) {
    * for player positions lives in `player.account.currentLat/Long` (self)
    * and `otherPlayers[pubkey].account.currentLat/Long` (everyone else). */
   const localPlayer = useAccountStore((s) => s.player);
-  const otherPlayers = useAccountStore((s) => s.otherPlayers);
+  /* Selector narrowing: the program-wide WS replaces the whole otherPlayers
+   * Map on every player tick anywhere in the kingdom, which would otherwise
+   * re-run the heavy cosmetic-resolution memo below for changes in cities the
+   * disc isn't even showing. Pre-filter to this city's players inside the
+   * selector (under useShallow) so an out-of-city tick yields a shallow-equal
+   * array and the consumer skips the re-render. Locations are city-scoped too,
+   * so only this city's players can occupy a rendered cell — narrowing here
+   * loses no occupant. */
+  const cityPlayers = useAccountStore(
+    useShallow((s) =>
+      cityId == null
+        ? []
+        : Array.from(s.otherPlayers.values()).filter((p) => p.account.currentCity === cityId),
+    ),
+  );
   const client = useNovusMundusClient();
   const ge = client.gameEngine;
   /* Castles aren't in Location PDAs (their lat/long is on the CastleAccount
@@ -100,6 +112,14 @@ export function useCityOccupied(cityId: number | null | undefined) {
 
   const [seededFor, setSeededFor] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Bumped by `refetch` to re-run the one-shot seed fetch after a
+  // failed load. It's an effect dependency so the existing seed path
+  // (with its cancelled-flag cleanup) is reused verbatim rather than
+  // duplicated — a manual retry walks the same code as a cityId change.
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const refetch = useCallback(() => {
+    setReloadNonce((n) => n + 1);
+  }, []);
   // 1 Hz wall-clock tick so the despawnAt filter below recomputes once
   // per second even when no other store mutation hits the memo deps.
   // Without this, an encounter whose despawnAt crosses while the disc
@@ -115,6 +135,9 @@ export function useCityOccupied(cityId: number | null | undefined) {
   useEffect(() => {
     if (cityId == null) return;
     setError(null);
+    // Re-arm the loading state so a retry reads as "scanning" again
+    // rather than silently re-running under the old error/empty UI.
+    if (reloadNonce > 0) setSeededFor(null);
 
     let cancelled = false;
     client
@@ -138,7 +161,7 @@ export function useCityOccupied(cityId: number | null | undefined) {
     return () => {
       cancelled = true;
     };
-  }, [cityId, client]);
+  }, [cityId, client, reloadNonce]);
 
   const data = useMemo<OccupiedCell[]>(() => {
     if (cityId == null) return [];
@@ -190,7 +213,11 @@ export function useCityOccupied(cityId: number | null | undefined) {
         localPlayer.account.equippedTitle,
       );
     }
-    for (const [key, entry] of otherPlayers) {
+    // `cityPlayers` is already narrowed to currentCity === cityId, so this
+    // loop only resolves cosmetics for players who can occupy a cell in the
+    // city the disc is rendering.
+    for (const entry of cityPlayers) {
+      const key = entry.pubkey.toBase58();
       liveByPlayer.set(key, {
         gridLat: toGrid(entry.account.currentLat),
         gridLong: toGrid(entry.account.currentLong),
@@ -237,7 +264,10 @@ export function useCityOccupied(cityId: number | null | undefined) {
       /* Player occupant (type=1) — only keep the cell that matches the
        * player's chain-state `currentLat/Long`. Other cells with the
        * same occupant pubkey are stale ghosts from old walks. Players
-       * not in the store (no liveByPlayer entry) fall through unchanged. */
+       * not in `liveByPlayer` (not the local player and not in this
+       * city's narrowed roster) fall through unchanged — the same
+       * permissive behaviour the broad-Map version applied to any
+       * player it didn't have a live position for. */
       if (account.occupantType === 1) {
         const live = liveByPlayer.get(account.occupant.toBase58());
         if (live && (live.gridLat !== account.gridLat || live.gridLong !== account.gridLong)) {
@@ -291,11 +321,12 @@ export function useCityOccupied(cityId: number | null | undefined) {
       }
     }
     return out;
-  }, [locations, cityId, ge, encounters, localPlayer, otherPlayers, nowTick, worldCastles]);
+  }, [locations, cityId, ge, encounters, localPlayer, cityPlayers, nowTick, worldCastles]);
 
   return {
     data,
     isLoading: cityId != null && seededFor !== cityId,
     error,
+    refetch,
   };
 }

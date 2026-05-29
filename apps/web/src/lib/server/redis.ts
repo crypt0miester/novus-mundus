@@ -37,5 +37,6 @@ function createClient(): Redis {
 }
 
 /** The shared Redis client (singleton, server-only). */
-export const redis: Redis =
-  globalThis.__noviRedis ?? (globalThis.__noviRedis = createClient());
+const cached: Redis = globalThis.__noviRedis ?? createClient();
+globalThis.__noviRedis = cached;
+export const redis: Redis = cached;

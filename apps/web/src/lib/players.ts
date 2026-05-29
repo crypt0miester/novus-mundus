@@ -15,8 +15,8 @@ export function matchesPlayerQuery(
 ): boolean {
   const q = query.trim().toLowerCase();
   if (!q) return true;
-  if (player.name && player.name.toLowerCase().includes(q)) return true;
-  if (domain && domain.toLowerCase().includes(q)) return true;
+  if (player.name?.toLowerCase().includes(q)) return true;
+  if (domain?.toLowerCase().includes(q)) return true;
   return ownerAddress.toLowerCase().includes(q);
 }
 

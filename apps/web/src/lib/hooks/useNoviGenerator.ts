@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { usePlayer } from "./usePlayer";
 import { useGameEngine } from "./useGameEngine";
+import { useChainTimeOffset } from "./useChainTime";
 import { deciToNovi, getEffectiveTier } from "novus-mundus-sdk";
 
 /** NOVI accrues one drop every 5 minutes. */
@@ -58,6 +59,9 @@ export function useNoviGenerator(): NoviGeneratorState {
   const { data: geData } = useGameEngine();
   const player = playerData?.account;
   const ge = geData?.account;
+  // Anchor `now` to the cluster clock — the effective tier keys off
+  // `subscription_end > now` on-chain, so a wall-clock preview mispredicts it.
+  const chainOffset = useChainTimeOffset();
 
   const [ticker, setTicker] = useState({
     displayNovi: 0,
@@ -68,7 +72,7 @@ export function useNoviGenerator(): NoviGeneratorState {
   useEffect(() => {
     if (!player || !ge) return;
     const tick = () => {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Math.floor(Date.now() / 1000) + chainOffset;
       const cfg = ge.subscriptionTiers[getEffectiveTier(player, now)];
       if (!cfg) return;
       const genRate = cfg.generationMultiplier.toNumber();
@@ -95,11 +99,11 @@ export function useNoviGenerator(): NoviGeneratorState {
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [player, ge]);
+  }, [player, ge, chainOffset]);
 
   return useMemo(() => {
     if (!player || !ge) return EMPTY;
-    const effectiveTier = getEffectiveTier(player, Math.floor(Date.now() / 1000));
+    const effectiveTier = getEffectiveTier(player, Math.floor(Date.now() / 1000) + chainOffset);
     const cfg = ge.subscriptionTiers[effectiveTier];
     if (!cfg) return EMPTY;
     // Internal scale: everything from the chain is in raw deci-NOVI (mint
@@ -122,5 +126,5 @@ export function useNoviGenerator(): NoviGeneratorState {
       isFull: currentLockedRaw >= maxCapRaw || ticker.fillPct >= 99.9,
       lastUpdatedAt: player.lastUpdatedTokensAt.toNumber(),
     };
-  }, [player, ge, ticker]);
+  }, [player, ge, ticker, chainOffset]);
 }

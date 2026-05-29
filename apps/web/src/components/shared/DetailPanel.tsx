@@ -1,6 +1,5 @@
 "use client";
 
-import { useEffect, useCallback } from "react";
 import { BottomSheet } from "@/components/shared/BottomSheet";
 
 /**
@@ -34,30 +33,8 @@ export function DetailPanel({
   className?: string;
   variant?: "sticky" | "column";
 }) {
-  // Close on Escape
-  const handleKey = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    },
-    [onClose],
-  );
-
-  useEffect(() => {
-    if (!open) return;
-    document.addEventListener("keydown", handleKey);
-    return () => document.removeEventListener("keydown", handleKey);
-  }, [open, handleKey]);
-
-  // Lock body scroll on mobile when open
-  useEffect(() => {
-    if (!open) return;
-    const prev = document.body.style.overflow;
-    const mql = window.matchMedia("(min-width: 1024px)");
-    if (!mql.matches) document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [open]);
+  // Escape-to-close and mobile body-scroll-lock are owned by BottomSheet,
+  // which is always mounted below — no need to duplicate them here.
 
   return (
     <>
@@ -70,9 +47,7 @@ export function DetailPanel({
         {open ? (
           <div
             className={`overflow-y-auto overscroll-contain rounded-lg border border-border-default bg-surface-raised p-4 space-y-4 ${
-              variant === "column"
-                ? "h-full"
-                : "sticky top-0 max-h-[calc(100vh_-_5.5rem)]"
+              variant === "column" ? "h-full" : "sticky top-0 max-h-[calc(100vh_-_5.5rem)]"
             }`}
           >
             {children}

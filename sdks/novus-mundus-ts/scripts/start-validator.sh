@@ -81,6 +81,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --gossip-port)
+            [ $# -ge 2 ] || { echo "Error: --gossip-port requires a value"; exit 1; }
             GOSSIP_PORT="$2"
             shift 2
             ;;
@@ -89,6 +90,7 @@ while [ $# -gt 0 ]; do
             shift
             ;;
         --dynamic-port-range)
+            [ $# -ge 2 ] || { echo "Error: --dynamic-port-range requires a value"; exit 1; }
             DYNAMIC_PORT_RANGE="$2"
             shift 2
             ;;

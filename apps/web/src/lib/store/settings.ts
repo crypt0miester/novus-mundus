@@ -98,6 +98,6 @@ export const useSettings = create<SettingsStore>()(
               : current.mapMode,
         };
       },
-    }
-  )
+    },
+  ),
 );

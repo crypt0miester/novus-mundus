@@ -3,12 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Moon, Sun, Sunrise, Sunset, type LucideIcon } from "lucide-react";
-import {
-  useWorldClock,
-  PHASES,
-  phaseWidth,
-  type PhaseBody,
-} from "@/lib/hooks/useWorldClock";
+import { useWorldClock, PHASES, phaseWidth, type PhaseBody } from "@/lib/hooks/useWorldClock";
 import { cn, formatTime } from "@/lib/utils";
 
 const BODY_ICON: Record<PhaseBody, LucideIcon> = {
@@ -75,18 +70,11 @@ export function WorldClock({ compact = false }: { compact?: boolean }) {
           compact ? "p-1" : "gap-1.5 px-2 py-1",
         )}
       >
-        <Glyph
-          className="h-3.5 w-3.5 shrink-0"
-          style={{ color: current.color }}
-        />
+        <Glyph className="h-3.5 w-3.5 shrink-0" style={{ color: current.color }} />
         {!compact && (
           <>
-            <span className="font-medium text-text-secondary">
-              {current.name}
-            </span>
-            <span className="hidden font-mono text-text-muted sm:inline">
-              · {clock}
-            </span>
+            <span className="font-medium text-text-secondary">{current.name}</span>
+            <span className="hidden font-mono text-text-muted sm:inline">· {clock}</span>
           </>
         )}
       </button>
@@ -100,18 +88,11 @@ export function WorldClock({ compact = false }: { compact?: boolean }) {
         >
           {/* The day's arc — gradient sky, the body riding it at `now`. */}
           <div className="relative mx-auto h-[104px] w-[220px]">
-            <svg
-              viewBox="0 0 240 120"
-              className="absolute inset-0 h-full w-full overflow-visible"
-            >
+            <svg viewBox="0 0 240 120" className="absolute inset-0 h-full w-full overflow-visible">
               <defs>
                 <linearGradient id="nm-sky" x1="0" y1="0" x2="1" y2="0">
                   {PHASES.map((p) => (
-                    <stop
-                      key={p.name}
-                      offset={p.start / 1000}
-                      stopColor={p.color}
-                    />
+                    <stop key={p.name} offset={p.start / 1000} stopColor={p.color} />
                   ))}
                   <stop offset="1" stopColor={PHASES[0]!.color} />
                 </linearGradient>
@@ -156,10 +137,7 @@ export function WorldClock({ compact = false }: { compact?: boolean }) {
           <div className="relative mt-3 h-1.5">
             <div className="flex h-full overflow-hidden rounded-full">
               {PHASES.map((p, i) => (
-                <div
-                  key={p.name}
-                  style={{ flexGrow: phaseWidth(i), backgroundColor: p.color }}
-                />
+                <div key={p.name} style={{ flexGrow: phaseWidth(i), backgroundColor: p.color }} />
               ))}
             </div>
             <div

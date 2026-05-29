@@ -23,6 +23,8 @@ import {
   ARENA_MIN_BATTLES_FOR_DAILY_REWARD,
 } from "novus-mundus-sdk";
 import { useCoSign } from "@/lib/cosign";
+import { BuildingId } from "@/lib/buildings";
+import { BuildingShowcase } from "./building-showcase";
 
 export function ArenaTab() {
   const { data: playerData } = usePlayer();
@@ -54,9 +56,8 @@ export function ArenaTab() {
     // midnight even when the player still had 10 fresh battles in the
     // trailing 24h — chain would then reject TooManyBattles.
     const cutoff = Math.floor(Date.now() / 1000) - 86400;
-    return participant.battleTimestamps.filter(
-      (ts: any) => (ts?.toNumber?.() ?? ts) >= cutoff,
-    ).length;
+    return participant.battleTimestamps.filter((ts: any) => (ts?.toNumber?.() ?? ts) >= cutoff)
+      .length;
   }, [participant]);
   const dailyBattlesRemaining = ARENA_MAX_DAILY_BATTLES - dailyBattlesUsed;
 
@@ -146,6 +147,7 @@ export function ArenaTab() {
 
   return (
     <div className="space-y-6">
+      <BuildingShowcase buildingId={BuildingId.Arena} icon="nav-arena" />
       {season && (
         <div className="card accent-border">
           <div className="flex items-center justify-between">
@@ -211,9 +213,7 @@ export function ArenaTab() {
           <div className="mt-4 flex flex-col items-center gap-2">
             <TxButton
               onClick={handleChallenge}
-              disabled={
-                dailyBattlesRemaining <= 0 || (season != null && !isSeasonActive(season))
-              }
+              disabled={dailyBattlesRemaining <= 0 || (season != null && !isSeasonActive(season))}
             >
               Find a Match
             </TxButton>
@@ -256,7 +256,10 @@ export function ArenaTab() {
                     highlight: true,
                   },
                   { label: "Melee Power", value: ac.meleeWeaponPower.toNumber().toLocaleString() },
-                  { label: "Ranged Power", value: ac.rangedWeaponPower.toNumber().toLocaleString() },
+                  {
+                    label: "Ranged Power",
+                    value: ac.rangedWeaponPower.toNumber().toLocaleString(),
+                  },
                   { label: "Siege Power", value: ac.siegeWeaponPower.toNumber().toLocaleString() },
                   { label: "Armor Power", value: ac.armorPower.toNumber().toLocaleString() },
                   { label: "Starting ELO", value: ac.startingElo.toLocaleString() },

@@ -8,9 +8,7 @@ export function useShopConfig() {
   const loading = useAccountStore((s) => s.loading);
   const active = useAccountStore((s) => s.subscriptionActive);
 
-  const data = entry
-    ? { pubkey: entry.pubkey, account: entry.account, exists: true }
-    : null;
+  const data = entry ? { pubkey: entry.pubkey, account: entry.account, exists: true } : null;
 
   return {
     data,
@@ -25,11 +23,8 @@ export function useShopItems() {
   const active = useAccountStore((s) => s.subscriptionActive);
 
   const data = useMemo(
-    () =>
-      Array.from(shopItems.values()).sort(
-        (a, b) => a.account.itemType - b.account.itemType
-      ),
-    [shopItems]
+    () => Array.from(shopItems.values()).sort((a, b) => a.account.itemType - b.account.itemType),
+    [shopItems],
   );
 
   return {
@@ -45,11 +40,8 @@ export function useBundles() {
   const active = useAccountStore((s) => s.subscriptionActive);
 
   const data = useMemo(
-    () =>
-      Array.from(bundles.values()).sort(
-        (a, b) => a.account.tier - b.account.tier
-      ),
-    [bundles]
+    () => Array.from(bundles.values()).sort((a, b) => a.account.tier - b.account.tier),
+    [bundles],
   );
 
   return {
@@ -64,10 +56,7 @@ export function useFlashSales() {
   const loading = useAccountStore((s) => s.loading);
   const active = useAccountStore((s) => s.subscriptionActive);
 
-  const data = useMemo(
-    () => Array.from(flashSales.values()),
-    [flashSales]
-  );
+  const data = useMemo(() => Array.from(flashSales.values()), [flashSales]);
 
   return {
     data,
@@ -83,7 +72,7 @@ export function useDailyDeals() {
 
   const data = useMemo(
     () => Array.from(dailyDeals.values()).sort((a, b) => a.slot - b.slot),
-    [dailyDeals]
+    [dailyDeals],
   );
 
   return {
@@ -122,10 +111,7 @@ export function useDaoPromotions() {
   const loading = useAccountStore((s) => s.loading);
   const active = useAccountStore((s) => s.subscriptionActive);
 
-  const data = useMemo(
-    () => Array.from(daoPromotions.values()),
-    [daoPromotions]
-  );
+  const data = useMemo(() => Array.from(daoPromotions.values()), [daoPromotions]);
 
   return {
     data,

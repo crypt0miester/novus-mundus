@@ -47,7 +47,12 @@
     },
     {
       "prompt": "What is the name of a kingdom's first, rawest age?",
-      "options": ["The Age of Ashes", "The Age of Crowns", "The Age of Dominion", "The Age of Aeondral"],
+      "options": [
+        "The Age of Ashes",
+        "The Age of Crowns",
+        "The Age of Dominion",
+        "The Age of Aeondral"
+      ],
       "correctIndex": 0
     },
     {

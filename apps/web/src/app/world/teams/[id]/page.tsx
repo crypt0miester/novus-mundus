@@ -19,15 +19,26 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 const RANK_LABELS = ["Member", "Officer", "Co-Leader", "Leader"] as const;
 const RANK_VARIANTS = ["default", "info", "gold", "legendary"] as const;
 
+/** Parse a numeric route id to a non-negative integer, or null if malformed. */
+function parseIdParam(value: string): number | null {
+  if (!/^\d+$/.test(value)) return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) ? n : null;
+}
+
 export default function TeamDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
-  const teamId = parseInt(id, 10);
   const client = useNovusMundusClient();
+  // Narrow the route id before any query so a malformed id is a clean
+  // not-found here instead of a NaN flowing into deriveTeamPda / the queryFns.
+  const teamId = parseIdParam(id);
 
-  const [teamPda] = deriveTeamPda(client.gameEngine, teamId);
-  const teamPdaStr = teamPda.toBase58();
+  const teamPdaStr = useMemo(() => {
+    if (teamId == null) return undefined;
+    return deriveTeamPda(client.gameEngine, teamId)[0].toBase58();
+  }, [client.gameEngine, teamId]);
 
-  const { data: teamResult, isLoading: teamLoading } = useWorldTeam(teamId);
+  const { data: teamResult, isLoading: teamLoading } = useWorldTeam(teamId ?? undefined);
   const { data: members } = useWorldTeamMembers(teamPdaStr);
   const { data: allPlayers } = useWorldPlayers();
   const citizen = useCitizenStatus();
@@ -80,6 +91,27 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
     citizen.isCitizen &&
     citizen.player &&
     citizen.player.team.toBase58() !== "11111111111111111111111111111111";
+
+  if (teamId == null) {
+    return (
+      <PageTransition>
+        <div className="mx-auto max-w-3xl space-y-6">
+          <h1 className="tier-title font-display text-3xl font-bold tracking-wide">
+            TEAM NOT FOUND
+          </h1>
+          <div className="card">
+            <p className="text-sm text-text-muted">"{id}" is not a valid team id.</p>
+            <Link
+              href="/world/teams"
+              className="mt-3 inline-block text-sm text-text-gold hover:underline"
+            >
+              Browse Teams
+            </Link>
+          </div>
+        </div>
+      </PageTransition>
+    );
+  }
 
   if (teamLoading) {
     return (

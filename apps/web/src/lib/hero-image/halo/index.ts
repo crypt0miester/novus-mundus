@@ -15,11 +15,7 @@
 // Bake provenance: images/halos/halos.json -> images/scripts/generate-halos.sh
 // -> images/scripts/export-halos-to-app.sh.
 
-import {
-  createCanvas,
-  type Image,
-  type SKRSContext2D,
-} from "@napi-rs/canvas";
+import { createCanvas, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import path from "node:path";
 import type { HaloKind } from "../fingerprint";
 import { drawConcentric, type HaloDrawParams } from "./concentric";
@@ -47,14 +43,7 @@ export async function drawHalo(
   p: HaloDrawParams,
 ): Promise<void> {
   const slug = SLUG_BY_KIND[kind];
-  const haloPath = path.join(
-    process.cwd(),
-    "public",
-    "img",
-    "heroes",
-    "halos",
-    `${slug}.png`,
-  );
+  const haloPath = path.join(process.cwd(), "public", "img", "heroes", "halos", `${slug}.png`);
 
   let img: Image | null = null;
   try {

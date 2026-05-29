@@ -13,7 +13,7 @@ import { DetailPanel } from "@/components/shared/DetailPanel";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import type { PanelAction } from "@/lib/store/right-panel";
 import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
-import { Keypair, PublicKey } from "@solana/web3.js";
+import { Keypair, type PublicKey } from "@solana/web3.js";
 import {
   derivePlayerPda,
   deriveHeroTemplatePda,
@@ -189,7 +189,7 @@ export function HeroesTab() {
             try {
               const asset = parseAssetV1(account.data);
               if (!asset) return null;
-              if (!asset.attributes["Template"]) return null;
+              if (!asset.attributes.Template) return null;
               return { address: pubkey, asset } as HeroData;
             } catch {
               return null;
@@ -302,8 +302,8 @@ export function HeroesTab() {
     const ge = client.gameEngine;
     const [playerPda] = derivePlayerPda(ge, publicKey);
     const heroData = lockedHeroes[slotIndex];
-    const templateId = heroData?.asset?.attributes["Template"]
-      ? parseInt(heroData.asset.attributes["Template"])
+    const templateId = heroData?.asset?.attributes.Template
+      ? parseInt(heroData.asset.attributes.Template, 10)
       : 0;
     const [heroTemplate] = deriveHeroTemplatePda(templateId);
     const [estateAccount] = deriveEstatePda(playerPda);
@@ -405,9 +405,7 @@ export function HeroesTab() {
     if (selected.type === "template") {
       const t = selected.info;
       const mintable =
-        canMintHero(t.account) &&
-        !t.minted &&
-        (player.level ?? 0) >= t.account.requiredPlayerLevel;
+        canMintHero(t.account) && !t.minted && (player.level ?? 0) >= t.account.requiredPlayerLevel;
       return [
         {
           id: "mint",
@@ -421,13 +419,10 @@ export function HeroesTab() {
 
     const hero = selected.hero;
     const attrs = hero.asset.attributes;
-    const templateId = parseInt(attrs["Template"] || "0");
-    const level = attrs["Level"] ? parseInt(attrs["Level"]) : 0;
+    const templateId = parseInt(attrs.Template || "0", 10);
+    const level = attrs.Level ? parseInt(attrs.Level, 10) : 0;
     const canLevel =
-      levelUpGate.allowed &&
-      fragments >= fragmentCost(level) &&
-      level < levelCap &&
-      levelCap > 0;
+      levelUpGate.allowed && fragments >= fragmentCost(level) && level < levelCap && levelCap > 0;
 
     const list: PanelAction[] = [];
     if (levelUpGate.allowed) {

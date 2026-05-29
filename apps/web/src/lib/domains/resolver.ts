@@ -74,10 +74,7 @@ export async function resolveDomainNamesBatched(
  * Fetch all parsed domains owned by a wallet.
  * Returns array of { nameAccount, domain } sorted alphabetically.
  */
-export async function getOwnedDomains(
-  connection: Connection,
-  owner: PublicKey | string,
-) {
+export async function getOwnedDomains(connection: Connection, owner: PublicKey | string) {
   const parser = getParser(connection);
   return parser.getParsedAllUserDomains(owner);
 }

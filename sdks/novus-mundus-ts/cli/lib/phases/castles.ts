@@ -16,6 +16,7 @@ import {
   deriveCastlePda,
   parseCastle,
   toGrid,
+  CASTLE_ATTACK_RANGE_METERS,
   type BiomeKnobs,
 } from '../../../src/index';
 import { CASTLES, defaultFootprintForTier } from '../../data/castles';
@@ -28,16 +29,42 @@ import {
 interface AnchorResolution {
   latitude: number;
   longitude: number;
+  /** Reachable cardinal sides (0-4) at the chosen anchor — 4 means a player
+   *  can stand within attack range on every side. < 4 means the spot is
+   *  water-locked on some side (no better one existed; surfaced as a warning). */
+  reachableSides: number;
 }
 
+// When the hint / first-fit lands on a coastline, keep spiralling inward up to
+// this many extra rings hunting a fully-surroundable footprint before falling
+// back to the most-open spot found. ~80 grid cells ≈ 0.9 km — far enough to
+// step off any normal shoreline, bounded so a near-all-water plot doesn't scan
+// the whole grid.
+const BUFFER_SEARCH_EXTRA = 80;
+
 /**
- * Resolve a castle's anchor (grid lat / lon) so its N×N footprint lands
- * on all-passable cells. Tries the data-file hint first (preserves
- * authored placements like Tower of London east of central London),
- * then spirals outward from the hint until a valid footprint is found.
+ * Resolve a castle's anchor (grid lat / lon) so its N×N footprint lands on
+ * passable land AND is ringed by enough passable land that attackers can stand
+ * within `CASTLE_ATTACK_RANGE_METERS` on every side. Without the buffer the old
+ * search stopped at the FIRST passable cell — almost always right on a coastline
+ * — leaving the castle water-locked: `attack_castle` rejects anyone who can't
+ * get within range of a footprint cell, so a sea-bound side is unattackable and
+ * players literally cannot move around it.
  *
- * The spiral skips the city centre cell (spawn point) to avoid
- * stomping on `init_player`'s first LocationAccount claim.
+ * Order:
+ *   1. the authored hint if it fits AND is fully surroundable (preserves
+ *      curated placements like Tower of London east of central London);
+ *   2. the CLOSEST fully-surroundable footprint spiralling out from the hint;
+ *   3. if none exists nearby (a genuine islet), the most-open footprint found
+ *      (max reachable sides) so init still succeeds — the caller warns on < 4.
+ *
+ * The spiral skips the city centre cell (spawn point) so it never stomps
+ * `init_player`'s first LocationAccount claim. Buffer cells beyond the plot edge
+ * are not required — the border is land-adjacent, not water-locked.
+ *
+ * `bufLon`/`bufLat` are the attack range expressed in grid cells per axis
+ * (longitude needs more cells than latitude because longitude degrees shrink
+ * with latitude).
  */
 function resolveCastleAnchor(
   cityLatGrid: number,
@@ -49,9 +76,14 @@ function resolveCastleAnchor(
   footprint: number,
   hintLatGrid: number,
   hintLongGrid: number,
+  bufLon: number,
+  bufLat: number,
 ): AnchorResolution | null {
   const hintOx = hintLongGrid - cityLongGrid;
   const hintOy = hintLatGrid - cityLatGrid;
+
+  const passable = (ox: number, oy: number): boolean =>
+    isPassableBiome(biomeAt(biomeSeed, ox, oy, knobs));
 
   const footprintFits = (ox: number, oy: number): boolean => {
     // AABB containment — anchor + (N-1) must stay inside the half-extent.
@@ -66,39 +98,76 @@ function resolveCastleAnchor(
     // Every footprint cell must be passable.
     for (let dx = 0; dx < footprint; dx++) {
       for (let dy = 0; dy < footprint; dy++) {
-        const cellOx = ox + dx;
-        const cellOy = oy + dy;
-        if (!isPassableBiome(biomeAt(biomeSeed, cellOx, cellOy, knobs))) {
-          return false;
-        }
+        if (!passable(ox + dx, oy + dy)) return false;
       }
     }
     return true;
   };
 
-  // Try the hint first.
-  if (footprintFits(hintOx, hintOy)) {
-    return { latitude: hintLatGrid, longitude: hintLongGrid };
+  // Count cardinal sides (0-4) with a passable cell within attack range
+  // straight out from each face of the footprint.
+  const reachableSides = (ox: number, oy: number): number => {
+    let sides = 0;
+    for (let k = 1; k <= bufLon; k++) if (passable(ox + footprint - 1 + k, oy)) { sides++; break; }
+    for (let k = 1; k <= bufLon; k++) if (passable(ox - k, oy)) { sides++; break; }
+    for (let k = 1; k <= bufLat; k++) if (passable(ox, oy + footprint - 1 + k)) { sides++; break; }
+    for (let k = 1; k <= bufLat; k++) if (passable(ox, oy - k)) { sides++; break; }
+    return sides;
+  };
+
+  // Every buffer-ring cell that lies inside the plot is passable — attackers
+  // can stand on any side. Cells past the plot edge are skipped, not failed.
+  const fullySurroundable = (ox: number, oy: number): boolean => {
+    for (let dx = -bufLon; dx < footprint + bufLon; dx++) {
+      for (let dy = -bufLat; dy < footprint + bufLat; dy++) {
+        const inFoot = dx >= 0 && dx < footprint && dy >= 0 && dy < footprint;
+        if (inFoot) continue;
+        const cox = ox + dx;
+        const coy = oy + dy;
+        if (cox < -cityHalfWidth || cox > cityHalfWidth) continue;
+        if (coy < -cityHalfHeight || coy > cityHalfHeight) continue;
+        if (!passable(cox, coy)) return false;
+      }
+    }
+    return true;
+  };
+
+  // 1. Authored hint, only if it's already fully surroundable.
+  if (footprintFits(hintOx, hintOy) && fullySurroundable(hintOx, hintOy)) {
+    return { latitude: hintLatGrid, longitude: hintLongGrid, reachableSides: 4 };
   }
 
-  // Spiral outward from the hint. `step=1` is fine for the small plot
-  // sizes here (half-extent ~4000 grid units). The outer cap stops the
-  // search well before we'd run off the plot.
+  // 2 + 3. Spiral out. Return the closest fully-surroundable fit; otherwise
+  // keep the most-open fit seen and return it once the bounded window is spent.
   const maxRadius = Math.min(cityHalfWidth, cityHalfHeight);
-  for (let r = 1; r <= maxRadius; r++) {
+  let bestOx = 0;
+  let bestOy = 0;
+  let bestSides = -1;
+  let deadline = maxRadius;
+  for (let r = 1; r <= maxRadius && r <= deadline; r++) {
     for (let dx = -r; dx <= r; dx++) {
       for (let dy = -r; dy <= r; dy++) {
         if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // ring only
         const ox = hintOx + dx;
         const oy = hintOy + dy;
-        if (footprintFits(ox, oy)) {
-          return {
-            latitude: cityLatGrid + oy,
-            longitude: cityLongGrid + ox,
-          };
+        if (!footprintFits(ox, oy)) continue;
+        // First land reached — bound the rest of the search so a mostly-water
+        // plot doesn't scan the whole grid hunting a buffer that isn't there.
+        if (bestSides < 0) deadline = Math.min(maxRadius, r + BUFFER_SEARCH_EXTRA);
+        const sides = reachableSides(ox, oy);
+        if (sides === 4 && fullySurroundable(ox, oy)) {
+          return { latitude: cityLatGrid + oy, longitude: cityLongGrid + ox, reachableSides: 4 };
+        }
+        if (sides > bestSides) {
+          bestSides = sides;
+          bestOx = ox;
+          bestOy = oy;
         }
       }
     }
+  }
+  if (bestSides >= 0) {
+    return { latitude: cityLatGrid + bestOy, longitude: cityLongGrid + bestOx, reachableSides: bestSides };
   }
   return null;
 }
@@ -127,6 +196,15 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
     const GRID_PRECISION = 10_000;
     const dim = Math.round(((city.radiusKm * SQRT_PI) / KM_PER_DEG) * GRID_PRECISION);
     const half = Math.floor(dim / 2);
+    // Attack range expressed in grid cells per axis. 1 grid unit ≈ 11.1 m of
+    // latitude; longitude degrees shrink by cos(lat) so the same range spans
+    // more longitude cells. The +1 gives attackers a cell strictly inside range
+    // rather than exactly on the boundary. This sizes the passable buffer the
+    // anchor search requires so the castle is attackable from every side.
+    const METERS_PER_GRID_LAT = (KM_PER_DEG * 1000) / GRID_PRECISION;
+    const cosLat = Math.max(0.15, Math.cos((city.lat * Math.PI) / 180));
+    const bufLat = Math.ceil(CASTLE_ATTACK_RANGE_METERS / METERS_PER_GRID_LAT) + 1;
+    const bufLon = Math.ceil(CASTLE_ATTACK_RANGE_METERS / (METERS_PER_GRID_LAT * cosLat)) + 1;
     const knobs: BiomeKnobs = {
       waterLevelDelta: city.biome.waterLevelDelta,
       tempBias: city.biome.tempBias,
@@ -146,11 +224,25 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
       footprint,
       castle.latitude,
       castle.longitude,
+      bufLon,
+      bufLat,
     );
     if (!resolved) {
       throw new Error(
         `Castle #${castle.castleId} ('${castle.name}'): no passable ` +
         `${footprint}×${footprint} footprint anywhere in city ${castle.cityId}.`,
+      );
+    }
+    // A spot with < 4 reachable sides is water-locked on some face: attackers
+    // can't surround it. Surface it loudly so the castle's hint can be
+    // re-anchored to a larger landmass (the world is mostly water near it).
+    if (resolved.reachableSides < 4) {
+      console.warn(
+        yellow(
+          `  ⚠ Castle #${castle.castleId} ('${castle.name}', city ${castle.cityId}): ` +
+          `only ${resolved.reachableSides}/4 sides reachable within ${CASTLE_ATTACK_RANGE_METERS}m — ` +
+          `water-locked, hard to attack. Consider re-anchoring its hint to more open land.`,
+        ),
       );
     }
 

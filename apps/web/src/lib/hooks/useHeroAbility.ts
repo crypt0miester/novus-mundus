@@ -2,7 +2,7 @@
 
 import { useCallback, useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import {
   createUseHeroAbilityInstruction,
   deriveHeroTemplatePda,

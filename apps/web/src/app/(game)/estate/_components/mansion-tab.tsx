@@ -1,6 +1,5 @@
 "use client";
 
-import { useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { createDailyClaimInstruction, findBuilding } from "novus-mundus-sdk";
 import { BuildingId } from "@/lib/hooks/useFeatureGate";
@@ -8,11 +7,11 @@ import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { buildingFraming } from "@/lib/narrative";
 import { TxButton, type TxPhase } from "@/components/shared/TxButton";
 import { ProgressRing } from "@/components/shared/ProgressRing";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { FeatureLayout } from "./feature-layout";
+import { BuildingShowcase } from "./building-showcase";
 
 // Mirrors `EstateAccount::get_streak_multiplier_bps` on-chain. Keep in sync if
 // the on-chain tiers ever change — there is no SDK helper for this yet.
@@ -102,9 +101,7 @@ export function MansionTab() {
   };
 
   if (!player || !estate) {
-    return (
-      <div className="card text-center text-sm text-text-muted">Loading the hall…</div>
-    );
+    return <div className="card text-center text-sm text-text-muted">Loading the hall…</div>;
   }
 
   if (mansionLevel < 1) {
@@ -160,7 +157,9 @@ export function MansionTab() {
           <div className="mt-3 grid grid-cols-3 gap-2 text-center">
             <div className="rounded border border-border-default/60 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-wider text-text-muted">Base</div>
-              <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">50 NOVI</div>
+              <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">
+                50 NOVI
+              </div>
             </div>
             <div className="rounded border border-border-default/60 px-2 py-1.5">
               <div className="text-[10px] uppercase tracking-wider text-text-muted">Materials</div>
@@ -175,9 +174,7 @@ export function MansionTab() {
       }
       main={
         <>
-          <p className="text-xs italic text-text-muted">
-            {buildingFraming(BuildingId.Mansion).line}
-          </p>
+          <BuildingShowcase buildingId={BuildingId.Mansion} icon="nav-estate" />
 
           <div className="card">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
@@ -185,15 +182,11 @@ export function MansionTab() {
             </h3>
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                  Current
-                </div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Current</div>
                 <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-gold">
                   {streak}
                 </div>
-                <div className="text-[10px] text-text-muted">
-                  day{streak === 1 ? "" : "s"}
-                </div>
+                <div className="text-[10px] text-text-muted">day{streak === 1 ? "" : "s"}</div>
               </div>
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-text-muted">
@@ -205,9 +198,7 @@ export function MansionTab() {
                 <div className="text-[10px] text-text-muted">streak bonus</div>
               </div>
               <div>
-                <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                  Longest
-                </div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Longest</div>
                 <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-secondary">
                   {longestStreak}
                 </div>
@@ -218,8 +209,8 @@ export function MansionTab() {
             </div>
             <p className="mt-3 text-[11px] text-text-muted">
               The streak holds while you return each day. The next jump is at{" "}
-              <span className="text-text-secondary">7, 14, 30, 60, 90, 180</span> days — each
-              tier raises the multiplier on every daily payout.
+              <span className="text-text-secondary">7, 14, 30, 60, 90, 180</span> days — each tier
+              raises the multiplier on every daily payout.
             </p>
           </div>
 

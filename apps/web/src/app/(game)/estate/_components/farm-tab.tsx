@@ -15,8 +15,8 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
 import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES, useFeatureGate } from "@/lib/hooks/useFeatureGate";
-import { buildingFraming } from "@/lib/narrative";
 import { FeatureLayout } from "./feature-layout";
+import { BuildingShowcase } from "./building-showcase";
 import { ActivityForecast } from "./activity-forecast";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTimeOfDay } from "@/lib/estate/useTimeOfDay";
@@ -80,13 +80,15 @@ export function FarmTab() {
   const hasEnough = noviBalance >= collectNoviAmount;
 
   const ge = geData?.account;
-  const forecast = ge ? forecastCollect(noviToDeci(collectNoviAmount), "farming", player, ge, now) : null;
+  const forecast = ge
+    ? forecastCollect(noviToDeci(collectNoviAmount), "farming", player, ge, now)
+    : null;
 
   return (
     <FeatureLayout
       main={
         <>
-          <p className="text-xs italic text-text-muted">{buildingFraming(BuildingId.Farm).line}</p>
+          <BuildingShowcase buildingId={BuildingId.Farm} icon="buff-produce-generation" />
 
           <NoviGenerator compact />
 

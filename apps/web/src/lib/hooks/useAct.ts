@@ -4,12 +4,8 @@ import { useEffect, useMemo } from "react";
 import { usePlayer } from "./usePlayer";
 import { useEstate } from "./useEstate";
 import { usePlayerCastle } from "./usePlayerCastle";
-import {
-  deriveAct,
-  deriveMood,
-  actDef as getActDef,
-  setCachedAct,
-} from "@/lib/narrative";
+import { useIncomingThreat } from "./useIncomingThreat";
+import { deriveAct, deriveMood, actDef as getActDef, setCachedAct } from "@/lib/narrative";
 import type { Act, ActDef, Mood } from "@/lib/narrative";
 
 export interface ActState {
@@ -31,6 +27,7 @@ export function useAct(): ActState {
   const { data: playerData } = usePlayer();
   const { data: estateData } = useEstate();
   const { ownsCastle } = usePlayerCastle();
+  const threat = useIncomingThreat();
 
   const player = playerData?.account ?? null;
   const estate = estateData?.account ?? null;
@@ -40,15 +37,19 @@ export function useAct(): ActState {
   const state = useMemo(() => {
     const nowSec = Math.floor(Date.now() / 1000);
     const act = deriveAct(player, estate, { ownsCastle });
+    // A credible non-teammate marching on the gate overrides the build-state
+    // mood: the stone goes red and its through-line bends to its threatened
+    // variant. Until this, the threatened mood had no trigger and never fired.
+    const mood: Mood = threat.active ? "threatened" : deriveMood(estate, nowSec);
     return {
       act,
-      mood: deriveMood(estate, nowSec),
+      mood,
       actDef: getActDef(act),
       hasPlayer,
       hasEstate,
       ownsCastle,
     };
-  }, [player, estate, hasPlayer, hasEstate, ownsCastle]);
+  }, [player, estate, hasPlayer, hasEstate, ownsCastle, threat.active]);
 
   // The narrative tone keys off the act, so cache it for the next load and
   // expose it on <body> for tone-aware surfaces.

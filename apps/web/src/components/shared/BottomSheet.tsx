@@ -10,6 +10,7 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from "react";
+import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 import { useSheetStore } from "@/lib/store/sheet";
 
 // The content area hugs its content but never grows past this slice of the
@@ -72,7 +73,14 @@ export function BottomSheet({
   children: ReactNode;
 }) {
   const [mounted, setMounted] = useState(false);
+  // The sheet only renders below the `lg` breakpoint (it is `lg:hidden`).
+  // Track that reactively so the focus trap and scroll-lock engage only when
+  // the sheet is the visible surface — never against the display:none wrapper
+  // on desktop, where consumers render their own inline panel instead.
+  const [isMobile, setIsMobile] = useState(false);
 
+  // The dialog wrapper — focus is trapped inside this while the sheet is up.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
   // The translated element (with the filler background); the content region
   // inside it is what we measure for the detents.
   const sheetRef = useRef<HTMLDivElement | null>(null);
@@ -309,6 +317,49 @@ export function BottomSheet({
     return () => releaseOpen(sheetId);
   }, [open, sheetId]);
 
+  // Track the `lg` breakpoint reactively — the trap and scroll-lock only apply
+  // while the sheet is the on-screen surface (below `lg`).
+  useEffect(() => {
+    const mql = window.matchMedia("(min-width: 1024px)");
+    const sync = () => setIsMobile(!mql.matches);
+    sync();
+    mql.addEventListener("change", sync);
+    return () => mql.removeEventListener("change", sync);
+  }, []);
+
+  // Contain keyboard focus inside the sheet while it is mounted, moving focus
+  // in on open and restoring it on close. Gated to the mobile breakpoint —
+  // it must never engage against the `lg:hidden` (display:none) wrapper, where
+  // consumers render their own inline panel. Engaged on `mounted` rather than
+  // `open` so it stays armed through the settle-shut animation; the trap
+  // captures the trigger element synchronously when the sheet first mounts.
+  useFocusTrap(dialogRef, { active: mounted && isMobile });
+
+  // Escape closes the sheet — owned here (the doc comment promises it) so the
+  // consumers that funnel through BottomSheet no longer each re-implement it.
+  // Kept ungated by breakpoint so Escape still closes the desktop inline panel
+  // those consumers render, routing through `onClose` to drive their state.
+  useEffect(() => {
+    if (!mounted) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRef.current();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mounted]);
+
+  // Lock body scroll behind the sheet on mobile. Owned here so standalone
+  // consumers don't each have to re-implement it; only locks below the desktop
+  // breakpoint, where the sheet (not an inline panel) is what renders.
+  useEffect(() => {
+    if (!mounted || !isMobile) return;
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, [mounted, isMobile]);
+
   if (!mounted) return null;
 
   const onPointerDown = (e: ReactPointerEvent) => {
@@ -373,7 +424,12 @@ export function BottomSheet({
   };
 
   return (
-    <div className="lg:hidden fixed inset-0 z-50 overflow-hidden" role="dialog" aria-modal="true">
+    <div
+      ref={dialogRef}
+      className="lg:hidden fixed inset-0 z-50 overflow-hidden"
+      role="dialog"
+      aria-modal="true"
+    >
       <div
         ref={backdropRef}
         className="absolute inset-0 bg-black"

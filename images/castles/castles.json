@@ -1,0 +1,57 @@
+{
+  "_comment": "Castle banner manifest. 16:9 full-color illustration of each real-world castle landmark, generated at 1024x576 and exported as 1280x720 webp (no alpha key). Per docs/design/CASTLE_BANNERS.md. Tier (Outpost/Keep/Stronghold/Fortress/Citadel) and state (Vacant/Contest/Protected/Vulnerable/Transitioning) are runtime CSS overlays on top of the static art, and the castle name plate is overlaid directly on the art (drop shadow for legibility, no dark gradient), so the art stays fully lit edge to edge. The 'castleId' field matches the chain castle index from cli/data/castles.ts so apps/web/src/components/castles/CastleBanner.tsx can derive the image path directly.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   576,
+    "steps":    4,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "export": {
+    "subdir":   "castles",
+    "filename": "castleId",
+    "canvas":   [1280, 720],
+    "upscale":  1,
+    "alphaKey": false,
+    "format":   "webp",
+    "quality":  82
+  },
+
+  "preamble": "Single fortress illustration. One isolated real-world castle landmark at golden hour, viewed in 3/4 perspective, no people, no animals, no foreground props.",
+
+  "style": {
+    "banner": "Style: richly detailed painterly fantasy game illustration of the castle in full color, warm golden-hour light with a subtle antique gold (#C9A961) glow, crisp architectural detail on the stonework and rooflines, soft atmospheric haze and depth behind the structure, cohesive matte-painting finish. No flat black silhouette, no cut-out look, full natural sky and ground."
+  },
+
+  "tail": "Composition: 16:9 landscape, the castle fills the frame at a generous scale with clear architectural detail, fully and evenly lit from foreground to sky. Castle only, absolutely no text, no letters, no numbers, no UI, no people, no animals, no scene clutter, no black bars or dark empty bands.",
+
+  "entries": [
+    { "id": "castle-0-tower-of-london",        "castleId": 0,  "seed": 3301, "subject": "The White Tower keep of the Tower of London — a square stone keep with four corner turrets and a steep pitched roof on each, set above the Thames river with thin fog at the base of the walls." },
+    { "id": "castle-1-bastille-fortress",      "castleId": 1,  "seed": 3302, "subject": "The Bastille — eight tall cylindrical stone towers ringed together by a heavy curtain wall, a single drawbridge gate at the centre of the visible face." },
+    { "id": "castle-2-castel-sant-angelo",     "castleId": 2,  "seed": 333334, "subject": "Castel Sant'Angelo — a wide cylindrical drum keep mounted on a square fortified base, a long stone bridge across the Tiber river in the foreground." },
+    { "id": "castle-3-acropolis-citadel",      "castleId": 3,  "seed": 3304, "subject": "The Acropolis citadel — a long colonnaded marble temple raised on a rocky limestone outcrop, narrow stairs cut into the rock face leading up to the colonnade." },
+    { "id": "castle-4-brandenburg-gate",       "castleId": 4,  "seed": 3305, "subject": "The Brandenburg Gate — a wide neoclassical triumphal gate with twelve fluted columns, a four-horse quadriga statue cresting the top, broad pavement at its base." },
+    { "id": "castle-5-kremlin-fortress",       "castleId": 5,  "seed": 3306, "subject": "The Moscow Kremlin — long crenellated red brick walls with swallow-tail merlons, three onion-domed cathedral spires rising behind the wall." },
+    { "id": "castle-6-topkapi-palace",         "castleId": 6,  "seed": 3307, "subject": "Topkapi Palace — terraced pavilion roofs with curved overhanging eaves stepping up a hillside, two slender pointed Ottoman minarets rising at the rear." },
+    { "id": "castle-7-cairo-citadel",          "castleId": 7,  "seed": 3308, "subject": "The Cairo Citadel — a single great central dome ringed by four slender pencil minarets, a wide desert plateau as the foundation." },
+    { "id": "castle-8-dubai-citadel",          "castleId": 8,  "seed": 8801, "subject": "A tall slender fortified Arabian tower with crenellated battlements at the peak, a single rectangular banner flying from a mast at the top, sunlit palm trees flanking the base." },
+    { "id": "castle-9-baghdad-palace",         "castleId": 9,  "seed": 3310, "subject": "A stepped Mesopotamian-style palace ziggurat with three vertically stacked arched portals at its center, narrow stairs flanking the lowest tier." },
+    { "id": "castle-10-lagos-outpost",         "castleId": 10, "seed": 3311, "subject": "A low coastal fort with a single round watchtower at one corner, two tall sunlit palm trees flanking the fort's outer wall." },
+    { "id": "castle-11-edo-castle",            "castleId": 11, "seed": 3312, "subject": "Edo Castle — a stepped Japanese keep of five stacked tiers with deeply curved tile roofs, a single tall ridgepole crest on the topmost tier." },
+    { "id": "castle-12-forbidden-city",        "castleId": 12, "seed": 8802, "subject": "The Forbidden City gate — a wide tiered Chinese palace gate with three concentric overhanging roof lines, a long stone ramp leading up to the central archway." },
+    { "id": "castle-13-shanghai-keep",         "castleId": 13, "seed": 3314, "subject": "A Chinese pagoda-style fortified tower of seven stacked tile roofs, each tier slightly narrower than the one below, finial spire at the top." },
+    { "id": "castle-14-gyeongbok-palace",      "castleId": 14, "seed": 3315, "subject": "Gyeongbokgung Palace — a wide single-story Korean palace hall with sweeping curved tile eaves, a broad open courtyard with low stone steps in the foreground." },
+    { "id": "castle-15-mumbai-fort",           "castleId": 15, "seed": 3316, "subject": "A long bastion fortress wall along a coastline with cannon embrasures spaced along the parapet, a single watchtower at the rightmost end of the wall." },
+    { "id": "castle-16-liberty-fortress",      "castleId": 16, "seed": 3317, "subject": "A star-shaped earthwork fort with five pointed bastion corners, a single lone flagstaff planted at the centre of the star, low ramparts of packed earth." },
+    { "id": "castle-17-inca-citadel",          "castleId": 17, "seed": 8803, "subject": "An Andean stone citadel of stepped agricultural terraces ascending a mountain ridge, a single peaked stone sanctum at the summit of the terraces." },
+    { "id": "castle-18-aztec-stronghold",      "castleId": 18, "seed": 8804, "subject": "A Mesoamerican step pyramid temple with a single broad stairway running up the centre face, twin small flat-roofed shrines crowning the summit." },
+    { "id": "castle-19-bandeirantes-fort",     "castleId": 19, "seed": 3320, "subject": "A wooden palisade frontier fort with square corner blockhouses at each of the four corners, a single timber gatehouse on the front face." },
+    { "id": "castle-20-sydney-stronghold",     "castleId": 20, "seed": 3321, "subject": "A sandstone harbor keep with a square fortified base, a tall semaphore signal mast rising from the highest tower, calm harbor water in the foreground." },
+    { "id": "castle-21-nairobi-outpost",       "castleId": 21, "seed": 3322, "subject": "A hilltop colonial frontier fort with a single round signal tower at the centre, a low stone curtain wall surrounding the tower base." },
+    { "id": "castle-22-la-plata-keep",         "castleId": 22, "seed": 3323, "subject": "A long fortified colonial-era manor with twin round corner turrets at the front face, low arched windows along the ground level." }
+  ]
+}

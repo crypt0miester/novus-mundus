@@ -4,17 +4,18 @@ import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { TransactionInstruction } from "@solana/web3.js";
 import {
-  deriveLocationPda,
   toGrid,
   calculateDistanceMeters,
-  createIntracityStartInstruction,
-  createIntracityCompleteInstruction,
-  createIntracityCancelInstruction,
-  createTravelSpeedupInstruction,
   isTraveling,
   hasArrived,
   TravelType,
 } from "novus-mundus-sdk";
+import {
+  buildIntracityCancelIx,
+  buildIntracityCompleteIx,
+  buildIntracityStartIx,
+  buildTravelSpeedupIxs,
+} from "@/lib/chain/travel";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useNow } from "@/lib/hooks/useNow";
@@ -88,27 +89,14 @@ export function TargetTravel({
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      ge,
-      cityId,
-      toGrid(player.currentLat),
-      toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(ge, cityId, toGrid(destLat), toGrid(destLong));
-    const originCreatorRefund = geData?.account?.authority ?? publicKey;
-    const ix = createIntracityStartInstruction(
-      {
-        owner: publicKey,
-        gameEngine: ge,
-        cityId,
-        originLocation,
-        destinationLocation,
-        originCreatorRefund,
-      },
-      { destinationLat: destLat, destinationLong: destLong },
-    );
+    const ix = buildIntracityStartIx({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      gameAuthority: geData?.account?.authority,
+      player,
+      targetGridLat: toGrid(destLat),
+      targetGridLong: toGrid(destLong),
+    });
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -121,20 +109,11 @@ export function TargetTravel({
 
   const buildCompleteIx = () => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [destinationLocation] = deriveLocationPda(
-      ge,
-      cityId,
-      toGrid(player.travelingToLat),
-      toGrid(player.travelingToLong),
-    );
-    return createIntracityCompleteInstruction({
+    return buildIntracityCompleteIx({
       owner: publicKey,
-      gameEngine: ge,
-      cityId,
-      destinationLocation,
-    });
+      gameEngine: client.gameEngine,
+      player,
+    }).ix;
   };
 
   const handleIntracityComplete = async (reportPhase: (p: TxPhase) => void) => {
@@ -150,32 +129,10 @@ export function TargetTravel({
 
   const handleIntracityCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ge = client.gameEngine;
-    const cityId = player.currentCity;
-    const [originLocation] = deriveLocationPda(
-      ge,
-      cityId,
-      toGrid(player.currentLat),
-      toGrid(player.currentLong),
-    );
-    const [destinationLocation] = deriveLocationPda(
-      ge,
-      cityId,
-      toGrid(player.travelingToLat),
-      toGrid(player.travelingToLong),
-    );
-    // The travel destination's `location_creator` is the player — intracity_start
-    // sets `dest_location.location_creator = owner`. intracity_cancel refunds the
-    // closed destination's rent to that creator and rejects any other recipient,
-    // so the refund must go to the player, not the game authority.
-    const destinationCreatorRefund = publicKey;
-    const ix = createIntracityCancelInstruction({
+    const ix = buildIntracityCancelIx({
       owner: publicKey,
-      gameEngine: ge,
-      cityId,
-      originLocation,
-      destinationLocation,
-      destinationCreatorRefund,
+      gameEngine: client.gameEngine,
+      player,
     });
     return transact
       .mutateAsync({
@@ -195,12 +152,12 @@ export function TargetTravel({
     if (!publicKey) throw new Error("Wallet not connected");
     // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
     const n = Math.max(1, Math.floor(count));
-    const instructions = Array.from({ length: n }, () =>
-      createTravelSpeedupInstruction(
-        { owner: publicKey, gameEngine: client.gameEngine },
-        { speedupTier: tier as 1 | 2 },
-      ),
-    );
+    const instructions = buildTravelSpeedupIxs({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      tier: tier as 1 | 2,
+      count: n,
+    });
     return transact
       .mutateAsync({
         instructions,

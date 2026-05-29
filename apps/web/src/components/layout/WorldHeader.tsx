@@ -3,7 +3,6 @@
 import Link from "next/link";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
-import { cn } from "@/lib/utils";
 
 export function WorldHeader() {
   const { connected } = useWallet();

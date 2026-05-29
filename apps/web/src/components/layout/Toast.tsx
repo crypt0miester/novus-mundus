@@ -17,10 +17,8 @@ const explorerUrls: Record<Explorer, (sig: string) => string> = {
 // overlay would show whatever's scrolled behind it). Loading stays neutral; the
 // spinner carries the signal.
 const typeStyle: Record<ToastType, string> = {
-  success:
-    "border-success/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-success))]",
-  error:
-    "border-danger/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-danger))]",
+  success: "border-success/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-success))]",
+  error: "border-danger/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-danger))]",
   info: "border-info/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_94%,var(--color-info))]",
   gold: "border-gold-600/60 bg-[color-mix(in_srgb,var(--nm-bg-raised)_92%,var(--color-gold-500))]",
   loading: "border-border-default bg-[var(--nm-bg-raised)]",

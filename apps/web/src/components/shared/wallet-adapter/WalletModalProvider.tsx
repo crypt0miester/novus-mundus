@@ -1,5 +1,5 @@
 import type { FC, ReactNode } from "react";
-import React, { useState } from "react";
+import { useState } from "react";
 
 import { WalletModalContext } from "./useWalletModal";
 import type { WalletModalProps } from "./WalletModal";
@@ -9,10 +9,7 @@ interface WalletModalProviderProps extends WalletModalProps {
   children: ReactNode;
 }
 
-export const WalletModalProvider: FC<WalletModalProviderProps> = ({
-  children,
-  ...props
-}) => {
+export const WalletModalProvider: FC<WalletModalProviderProps> = ({ children, ...props }) => {
   const [visible, setVisible] = useState(false);
 
   return (

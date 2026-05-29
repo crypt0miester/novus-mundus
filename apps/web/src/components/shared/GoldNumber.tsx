@@ -87,11 +87,7 @@ export function GoldNumber({
   const storeFormat = useSettings((s) => s.numberFormat);
   const animationsEnabled = useSettings((s) => s.animationsEnabled);
   const fmt: Format = format ?? storeFormat;
-  const wrapperClass = cn(
-    "font-mono tabular-nums text-text-gold",
-    SIZE_CLASSES[size],
-    className,
-  );
+  const wrapperClass = cn("font-mono tabular-nums text-text-gold", SIZE_CLASSES[size], className);
 
   const shouldAnimate = animate && animationsEnabled && Number.isFinite(value);
   if (!shouldAnimate) {

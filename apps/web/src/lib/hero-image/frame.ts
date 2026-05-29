@@ -10,11 +10,7 @@
 // Bake provenance: images/frames/frames.json -> images/scripts/generate-frames.sh
 // -> images/scripts/export-frames-to-app.sh.
 
-import {
-  loadImage,
-  type Image,
-  type SKRSContext2D,
-} from "@napi-rs/canvas";
+import { loadImage, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import path from "node:path";
 import { TIER_ACCENT, type HeroTier } from "./palette";
 
@@ -37,14 +33,7 @@ export async function drawFrame(
   p: FrameDrawParams,
 ): Promise<void> {
   const slug = SLUG_BY_TIER[tier];
-  const framePath = path.join(
-    process.cwd(),
-    "public",
-    "img",
-    "heroes",
-    "frames",
-    `${slug}.png`,
-  );
+  const framePath = path.join(process.cwd(), "public", "img", "heroes", "frames", `${slug}.png`);
 
   let img: Image | null = null;
   try {
@@ -60,11 +49,7 @@ export async function drawFrame(
 
 const FRAME_INSET = 12;
 
-function drawProgrammaticFrame(
-  ctx: SKRSContext2D,
-  tier: HeroTier,
-  p: FrameDrawParams,
-): void {
+function drawProgrammaticFrame(ctx: SKRSContext2D, tier: HeroTier, p: FrameDrawParams): void {
   ctx.save();
 
   const accent = TIER_ACCENT[tier];
@@ -83,12 +68,7 @@ function drawProgrammaticFrame(
       ctx.lineWidth = 2;
       ctx.strokeRect(inset, inset, size - 2 * inset, size - 2 * inset);
       ctx.lineWidth = 1;
-      ctx.strokeRect(
-        inset + 4,
-        inset + 4,
-        size - 2 * inset - 8,
-        size - 2 * inset - 8,
-      );
+      ctx.strokeRect(inset + 4, inset + 4, size - 2 * inset - 8, size - 2 * inset - 8);
       break;
 
     case 2:
@@ -102,22 +82,12 @@ function drawProgrammaticFrame(
       ctx.strokeStyle = accent.primary;
       ctx.lineWidth = 3;
       ctx.strokeRect(inset, inset, size - 2 * inset, size - 2 * inset);
-      ctx.strokeRect(
-        inset + 8,
-        inset + 8,
-        size - 2 * inset - 16,
-        size - 2 * inset - 16,
-      );
+      ctx.strokeRect(inset + 8, inset + 8, size - 2 * inset - 16, size - 2 * inset - 16);
       const inlay = accent.inlay;
       if (inlay) {
         ctx.strokeStyle = inlay;
         ctx.lineWidth = 1;
-        ctx.strokeRect(
-          inset + 4,
-          inset + 4,
-          size - 2 * inset - 8,
-          size - 2 * inset - 8,
-        );
+        ctx.strokeRect(inset + 4, inset + 4, size - 2 * inset - 8, size - 2 * inset - 8);
       }
       drawCornerMarks(ctx, inset, size, accent.bright, 9);
       break;
@@ -131,12 +101,7 @@ function drawProgrammaticFrame(
       if (inlay) {
         ctx.strokeStyle = inlay;
         ctx.lineWidth = 1;
-        ctx.strokeRect(
-          inset + 6,
-          inset + 6,
-          size - 2 * inset - 12,
-          size - 2 * inset - 12,
-        );
+        ctx.strokeRect(inset + 6, inset + 6, size - 2 * inset - 12, size - 2 * inset - 12);
       }
       drawCornerMarks(ctx, inset, size, inlay ?? accent.bright, 14);
       break;

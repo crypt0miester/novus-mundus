@@ -27,7 +27,9 @@ export function useTierTheme() {
     }
 
     document.body.setAttribute("data-tier", String(tier));
-    try { localStorage.setItem("novus-tier", String(tier)); } catch {}
+    try {
+      localStorage.setItem("novus-tier", String(tier));
+    } catch {}
 
     // Resolve theme: auto picks based on tier (no player = tier 0 = paper)
     const resolvedTheme = resolveTheme(themePreference, tier);

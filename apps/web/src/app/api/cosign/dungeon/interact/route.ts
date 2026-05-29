@@ -1,11 +1,7 @@
 import "server-only";
 import { createInteractInstruction, DungeonStatus, RoomType } from "novus-mundus-sdk";
 import { gameAuthorityKeypair } from "@/lib/server/game-authority";
-import {
-  gameEnginePda,
-  getDungeonRun,
-  getDungeonTemplate,
-} from "@/lib/server/chain";
+import { gameEnginePda, getDungeonRun, getDungeonTemplate } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollDungeonInteract } from "@/lib/server/dungeon-logic";
 import { coSignResponse, fail, requireSession } from "@/lib/server/route-helpers";
@@ -49,8 +45,7 @@ export async function POST(req: Request) {
     {
       templateId: run.dungeonId,
       nextRoomType: rolls.nextRoomType,
-      campBonusBps:
-        run.roomType === RoomType.Camp ? rolls.campBonusBps : undefined,
+      campBonusBps: run.roomType === RoomType.Camp ? rolls.campBonusBps : undefined,
     },
   );
 

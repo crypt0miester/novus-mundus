@@ -17,11 +17,7 @@ interface DomainNameProps {
  * For lists, prefer useDomainNames() batch hook + inline rendering.
  */
 export function DomainName({ pubkey, className, chars = 4 }: DomainNameProps) {
-  const base58 = pubkey
-    ? typeof pubkey === "string"
-      ? pubkey
-      : pubkey.toBase58()
-    : null;
+  const base58 = pubkey ? (typeof pubkey === "string" ? pubkey : pubkey.toBase58()) : null;
 
   const domain = useDomainName(pubkey);
 

@@ -340,22 +340,55 @@
  * of the sheet; the band is a separate gradient strip rendered just inside
  * the day side of the terminator to soften the boundary. Pointer-events off
  * so the underlying click-to-deselect target still works. */
-.nightWash {
-  fill: rgba(40, 25, 8, 0.18);
+/* Day/night — vertical longitude bands tinted by the shared phase palette
+ * (each rect's `fill` is set inline from PHASES[].color). On the light "paper"
+ * theme the bands multiply to darken the parchment into dusk/night; on the dark
+ * theme they screen to a moonlight pallor instead of more brown. The opacities
+ * are starting values — tune to taste against the parchment. */
+.dayNightLayer {
   pointer-events: none;
 }
-.twilightBand {
-  pointer-events: none;
-  /* `fill` is set inline to the linearGradient — only the mix-blend matters. */
+/* The wash — a horizontal phase-colour gradient, one rect per theme. On the
+ * light "paper" the SHADOW multiplies to deepen the night longitudes into dusk;
+ * on the dark vellum a multiply shadow just reads as mud on a near-black ground,
+ * so we swap to the GLOW, which screens to LIFT the daylit longitudes instead.
+ * The two carry inverted opacity ramps (night-heavy vs day-heavy) so daylight
+ * always reads brighter than night, never the other way round. */
+.washShadow {
   mix-blend-mode: multiply;
+  pointer-events: none;
 }
-:global(body[data-theme="dark"]) .nightWash {
-  /* On dark mode the parchment is already brown; the night wash needs to be
-   * lighter (a moonlight pallor) instead of more sepia. */
-  fill: rgba(210, 220, 235, 0.06);
+.washGlow {
+  display: none;
+  pointer-events: none;
 }
-:global(body[data-theme="dark"]) .twilightBand {
+:global(body[data-theme="dark"]) .washShadow {
+  display: none;
+}
+:global(body[data-theme="dark"]) .washGlow {
+  display: block;
   mix-blend-mode: screen;
+}
+/* Cinzel HH:MM riding the noon / midnight meridians, with a short anchoring
+ * tick. A cream halo (paint-order) keeps them legible over both the wash and the
+ * terrain beneath; muted opacity so they read as a quiet chart annotation. */
+.meridianLabel {
+  fill: var(--ink-soft);
+  font-family: var(--font-cinzel), Cinzel, serif;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-anchor: middle;
+  opacity: 0.62;
+  paint-order: stroke fill;
+  stroke: var(--halo);
+  stroke-width: 2;
+  pointer-events: none;
+}
+.meridianTick {
+  stroke: var(--ink-soft);
+  stroke-width: 0.7;
+  opacity: 0.38;
+  pointer-events: none;
 }
 
 /* Terrain — pen-ink glyphs scattered through the kingdom hull. Each glyph is
@@ -1159,33 +1192,33 @@
 }
 
 .mobileStatusPill {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    position: absolute;
-    bottom: 2rem;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 25;
-    max-width: calc(100% - 2rem);
-    padding: 0.4rem 0.85rem;
-    background: var(--readout-tint);
-    border: 1px solid var(--parchment-edge);
-    border-radius: 999px;
-    color: var(--ink);
-    font-family: var(--font-cinzel), Cinzel, serif;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    cursor: pointer;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    transition: background-color 0.15s ease;
-  }
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  position: absolute;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 25;
+  max-width: calc(100% - 2rem);
+  padding: 0.4rem 0.85rem;
+  background: var(--readout-tint);
+  border: 1px solid var(--parchment-edge);
+  border-radius: 999px;
+  color: var(--ink);
+  font-family: var(--font-cinzel), Cinzel, serif;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background-color 0.15s ease;
+}
 
 .mobileStatusLabel {
   font-weight: 600;
@@ -1196,4 +1229,3 @@
   color: var(--ink-soft);
   font-size: 0.62rem;
 }
-

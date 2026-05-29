@@ -23,12 +23,8 @@ const LOCK_TTL_SECONDS = 18 * 3600;
 
 const sessionKey = (id: string): string => `mg:session:${id}`;
 const submitKey = (id: string): string => `mg:cosign:${id}`;
-const lockKey = (
-  owner: string,
-  day: number,
-  window: string,
-  building: number,
-): string => `mg:lock:${owner}:${day}:${window}:${building}`;
+const lockKey = (owner: string, day: number, window: string, building: number): string =>
+  `mg:lock:${owner}:${day}:${window}:${building}`;
 
 /** A fresh 128-bit unguessable session id. */
 export function newSessionId(): string {
@@ -52,10 +48,7 @@ export async function loadSession(id: string): Promise<MinigameSession | null> {
  * later writes to preserve the original expiry — a session lives a fixed window
  * from `/start`, and moves do not extend it.
  */
-export async function saveSession(
-  session: MinigameSession,
-  ttl: number | "keep",
-): Promise<void> {
+export async function saveSession(session: MinigameSession, ttl: number | "keep"): Promise<void> {
   const json = JSON.stringify(session);
   if (ttl === "keep") {
     await redis.set(sessionKey(session.id), json, "KEEPTTL");

@@ -1,0 +1,42 @@
+{
+  "_comment": "Event splash manifest. Two-layer art system: a class default per event class (Daily/Weekly/Seasonal/World) so every event has *some* art the moment it spawns on chain, plus optional per-event hero splashes for marquee events. apps/web/src/lib/events/splash.ts falls through from event-<id>.webp to event-class-<class>.webp. Full-color matte-painting art (no alpha key); generated at 1024x576 and exported as 1280x720 webp. The event name is overlaid directly on the art at runtime (drop shadow for legibility, no dark gradient), so the art stays fully lit edge to edge.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   576,
+    "steps":    4,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "export": {
+    "subdir":   "events",
+    "filename": "id",
+    "canvas":   [1280, 720],
+    "upscale":  1,
+    "alphaKey": false,
+    "format":   "webp",
+    "quality":  82
+  },
+
+  "preamble": "Single ceremonial event scene. One isolated subject at warm golden hour, viewed straight on, no people figures unless specified, no UI, no text.",
+
+  "style": {
+    "splash": "Style: richly detailed painterly fantasy game illustration in full color, lit naturally by warm golden-hour light so each scene keeps its own natural palette. Crisp focal detail on the subject, soft atmospheric depth behind it, cohesive matte-painting finish. No flat black silhouette, no cut-out look, full natural background."
+  },
+
+  "tail": "Composition: 16:9 landscape, the subject fills the frame at a generous scale with clear readable detail, fully and evenly lit from foreground to sky. Subject only, absolutely no text, no letters, no numbers, no UI, no people unless specified, no scene clutter, no black bars or dark empty bands.",
+
+  "entries": [
+    { "id": "event-class-daily",      "eventClass": "daily",    "seed": 341341, "subject": "A large hourglass with sand running between its two glass halves, resting on a low stone plinth at a horizon line, a flat round bronze sundial on a short pillar beside it. No people, no figures, no humans." },
+    { "id": "event-class-weekly",     "eventClass": "weekly",   "seed": 3402, "subject": "A folded campaign tent under a clear warm golden-hour sky, four planted standard poles arranged around the tent corners." },
+    { "id": "event-class-seasonal",   "eventClass": "seasonal", "seed": 9102, "subject": "A wide ceremonial stone arch gate flanked on each side by a tall iron brazier burning with a single warm flame, a stone path leading up to the arch. The gateway and path are completely empty, absolutely no people, no figures, no humans, no person standing in the archway." },
+    { "id": "event-class-world",      "eventClass": "world",    "seed": 343443, "subject": "A great smithing anvil under a deep blue night sky, a single comet with a long bright tail streaking diagonally across the sky above the anvil." },
+
+    { "id": "event-1-launch-tournament", "eventId": 1, "eventClass": "seasonal", "seed": 9101, "filename": "event-1", "subject": "Two crossed kingdom standards planted upright into a piled cairn of trophy weapons and shields, dawn light breaking behind the standards. The scene is completely empty, absolutely no people, no figures, no humans, no soldiers, no knights, no person standing in the frame." },
+    { "id": "event-2-weekly-pvp",        "eventId": 2, "eventClass": "weekly",   "seed": 344244, "filename": "event-2", "subject": "Two crossed swords planted upright into the sand of a completely empty arena, fine dust drifting low around the blades, no people, no figures, no humans, warm low golden light." },
+    { "id": "event-3-newcomer-challenge","eventId": 3, "eventClass": "daily",    "seed": 3413, "filename": "event-3", "subject": "A wooden practice training stand at the edge of a long open horizon, a single planted post with a hung heater shield and one short sword propped against the post base." }
+  ]
+}

@@ -22,12 +22,7 @@
  * per kind (one bit per id), which dovetails with the ranges above.
  */
 
-export type CosmeticRarity =
-  | "common"
-  | "rare"
-  | "epic"
-  | "legendary"
-  | "mythic";
+export type CosmeticRarity = "common" | "rare" | "epic" | "legendary" | "mythic";
 
 /**
  * `id` matches the on-chain `u16` slot. `id === 0` is reserved as
@@ -63,12 +58,7 @@ export interface CosmeticTitleEntry {
  * - `vesper` — slow 3-stop cycle through amber → gold → crimson
  * - `cinder` — drifting warm-orange overlay, low-frequency
  */
-export type CosmeticColorAnimation =
-  | "pulse"
-  | "embered"
-  | "glimmer"
-  | "vesper"
-  | "cinder";
+export type CosmeticColorAnimation = "pulse" | "embered" | "glimmer" | "vesper" | "cinder";
 
 export interface CosmeticColorEntry {
   id: number;
@@ -127,10 +117,10 @@ function placeholderBadgeSvg(letter: string, ringHex: string, glyphHex: string):
  * read with the same warm progression as subscription tiers. */
 const BADGE_RING: Record<CosmeticRarity, { ring: string; glyph: string }> = {
   common: { ring: "#6e4e24", glyph: "#3a2a14" }, // amber-brown
-  rare: { ring: "#CD7F32", glyph: "#6b3410" },   // bronze
-  epic: { ring: "#daa520", glyph: "#92400e" },   // gold
+  rare: { ring: "#CD7F32", glyph: "#6b3410" }, // bronze
+  epic: { ring: "#daa520", glyph: "#92400e" }, // gold
   legendary: { ring: "#8B1A1A", glyph: "#4a0e0e" }, // crimson
-  mythic: { ring: "#b41e1e", glyph: "#7a1010" },  // vivid red
+  mythic: { ring: "#b41e1e", glyph: "#7a1010" }, // vivid red
 };
 
 export const COSMETIC_BADGES: Record<number, CosmeticBadgeEntry> = {
@@ -226,25 +216,25 @@ export const COSMETIC_TITLES: Record<number, CosmeticTitleEntry> = {
  * default); high rarities are saturated and signal spend. */
 
 export const COSMETIC_COLORS: Record<number, CosmeticColorEntry> = {
-  1:  { id: 1,  name: "Parchment Ink", rarity: "common",    hex: "#2e1f10" },
-  2:  { id: 2,  name: "Mossbark",      rarity: "rare",      hex: "#3f6b34" },
-  3:  { id: 3,  name: "Ember",         rarity: "rare",      hex: "#b4571e" },
-  4:  { id: 4,  name: "Royal Purple",  rarity: "epic",      hex: "#7B2CBF" },
-  5:  { id: 5,  name: "Goldleaf",      rarity: "legendary", hex: "#d4a330" },
-  6:  { id: 6,  name: "Iridescent",    rarity: "mythic",    hex: "#a8e7d2" },
+  1: { id: 1, name: "Parchment Ink", rarity: "common", hex: "#2e1f10" },
+  2: { id: 2, name: "Mossbark", rarity: "rare", hex: "#3f6b34" },
+  3: { id: 3, name: "Ember", rarity: "rare", hex: "#b4571e" },
+  4: { id: 4, name: "Royal Purple", rarity: "epic", hex: "#7B2CBF" },
+  5: { id: 5, name: "Goldleaf", rarity: "legendary", hex: "#d4a330" },
+  6: { id: 6, name: "Iridescent", rarity: "mythic", hex: "#a8e7d2" },
   // Material ladder — static colors, climbing the metal-rarity register.
-  7:  { id: 7,  name: "Copper",        rarity: "rare",      hex: "#b87333" },
-  8:  { id: 8,  name: "Electrum",      rarity: "epic",      hex: "#fad48a" },
-  9:  { id: 9,  name: "Mithril",       rarity: "legendary", hex: "#c0c8d3" },
-  10: { id: 10, name: "Adamantine",    rarity: "legendary", hex: "#4a5568" },
-  11: { id: 11, name: "Obsidian",      rarity: "mythic",    hex: "#0d0a0e" },
+  7: { id: 7, name: "Copper", rarity: "rare", hex: "#b87333" },
+  8: { id: 8, name: "Electrum", rarity: "epic", hex: "#fad48a" },
+  9: { id: 9, name: "Mithril", rarity: "legendary", hex: "#c0c8d3" },
+  10: { id: 10, name: "Adamantine", rarity: "legendary", hex: "#4a5568" },
+  11: { id: 11, name: "Obsidian", rarity: "mythic", hex: "#0d0a0e" },
   // Animated mythics — the base hex is the rendered fallback when an
   // animation host can't drive it (e.g. tooltips snapshotting a static frame).
-  12: { id: 12, name: "Pulse",         rarity: "mythic",    hex: "#f1af09", animation: "pulse" },
-  13: { id: 13, name: "Embered",       rarity: "mythic",    hex: "#b4571e", animation: "embered" },
-  14: { id: 14, name: "Glimmer",       rarity: "mythic",    hex: "#daa520", animation: "glimmer" },
-  15: { id: 15, name: "Vesper",        rarity: "mythic",    hex: "#CD7F32", animation: "vesper" },
-  16: { id: 16, name: "Cinder",        rarity: "mythic",    hex: "#d97706", animation: "cinder" },
+  12: { id: 12, name: "Pulse", rarity: "mythic", hex: "#f1af09", animation: "pulse" },
+  13: { id: 13, name: "Embered", rarity: "mythic", hex: "#b4571e", animation: "embered" },
+  14: { id: 14, name: "Glimmer", rarity: "mythic", hex: "#daa520", animation: "glimmer" },
+  15: { id: 15, name: "Vesper", rarity: "mythic", hex: "#CD7F32", animation: "vesper" },
+  16: { id: 16, name: "Cinder", rarity: "mythic", hex: "#d97706", animation: "cinder" },
 };
 
 /* ── Avatar Frames ────────────────────────────────────────────── *
@@ -305,11 +295,11 @@ export const COSMETIC_FRAMES: Record<number, CosmeticFrameEntry> = {
  * reads with the same warm progression as subscription tiers.
  */
 export const RARITY_BORDER: Record<CosmeticRarity, string> = {
-  common: "rgba(110, 78, 36, 0.55)",     // amber-brown
-  rare: "rgba(205, 127, 50, 0.85)",      // bronze
-  epic: "rgba(218, 165, 32, 0.90)",      // gold
-  legendary: "rgba(139, 26, 26, 0.90)",  // crimson
-  mythic: "rgba(180, 30, 30, 0.95)",     // vivid red
+  common: "rgba(110, 78, 36, 0.55)", // amber-brown
+  rare: "rgba(205, 127, 50, 0.85)", // bronze
+  epic: "rgba(218, 165, 32, 0.90)", // gold
+  legendary: "rgba(139, 26, 26, 0.90)", // crimson
+  mythic: "rgba(180, 30, 30, 0.95)", // vivid red
 };
 
 /* ── Lookup helpers ─────────────────────────────────────────────
@@ -374,9 +364,9 @@ function parseHex(hex: string): [number, number, number] {
 // Vesper cycles between these three stops — must match the CSS keyframe
 // `cosmetic-anim-vesper` in globals.css. Theme palette: amber → gold → crimson.
 const VESPER_STOPS: ReadonlyArray<[number, number, number]> = [
-  [205 / 255, 127 / 255, 50 / 255],  // #CD7F32 bronze-amber
-  [218 / 255, 165 / 255, 32 / 255],  // #daa520 gold
-  [139 / 255, 26 / 255, 26 / 255],   // #8B1A1A crimson
+  [205 / 255, 127 / 255, 50 / 255], // #CD7F32 bronze-amber
+  [218 / 255, 165 / 255, 32 / 255], // #daa520 gold
+  [139 / 255, 26 / 255, 26 / 255], // #8B1A1A crimson
 ] as const;
 
 export interface AnimatedColor {
@@ -401,7 +391,7 @@ export function animatedColorAt(
     case "embered": {
       // 3.2s period; sharp brightness peak ~20% of the cycle
       const p = (Math.sin((tMs / 3200) * TAU) + 1) / 2;
-      const k = 1 + 0.45 * Math.pow(p, 4);
+      const k = 1 + 0.45 * p ** 4;
       return {
         r: Math.min(1, r0 * k),
         g: Math.min(1, g0 * k),
@@ -414,7 +404,9 @@ export function animatedColorAt(
       const p = (Math.sin((tMs / 4000) * TAU) + 1) / 2;
       // Bias toward gold (#daa520 = ~218/165/32) at the peak. Blend the
       // base color toward gold by `p`.
-      const tg = 218 / 255, tgg = 165 / 255, tgb = 32 / 255;
+      const tg = 218 / 255,
+        tgg = 165 / 255,
+        tgb = 32 / 255;
       return {
         r: r0 + (tg - r0) * 0.35 * p,
         g: g0 + (tgg - g0) * 0.35 * p,
@@ -424,7 +416,7 @@ export function animatedColorAt(
     }
     case "vesper": {
       // 6s period; three-stop warm cycle (amber → gold → crimson)
-      const phase = ((tMs / 6000) % 1 + 1) % 1;
+      const phase = (((tMs / 6000) % 1) + 1) % 1;
       const seg = phase * VESPER_STOPS.length;
       const idx = Math.floor(seg) % VESPER_STOPS.length;
       const next = (idx + 1) % VESPER_STOPS.length;

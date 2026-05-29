@@ -36,10 +36,7 @@ export class Rng {
   }
 
   private nextBlock(): Buffer {
-    const block = createHash("sha256")
-      .update(this.seed)
-      .update(String(this.counter))
-      .digest();
+    const block = createHash("sha256").update(this.seed).update(String(this.counter)).digest();
     this.counter += 1;
     this.offset = 0;
     return block;
@@ -67,7 +64,7 @@ export class Rng {
   rollBps(chanceBps: number): boolean {
     if (chanceBps <= 0) return false;
     if (chanceBps >= 10000) return true;
-    return this.nextU32() % 10000 < chanceBps;
+    return this.nextInt(10000) < chanceBps;
   }
 
   /** Weighted index pick; weights need not be normalised. */
@@ -75,7 +72,7 @@ export class Rng {
     let total = 0;
     for (const w of weights) total += Math.max(0, w);
     if (total <= 0) return 0;
-    let r = this.nextU32() % total;
+    let r = this.nextInt(total);
     for (let i = 0; i < weights.length; i += 1) {
       const w = Math.max(0, weights[i] ?? 0);
       if (r < w) return i;

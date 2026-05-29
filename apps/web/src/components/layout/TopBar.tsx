@@ -100,7 +100,7 @@ export function TopBar() {
 
   const pageLocked = computePageLocks(hasPlayer, hasEstate, extensions);
 
-  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
   const disabled = isSuccess && !hasPlayer;
 

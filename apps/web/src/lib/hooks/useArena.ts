@@ -13,16 +13,17 @@ export function useArenaSeason(seasonId: number | null | undefined) {
   useEffect(() => {
     if (seasonId == null) return;
 
-    client.fetchArenaSeason(seasonId).then((result) => {
-      if (result.account) {
-        useAccountStore.getState().setArenaSeason(result.pubkey, result.account);
-      }
-    }).catch(() => {});
+    client
+      .fetchArenaSeason(seasonId)
+      .then((result) => {
+        if (result.account) {
+          useAccountStore.getState().setArenaSeason(result.pubkey, result.account);
+        }
+      })
+      .catch(() => {});
   }, [seasonId, client]);
 
-  const seasonData = entry
-    ? { pubkey: entry.pubkey, account: entry.account, exists: true }
-    : null;
+  const seasonData = entry ? { pubkey: entry.pubkey, account: entry.account, exists: true } : null;
 
   return {
     data: seasonData,
@@ -40,11 +41,14 @@ export function useArenaParticipant(seasonId: number | null | undefined) {
   useEffect(() => {
     if (seasonId == null || !publicKey) return;
 
-    client.fetchArenaParticipant(seasonId, publicKey).then((result) => {
-      if (result.account) {
-        useAccountStore.getState().setArenaParticipant(result.pubkey, result.account);
-      }
-    }).catch(() => {});
+    client
+      .fetchArenaParticipant(seasonId, publicKey)
+      .then((result) => {
+        if (result.account) {
+          useAccountStore.getState().setArenaParticipant(result.pubkey, result.account);
+        }
+      })
+      .catch(() => {});
   }, [seasonId, publicKey, client]);
 
   const participantData = entry

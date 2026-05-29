@@ -4,10 +4,7 @@
 
 import { describe, it, expect } from "bun:test";
 import type { EstateAccount } from "novus-mundus-sdk";
-import {
-  windowCompletionBonus,
-  WINDOW_COMPLETION_BONUS,
-} from "./window-completion";
+import { windowCompletionBonus, WINDOW_COMPLETION_BONUS } from "./window-completion";
 
 const DAY = 20578;
 const DAWN = DAY * 86400;

@@ -81,6 +81,9 @@ interface AccountsState {
   encounters: Map<string, AccountEntry<EncounterAccount>>;
   loot: Map<string, AccountEntry<LootAccount>>;
   otherPlayers: Map<string, AccountEntry<PlayerCore>>;
+  /* Enemy war-bands aimed at the local player, kept live by the program-wide
+   * WS. Feeds the Cairn's incoming-threat warning; usually empty. */
+  incomingRallies: Map<string, AccountEntry<RallyAccount>>;
   teamMembers: Map<string, AccountEntry<TeamMemberSlot>>;
   teamInvites: Map<string, AccountEntry<TeamInviteAccount>>;
   treasuryRequests: Map<string, AccountEntry<TreasuryRequest>>;
@@ -131,10 +134,14 @@ interface AccountsState {
 
   // The current user's player PDA (set during subscription init)
   myPlayerPda: string | null;
+  // The castle the current user holds, if any (set by usePlayerCastle). Lets the
+  // WS route castle-targeted rallies into incomingRallies without an extra fetch.
+  myCastlePda: string | null;
 
   // Actions — singletons
   setLoading: (loading: boolean) => void;
   setMyPlayerPda: (pda: string) => void;
+  setMyCastlePda: (pda: string | null) => void;
   setPlayer: (pubkey: PublicKey, account: PlayerCore) => void;
   setUser: (pubkey: PublicKey, account: UserAccount) => void;
   setGameEngine: (pubkey: PublicKey, account: GameEngine) => void;
@@ -154,7 +161,11 @@ interface AccountsState {
   setResearchProgress: (pubkey: PublicKey, account: ResearchProgressAccount) => void;
   setWeeklySale: (pubkey: PublicKey, account: WeeklySaleAccount) => void;
   setSeasonalSale: (pubkey: PublicKey, account: SeasonalSaleAccount) => void;
-  upsertPlayerPurchase: (pubkey: PublicKey, account: PlayerPurchaseAccount, itemId?: number) => void;
+  upsertPlayerPurchase: (
+    pubkey: PublicKey,
+    account: PlayerPurchaseAccount,
+    itemId?: number,
+  ) => void;
 
   // Actions — collections
   upsertCity: (pubkey: PublicKey, account: CityAccount) => void;
@@ -163,6 +174,8 @@ interface AccountsState {
   upsertLoot: (pubkey: PublicKey, account: LootAccount) => void;
   removeLoot: (key: string) => void;
   upsertOtherPlayer: (pubkey: PublicKey, account: PlayerCore) => void;
+  upsertIncomingRally: (pubkey: PublicKey, account: RallyAccount) => void;
+  removeIncomingRally: (key: string) => void;
   upsertTeamMember: (pubkey: PublicKey, account: TeamMemberSlot) => void;
   upsertTeamInvite: (pubkey: PublicKey, account: TeamInviteAccount) => void;
   removeTeamInvite: (key: string) => void;
@@ -199,7 +212,11 @@ interface AccountsState {
 
 // Helpers
 
-function upsertMap<T>(map: Map<string, AccountEntry<T>>, pubkey: PublicKey, account: T): Map<string, AccountEntry<T>> {
+function upsertMap<T>(
+  map: Map<string, AccountEntry<T>>,
+  pubkey: PublicKey,
+  account: T,
+): Map<string, AccountEntry<T>> {
   const next = new Map(map);
   next.set(pubkey.toBase58(), { pubkey, account });
   return next;
@@ -221,6 +238,7 @@ const initialState = {
   encounters: new Map() as Map<string, AccountEntry<EncounterAccount>>,
   loot: new Map() as Map<string, AccountEntry<LootAccount>>,
   otherPlayers: new Map() as Map<string, AccountEntry<PlayerCore>>,
+  incomingRallies: new Map() as Map<string, AccountEntry<RallyAccount>>,
   teamMembers: new Map() as Map<string, AccountEntry<TeamMemberSlot>>,
   teamInvites: new Map() as Map<string, AccountEntry<TeamInviteAccount>>,
   treasuryRequests: new Map() as Map<string, AccountEntry<TreasuryRequest>>,
@@ -261,6 +279,7 @@ const initialState = {
   loading: false,
   subscriptionActive: false,
   myPlayerPda: null,
+  myCastlePda: null,
 };
 
 export const useAccountStore = create<AccountsState>()(
@@ -269,6 +288,7 @@ export const useAccountStore = create<AccountsState>()(
 
     setLoading: (loading) => set({ loading }),
     setMyPlayerPda: (pda) => set({ myPlayerPda: pda }),
+    setMyCastlePda: (pda) => set({ myCastlePda: pda }),
 
     // Singletons
     setPlayer: (pubkey, account) => set({ player: { pubkey, account } }),
@@ -309,29 +329,52 @@ export const useAccountStore = create<AccountsState>()(
 
     // Collections
     upsertCity: (pubkey, account) => set((s) => ({ cities: upsertMap(s.cities, pubkey, account) })),
-    upsertEncounter: (pubkey, account) => set((s) => ({ encounters: upsertMap(s.encounters, pubkey, account) })),
+    upsertEncounter: (pubkey, account) =>
+      set((s) => ({ encounters: upsertMap(s.encounters, pubkey, account) })),
     removeEncounter: (key) => set((s) => ({ encounters: removeFromMap(s.encounters, key) })),
     upsertLoot: (pubkey, account) => set((s) => ({ loot: upsertMap(s.loot, pubkey, account) })),
     removeLoot: (key) => set((s) => ({ loot: removeFromMap(s.loot, key) })),
-    upsertOtherPlayer: (pubkey, account) => set((s) => ({ otherPlayers: upsertMap(s.otherPlayers, pubkey, account) })),
-    upsertTeamMember: (pubkey, account) => set((s) => ({ teamMembers: upsertMap(s.teamMembers, pubkey, account) })),
-    upsertTeamInvite: (pubkey, account) => set((s) => ({ teamInvites: upsertMap(s.teamInvites, pubkey, account) })),
+    upsertOtherPlayer: (pubkey, account) =>
+      set((s) => ({ otherPlayers: upsertMap(s.otherPlayers, pubkey, account) })),
+    upsertIncomingRally: (pubkey, account) =>
+      set((s) => ({ incomingRallies: upsertMap(s.incomingRallies, pubkey, account) })),
+    removeIncomingRally: (key) =>
+      set((s) => ({ incomingRallies: removeFromMap(s.incomingRallies, key) })),
+    upsertTeamMember: (pubkey, account) =>
+      set((s) => ({ teamMembers: upsertMap(s.teamMembers, pubkey, account) })),
+    upsertTeamInvite: (pubkey, account) =>
+      set((s) => ({ teamInvites: upsertMap(s.teamInvites, pubkey, account) })),
     removeTeamInvite: (key) => set((s) => ({ teamInvites: removeFromMap(s.teamInvites, key) })),
-    upsertTreasuryRequest: (pubkey, account) => set((s) => ({ treasuryRequests: upsertMap(s.treasuryRequests, pubkey, account) })),
-    upsertRallyParticipant: (pubkey, account) => set((s) => ({ rallyParticipants: upsertMap(s.rallyParticipants, pubkey, account) })),
-    upsertEvent: (pubkey, account) => set((s) => ({ events: upsertMap(s.events, pubkey, account) })),
-    upsertEventParticipation: (pubkey, account) => set((s) => ({ eventParticipations: upsertMap(s.eventParticipations, pubkey, account) })),
-    upsertDungeonTemplate: (pubkey, account) => set((s) => ({ dungeonTemplates: upsertMap(s.dungeonTemplates, pubkey, account) })),
-    upsertDungeonLeaderboard: (pubkey, account) => set((s) => ({ dungeonLeaderboards: upsertMap(s.dungeonLeaderboards, pubkey, account) })),
-    upsertGarrisonContribution: (pubkey, account) => set((s) => ({ garrisonContributions: upsertMap(s.garrisonContributions, pubkey, account) })),
-    upsertKingRegistry: (pubkey, account) => set((s) => ({ kingRegistries: upsertMap(s.kingRegistries, pubkey, account) })),
-    upsertCourtPosition: (pubkey, account) => set((s) => ({ courtPositions: upsertMap(s.courtPositions, pubkey, account) })),
-    upsertTeamCastleReward: (pubkey, account) => set((s) => ({ teamCastleRewards: upsertMap(s.teamCastleRewards, pubkey, account) })),
-    upsertLocation: (pubkey, account) => set((s) => ({ locations: upsertMap(s.locations, pubkey, account) })),
-    upsertResearchTemplate: (pubkey, account) => set((s) => ({ researchTemplates: upsertMap(s.researchTemplates, pubkey, account) })),
-    upsertHeroTemplate: (pubkey, account) => set((s) => ({ heroTemplates: upsertMap(s.heroTemplates, pubkey, account) })),
-    upsertDaoPromotion: (pubkey, account) => set((s) => ({ daoPromotions: upsertMap(s.daoPromotions, pubkey, account) })),
-    upsertAllowedToken: (pubkey, account) => set((s) => ({ allowedTokens: upsertMap(s.allowedTokens, pubkey, account) })),
+    upsertTreasuryRequest: (pubkey, account) =>
+      set((s) => ({ treasuryRequests: upsertMap(s.treasuryRequests, pubkey, account) })),
+    upsertRallyParticipant: (pubkey, account) =>
+      set((s) => ({ rallyParticipants: upsertMap(s.rallyParticipants, pubkey, account) })),
+    upsertEvent: (pubkey, account) =>
+      set((s) => ({ events: upsertMap(s.events, pubkey, account) })),
+    upsertEventParticipation: (pubkey, account) =>
+      set((s) => ({ eventParticipations: upsertMap(s.eventParticipations, pubkey, account) })),
+    upsertDungeonTemplate: (pubkey, account) =>
+      set((s) => ({ dungeonTemplates: upsertMap(s.dungeonTemplates, pubkey, account) })),
+    upsertDungeonLeaderboard: (pubkey, account) =>
+      set((s) => ({ dungeonLeaderboards: upsertMap(s.dungeonLeaderboards, pubkey, account) })),
+    upsertGarrisonContribution: (pubkey, account) =>
+      set((s) => ({ garrisonContributions: upsertMap(s.garrisonContributions, pubkey, account) })),
+    upsertKingRegistry: (pubkey, account) =>
+      set((s) => ({ kingRegistries: upsertMap(s.kingRegistries, pubkey, account) })),
+    upsertCourtPosition: (pubkey, account) =>
+      set((s) => ({ courtPositions: upsertMap(s.courtPositions, pubkey, account) })),
+    upsertTeamCastleReward: (pubkey, account) =>
+      set((s) => ({ teamCastleRewards: upsertMap(s.teamCastleRewards, pubkey, account) })),
+    upsertLocation: (pubkey, account) =>
+      set((s) => ({ locations: upsertMap(s.locations, pubkey, account) })),
+    upsertResearchTemplate: (pubkey, account) =>
+      set((s) => ({ researchTemplates: upsertMap(s.researchTemplates, pubkey, account) })),
+    upsertHeroTemplate: (pubkey, account) =>
+      set((s) => ({ heroTemplates: upsertMap(s.heroTemplates, pubkey, account) })),
+    upsertDaoPromotion: (pubkey, account) =>
+      set((s) => ({ daoPromotions: upsertMap(s.daoPromotions, pubkey, account) })),
+    upsertAllowedToken: (pubkey, account) =>
+      set((s) => ({ allowedTokens: upsertMap(s.allowedTokens, pubkey, account) })),
 
     // ShopItem: itemId = account.itemType (stored in the account itself)
     upsertShopItem: (pubkey, account, itemId?) =>
@@ -407,34 +450,36 @@ export const useAccountStore = create<AccountsState>()(
       }),
 
     setSubscriptionActive: (active) => set({ subscriptionActive: active }),
-    reset: () => set({
-      ...initialState,
-      cities: new Map(),
-      encounters: new Map(),
-      loot: new Map(),
-      otherPlayers: new Map(),
-      teamMembers: new Map(),
-      teamInvites: new Map(),
-      treasuryRequests: new Map(),
-      rallyParticipants: new Map(),
-      events: new Map(),
-      eventParticipations: new Map(),
-      dungeonTemplates: new Map(),
-      dungeonLeaderboards: new Map(),
-      garrisonContributions: new Map(),
-      kingRegistries: new Map(),
-      courtPositions: new Map(),
-      teamCastleRewards: new Map(),
-      shopItems: new Map(),
-      bundles: new Map(),
-      flashSales: new Map(),
-      dailyDeals: new Map(),
-      playerPurchases: new Map(),
-      locations: new Map(),
-      researchTemplates: new Map(),
-      heroTemplates: new Map(),
-      daoPromotions: new Map(),
-      allowedTokens: new Map(),
-    }),
-  }))
+    reset: () =>
+      set({
+        ...initialState,
+        cities: new Map(),
+        encounters: new Map(),
+        loot: new Map(),
+        otherPlayers: new Map(),
+        incomingRallies: new Map(),
+        teamMembers: new Map(),
+        teamInvites: new Map(),
+        treasuryRequests: new Map(),
+        rallyParticipants: new Map(),
+        events: new Map(),
+        eventParticipations: new Map(),
+        dungeonTemplates: new Map(),
+        dungeonLeaderboards: new Map(),
+        garrisonContributions: new Map(),
+        kingRegistries: new Map(),
+        courtPositions: new Map(),
+        teamCastleRewards: new Map(),
+        shopItems: new Map(),
+        bundles: new Map(),
+        flashSales: new Map(),
+        dailyDeals: new Map(),
+        playerPurchases: new Map(),
+        locations: new Map(),
+        researchTemplates: new Map(),
+        heroTemplates: new Map(),
+        daoPromotions: new Map(),
+        allowedTokens: new Map(),
+      }),
+  })),
 );

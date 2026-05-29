@@ -149,11 +149,7 @@ export function MarketTab() {
       if (adjustedUnit <= 0) return null;
       return { adjustedUnit, timeMult, discountBps };
     });
-  }, [
-    geData?.account?.economicConfig,
-    estateData?.account,
-    playerData?.account?.currentLong,
-  ]);
+  }, [geData?.account?.economicConfig, estateData?.account, playerData?.account?.currentLong]);
 
   /**
    * Total cost matching the on-chain order of operations:
@@ -435,7 +431,9 @@ export function MarketTab() {
                       <span className="text-zinc-500">Your {equipPayCash ? "Cash" : "NOVI"}</span>
                       <span className="flex items-center gap-1 font-mono tabular-nums text-text-gold">
                         <GameIcon id={equipPayCash ? "resource-cash" : "resource-novi"} size={13} />
-                        {equipPayCash ? cashBalance.toLocaleString() : formatNoviAmount(noviBalance)}
+                        {equipPayCash
+                          ? cashBalance.toLocaleString()
+                          : formatNoviAmount(noviBalance)}
                       </span>
                     </div>
                     <div className="flex gap-1 rounded-lg bg-surface p-1">
@@ -479,9 +477,7 @@ export function MarketTab() {
                           />
                           {(() => {
                             const cost = totalCost(equipType, equipAmount);
-                            return equipPayCash
-                              ? cost.toLocaleString()
-                              : formatNoviAmount(cost);
+                            return equipPayCash ? cost.toLocaleString() : formatNoviAmount(cost);
                           })()}
                         </span>
                       </div>
@@ -537,4 +533,3 @@ export function MarketTab() {
     />
   );
 }
-

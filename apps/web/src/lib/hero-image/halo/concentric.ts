@@ -14,10 +14,7 @@ export interface HaloDrawParams {
   seed: number;
 }
 
-export function drawConcentric(
-  ctx: SKRSContext2D,
-  p: HaloDrawParams,
-): void {
+export function drawConcentric(ctx: SKRSContext2D, p: HaloDrawParams): void {
   const rng = mulberry32(p.seed);
 
   ctx.save();

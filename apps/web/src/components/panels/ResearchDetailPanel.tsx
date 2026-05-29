@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useCallback } from "react";
+import { useMemo } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -43,7 +43,6 @@ import {
   getResearchNode,
   getResearchCategoryName,
 } from "novus-mundus-sdk";
-import type { ResearchTemplateAccount, ResearchProgressAccount } from "novus-mundus-sdk";
 import { GameIcon } from "../shared/GameIcon";
 
 // Category icons are UI-only; node names/descriptions come from the SDK catalog.
@@ -282,7 +281,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       // "Instant" starts the next level then skips its full level-scaled timer
       // — price it at that level's banded gem rate, not the flat template field.
       const startLevel = currentLevel + 1;
-      const instantSec = template.baseTimeSeconds * Math.pow(1.5, startLevel);
+      const instantSec = template.baseTimeSeconds * 1.5 ** startLevel;
       const instantGemCost = researchGemsPerMinute(startLevel) * Math.ceil(instantSec / 60);
       const gems = playerData?.account?.gems?.toNumber?.() ?? 0;
       return [
@@ -407,7 +406,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
   const instantStartLevel = currentLevel + 1;
   const instantGemCost =
     researchGemsPerMinute(instantStartLevel) *
-    Math.ceil((baseTime * Math.pow(1.5, instantStartLevel)) / 60);
+    Math.ceil((baseTime * 1.5 ** instantStartLevel) / 60);
 
   // Cost preview — a rolling window of up to 6 *upcoming* levels starting at
   // the next one to research, so a mid-progress node shows what is ahead
@@ -425,7 +424,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       return {
         level,
         cost: calculateResearchCost(baseCost, level),
-        timeHours: Math.max(0.1, Math.round((baseTime * Math.pow(1.5, level)) / 360) / 10),
+        timeHours: Math.max(0.1, Math.round((baseTime * 1.5 ** level) / 360) / 10),
       };
     },
   );
@@ -557,33 +556,31 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       {/* In-progress actions — tier 1 "Skip" holds to charge multiple 1-hour
           skips into one tx; tier 2 "Instant" stays a one-shot (no maxCount). */}
       {isActiveForThis && !isComplete && (
-        <>
-          <SpeedupPanel
-            visible
-            remainingSeconds={remainingSeconds}
-            onSpeedup={(tier, rp, count) => handleSpeedup(tier, rp, count)}
-            tiers={[
-              {
-                tier: 1,
-                label: "Skip",
-                description: "Skip 1 hour of research time",
-                gemCost: activeResearchRate * 60,
-                maxCount: maxResearchHastenCount({
-                  remainingSeconds,
-                  currentLevel: progress?.currentLevel ?? 1,
-                  gemBalance,
-                }),
-              },
-              {
-                tier: 2,
-                label: "Instant",
-                description: "Complete all remaining time",
-                gemCost: activeResearchRate * Math.ceil(remainingSeconds / 60),
-              },
-            ]}
-            gemBalance={gemBalance}
-          />
-        </>
+        <SpeedupPanel
+          visible
+          remainingSeconds={remainingSeconds}
+          onSpeedup={(tier, rp, count) => handleSpeedup(tier, rp, count)}
+          tiers={[
+            {
+              tier: 1,
+              label: "Skip",
+              description: "Skip 1 hour of research time",
+              gemCost: activeResearchRate * 60,
+              maxCount: maxResearchHastenCount({
+                remainingSeconds,
+                currentLevel: progress?.currentLevel ?? 1,
+                gemBalance,
+              }),
+            },
+            {
+              tier: 2,
+              label: "Instant",
+              description: "Complete all remaining time",
+              gemCost: activeResearchRate * Math.ceil(remainingSeconds / 60),
+            },
+          ]}
+          gemBalance={gemBalance}
+        />
       )}
 
       {/* Already researching something else */}

@@ -134,9 +134,7 @@ export const DAILY_ACTIVITIES: ActivityMeta[] = [
   },
 ];
 
-export const ACTIVITY_BY_BUILDING = new Map(
-  DAILY_ACTIVITIES.map((a) => [a.building, a]),
-);
+export const ACTIVITY_BY_BUILDING = new Map(DAILY_ACTIVITIES.map((a) => [a.building, a]));
 
 /**
  * The on-chain reward formula per building, mirroring the grading processor.

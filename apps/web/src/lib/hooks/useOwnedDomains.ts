@@ -13,11 +13,7 @@ import { getOwnedDomains } from "@/lib/domains";
  */
 export function useOwnedDomains(owner: PublicKey | string | null | undefined) {
   const { connection } = useConnection();
-  const key = owner
-    ? typeof owner === "string"
-      ? owner
-      : owner.toBase58()
-    : null;
+  const key = owner ? (typeof owner === "string" ? owner : owner.toBase58()) : null;
 
   return useQuery({
     queryKey: ["owned-domains", key],

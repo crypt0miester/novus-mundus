@@ -32,9 +32,7 @@ export function parseOwner(
  * Resolve the authenticated `owner` from the SIWS session cookie, or a 401.
  * A 401 is the signal the client uses to launch the sign-in flow.
  */
-export function requireSession(
-  req: Request,
-): { owner: PublicKey } | { error: NextResponse } {
+export function requireSession(req: Request): { owner: PublicKey } | { error: NextResponse } {
   const owner = sessionOwner(req);
   if (!owner) return { error: fail("authentication required", 401) };
   try {
@@ -73,6 +71,7 @@ export async function coSignResponse(
     return NextResponse.json({ transaction, ...extra });
   } catch (e) {
     console.error("co-sign failed", e);
-    return fail(e instanceof Error ? e.message : "co-sign failed", 500);
+    // Don't leak simulation internals across the trust boundary.
+    return fail("could not co-sign this action", 500, "COSIGN_FAILED");
   }
 }

@@ -39,11 +39,7 @@ export function ChroniclePanel() {
   const { data: estateData } = useEstate();
   const { act, ownsCastle } = useAct();
 
-  const facts = buildChronicleFacts(
-    playerData?.account,
-    estateData?.account,
-    ownsCastle,
-  );
+  const facts = buildChronicleFacts(playerData?.account, estateData?.account, ownsCastle);
   const done = beatsDone(facts);
   const next = nextBeat(facts);
   const total = JOURNEY_BEATS.length;
@@ -62,16 +58,13 @@ export function ChroniclePanel() {
             {doneCount}/{total}
           </span>
         </div>
-        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-          {chapter.standing}
-        </p>
+        <p className="mt-1 text-xs leading-relaxed text-text-secondary">{chapter.standing}</p>
         <div className="mt-2 h-0.5 w-full overflow-hidden rounded-full bg-surface-overlay">
           <div
             className="h-full rounded-full"
             style={{
               width: `${(doneCount / total) * 100}%`,
-              background:
-                "linear-gradient(90deg, var(--nm-accent), var(--nm-accent-bright))",
+              background: "linear-gradient(90deg, var(--nm-accent), var(--nm-accent-bright))",
               transition: "width 0.6s ease",
             }}
           />
@@ -98,9 +91,7 @@ export function ChroniclePanel() {
                 )}
               >
                 <span className="flex items-center gap-1.5 text-text-muted">
-                  <span className="w-3 text-center">
-                    {past && allDone ? "✦" : "·"}
-                  </span>
+                  <span className="w-3 text-center">{past && allDone ? "✦" : "·"}</span>
                   <span>{a.name}</span>
                 </span>
                 <span className="font-mono text-[10px] tabular-nums text-text-muted">

@@ -62,7 +62,7 @@ export function StatBar({
           )}
         </div>
       )}
-      <div className={cn("overflow-hidden rounded-full bg-zinc-800", sizeMap[size])}>
+      <div className={cn("overflow-hidden rounded-full bg-surface-overlay", sizeMap[size])}>
         <div
           className={cn("h-full rounded-full transition-[width] duration-700 ease-out", barClass)}
           style={{ width: `${pct}%` }}

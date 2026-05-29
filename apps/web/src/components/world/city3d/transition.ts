@@ -25,7 +25,7 @@ import type { BuiltTerrainMesh } from "./buildTerrainMesh";
 export const TRANSITION_DURATION_MS = 700;
 
 function easeOutCubic(t: number): number {
-  return 1 - Math.pow(1 - t, 3);
+  return 1 - (1 - t) ** 3;
 }
 
 function lerp(a: number, b: number, t: number): number {
@@ -76,8 +76,7 @@ export function snapToMode(
   if (fromMode === "iso" && toMode === "flat") {
     controller.setStoredPitch3D(controller.getDesiredPitch());
   }
-  const pitchTo =
-    toMode === "iso" ? controller.getStoredPitch3D() : PITCH_2D;
+  const pitchTo = toMode === "iso" ? controller.getStoredPitch3D() : PITCH_2D;
   controller.setPitchHard(pitchTo);
   terrain.heightScale.value = toMode === "iso" ? 1 : 0;
   const yTo = toMode === "iso" ? midpointElevation() : 0;
@@ -105,8 +104,7 @@ export function runModeTransition(opts: TransitionOptions): RunningTransition {
   if (fromMode === "iso" && toMode === "flat") {
     controller.setStoredPitch3D(pitchFrom);
   }
-  const pitchTo =
-    toMode === "iso" ? controller.getStoredPitch3D() : PITCH_2D;
+  const pitchTo = toMode === "iso" ? controller.getStoredPitch3D() : PITCH_2D;
   const scaleFrom = terrain.heightScale.value;
   const scaleTo = toMode === "iso" ? 1 : 0;
   const yFrom = controller.getDesiredTarget().y;
@@ -212,11 +210,7 @@ export function runViewTween(
     const e = easeOutCubic(t);
 
     controller.setTargetHard(
-      new THREE.Vector3(
-        lerp(tFrom.x, tTo.x, e),
-        lerp(tFrom.y, tTo.y, e),
-        lerp(tFrom.z, tTo.z, e),
-      ),
+      new THREE.Vector3(lerp(tFrom.x, tTo.x, e), lerp(tFrom.y, tTo.y, e), lerp(tFrom.z, tTo.z, e)),
     );
     controller.setDistanceHard(lerp(dFrom, dTo, e));
     controller.setYawHard(lerp(yFrom, yTo, e));

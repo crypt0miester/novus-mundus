@@ -5,12 +5,8 @@ import { JumpAhead } from "./JumpAhead";
 import { BeatEyebrow } from "./Beat";
 import { useRevealOnMount } from "./useRevealOnMount";
 import { useJumpAhead } from "@/lib/jumpstart/useJumpAhead";
-import {
-  JUMP_RECIPES,
-  JUMP_TIER_ORDER,
-  jumpTierSol,
-  type JumpTier,
-} from "@/lib/jumpstart/recipes";
+import { LAMPORTS_PER_SOL } from "@solana/web3.js";
+import { JUMP_RECIPES, JUMP_TIER_ORDER, type JumpTier } from "@/lib/jumpstart/recipes";
 import type { CityChoice } from "./Arrival";
 
 interface JumpAheadBeatProps {
@@ -24,9 +20,10 @@ interface JumpAheadBeatProps {
 
 /** What each tier visibly grants — one line for the picker card. */
 const TIER_BLURB: Record<JumpTier, string> = {
-  settled: "An estate, a Barracks, and a standing garrison.",
-  established: "Barracks, Camp, Market, Stables, Academy — and a fuller host.",
-  veteran: "A built-out estate through the Citadel, and an army.",
+  settled: "Rookie patronage, a starter estate, and your first hero.",
+  established: "Expert patronage, a built estate with battle research, and three heroes.",
+  veteran:
+    "Epic patronage, a full estate through the Citadel, battle research, and five heroes.",
 };
 
 /**
@@ -34,11 +31,7 @@ const TIER_BLURB: Record<JumpTier, string> = {
  * Pick a tier; the executor replays the real instruction pipeline behind one
  * signature and the stepper shows it land.
  */
-export function JumpAheadBeat({
-  city,
-  onComplete,
-  resumeTier,
-}: JumpAheadBeatProps) {
+export function JumpAheadBeat({ city, onComplete, resumeTier }: JumpAheadBeatProps) {
   const jump = useJumpAhead();
   const [tier, setTier] = useState<JumpTier | null>(null);
   const pickerRef = useRef<HTMLDivElement>(null);
@@ -79,10 +72,7 @@ export function JumpAheadBeat({
   }
 
   return (
-    <div
-      ref={pickerRef}
-      className="mx-auto flex w-full max-w-md flex-col items-center text-center"
-    >
+    <div ref={pickerRef} className="mx-auto flex w-full max-w-md flex-col items-center text-center">
       <BeatEyebrow reveal className="mb-2">
         The Leap
       </BeatEyebrow>
@@ -92,22 +82,13 @@ export function JumpAheadBeat({
       >
         Jump ahead
       </h2>
-      <p
-        data-reveal
-        className="mb-7 text-sm leading-relaxed text-text-secondary opacity-0"
-      >
+      <p data-reveal className="mb-7 text-sm leading-relaxed text-text-secondary opacity-0">
         the early road is a known road.
       </p>
-      <p
-        data-reveal
-        className="mb-7 text-sm leading-relaxed text-text-secondary opacity-0"
-      >
+      <p data-reveal className="mb-7 text-sm leading-relaxed text-text-secondary opacity-0">
         pay it forward instead.
       </p>
-      <p
-        data-reveal
-        className="mb-7 text-sm leading-relaxed text-text-secondary opacity-0"
-      >
+      <p data-reveal className="mb-7 text-sm leading-relaxed text-text-secondary opacity-0">
         arrive with ground already broken and a host already raised.
       </p>
 
@@ -126,12 +107,10 @@ export function JumpAheadBeat({
                 <span className="block font-display text-sm font-bold text-text-primary">
                   {r.label}
                 </span>
-                <span className="block text-xs text-text-muted">
-                  {TIER_BLURB[t]}
-                </span>
+                <span className="block text-xs text-text-muted">{TIER_BLURB[t]}</span>
               </span>
               <span className="shrink-0 rounded-full bg-surface px-3 py-1 font-mono text-xs font-bold text-text-gold">
-                {jumpTierSol(r)} SOL
+                ~{(jump.tierPriceLamports(r) / LAMPORTS_PER_SOL).toFixed(2)} SOL
               </span>
             </button>
           );

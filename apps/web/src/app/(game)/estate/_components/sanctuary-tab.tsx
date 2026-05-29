@@ -46,7 +46,7 @@ const SUB_TABS = [
 
 /** A hero's template id lives in its NFT attributes — never ask the user. */
 function templateIdOf(asset: ParsedAssetV1 | null): number | null {
-  const raw = asset?.attributes?.["Template"];
+  const raw = asset?.attributes?.Template;
   if (raw == null) return null;
   const id = parseInt(raw, 10);
   return Number.isFinite(id) ? id : null;
@@ -136,18 +136,15 @@ function MeditationView() {
   const meditationMaxSeconds = meditationMaxHours * 3600;
   const now = Math.floor(Date.now() / 1000);
   const rawElapsed = meditating ? now - meditationStart : 0;
-  const elapsed = meditationMaxSeconds > 0
-    ? Math.min(rawElapsed, meditationMaxSeconds)
-    : rawElapsed;
+  const elapsed =
+    meditationMaxSeconds > 0 ? Math.min(rawElapsed, meditationMaxSeconds) : rawElapsed;
   const elapsedHours = Math.floor(elapsed / 3600);
   const elapsedMinutes = Math.floor((elapsed % 3600) / 60);
 
   // Chain awards xp_per_hour * elapsed_seconds / 3600 — proportional within
   // the hour. Prior `floor(elapsed/3600) * rate` only ticked every full hour,
   // under-reporting partial-hour XP by up to one whole rate's worth.
-  const meditationXpEstimate = meditating
-    ? Math.floor((meditationXpPerHour * elapsed) / 3600)
-    : 0;
+  const meditationXpEstimate = meditating ? Math.floor((meditationXpPerHour * elapsed) / 3600) : 0;
 
   const heroSlots = useMemo(() => {
     if (!player) return [];
@@ -466,8 +463,8 @@ function MeditationView() {
                 heroSlots[selectedSlot]?.occupied &&
                 (!meditationCityOk && selectedTemplate && player ? (
                   <p className="rounded-lg border border-border-gold/40 bg-accent/10 px-4 py-3 text-sm text-text-gold">
-                    This hero can only meditate in {cityName(selectedTemplate.meditationCityId)}, you
-                    are in {cityName(player.currentCity)}.{" "}
+                    This hero can only meditate in {cityName(selectedTemplate.meditationCityId)},
+                    you are in {cityName(player.currentCity)}.{" "}
                     <Link
                       href="/map"
                       className="font-semibold underline underline-offset-2 hover:opacity-80"
@@ -478,9 +475,9 @@ function MeditationView() {
                   </p>
                 ) : meditationAtCap ? (
                   <p className="text-center text-sm text-red-300">
-                    This hero is at the meditation cap for Sanctuary level {sanctuaryLevel}{" "}
-                    (Lv {meditationCap}). Spend fragments in the Heroes tab to level past it,
-                    or upgrade your Sanctuary.
+                    This hero is at the meditation cap for Sanctuary level {sanctuaryLevel} (Lv{" "}
+                    {meditationCap}). Spend fragments in the Heroes tab to level past it, or upgrade
+                    your Sanctuary.
                   </p>
                 ) : (
                   <div className="space-y-3">

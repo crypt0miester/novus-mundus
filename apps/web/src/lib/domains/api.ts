@@ -87,12 +87,8 @@ export interface MainDomainResult {
  * Check if a domain is available and get its price.
  * GET /api/check-domain/{domain}
  */
-export async function checkDomainAvailability(
-  domain: string,
-): Promise<DomainCheckResult> {
-  const res = await fetch(
-    `${ALLDOMAINS_API}/api/check-domain/${encodeURIComponent(domain)}`,
-  );
+export async function checkDomainAvailability(domain: string): Promise<DomainCheckResult> {
+  const res = await fetch(`${ALLDOMAINS_API}/api/check-domain/${encodeURIComponent(domain)}`);
   if (!res.ok) throw new Error(`check-domain failed: ${res.status}`);
   return res.json();
 }
@@ -113,12 +109,8 @@ export async function fetchAllTlds(): Promise<TldInfo[]> {
  * Get the primary domain for a single wallet.
  * GET /api/main-domain/{pubkey}
  */
-export async function fetchMainDomain(
-  pubkey: string,
-): Promise<string | null> {
-  const res = await fetch(
-    `${ALLDOMAINS_API}/api/main-domain/${encodeURIComponent(pubkey)}`,
-  );
+export async function fetchMainDomain(pubkey: string): Promise<string | null> {
+  const res = await fetch(`${ALLDOMAINS_API}/api/main-domain/${encodeURIComponent(pubkey)}`);
   if (!res.ok) return null;
   const data = await res.json();
   return data.mainDomain ?? null;
@@ -128,9 +120,7 @@ export async function fetchMainDomain(
  * Batch-fetch primary domains for multiple wallets.
  * POST /api/main-domain/batch (max 100)
  */
-export async function fetchMainDomainsBatch(
-  pubkeys: string[],
-): Promise<MainDomainResult[]> {
+export async function fetchMainDomainsBatch(pubkeys: string[]): Promise<MainDomainResult[]> {
   const res = await fetch(`${ALLDOMAINS_API}/api/main-domain/batch`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -145,10 +135,7 @@ export async function fetchMainDomainsBatch(
  * Get domains owned by a wallet for a specific TLD.
  * GET /api/check-user-domains/{tld}/{publicKey}
  */
-export async function fetchUserDomainsForTld(
-  tld: string,
-  publicKey: string,
-): Promise<unknown[]> {
+export async function fetchUserDomainsForTld(tld: string, publicKey: string): Promise<unknown[]> {
   const res = await fetch(
     `${ALLDOMAINS_API}/api/check-user-domains/${encodeURIComponent(tld)}/${encodeURIComponent(publicKey)}`,
   );
@@ -227,9 +214,7 @@ export function isCosignerResult(
 export async function fetchDomainSuggestions(
   domain: string,
 ): Promise<{ domain: string; exists: boolean }[]> {
-  const res = await fetch(
-    `${ALLDOMAINS_API}/api/suggestions/${encodeURIComponent(domain)}`,
-  );
+  const res = await fetch(`${ALLDOMAINS_API}/api/suggestions/${encodeURIComponent(domain)}`);
   if (!res.ok) return [];
   const results: { domain: string; exists: boolean }[] = await res.json();
   return results.filter((r) => {

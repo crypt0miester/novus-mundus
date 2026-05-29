@@ -2,11 +2,7 @@
 
 import { useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
-import {
-  createEquipCosmeticInstruction,
-  CosmeticKind,
-  ExtensionFlags,
-} from "novus-mundus-sdk";
+import { createEquipCosmeticInstruction, CosmeticKind, ExtensionFlags } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
@@ -63,15 +59,9 @@ export function WardrobeTab() {
   // Until then, equip would error with ExtensionPrerequisite and the user
   // pays the signature fee for a guaranteed-fail tx. Surface the gate as
   // a panel-wide notice so the call never goes out.
-  const cosmeticsUnlocked = player
-    ? (player.extensions & ExtensionFlags.COSMETICS) !== 0
-    : false;
+  const cosmeticsUnlocked = player ? (player.extensions & ExtensionFlags.COSMETICS) !== 0 : false;
 
-  const equip = async (
-    kind: CosmeticKind,
-    id: number,
-    reportPhase: (p: TxPhase) => void,
-  ) => {
+  const equip = async (kind: CosmeticKind, id: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!cosmeticsUnlocked) {
       throw new Error("Buy a cosmetic from the shop to unlock the wardrobe.");
@@ -99,8 +89,8 @@ export function WardrobeTab() {
     return (
       <div className="card">
         <p className="text-sm text-text-muted">
-          Buy a cosmetic from the shop to unlock the wardrobe — equip is gated on the chain
-          until you own one.
+          Buy a cosmetic from the shop to unlock the wardrobe — equip is gated on the chain until
+          you own one.
         </p>
       </div>
     );
@@ -284,10 +274,7 @@ function Section({
       <div className="flex items-baseline justify-between">
         <h2 className="text-sm font-semibold uppercase tracking-wider text-text-muted">{title}</h2>
         {equippedId !== 0 && (
-          <TxButton
-            onClick={(rp) => equip(kind, 0, rp)}
-            className="text-xs w-auto"
-          >
+          <TxButton onClick={(rp) => equip(kind, 0, rp)} className="text-xs w-auto">
             Take off
           </TxButton>
         )}
@@ -340,14 +327,14 @@ function Section({
                   </div>
                 </div>
                 {equipped ? (
-                  <div className="text-[10px] uppercase tracking-wider" style={{ color: "var(--seal)" }}>
+                  <div
+                    className="text-[10px] uppercase tracking-wider"
+                    style={{ color: "var(--seal)" }}
+                  >
                     Equipped
                   </div>
                 ) : owned ? (
-                  <TxButton
-                    onClick={(rp) => equip(kind, id, rp)}
-                    className="text-xs"
-                  >
+                  <TxButton onClick={(rp) => equip(kind, id, rp)} className="text-xs">
                     Equip
                   </TxButton>
                 ) : (

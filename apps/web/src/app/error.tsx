@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import Link from "next/link";
 import Noise from "@/components/shared/animations/Noise";
 
+// biome-ignore lint/suspicious/noShadowRestrictedNames: Next.js requires the error-boundary export to be named Error.
 export default function Error({
   error,
   reset,

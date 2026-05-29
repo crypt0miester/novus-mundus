@@ -4,7 +4,7 @@ import {
   ComputeBudgetProgram,
   type Connection,
   type Keypair,
-  PublicKey,
+  type PublicKey,
   Transaction,
   type TransactionInstruction,
   sendAndConfirmTransaction,
@@ -20,17 +20,8 @@ import {
   EncounterRarity,
 } from "novus-mundus-sdk";
 
-import {
-  biomeAt,
-  biomeKnobsFromCity,
-  isPassableBiome,
-  type BiomeKnobs,
-} from "@/lib/world/biome";
-import {
-  gameAuthorityKeypair,
-  serverClient,
-  serverConnection,
-} from "@/lib/server/game-authority";
+import { biomeAt, biomeKnobsFromCity, isPassableBiome, type BiomeKnobs } from "@/lib/world/biome";
+import { gameAuthorityKeypair, serverClient, serverConnection } from "@/lib/server/game-authority";
 import { gameEnginePda } from "@/lib/server/chain";
 
 export const runtime = "nodejs";
@@ -124,9 +115,7 @@ const MAX_BIOME_RETRIES = 200;
 /* Priority fee in micro-lamports per CU. 0 on localnet (no congestion)
  * — production should read from env so the operator can bump in a
  * congestion spike without redeploying. */
-const CU_PRICE_MICROLAMPORTS = Number(
-  process.env.CRON_CU_PRICE_MICROLAMPORTS ?? "0",
-);
+const CU_PRICE_MICROLAMPORTS = Number(process.env.CRON_CU_PRICE_MICROLAMPORTS ?? "0");
 
 interface CitySummary {
   cityId: number;
@@ -145,7 +134,7 @@ async function handle(req: Request): Promise<Response> {
   const ge = gameEnginePda();
   const authority = gameAuthorityKeypair();
 
-  let cities;
+  let cities: Awaited<ReturnType<typeof client.fetchAllCities>>;
   try {
     cities = await client.fetchAllCities();
   } catch (err) {
@@ -245,7 +234,7 @@ async function processCity(args: {
     errors: 0,
   };
 
-  let encounters;
+  let encounters: Awaited<ReturnType<typeof client.fetchEncountersInCity>>;
   try {
     encounters = await client.fetchEncountersInCity(cityId);
   } catch {
@@ -256,8 +245,7 @@ async function processCity(args: {
   const nowSec = Math.floor(Date.now() / 1000);
   const aliveCountsByRarity: Record<number, number> = {};
   for (const { account: e } of encounters) {
-    const aliveOnChain =
-      !e.health.isZero() && e.despawnAt.toNumber() > nowSec;
+    const aliveOnChain = !e.health.isZero() && e.despawnAt.toNumber() > nowSec;
     if (!aliveOnChain) continue;
     aliveCountsByRarity[e.rarity] = (aliveCountsByRarity[e.rarity] ?? 0) + 1;
   }
@@ -353,17 +341,8 @@ async function processCity(args: {
      * wallet and the chain reverting the whole batched tx. */
     let rentRecipient = authority.publicKey;
     try {
-      const [locationPda] = deriveLocationPda(
-        gameEngine,
-        cityId,
-        gridLat,
-        gridLong,
-      );
-      const [encounterPda] = deriveEncounterPda(
-        gameEngine,
-        cityId,
-        encounterIndex,
-      );
+      const [locationPda] = deriveLocationPda(gameEngine, cityId, gridLat, gridLong);
+      const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterIndex);
       const locInfo = await connection.getAccountInfo(locationPda);
       if (locInfo && locInfo.data.length > 0) {
         const loc = deserializeLocation(locInfo.data);
@@ -436,10 +415,8 @@ function pickPassableCell(args: {
 }): { gridLat: number; gridLong: number } | null {
   for (let i = 0; i < MAX_BIOME_RETRIES; i++) {
     /* Uniform in ±plotHalf bounds → can't trigger OUT_OF_RANGE. */
-    const ox =
-      Math.floor(Math.random() * (args.plotHalfW * 2 + 1)) - args.plotHalfW;
-    const oy =
-      Math.floor(Math.random() * (args.plotHalfH * 2 + 1)) - args.plotHalfH;
+    const ox = Math.floor(Math.random() * (args.plotHalfW * 2 + 1)) - args.plotHalfW;
+    const oy = Math.floor(Math.random() * (args.plotHalfH * 2 + 1)) - args.plotHalfH;
     const biome = biomeAt(args.biomeSeed, ox, oy, args.knobs);
     if (!isPassableBiome(biome)) continue;
     return {
@@ -558,7 +535,7 @@ async function trySpawnBatch(args: {
     tx.feePayer = args.authority.publicKey;
     tx.recentBlockhash = blockhash;
 
-    let sim;
+    let sim: Awaited<ReturnType<typeof args.connection.simulateTransaction>>;
     try {
       sim = await args.connection.simulateTransaction(tx, [args.authority]);
     } catch {
@@ -593,12 +570,9 @@ async function trySpawnBatch(args: {
      * checks its expected index. */
     try {
       const sendTx = new Transaction().add(...cuIxs, ...spawnIxs);
-      await sendAndConfirmTransaction(
-        args.connection,
-        sendTx,
-        [args.authority],
-        { commitment: "confirmed" },
-      );
+      await sendAndConfirmTransaction(args.connection, sendTx, [args.authority], {
+        commitment: "confirmed",
+      });
       return {
         placed: spawnIxs.length,
         terminal: false,
@@ -619,9 +593,7 @@ async function trySpawnBatch(args: {
  * `simulateTransaction`. Programs emit `Program ... failed: custom
  * program error: 0x1908` (hex) on a `ProgramError::Custom(n)` return.
  * Returns the decoded number or null if no match. */
-function extractCustomErrorCodeFromLogs(
-  logs: string[] | null | undefined,
-): number | null {
+function extractCustomErrorCodeFromLogs(logs: string[] | null | undefined): number | null {
   if (!logs) return null;
   for (const line of logs) {
     const m = line.match(/custom program error: 0x([0-9a-fA-F]+)/i);

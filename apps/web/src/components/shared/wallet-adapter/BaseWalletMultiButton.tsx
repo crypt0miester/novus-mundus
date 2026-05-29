@@ -4,7 +4,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
 import { WalletReadyState } from "@solana/wallet-adapter-base";
 import { LAMPORTS_PER_SOL } from "@solana/web3.js";
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { BaseWalletConnectionButton } from "./BaseWalletConnectionButton";
 import type { ButtonProps } from "./Button";
@@ -116,10 +116,14 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
 
   const content = useMemo(() => {
     if (children) return children;
-    if (connecting) return labels["connecting"];
+    if (connecting) return labels.connecting;
     if (publicKey) {
       const addr = publicKey.toBase58();
-      return <span>{addr.slice(0, 4)}..{addr.slice(-4)}</span>;
+      return (
+        <span>
+          {addr.slice(0, 4)}..{addr.slice(-4)}
+        </span>
+      );
     }
     return labels["no-wallet"];
   }, [children, labels, publicKey, connecting]);
@@ -166,9 +170,7 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
         >
           {/* Balance */}
           {balance != null && (
-            <li className="px-3 py-2 text-center text-xs text-zinc-400">
-              {balance} SOL
-            </li>
+            <li className="px-3 py-2 text-center text-xs text-zinc-400">{balance} SOL</li>
           )}
 
           {/* Divider */}
@@ -180,9 +182,11 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
             tabIndex={0}
             className="cursor-pointer px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white list-none"
             onClick={handleCopy}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleCopy(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") handleCopy();
+            }}
           >
-            {copied ? labels["copied"] : labels["copy-address"]}
+            {copied ? labels.copied : labels["copy-address"]}
           </li>
 
           {/* Airdrop */}
@@ -191,7 +195,9 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
             tabIndex={0}
             className="cursor-pointer px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             onClick={handleAirdrop}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") handleAirdrop(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") handleAirdrop();
+            }}
           >
             {airdropping ? "Airdropping..." : "Airdrop 1 SOL"}
           </li>
@@ -202,7 +208,9 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
             tabIndex={0}
             className="cursor-pointer px-3 py-2 text-sm text-zinc-300 transition-colors hover:bg-zinc-800 hover:text-white"
             onClick={resetWalletSelection}
-            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") resetWalletSelection(); }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") resetWalletSelection();
+            }}
           >
             {labels["change-wallet"]}
           </li>
@@ -217,9 +225,14 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
                 disconnect();
                 setMenuOpen(false);
               }}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { disconnect(); setMenuOpen(false); } }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  disconnect();
+                  setMenuOpen(false);
+                }
+              }}
             >
-              {labels["disconnect"]}
+              {labels.disconnect}
             </li>
           )}
         </ul>

@@ -111,7 +111,7 @@ body[data-theme="dark"] {
   --nm-bg-bar: #111113;
   --nm-text: #fafafa;
   --nm-text-secondary: #a1a1aa;
-  --nm-text-muted: #52525b;
+  --nm-text-muted: #8a8a93;
   --nm-border: var(--tier-border);
   --color-surface: #171412;
   --color-surface-raised: #18181b;
@@ -119,7 +119,7 @@ body[data-theme="dark"] {
   --color-border-default: #27272a;
   --color-text-primary: #fafafa;
   --color-text-secondary: #a1a1aa;
-  --color-text-muted: #52525b;
+  --color-text-muted: #8a8a93;
   --color-primary: #daa520;
   --color-primary-hover: #f59e0b;
 }

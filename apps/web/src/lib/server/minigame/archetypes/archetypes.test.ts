@@ -71,10 +71,9 @@ interface MemoryProgress {
 
 describe("memory archetype", () => {
   it("generates a shuffled board of P symbol pairs", () => {
-    const { puzzle, progress, presentation } = memoryArchetype.generate(
-      new FakeRng(9),
-      { pairs: 6 },
-    );
+    const { puzzle, progress, presentation } = memoryArchetype.generate(new FakeRng(9), {
+      pairs: 6,
+    });
     const faces = (puzzle as MemoryPuzzle).faces;
     expect(faces).toHaveLength(12);
     for (let s = 0; s < 6; s += 1) {
@@ -144,9 +143,15 @@ describe("memory archetype", () => {
 
   it("grades move efficiency against the 2P optimum", () => {
     const faces = [0, 0, 1, 1, 2, 2]; // P = 3, optimum 6 flips
-    expect(memoryArchetype.grade({ faces }, { moves: 6, matched: [], faceUp: null }, undefined)).toBe(1);
-    expect(memoryArchetype.grade({ faces }, { moves: 12, matched: [], faceUp: null }, undefined)).toBe(0.5);
-    expect(memoryArchetype.grade({ faces }, { moves: 0, matched: [], faceUp: null }, undefined)).toBe(0);
+    expect(
+      memoryArchetype.grade({ faces }, { moves: 6, matched: [], faceUp: null }, undefined),
+    ).toBe(1);
+    expect(
+      memoryArchetype.grade({ faces }, { moves: 12, matched: [], faceUp: null }, undefined),
+    ).toBe(0.5);
+    expect(
+      memoryArchetype.grade({ faces }, { moves: 0, matched: [], faceUp: null }, undefined),
+    ).toBe(0);
   });
 });
 
@@ -188,7 +193,13 @@ describe("mcq archetype — content bank", () => {
   it("keeps the answer key correct after shuffling options", () => {
     const { puzzle } = mcqArchetype.generate(new FakeRng(5), { questions: 2 }, bank);
     const qs = (puzzle as { questions: { correctIndex: number }[] }).questions;
-    expect(mcqArchetype.grade(puzzle, {}, qs.map((q) => q.correctIndex))).toBe(1);
+    expect(
+      mcqArchetype.grade(
+        puzzle,
+        {},
+        qs.map((q) => q.correctIndex),
+      ),
+    ).toBe(1);
   });
 });
 
@@ -213,9 +224,19 @@ describe("set-select archetype", () => {
     const { puzzle } = setSelectArchetype.generate(new FakeRng(4), { items: 6 }, content);
     const p = puzzle as { real: boolean[] };
     expect(setSelectArchetype.grade(puzzle, {}, p.real.slice())).toBe(1);
-    expect(setSelectArchetype.grade(puzzle, {}, p.real.map(() => false))).toBe(0);
     expect(
-      setSelectArchetype.grade(puzzle, {}, p.real.map(() => true)),
+      setSelectArchetype.grade(
+        puzzle,
+        {},
+        p.real.map(() => false),
+      ),
+    ).toBe(0);
+    expect(
+      setSelectArchetype.grade(
+        puzzle,
+        {},
+        p.real.map(() => true),
+      ),
     ).toBeGreaterThanOrEqual(0);
   });
 });
@@ -245,15 +266,15 @@ describe("assignment archetype", () => {
   });
 
   it("grades the fraction binned correctly", () => {
-    const { puzzle } = assignmentArchetype.generate(
-      new FakeRng(8),
-      { items: 6, bins: 3 },
-      content,
-    );
+    const { puzzle } = assignmentArchetype.generate(new FakeRng(8), { items: 6, bins: 3 }, content);
     const p = puzzle as { correctBin: number[] };
     expect(assignmentArchetype.grade(puzzle, {}, p.correctBin.slice())).toBe(1);
     expect(
-      assignmentArchetype.grade(puzzle, {}, p.correctBin.map((b) => (b + 1) % 3)),
+      assignmentArchetype.grade(
+        puzzle,
+        {},
+        p.correctBin.map((b) => (b + 1) % 3),
+      ),
     ).toBe(0);
   });
 });
@@ -268,9 +289,7 @@ describe("ordering archetype", () => {
 
   it("generates items with distinct metrics", () => {
     const { puzzle } = orderingArchetype.generate(new FakeRng(2), { items: 5 }, content);
-    const metrics = (puzzle as { items: { metric: number }[] }).items.map(
-      (it) => it.metric,
-    );
+    const metrics = (puzzle as { items: { metric: number }[] }).items.map((it) => it.metric);
     expect(metrics).toHaveLength(5);
     expect(new Set(metrics).size).toBe(5);
   });
@@ -278,9 +297,7 @@ describe("ordering archetype", () => {
   it("grades correct adjacent pairs", () => {
     const { puzzle } = orderingArchetype.generate(new FakeRng(2), { items: 5 }, content);
     const items = (puzzle as { items: { metric: number }[] }).items;
-    const sorted = items
-      .map((_, i) => i)
-      .sort((x, y) => items[x]!.metric - items[y]!.metric);
+    const sorted = items.map((_, i) => i).sort((x, y) => items[x]!.metric - items[y]!.metric);
     expect(orderingArchetype.grade(puzzle, {}, sorted)).toBe(1);
     expect(orderingArchetype.grade(puzzle, {}, sorted.slice().reverse())).toBe(0);
   });

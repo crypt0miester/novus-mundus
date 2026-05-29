@@ -1,5 +1,6 @@
-import React, { useEffect, useRef } from 'react';
-import * as THREE from 'three';
+import type React from "react";
+import { useEffect, useRef } from "react";
+import * as THREE from "three";
 
 type Props = {
   className?: string;
@@ -262,12 +263,12 @@ void main(){
 
 function hexToRGB(hex: string) {
   let c = hex.trim();
-  if (c[0] === '#') c = c.slice(1);
+  if (c[0] === "#") c = c.slice(1);
   if (c.length === 3)
     c = c
-      .split('')
-      .map(x => x + x)
-      .join('');
+      .split("")
+      .map((x) => x + x)
+      .join("");
   const n = parseInt(c, 16) || 0xffffff;
   return { r: ((n >> 16) & 255) / 255, g: ((n >> 8) & 255) / 255, b: (n & 255) / 255 };
 }
@@ -292,7 +293,7 @@ export const LaserFlow: React.FC<Props> = ({
   decay = 1.1,
   falloffStart = 1.2,
   fogFallSpeed = 0.6,
-  color = '#FF79C6'
+  color = "#FF79C6",
 }) => {
   const mountRef = useRef<HTMLDivElement | null>(null);
   const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -320,11 +321,11 @@ export const LaserFlow: React.FC<Props> = ({
       alpha: false,
       depth: false,
       stencil: false,
-      powerPreference: 'high-performance',
+      powerPreference: "high-performance",
       premultipliedAlpha: false,
       preserveDrawingBuffer: false,
       failIfMajorPerformanceCaveat: false,
-      logarithmicDepthBuffer: false
+      logarithmicDepthBuffer: false,
     });
     rendererRef.current = renderer;
 
@@ -336,16 +337,19 @@ export const LaserFlow: React.FC<Props> = ({
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.setClearColor(0x000000, 1);
     const canvas = renderer.domElement;
-    canvas.style.width = '100%';
-    canvas.style.height = '100%';
-    canvas.style.display = 'block';
+    canvas.style.width = "100%";
+    canvas.style.height = "100%";
+    canvas.style.display = "block";
     mount.appendChild(canvas);
 
     const scene = new THREE.Scene();
     const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 
     const geometry = new THREE.BufferGeometry();
-    geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3));
+    geometry.setAttribute(
+      "position",
+      new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 3, -1, 0, -1, 3, 0]), 3),
+    );
 
     const uniforms = {
       iTime: { value: 0 },
@@ -369,7 +373,7 @@ export const LaserFlow: React.FC<Props> = ({
       uFalloffStart: { value: falloffStart },
       uFogFallSpeed: { value: fogFallSpeed },
       uColor: { value: new THREE.Vector3(1, 1, 1) },
-      uFade: { value: hasFadedRef.current ? 1 : 0 }
+      uFade: { value: hasFadedRef.current ? 1 : 0 },
     };
     uniformsRef.current = uniforms;
 
@@ -380,7 +384,7 @@ export const LaserFlow: React.FC<Props> = ({
       transparent: false,
       depthTest: false,
       depthWrite: false,
-      blending: THREE.NormalBlending
+      blending: THREE.NormalBlending,
     });
 
     const mesh = new THREE.Mesh(geometry, material);
@@ -426,17 +430,17 @@ export const LaserFlow: React.FC<Props> = ({
     ro.observe(mount);
 
     const io = new IntersectionObserver(
-      entries => {
+      (entries) => {
         inViewRef.current = entries[0]?.isIntersecting ?? true;
       },
-      { root: null, threshold: 0 }
+      { root: null, threshold: 0 },
     );
     io.observe(mount);
 
     const onVis = () => {
       pausedRef.current = document.hidden;
     };
-    document.addEventListener('visibilitychange', onVis, { passive: true });
+    document.addEventListener("visibilitychange", onVis, { passive: true });
 
     const updateMouse = (clientX: number, clientY: number) => {
       const rect = rectRef.current;
@@ -449,10 +453,10 @@ export const LaserFlow: React.FC<Props> = ({
     };
     const onMove = (ev: PointerEvent | MouseEvent) => updateMouse(ev.clientX, ev.clientY);
     const onLeave = () => mouseTarget.set(0, 0);
-    canvas.addEventListener('pointermove', onMove as any, { passive: true });
-    canvas.addEventListener('pointerdown', onMove as any, { passive: true });
-    canvas.addEventListener('pointerenter', onMove as any, { passive: true });
-    canvas.addEventListener('pointerleave', onLeave as any, { passive: true });
+    canvas.addEventListener("pointermove", onMove as any, { passive: true });
+    canvas.addEventListener("pointerdown", onMove as any, { passive: true });
+    canvas.addEventListener("pointerenter", onMove as any, { passive: true });
+    canvas.addEventListener("pointerleave", onLeave as any, { passive: true });
 
     const onCtxLost = (e: Event) => {
       e.preventDefault();
@@ -462,8 +466,8 @@ export const LaserFlow: React.FC<Props> = ({
       pausedRef.current = false;
       scheduleResize();
     };
-    canvas.addEventListener('webglcontextlost', onCtxLost, false);
-    canvas.addEventListener('webglcontextrestored', onCtxRestored, false);
+    canvas.addEventListener("webglcontextlost", onCtxLost, false);
+    canvas.addEventListener("webglcontextrestored", onCtxRestored, false);
 
     let raf = 0;
 
@@ -494,7 +498,10 @@ export const LaserFlow: React.FC<Props> = ({
         next = clamp(currentDprRef.current * 1.1, dprFloor, base);
       }
 
-      if (Math.abs(next - currentDprRef.current) > 0.01 && now - lastDprChange > dprChangeCooldown) {
+      if (
+        Math.abs(next - currentDprRef.current) > 0.01 &&
+        now - lastDprChange > dprChangeCooldown
+      ) {
         currentDprRef.current = next;
         lastDprChange = now;
         setSizeNow();
@@ -548,13 +555,13 @@ export const LaserFlow: React.FC<Props> = ({
 
       ro.disconnect();
       io.disconnect();
-      document.removeEventListener('visibilitychange', onVis);
-      canvas.removeEventListener('pointermove', onMove as any);
-      canvas.removeEventListener('pointerdown', onMove as any);
-      canvas.removeEventListener('pointerenter', onMove as any);
-      canvas.removeEventListener('pointerleave', onLeave as any);
-      canvas.removeEventListener('webglcontextlost', onCtxLost);
-      canvas.removeEventListener('webglcontextrestored', onCtxRestored);
+      document.removeEventListener("visibilitychange", onVis);
+      canvas.removeEventListener("pointermove", onMove as any);
+      canvas.removeEventListener("pointerdown", onMove as any);
+      canvas.removeEventListener("pointerenter", onMove as any);
+      canvas.removeEventListener("pointerleave", onLeave as any);
+      canvas.removeEventListener("webglcontextlost", onCtxLost);
+      canvas.removeEventListener("webglcontextrestored", onCtxRestored);
 
       scene.clear();
       geometry.dispose();
@@ -585,7 +592,7 @@ export const LaserFlow: React.FC<Props> = ({
     uniforms.uFalloffStart.value = falloffStart;
     uniforms.uFogFallSpeed.value = fogFallSpeed;
 
-    const { r, g, b } = hexToRGB(color || '#FFFFFF');
+    const { r, g, b } = hexToRGB(color || "#FFFFFF");
     uniforms.uColor.value.set(r, g, b);
   }, [
     wispDensity,
@@ -603,10 +610,12 @@ export const LaserFlow: React.FC<Props> = ({
     decay,
     falloffStart,
     fogFallSpeed,
-    color
+    color,
   ]);
 
-  return <div ref={mountRef} className={`w-full h-full relative ${className || ''}`} style={style} />;
+  return (
+    <div ref={mountRef} className={`w-full h-full relative ${className || ""}`} style={style} />
+  );
 };
 
 export default LaserFlow;

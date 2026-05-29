@@ -61,7 +61,7 @@ interface TowerSpec {
  * instead of from tower count. */
 function getCastleTowerPositions(tier: number, n: number): TowerSpec[] {
   if (n <= 1) {
-    return [{ ox: 0, oy: 0, scaleFrac: 0.30 }];
+    return [{ ox: 0, oy: 0, scaleFrac: 0.3 }];
   }
   const cornerOffset = (n / 2 - 0.5) * 0.85;
   switch (tier) {
@@ -91,7 +91,7 @@ function getCastleTowerPositions(tier: number, n: number): TowerSpec[] {
         { ox: 0, oy: 0, scaleFrac: 0.22 },
       ];
     default:
-      return [{ ox: 0, oy: 0, scaleFrac: 0.20 }];
+      return [{ ox: 0, oy: 0, scaleFrac: 0.2 }];
   }
 }
 
@@ -151,11 +151,7 @@ export class CastleLayer {
   private pips: THREE.InstancedMesh;
   private instanceCells: OccupiedCell[] = [];
 
-  constructor(
-    parent: THREE.Group,
-    center: CastleLayerCenter,
-    geom: CastleLayerGeometries,
-  ) {
+  constructor(parent: THREE.Group, center: CastleLayerCenter, geom: CastleLayerGeometries) {
     this.rgu = center.rgu;
     this.cityLatGrid = center.cityLatGrid;
     this.cityLongGrid = center.cityLongGrid;
@@ -167,11 +163,7 @@ export class CastleLayer {
     /* Plates — slate fills at the castle's footprint. RenderOrder 3.0
      * sits BENEATH player + encounter dots (3.2) so a player standing
      * on a castle cell remains visible. */
-    this.plates = new THREE.InstancedMesh(
-      geom.tileGeom.clone(),
-      geom.fillMat.clone(),
-      MAX_CASTLES,
-    );
+    this.plates = new THREE.InstancedMesh(geom.tileGeom.clone(), geom.fillMat.clone(), MAX_CASTLES);
     this.plates.count = 0;
     this.plates.frustumCulled = false;
     this.plates.renderOrder = 3.0;
@@ -291,12 +283,9 @@ export class CastleLayer {
        * mirrors the 2D fallback so a Citadel reads visibly bigger
        * than an Outpost at overview zoom. */
       const TARGET_CASTLE_DIAMETER_CSS_PX = 12;
-      const dotExtent =
-        (TARGET_CASTLE_DIAMETER_CSS_PX * cellWorld) / cssPxClamped;
+      const dotExtent = (TARGET_CASTLE_DIAMETER_CSS_PX * cellWorld) / cssPxClamped;
       const castleScale = Math.max(1, n * 0.7);
-      const plateExtent = renderAsTiles
-        ? n * cellWorld
-        : dotExtent * castleScale;
+      const plateExtent = renderAsTiles ? n * cellWorld : dotExtent * castleScale;
       /* Per-grid-cell world distance on the RENDERED plate — equals
        * cellWorld in tile mode, plateExtent/n in dot mode. Tower/pip
        * positions use this so they follow the plate's visual size. */
@@ -308,10 +297,7 @@ export class CastleLayer {
       this.plates.setMatrixAt(plateCount, tmpMat);
       this.plates.setColorAt(plateCount, COLOR_CASTLE);
       this.rings.setMatrixAt(plateCount, tmpMat);
-      this.rings.setColorAt(
-        plateCount,
-        isSelected ? COLOR_SELECTED : COLOR_CREAM,
-      );
+      this.rings.setColorAt(plateCount, isSelected ? COLOR_SELECTED : COLOR_CREAM);
       this.instanceCells[plateCount] = cell;
       plateCount++;
 

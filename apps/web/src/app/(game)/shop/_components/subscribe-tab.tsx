@@ -286,11 +286,7 @@ export function SubscribeTab() {
 
       {/* Payment method — SOL by default, or any whitelisted token. The
           selector hides options the chain can't honor for a USD-priced product. */}
-      <PaymentMethodSelector
-        product="usd"
-        value={paymentMethod}
-        onChange={setPaymentMethod}
-      />
+      <PaymentMethodSelector product="usd" value={paymentMethod} onChange={setPaymentMethod} />
 
       {/* ─── Tier ladder (paid charters) ─── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -502,7 +498,8 @@ export function SubscribeTab() {
                     </TxButton>
                     {sub.active && upgradeDeltaUsdCents > 0 && (
                       <p className="mt-1.5 text-center text-[11px] text-text-muted">
-                        +{formatPaymentPrice(paymentMethod, {
+                        +
+                        {formatPaymentPrice(paymentMethod, {
                           usdCents: upgradeDeltaUsdCents,
                           solUsdRateCents: usdPriceCents,
                         })}{" "}

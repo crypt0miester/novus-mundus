@@ -123,9 +123,7 @@ export const useEventStore = create<EventStoreState>((set, get) => ({
 
   markRead: (scope) => {
     const { events } = get();
-    const updated = events.map((e) =>
-      e.scopes.includes(scope) ? { ...e, read: true } : e,
-    );
+    const updated = events.map((e) => (e.scopes.includes(scope) ? { ...e, read: true } : e));
     set({ events: updated });
     idbSet(IDB_KEY, updated).catch(() => {});
   },
@@ -134,6 +132,5 @@ export const useEventStore = create<EventStoreState>((set, get) => ({
   getTeamFeed: () => get().events.filter((e) => e.scopes.includes("team")),
   getCityFeed: () => get().events.filter((e) => e.scopes.includes("city")),
 
-  getUnreadCount: (scope) =>
-    get().events.filter((e) => !e.read && e.scopes.includes(scope)).length,
+  getUnreadCount: (scope) => get().events.filter((e) => !e.read && e.scopes.includes(scope)).length,
 }));

@@ -30,9 +30,7 @@ export function TabNav({ tabs, activeTab, onTabChange }: TabNavProps) {
             )}
           >
             {tab.label}
-            {tab.badge && (
-              <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-red-500" />
-            )}
+            {tab.badge && <span className="ml-1.5 inline-block h-2 w-2 rounded-full bg-red-500" />}
           </button>
         ))}
       </div>

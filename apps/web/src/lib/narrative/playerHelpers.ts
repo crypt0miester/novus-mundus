@@ -36,11 +36,7 @@ function isRaised(slot: { status: number }): boolean {
 }
 
 /** True if a building of `type` is built and at least `minLevel` (active or upgrading). */
-export function hasBuildingAtLevel(
-  buildings: SlotLike[],
-  type: number,
-  minLevel = 1,
-): boolean {
+export function hasBuildingAtLevel(buildings: SlotLike[], type: number, minLevel = 1): boolean {
   return buildings.some((b) => b.buildingType === type && isRaised(b) && b.level >= minLevel);
 }
 

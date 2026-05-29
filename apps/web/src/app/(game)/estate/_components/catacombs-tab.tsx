@@ -35,6 +35,7 @@ import { useRightPanelStore } from "@/lib/store/right-panel";
 import { useDungeonTemplate } from "@/lib/hooks/useDungeonTemplate";
 import { useDungeonTemplates } from "@/lib/hooks/useDungeonTemplates";
 import { THEMES } from "@/lib/dungeon-lore";
+import { DungeonSplash } from "@/components/dungeons/DungeonSplash";
 import { RunView } from "./catacombs/RunView";
 
 // Hero specialization is chosen per run — it drives the run's combat bonuses
@@ -224,6 +225,15 @@ export function CatacombsTab() {
           <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
             Select Dungeon
           </h3>
+          {selectedTemplate && (
+            <div className="mb-4">
+              <DungeonSplash
+                dungeonId={selectedDungeon}
+                title={selectedTemplate.name}
+                subtitle={THEMES[selectedTemplate.theme]?.name ?? `Theme ${selectedTemplate.theme}`}
+              />
+            </div>
+          )}
           {!dungeons ? (
             <p className="text-sm text-text-muted">Loading dungeons…</p>
           ) : dungeons.length === 0 ? (
@@ -288,9 +298,6 @@ export function CatacombsTab() {
               <span className={meetsLevel ? "text-text-secondary" : "text-red-400"}>
                 {minLevel}
               </span>
-              {!meetsLevel && (
-                <span className="ml-1 text-red-400">— you are level {player?.level ?? 0}</span>
-              )}
             </div>
           )}
           {champion ? (
@@ -310,8 +317,7 @@ export function CatacombsTab() {
             </div>
           ) : (
             <div className="mt-1 text-center text-[11px] text-danger">
-              No hero available — mint or unlock one in the Sanctuary's Heroes tab. A dungeon run
-              escrows a wallet-held hero.
+              No hero available
             </div>
           )}
 

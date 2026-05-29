@@ -75,11 +75,7 @@ export class OccupantsLayer {
   private encounterDotCells: OccupiedCell[] = [];
   private encounterTileCells: OccupiedCell[] = [];
 
-  constructor(
-    parent: THREE.Group,
-    center: OccupantsLayerCenter,
-    geom: OccupantsLayerGeometries,
-  ) {
+  constructor(parent: THREE.Group, center: OccupantsLayerCenter, geom: OccupantsLayerGeometries) {
     this.rgu = center.rgu;
     this.cityLatGrid = center.cityLatGrid;
     this.cityLongGrid = center.cityLongGrid;
@@ -89,11 +85,7 @@ export class OccupantsLayer {
     parent.add(this.group);
 
     /* Player dot family — circle fill + ring halo for low-zoom. */
-    this.playerDots = new THREE.InstancedMesh(
-      geom.dotGeom,
-      geom.fillMat.clone(),
-      MAX_OCCUPANTS,
-    );
+    this.playerDots = new THREE.InstancedMesh(geom.dotGeom, geom.fillMat.clone(), MAX_OCCUPANTS);
     this.playerDots.count = 0;
     this.playerDots.frustumCulled = false;
     this.playerDots.renderOrder = 3.2;
@@ -110,11 +102,7 @@ export class OccupantsLayer {
     this.group.add(this.playerDotRings);
 
     /* Player tile family — full cell fill + square frame for high-zoom. */
-    this.playerTiles = new THREE.InstancedMesh(
-      geom.tileGeom,
-      geom.fillMat.clone(),
-      MAX_OCCUPANTS,
-    );
+    this.playerTiles = new THREE.InstancedMesh(geom.tileGeom, geom.fillMat.clone(), MAX_OCCUPANTS);
     this.playerTiles.count = 0;
     this.playerTiles.frustumCulled = false;
     this.playerTiles.renderOrder = 3.2;
@@ -186,10 +174,7 @@ export class OccupantsLayer {
   /** Returns the cell that drove a given instance of an interactive
    * mesh. Returns null if the mesh isn't one of the occupant layers
    * or the instance ID is out of range. */
-  cellForInstance(
-    mesh: THREE.Object3D,
-    instanceId: number,
-  ): OccupiedCell | null {
+  cellForInstance(mesh: THREE.Object3D, instanceId: number): OccupiedCell | null {
     if (mesh === this.playerDots) return this.playerDotCells[instanceId] ?? null;
     if (mesh === this.playerTiles) return this.playerTileCells[instanceId] ?? null;
     if (mesh === this.encounterDots) return this.encounterDotCells[instanceId] ?? null;
@@ -199,12 +184,7 @@ export class OccupantsLayer {
 
   /** Meshes the raycaster should test against. */
   getInteractiveMeshes(): THREE.Object3D[] {
-    return [
-      this.playerDots,
-      this.playerTiles,
-      this.encounterDots,
-      this.encounterTiles,
-    ];
+    return [this.playerDots, this.playerTiles, this.encounterDots, this.encounterTiles];
   }
 
   /** Paint all players + encounters from `occupied`. Castle cells in
@@ -244,8 +224,7 @@ export class OccupantsLayer {
       const { wx, wz } = gridToWorld(ox, oy, this.rgu);
       const y = getElevationAt(ox, oy) + OVERLAY_Y_BIAS;
 
-      const isMyPlayer =
-        isPlayer && myPlayerPubkey != null && cell.occupant === myPlayerPubkey;
+      const isMyPlayer = isPlayer && myPlayerPubkey != null && cell.occupant === myPlayerPubkey;
       const isSelected =
         selected != null &&
         selected.gridLat === cell.gridLat &&
@@ -254,9 +233,7 @@ export class OccupantsLayer {
       /* Cosmetic name colour wins over the canonical palette. Falls
        * through to default ink colours when the player has no paid
        * colour equipped. */
-      const cosmeticFill = cell.nameColorHex
-        ? parseHexLinear(cell.nameColorHex)
-        : null;
+      const cosmeticFill = cell.nameColorHex ? parseHexLinear(cell.nameColorHex) : null;
       const fill = cosmeticFill
         ? cosmeticFill
         : isMyPlayer
@@ -270,10 +247,8 @@ export class OccupantsLayer {
        * three.js would render past-the-end instances holding the
        * identity matrix (visible as a stack of ghost dots at world
        * origin). Skip + warn once. */
-      const playerCapHit =
-        isPlayer && (renderAsTiles ? pTileCount : pCount) >= MAX_OCCUPANTS;
-      const encounterCapHit =
-        isEncounter && (renderAsTiles ? eTileCount : eCount) >= MAX_OCCUPANTS;
+      const playerCapHit = isPlayer && (renderAsTiles ? pTileCount : pCount) >= MAX_OCCUPANTS;
+      const encounterCapHit = isEncounter && (renderAsTiles ? eTileCount : eCount) >= MAX_OCCUPANTS;
       if (playerCapHit || encounterCapHit) {
         warnOnce(
           `[city3d/occupants] capacity reached — MAX_OCCUPANTS=${MAX_OCCUPANTS}. ` +
@@ -290,20 +265,14 @@ export class OccupantsLayer {
           this.playerTiles.setMatrixAt(pTileCount, tmpMat);
           this.playerTiles.setColorAt(pTileCount, fill);
           this.playerTileRings.setMatrixAt(pTileCount, tmpMat);
-          this.playerTileRings.setColorAt(
-            pTileCount,
-            isSelected ? COLOR_SELECTED : COLOR_CREAM,
-          );
+          this.playerTileRings.setColorAt(pTileCount, isSelected ? COLOR_SELECTED : COLOR_CREAM);
           this.playerTileCells[pTileCount] = cell;
           pTileCount++;
         } else {
           this.encounterTiles.setMatrixAt(eTileCount, tmpMat);
           this.encounterTiles.setColorAt(eTileCount, fill);
           this.encounterTileRings.setMatrixAt(eTileCount, tmpMat);
-          this.encounterTileRings.setColorAt(
-            eTileCount,
-            isSelected ? COLOR_SELECTED : COLOR_CREAM,
-          );
+          this.encounterTileRings.setColorAt(eTileCount, isSelected ? COLOR_SELECTED : COLOR_CREAM);
           this.encounterTileCells[eTileCount] = cell;
           eTileCount++;
         }
@@ -315,20 +284,14 @@ export class OccupantsLayer {
           this.playerDots.setMatrixAt(pCount, tmpMat);
           this.playerDots.setColorAt(pCount, fill);
           this.playerDotRings.setMatrixAt(pCount, tmpMat);
-          this.playerDotRings.setColorAt(
-            pCount,
-            isSelected ? COLOR_SELECTED : COLOR_CREAM,
-          );
+          this.playerDotRings.setColorAt(pCount, isSelected ? COLOR_SELECTED : COLOR_CREAM);
           this.playerDotCells[pCount] = cell;
           pCount++;
         } else {
           this.encounterDots.setMatrixAt(eCount, tmpMat);
           this.encounterDots.setColorAt(eCount, fill);
           this.encounterDotRings.setMatrixAt(eCount, tmpMat);
-          this.encounterDotRings.setColorAt(
-            eCount,
-            isSelected ? COLOR_SELECTED : COLOR_CREAM,
-          );
+          this.encounterDotRings.setColorAt(eCount, isSelected ? COLOR_SELECTED : COLOR_CREAM);
           this.encounterDotCells[eCount] = cell;
           eCount++;
         }
@@ -353,20 +316,14 @@ export class OccupantsLayer {
     this.playerTileRings.instanceMatrix.needsUpdate = true;
     this.encounterTiles.instanceMatrix.needsUpdate = true;
     this.encounterTileRings.instanceMatrix.needsUpdate = true;
-    if (this.playerDots.instanceColor)
-      this.playerDots.instanceColor.needsUpdate = true;
-    if (this.playerDotRings.instanceColor)
-      this.playerDotRings.instanceColor.needsUpdate = true;
-    if (this.encounterDots.instanceColor)
-      this.encounterDots.instanceColor.needsUpdate = true;
+    if (this.playerDots.instanceColor) this.playerDots.instanceColor.needsUpdate = true;
+    if (this.playerDotRings.instanceColor) this.playerDotRings.instanceColor.needsUpdate = true;
+    if (this.encounterDots.instanceColor) this.encounterDots.instanceColor.needsUpdate = true;
     if (this.encounterDotRings.instanceColor)
       this.encounterDotRings.instanceColor.needsUpdate = true;
-    if (this.playerTiles.instanceColor)
-      this.playerTiles.instanceColor.needsUpdate = true;
-    if (this.playerTileRings.instanceColor)
-      this.playerTileRings.instanceColor.needsUpdate = true;
-    if (this.encounterTiles.instanceColor)
-      this.encounterTiles.instanceColor.needsUpdate = true;
+    if (this.playerTiles.instanceColor) this.playerTiles.instanceColor.needsUpdate = true;
+    if (this.playerTileRings.instanceColor) this.playerTileRings.instanceColor.needsUpdate = true;
+    if (this.encounterTiles.instanceColor) this.encounterTiles.instanceColor.needsUpdate = true;
     if (this.encounterTileRings.instanceColor)
       this.encounterTileRings.instanceColor.needsUpdate = true;
 

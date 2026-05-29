@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  GameFooter,
-  GameHeader,
-  GameTimer,
-  useFireOnce,
-  useIndexedSelection,
-} from "./_shell";
+import { GameFooter, GameHeader, GameTimer, useFireOnce, useIndexedSelection } from "./_shell";
 
 /** Client-safe Assignment presentation (server `assignment` archetype). */
 export interface AssignmentPresentation {
@@ -41,16 +35,8 @@ export function AssignmentGame({ presentation, submitting, onSubmit }: Assignmen
 
   return (
     <div className="space-y-3">
-      <GameHeader
-        current={Math.min(sorted + 1, items.length)}
-        total={items.length}
-        noun="Sort"
-      />
-      <GameTimer
-        totalMs={MS_PER_ITEM * items.length}
-        paused={submitting}
-        onExpire={fireSubmit}
-      />
+      <GameHeader current={Math.min(sorted + 1, items.length)} total={items.length} noun="Sort" />
+      <GameTimer totalMs={MS_PER_ITEM * items.length} paused={submitting} onExpire={fireSubmit} />
 
       <p className="text-sm text-text-secondary">{instruction}</p>
       <div className="flex flex-wrap gap-x-3 gap-y-1 text-[11px] tabular-nums text-text-muted">

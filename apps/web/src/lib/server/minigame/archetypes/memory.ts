@@ -1,10 +1,4 @@
-import type {
-  Archetype,
-  Difficulty,
-  GeneratedPuzzle,
-  MoveOutcome,
-  RandomSource,
-} from "../types";
+import type { Archetype, Difficulty, GeneratedPuzzle, MoveOutcome, RandomSource } from "../types";
 
 /**
  * Memory archetype — the server holds a board of `P` symbol pairs; the client
@@ -55,16 +49,8 @@ function applyMove(puzzle: unknown, progress: unknown, move: unknown): MoveOutco
   const { faces } = puzzle as MemoryPuzzle;
   const g = progress as MemoryProgress;
 
-  const flip =
-    move && typeof move === "object"
-      ? (move as { flip?: unknown }).flip
-      : undefined;
-  if (
-    typeof flip !== "number" ||
-    !Number.isInteger(flip) ||
-    flip < 0 ||
-    flip >= faces.length
-  ) {
+  const flip = move && typeof move === "object" ? (move as { flip?: unknown }).flip : undefined;
+  if (typeof flip !== "number" || !Number.isInteger(flip) || flip < 0 || flip >= faces.length) {
     return { ok: false, error: "'move.flip' must be a valid tile index" };
   }
   if (g.matched.includes(flip)) {

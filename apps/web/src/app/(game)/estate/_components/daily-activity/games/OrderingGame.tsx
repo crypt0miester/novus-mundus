@@ -60,11 +60,7 @@ export function OrderingGame({ presentation, submitting, onSubmit }: OrderingGam
   return (
     <div className="space-y-3">
       <GameHeader current={items.length} total={items.length} noun="Slot" pips={false} />
-      <GameTimer
-        totalMs={MS_PER_ITEM * items.length}
-        paused={submitting}
-        onExpire={fireSubmit}
-      />
+      <GameTimer totalMs={MS_PER_ITEM * items.length} paused={submitting} onExpire={fireSubmit} />
 
       <p className="text-sm text-text-secondary">{instruction}</p>
       <div className="space-y-1.5">
@@ -112,11 +108,7 @@ export function OrderingGame({ presentation, submitting, onSubmit }: OrderingGam
           );
         })}
       </div>
-      <GameFooter
-        submitLabel="Submit order"
-        submitting={submitting}
-        onSubmit={fireSubmit}
-      />
+      <GameFooter submitLabel="Submit order" submitting={submitting} onSubmit={fireSubmit} />
     </div>
   );
 }

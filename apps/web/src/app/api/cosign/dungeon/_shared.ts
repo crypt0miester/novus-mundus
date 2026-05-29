@@ -16,10 +16,7 @@ import { fail } from "@/lib/server/route-helpers";
  */
 export async function loadCombatRun(
   owner: PublicKey,
-): Promise<
-  | { run: DungeonRunAccount; template: DungeonTemplateAccount }
-  | { error: NextResponse }
-> {
+): Promise<{ run: DungeonRunAccount; template: DungeonTemplateAccount } | { error: NextResponse }> {
   const run = await getDungeonRun(owner);
   if (!run) return { error: fail("no active dungeon run", 409) };
   if (run.status !== DungeonStatus.Active && run.status !== DungeonStatus.BossFight) {

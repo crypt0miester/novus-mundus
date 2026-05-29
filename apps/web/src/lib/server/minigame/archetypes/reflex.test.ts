@@ -10,6 +10,8 @@ import {
   precisionFraction,
   rttEstimate,
   REFLEX_RTT_CAP_MS,
+  REACT_DELAY_MIN_MS,
+  REACT_DELAY_SPAN_MS,
   type ReflexProgress,
   type ReflexPuzzle,
 } from "./reflex";
@@ -22,8 +24,8 @@ describe("reflex archetype — generate", () => {
     expect(puzzle.mode).toBe("react");
     expect(puzzle.perRound).toHaveLength(4);
     for (const r of puzzle.perRound) {
-      expect(r.goDelayMs!).toBeGreaterThanOrEqual(800);
-      expect(r.goDelayMs!).toBeLessThanOrEqual(3000);
+      expect(r.goDelayMs!).toBeGreaterThanOrEqual(REACT_DELAY_MIN_MS);
+      expect(r.goDelayMs!).toBeLessThanOrEqual(REACT_DELAY_MIN_MS + REACT_DELAY_SPAN_MS);
     }
     // The secret delays must never reach the client.
     expect(JSON.stringify(g.presentation)).not.toContain("goDelay");
@@ -31,11 +33,7 @@ describe("reflex archetype — generate", () => {
   });
 
   it("builds precision rounds with a valid target band", () => {
-    const g = reflexArchetype.generate(
-      new FakeRng(7),
-      { rounds: 3 },
-      { mode: "precision" },
-    );
+    const g = reflexArchetype.generate(new FakeRng(7), { rounds: 3 }, { mode: "precision" });
     const puzzle = g.puzzle as ReflexPuzzle;
     expect(puzzle.mode).toBe("precision");
     expect(puzzle.perRound).toHaveLength(3);

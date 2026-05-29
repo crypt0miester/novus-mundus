@@ -78,9 +78,7 @@ export default function GlobalError({
         </p>
 
         {error?.digest && (
-          <p style={{ fontSize: "0.75rem", color: "#52525b", margin: 0 }}>
-            sigil · {error.digest}
-          </p>
+          <p style={{ fontSize: "0.75rem", color: "#52525b", margin: 0 }}>sigil · {error.digest}</p>
         )}
 
         <button

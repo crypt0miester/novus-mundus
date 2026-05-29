@@ -1,6 +1,5 @@
 import type { Wallet } from "@solana/wallet-adapter-react";
 import type { FC, MouseEventHandler } from "react";
-import React from "react";
 
 import { WalletIcon } from "./WalletIcon";
 
@@ -17,11 +16,7 @@ const formatWalletName = (name: string): string => {
   return name;
 };
 
-export const WalletListItem: FC<WalletListItemProps> = ({
-  handleClick,
-  tabIndex,
-  wallet,
-}) => {
+export const WalletListItem: FC<WalletListItemProps> = ({ handleClick, tabIndex, wallet }) => {
   const walletName = formatWalletName(wallet.adapter.name);
 
   return (
@@ -34,9 +29,7 @@ export const WalletListItem: FC<WalletListItemProps> = ({
         <div className="w-7 h-7 rounded-md flex items-center justify-center overflow-hidden bg-white dark:bg-neutral-800">
           <WalletIcon wallet={wallet} />
         </div>
-        <span className="font-medium text-sm text-black dark:text-white">
-          {walletName}
-        </span>
+        <span className="font-medium text-sm text-black dark:text-white">{walletName}</span>
       </div>
       <svg
         width="14"

@@ -3,13 +3,7 @@ import { WalletReadyState } from "@solana/wallet-adapter-base";
 import type { Wallet } from "@solana/wallet-adapter-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { FC, MouseEvent } from "react";
-import React, {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 import { useWalletModal } from "./useWalletModal";
@@ -34,10 +28,7 @@ export interface WalletModalProps {
   container?: string;
 }
 
-export const WalletModal: FC<WalletModalProps> = ({
-  className = "",
-  container = "body",
-}) => {
+export const WalletModal: FC<WalletModalProps> = ({ className = "", container = "body" }) => {
   const ref = useRef<HTMLDivElement>(null);
   const { wallets, select } = useWallet();
   const { setVisible } = useWalletModal();
@@ -59,12 +50,7 @@ export const WalletModal: FC<WalletModalProps> = ({
     };
 
     const isSafariMobile = isSafariIOSMobile();
-    const safariMobileWalletNames = [
-      "phantom",
-      "solflare",
-      "backpack",
-      "bitget",
-    ];
+    const safariMobileWalletNames = ["phantom", "solflare", "backpack", "bitget"];
 
     for (const wallet of wallets) {
       const dedupeKey = getDedupeKey(wallet.adapter.name);
@@ -73,10 +59,7 @@ export const WalletModal: FC<WalletModalProps> = ({
       if (seenNames.has(dedupeKey)) continue;
       if (wallet.adapter.name === "Phantom Embedded") continue;
 
-      if (
-        isSafariMobile &&
-        !safariMobileWalletNames.includes(walletNameLower)
-      ) {
+      if (isSafariMobile && !safariMobileWalletNames.includes(walletNameLower)) {
         continue;
       }
 
@@ -99,9 +82,7 @@ export const WalletModal: FC<WalletModalProps> = ({
   const downloadWallets = useMemo(() => {
     return Object.keys(WALLET_DOWNLOAD_URLS)
       .map((name) => {
-        const wallet = wallets.find(
-          (w) => w.adapter.name.toLowerCase() === name,
-        );
+        const wallet = wallets.find((w) => w.adapter.name.toLowerCase() === name);
         return wallet ? { wallet, url: WALLET_DOWNLOAD_URLS[name] } : null;
       })
       .filter(Boolean) as { wallet: Wallet; url: string }[];
@@ -172,10 +153,7 @@ export const WalletModal: FC<WalletModalProps> = ({
     };
   }, [hideModal, handleTabKey]);
 
-  useLayoutEffect(
-    () => setPortal(document.querySelector(container)),
-    [container],
-  );
+  useLayoutEffect(() => setPortal(document.querySelector(container)), [container]);
 
   return (
     portal &&
@@ -190,15 +168,15 @@ export const WalletModal: FC<WalletModalProps> = ({
             background: transparent;
           }
           .wallet-modal-scrollbar::-webkit-scrollbar-thumb {
-            background: #d97706;
+            background: var(--tier-accent);
             border-radius: 3px;
           }
           .wallet-modal-scrollbar::-webkit-scrollbar-thumb:hover {
-            background: #b45309;
+            background: var(--tier-accent-bright);
           }
           .wallet-modal-scrollbar {
             scrollbar-width: thin;
-            scrollbar-color: #d97706 transparent;
+            scrollbar-color: var(--tier-accent) transparent;
           }
         `}</style>
         <div
@@ -207,7 +185,9 @@ export const WalletModal: FC<WalletModalProps> = ({
           aria-modal="true"
           role="dialog"
           className={`fixed inset-0 z-50 flex items-end justify-end sm:items-center sm:justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-150 ${fadeIn ? "opacity-100" : "opacity-0"} ${className}`}
-          onKeyDown={(e) => { if (e.key === "Escape") hideModal(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") hideModal();
+          }}
           onClick={(e) => {
             if (e.target === e.currentTarget) hideModal();
           }}
@@ -216,24 +196,18 @@ export const WalletModal: FC<WalletModalProps> = ({
             className="sm:rounded-2xl rounded-t-2xl p-[2px] w-full sm:w-auto"
             style={{
               background:
-                "linear-gradient(270deg, #fbbf24 0%, #92400e 100%)",
+                "linear-gradient(270deg, var(--tier-accent-bright) 0%, var(--tier-accent) 100%)",
             }}
           >
-            <div className="sm:w-[680px] max-w-[99vw] mx-auto overflow-hidden w-full bg-zinc-950 relative flex flex-col sm:rounded-xl rounded-t-xl max-h-[85vh]">
+            <div className="sm:w-[680px] max-w-[99vw] mx-auto overflow-hidden w-full bg-surface-raised relative flex flex-col sm:rounded-xl rounded-t-xl max-h-[85vh]">
               {/* Header */}
               <div className="px-5 py-4 flex justify-between items-center">
-                <div className="font-semibold text-lg text-white">
-                  Connect a Wallet
-                </div>
+                <div className="font-semibold text-lg text-text-primary">Connect a Wallet</div>
                 <button
                   onClick={handleClose}
-                  className="p-2 hover:bg-zinc-800 rounded-lg transition-colors cursor-pointer"
+                  className="p-2 hover:bg-surface-overlay rounded-lg transition-colors cursor-pointer"
                 >
-                  <svg
-                    width="14"
-                    height="14"
-                    className="fill-zinc-400"
-                  >
+                  <svg width="14" height="14" className="fill-text-muted">
                     <path d="M14 12.461 8.3 6.772l5.234-5.233L12.006 0 6.772 5.234 1.54 0 0 1.539l5.234 5.233L0 12.006l1.539 1.528L6.772 8.3l5.69 5.7L14 12.461z" />
                   </svg>
                 </button>
@@ -244,7 +218,7 @@ export const WalletModal: FC<WalletModalProps> = ({
                 className="h-[2px] w-11/12 mx-auto rounded-full"
                 style={{
                   background:
-                    "linear-gradient(270deg, #fbbf24 0%, #92400e 100%)",
+                    "linear-gradient(270deg, var(--tier-accent-bright) 0%, var(--tier-accent) 100%)",
                 }}
               />
 
@@ -256,16 +230,14 @@ export const WalletModal: FC<WalletModalProps> = ({
                     {/* Installed Wallets */}
                     {installedWallets.length > 0 && (
                       <div className="space-y-2">
-                        <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wide px-1">
+                        <div className="text-xs font-semibold text-text-muted uppercase tracking-wide px-1">
                           Installed
                         </div>
                         <div className="space-y-1">
                           {installedWallets.map((wallet) => (
                             <WalletListItem
                               key={wallet.adapter.name}
-                              handleClick={(event) =>
-                                handleWalletClick(event, wallet.adapter.name)
-                              }
+                              handleClick={(event) => handleWalletClick(event, wallet.adapter.name)}
                               wallet={wallet}
                             />
                           ))}
@@ -277,17 +249,15 @@ export const WalletModal: FC<WalletModalProps> = ({
                     {otherWallets.length > 0 && (
                       <div className="space-y-2">
                         {installedWallets.length > 0 && (
-                          <div className="border-t border-zinc-800 pt-2" />
+                          <div className="border-t border-border-default pt-2" />
                         )}
 
                         <button
                           onClick={() => setMoreWalletsOpen(!moreWalletsOpen)}
-                          className="flex items-center gap-2 text-xs font-semibold text-zinc-500 uppercase tracking-wide px-1 hover:text-zinc-300 transition-colors w-full cursor-pointer"
+                          className="flex items-center gap-2 text-xs font-semibold text-text-muted uppercase tracking-wide px-1 hover:text-text-secondary transition-colors w-full cursor-pointer"
                         >
                           <span>
-                            {installedWallets.length > 0
-                              ? "More Wallets"
-                              : "Available Wallets"}
+                            {installedWallets.length > 0 ? "More Wallets" : "Available Wallets"}
                           </span>
                           <svg
                             width="10"
@@ -313,9 +283,7 @@ export const WalletModal: FC<WalletModalProps> = ({
 
                         <div
                           className={`overflow-hidden transition-all duration-200 ${
-                            moreWalletsOpen
-                              ? "max-h-[1000px] opacity-100"
-                              : "max-h-0 opacity-0"
+                            moreWalletsOpen ? "max-h-[1000px] opacity-100" : "max-h-0 opacity-0"
                           }`}
                         >
                           <div className="space-y-1">
@@ -336,31 +304,25 @@ export const WalletModal: FC<WalletModalProps> = ({
                 </div>
 
                 {/* Vertical Divider */}
-                <div className="hidden sm:block w-px bg-zinc-800" />
+                <div className="hidden sm:block w-px bg-border-default" />
 
                 {/* Right Column - Info Panel */}
-                <div className="hidden sm:flex sm:w-1/2 flex-col p-5 bg-zinc-900/50 overflow-y-auto wallet-modal-scrollbar">
+                <div className="hidden sm:flex sm:w-1/2 flex-col p-5 bg-surface overflow-y-auto wallet-modal-scrollbar">
                   <div className="space-y-5">
                     <div>
-                      <h3 className="text-lg font-semibold text-white">
-                        New to Solana?
-                      </h3>
-                      <p className="text-sm text-zinc-400 mt-1">
+                      <h3 className="text-lg font-semibold text-text-primary">New to Solana?</h3>
+                      <p className="text-sm text-text-secondary mt-1">
                         A wallet is needed to interact with the blockchain
                       </p>
                     </div>
 
                     {/* Download a Wallet - Accordion */}
-                    <div className="border-t border-zinc-800 pt-4">
+                    <div className="border-t border-border-default pt-4">
                       <button
-                        onClick={() =>
-                          setGetWalletDropdownOpen(!getWalletDropdownOpen)
-                        }
-                        className="flex items-center gap-2 text-sm text-zinc-400 hover:text-zinc-300 transition-colors cursor-pointer"
+                        onClick={() => setGetWalletDropdownOpen(!getWalletDropdownOpen)}
+                        className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
                       >
-                        <span className="underline underline-offset-2">
-                          Download a wallet
-                        </span>
+                        <span className="underline underline-offset-2">Download a wallet</span>
                         <svg
                           width="12"
                           height="12"
@@ -394,14 +356,12 @@ export const WalletModal: FC<WalletModalProps> = ({
                               href={url}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-400 hover:text-white cursor-pointer"
+                              className="flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-surface-overlay transition-colors text-sm text-text-secondary hover:text-text-primary cursor-pointer"
                             >
                               <div className="w-5 h-5 rounded overflow-hidden flex items-center justify-center">
                                 <WalletIcon wallet={wallet} />
                               </div>
-                              <span className="flex-1">
-                                {wallet.adapter.name}
-                              </span>
+                              <span className="flex-1">{wallet.adapter.name}</span>
                               <svg
                                 width="12"
                                 height="12"
@@ -425,8 +385,8 @@ export const WalletModal: FC<WalletModalProps> = ({
               </div>
 
               {/* Mobile Footer */}
-              <div className="sm:hidden border-t border-zinc-800 px-4 py-4 bg-zinc-900/50 space-y-3">
-                <p className="text-xs text-zinc-500 text-center">
+              <div className="sm:hidden border-t border-border-default px-4 py-4 bg-surface space-y-3">
+                <p className="text-xs text-text-muted text-center">
                   Download a wallet to get started
                 </p>
                 <div className="space-y-1">
@@ -436,7 +396,7 @@ export const WalletModal: FC<WalletModalProps> = ({
                       href={url}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-zinc-800 transition-colors text-sm text-zinc-400 cursor-pointer"
+                      className="flex items-center gap-2 px-2 py-2 rounded-lg hover:bg-surface-overlay transition-colors text-sm text-text-secondary cursor-pointer"
                     >
                       <div className="w-6 h-6 rounded overflow-hidden flex items-center justify-center">
                         <WalletIcon wallet={wallet} />

@@ -5,10 +5,6 @@ export const metadata: Metadata = {
   title: "World | Novus Mundus",
 };
 
-export default function WorldLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function WorldLayout({ children }: { children: React.ReactNode }) {
   return <WorldShell>{children}</WorldShell>;
 }

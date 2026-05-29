@@ -2,7 +2,7 @@
 
 import type { ReactNode } from "react";
 import {
-  ActivityType,
+  type ActivityType,
   TimeOfDay,
   getActivityMultiplierBps,
   getTimeOfDayName,
@@ -36,11 +36,7 @@ interface ActivityForecastProps {
  * sits right now, and — when the player is in a penalised window — when it
  * peaks. Optionally frames a view-specific yield preview underneath.
  */
-export function ActivityForecast({
-  activity,
-  verb,
-  children,
-}: ActivityForecastProps) {
+export function ActivityForecast({ activity, verb, children }: ActivityForecastProps) {
   const { tod } = useTimeOfDay();
   const nowBps = getActivityMultiplierBps(activity, tod);
 

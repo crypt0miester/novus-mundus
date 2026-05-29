@@ -1,10 +1,5 @@
 import { clamp } from "../grade";
-import type {
-  Archetype,
-  Difficulty,
-  GeneratedPuzzle,
-  RandomSource,
-} from "../types";
+import type { Archetype, Difficulty, GeneratedPuzzle, RandomSource } from "../types";
 
 /**
  * Reflex archetype — the timed Class C games (`DAILY_ACTIVITY_MINIGAMES.md` §5,
@@ -48,11 +43,7 @@ export interface ReflexPuzzle {
   tolerance: number;
 }
 
-export type ReflexPhase =
-  | "idle"
-  | "started"
-  | "awaiting-tap"
-  | "awaiting-release";
+export type ReflexPhase = "idle" | "started" | "awaiting-tap" | "awaiting-release";
 
 export interface ReflexProgress {
   mode: ReflexMode;
@@ -80,8 +71,8 @@ export interface ReflexPresentation {
 /** Cap on the latency subtracted from a reaction — bounds RTT inflation (§15). */
 export const REFLEX_RTT_CAP_MS = 400;
 
-const REACT_DELAY_MIN_MS = 1500;
-const REACT_DELAY_SPAN_MS = 3500; // 1500-5000ms
+export const REACT_DELAY_MIN_MS = 1500;
+export const REACT_DELAY_SPAN_MS = 3500; // 1500-5000ms
 
 /** The latency to subtract: the smallest round-trip sample, capped. */
 export function rttEstimate(samples: number[]): number {
@@ -90,11 +81,7 @@ export function rttEstimate(samples: number[]): number {
 }
 
 /** react: a reaction time (ms) to score fraction 0-1. */
-export function reactionFraction(
-  reactionMs: number,
-  targetMs: number,
-  floorMs: number,
-): number {
+export function reactionFraction(reactionMs: number, targetMs: number, floorMs: number): number {
   if (floorMs <= targetMs) return reactionMs <= targetMs ? 1 : 0;
   return clamp((floorMs - reactionMs) / (floorMs - targetMs), 0, 1);
 }
@@ -112,13 +99,8 @@ export function precisionFraction(
   return clamp(1 - dist / tolerance, 0, 1);
 }
 
-function generate(
-  rng: RandomSource,
-  difficulty: Difficulty,
-  content?: unknown,
-): GeneratedPuzzle {
-  const mode: ReflexMode =
-    (content as { mode?: ReflexMode } | undefined)?.mode ?? "react";
+function generate(rng: RandomSource, difficulty: Difficulty, content?: unknown): GeneratedPuzzle {
+  const mode: ReflexMode = (content as { mode?: ReflexMode } | undefined)?.mode ?? "react";
   const rounds = Math.max(1, difficulty.rounds ?? (mode === "react" ? 4 : 3));
 
   const perRound: ReflexRound[] = [];

@@ -24,10 +24,7 @@ interface MoveRequest {
  * answer key. The move that clears the puzzle records the session's score for
  * co-sign to read.
  */
-export async function POST(
-  req: Request,
-  ctx: { params: Promise<{ sessionId: string }> },
-) {
+export async function POST(req: Request, ctx: { params: Promise<{ sessionId: string }> }) {
   const limited = await rateLimited(req);
   if (limited) return limited;
 
@@ -75,19 +72,13 @@ export async function POST(
 
     session.progress = outcome.progress;
     if (outcome.done) {
-      session.score = finalScore(
-        archetype.grade(session.puzzle, outcome.progress, undefined),
-      );
+      session.score = finalScore(archetype.grade(session.puzzle, outcome.progress, undefined));
     }
     await saveSession(session, "keep");
 
     return NextResponse.json({ result: outcome.result, done: outcome.done });
   } catch (e) {
     console.error("minigame move failed", e);
-    return fail(
-      "the mini-game service is unavailable — try again shortly",
-      503,
-      "SERVICE_DOWN",
-    );
+    return fail("the mini-game service is unavailable — try again shortly", 503, "SERVICE_DOWN");
   }
 }

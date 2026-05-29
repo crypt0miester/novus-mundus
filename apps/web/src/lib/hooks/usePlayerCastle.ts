@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import type { PublicKey } from "@solana/web3.js";
 import { deriveKingRegistryPda, parseKingRegistry } from "novus-mundus-sdk";
+import { useAccountStore } from "@/lib/store/accounts";
 
 export interface PlayerCastleState {
   /** True once the player holds a castle — the Act V signal (§5). */
@@ -21,6 +22,7 @@ export interface PlayerCastleState {
 export function usePlayerCastle(): PlayerCastleState {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
+  const setMyCastlePda = useAccountStore((s) => s.setMyCastlePda);
   const [state, setState] = useState<PlayerCastleState>({
     ownsCastle: false,
     castle: null,
@@ -30,6 +32,7 @@ export function usePlayerCastle(): PlayerCastleState {
   useEffect(() => {
     if (!publicKey) {
       setState({ ownsCastle: false, castle: null, loading: false });
+      setMyCastlePda(null);
       return;
     }
     let cancelled = false;
@@ -39,11 +42,11 @@ export function usePlayerCastle(): PlayerCastleState {
       .then((info) => {
         if (cancelled) return;
         const registry = info ? parseKingRegistry(info) : null;
-        setState({
-          ownsCastle: !!registry,
-          castle: registry?.castle ?? null,
-          loading: false,
-        });
+        const castle = registry?.castle ?? null;
+        setState({ ownsCastle: !!registry, castle, loading: false });
+        // Surface the held castle to the store so the WS can route rallies
+        // aimed at it into incomingRallies (the Cairn's castle-attack warning).
+        setMyCastlePda(castle ? castle.toBase58() : null);
       })
       .catch(() => {
         if (!cancelled) setState({ ownsCastle: false, castle: null, loading: false });
@@ -51,7 +54,7 @@ export function usePlayerCastle(): PlayerCastleState {
     return () => {
       cancelled = true;
     };
-  }, [publicKey, connection]);
+  }, [publicKey, connection, setMyCastlePda]);
 
   return state;
 }

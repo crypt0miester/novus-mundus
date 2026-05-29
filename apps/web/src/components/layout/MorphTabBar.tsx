@@ -95,20 +95,21 @@ export function MorphTabBar() {
   // stray inline ✕ pill inside the action row.
   const topSheet = useSheetStore((s) => s.openSheets[s.openSheets.length - 1]);
   const panelHasDismiss = panelActions.some((a) => a.kind === "dismiss");
-  const actions: PanelAction[] = topSheet && !panelHasDismiss
-    ? [
-        ...panelActions,
-        {
-          id: "sheet-close",
-          kind: "dismiss",
-          label: "✕",
-          onClick: async () => {
-            topSheet.close();
-            return "";
+  const actions: PanelAction[] =
+    topSheet && !panelHasDismiss
+      ? [
+          ...panelActions,
+          {
+            id: "sheet-close",
+            kind: "dismiss",
+            label: "✕",
+            onClick: async () => {
+              topSheet.close();
+              return "";
+            },
           },
-        },
-      ]
-    : panelActions;
+        ]
+      : panelActions;
 
   const player = playerData?.account;
   const hasPlayer = !!player;
@@ -375,7 +376,7 @@ export function MorphTabBar() {
     });
   }, [shape, wideBarWidth]);
 
-  const isActive = (href: string) => pathname === href || pathname?.startsWith(href + "/");
+  const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
   // Render — one structure for every shape. Both layers are always in the DOM;
   // the inactive one is an `absolute` overlay so it costs no layout space.

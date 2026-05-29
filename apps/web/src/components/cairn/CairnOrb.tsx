@@ -16,7 +16,7 @@ interface CairnOrbProps {
 /**
  * The Cairn — an origin-unknown stone at the centre of the holding. It casts a
  * shadow in the light theme and throws light in the dark theme (inverted, so it
- * never disappears into the page). 
+ * never disappears into the page).
  */
 export function CairnOrb({ mood, act, size = 44, className }: CairnOrbProps) {
   return (

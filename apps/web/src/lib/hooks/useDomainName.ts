@@ -13,11 +13,7 @@ import { useDomainStore } from "@/lib/store/domains";
  */
 export function useDomainName(owner: PublicKey | string | null | undefined) {
   const { connection } = useConnection();
-  const key = owner
-    ? typeof owner === "string"
-      ? owner
-      : owner.toBase58()
-    : null;
+  const key = owner ? (typeof owner === "string" ? owner : owner.toBase58()) : null;
 
   const name = useDomainStore((s) => (key ? s.names.get(key) : undefined));
   const resolve = useDomainStore((s) => s.resolve);

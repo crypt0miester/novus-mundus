@@ -13,17 +13,8 @@ import * as THREE from "three";
 import type { CityAccount } from "novus-mundus-sdk";
 
 import type { CityTerrainMapWebGLProps } from "../CityTerrainMapWebGL";
-import {
-  cssPxPerCellAt,
-  getElevationAt,
-  gridToWorld,
-  midpointElevation,
-} from "../coords";
-import {
-  INITIAL_DISTANCE_2D,
-  INITIAL_DISTANCE_3D,
-  cityCameraSizeFactor,
-} from "../controls";
+import { cssPxPerCellAt, getElevationAt, gridToWorld, midpointElevation } from "../coords";
+import { INITIAL_DISTANCE_2D, INITIAL_DISTANCE_3D, cityCameraSizeFactor } from "../controls";
 import {
   buildTerrainMesh,
   meshFromBakedPixels,
@@ -31,12 +22,7 @@ import {
   COLOR_TEXTURE_SIZE_PREVIEW,
 } from "../buildTerrainMesh";
 import { getBakeWorker } from "@/lib/world/bakeWorkerClient";
-import {
-  runModeTransition,
-  runViewTween,
-  shouldRunTransition,
-  snapToMode,
-} from "../transition";
+import { runModeTransition, runViewTween, shouldRunTransition, snapToMode } from "../transition";
 import type { MapMode } from "@/lib/store/settings";
 import type { BiomeKnobs } from "@/lib/world/biome";
 import type { SceneRefs } from "./setupCityScene";
@@ -116,10 +102,7 @@ export function useSceneSync({
     /* Distance bounds: max = mode default (zoom 1×), min = max/200.
      * Re-applied here so a city switch re-clamps in case the user
      * was zoomed in at the previous city. */
-    const maxD =
-      r.controller.getMode() === "iso"
-        ? INITIAL_DISTANCE_3D
-        : INITIAL_DISTANCE_2D;
+    const maxD = r.controller.getMode() === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     r.controller.setDistanceBounds(maxD / 200, maxD);
     requestRender();
 
@@ -171,13 +154,7 @@ export function useSceneSync({
     r.markers.updateLanding(props.selected, cssPx);
     requestRender();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    props.occupied,
-    props.selected,
-    props.selectedEntity,
-    props.myPlayerPubkey,
-    size.h,
-  ]);
+  }, [props.occupied, props.selected, props.selectedEntity, props.myPlayerPubkey, size.h]);
 
   /* Push walks. */
   useEffect(() => {
@@ -219,10 +196,8 @@ export function useSceneSync({
 
     /* Preserve the user's relative zoom across the mode toggle. */
     const sizeFactor = cityCameraSizeFactor(props.cityAccount);
-    const oldMax =
-      (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
-    const newMax =
-      (to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const oldMax = (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const newMax = (to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
     const distanceFrom = r.controller.getDistance();
     const relativeZoom = Math.max(0, Math.min(1, distanceFrom / oldMax));
     const distanceTo = relativeZoom * newMax;
@@ -274,11 +249,7 @@ export function useSceneSync({
     r.viewTween?.cancel();
     const mode = r.controller.getMode();
     const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const tDefault = new THREE.Vector3(
-      0,
-      mode === "iso" ? midpointElevation() : 0,
-      0,
-    );
+    const tDefault = new THREE.Vector3(0, mode === "iso" ? midpointElevation() : 0, 0);
     r.viewTween = runViewTween(
       r.controller,
       { target: tDefault, distance: dDefault, yaw: 0 },
@@ -299,18 +270,11 @@ export function useSceneSync({
     const oy = req.gridLat - r.cityLatGrid;
     const { wx, wz } = gridToWorld(ox, oy, r.rgu);
     const mode = r.controller.getMode();
-    const baseMax =
-      mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const sizeFactor = cityCameraSizeFactor(
-      propsRef.current.cityAccount as CityAccount,
-    );
+    const baseMax = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    const sizeFactor = cityCameraSizeFactor(propsRef.current.cityAccount as CityAccount);
     const maxD = baseMax * sizeFactor;
     const targetDistance = maxD / 200;
-    const targetVec = new THREE.Vector3(
-      wx,
-      mode === "iso" ? midpointElevation() : 0,
-      wz,
-    );
+    const targetVec = new THREE.Vector3(wx, mode === "iso" ? midpointElevation() : 0, wz);
     r.viewTween?.cancel();
     r.viewTween = runViewTween(
       r.controller,
@@ -336,17 +300,12 @@ export function useSceneSync({
     const oy = props.autoFocusCell.gridLat - cityLatGrid;
     const { wx, wz } = gridToWorld(ox, oy, rgu);
     const mode = r.controller.getMode();
-    const dTarget =
-      (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 16;
+    const dTarget = (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / 16;
     r.viewTween?.cancel();
     r.viewTween = null;
     r.controller.setDistanceHard(dTarget);
     r.controller.setTargetHard(
-      new THREE.Vector3(
-        wx,
-        mode === "iso" ? getElevationAt(ox, oy) : 0,
-        wz,
-      ),
+      new THREE.Vector3(wx, mode === "iso" ? getElevationAt(ox, oy) : 0, wz),
     );
     /* Force-apply the snap before the next paint; controller.update(0)
      * won't, because desired===smoothed leaves `moved` false. */

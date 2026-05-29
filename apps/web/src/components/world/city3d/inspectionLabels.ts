@@ -81,9 +81,7 @@ export interface InspectionLabelsConfig {
 
 export interface InspectionLabelsUpdate {
   occupied: OccupiedCell[];
-  getDotTooltip:
-    | ((occupant: string, occupantType: number) => DotTooltip | null)
-    | undefined;
+  getDotTooltip: ((occupant: string, occupantType: number) => DotTooltip | null) | undefined;
   myPlayerPubkey: string | undefined;
   selectedEntity: { gridLat: number; gridLong: number } | null;
   viewScale: number;
@@ -204,11 +202,7 @@ export class InspectionLabelsLayer {
      * there's no resolver or no canvas to project against. */
     void INSPECTION_ZOOM_LOW;
     void INSPECTION_ZOOM_HIGH;
-    if (
-      args.getDotTooltip == null ||
-      args.canvasW <= 0 ||
-      args.canvasH <= 0
-    ) {
+    if (args.getDotTooltip == null || args.canvasW <= 0 || args.canvasH <= 0) {
       this.hideFrom(0);
       this.activeCount = 0;
       return;
@@ -343,10 +337,7 @@ export class InspectionLabelsLayer {
       const cssMarkerHalfHeight = isCastle
         ? (TARGET_CASTLE_DIAMETER_CSS_PX * castleScale * 0.82) / 2
         : (TARGET_DOT_DIAMETER_CSS_PX * 0.82) / 2;
-      const markerHalfHeight = Math.max(
-        projectedHalfHeight,
-        cssMarkerHalfHeight,
-      );
+      const markerHalfHeight = Math.max(projectedHalfHeight, cssMarkerHalfHeight);
       /* +3 px breathing space between marker bottom and label top. */
       const labelMarginTop = Math.round(markerHalfHeight + 3);
       if (
@@ -365,9 +356,7 @@ export class InspectionLabelsLayer {
        * is close enough for collision purposes; mis-estimates only
        * affect which neighbour wins, not correctness. */
       const titleEntry = t.titleId ? getCosmeticTitle(t.titleId) : null;
-      const text = titleEntry
-        ? `${t.primary} · ${titleEntry.displayName}`
-        : t.primary;
+      const text = titleEntry ? `${t.primary} · ${titleEntry.displayName}` : t.primary;
       /* Width / height estimates match the compact 0.55rem font + 0.12
        * padding pill style. Per-char width is approximate; collision
        * mis-estimates only affect which neighbour wins, not whether
@@ -451,4 +440,3 @@ export class InspectionLabelsLayer {
     this.group.parent?.remove(this.group);
   }
 }
-

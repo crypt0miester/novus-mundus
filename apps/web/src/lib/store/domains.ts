@@ -55,9 +55,7 @@ export const useDomainStore = create<DomainsState>()((set, get) => ({
 
   resolveBatch: (connection, keys) => {
     const state = get();
-    const missing = keys.filter(
-      (k) => !state.names.has(k) && !state.pending.has(k),
-    );
+    const missing = keys.filter((k) => !state.names.has(k) && !state.pending.has(k));
     if (missing.length === 0) return;
 
     // Mark all pending

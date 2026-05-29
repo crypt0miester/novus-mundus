@@ -43,9 +43,7 @@ export function useUrlIntParam(
  *  params change in lockstep — the equivalent inline boilerplate
  *  (`new URLSearchParams(searchParams.toString()) → mutate → router.replace`)
  *  appeared in 4+ places before this. */
-export function useUrlPatch(): (
-  mutations: Record<string, string | null>,
-) => void {
+export function useUrlPatch(): (mutations: Record<string, string | null>) => void {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();

@@ -17,17 +17,10 @@
  */
 import * as THREE from "three";
 import type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
-import {
-  GRID_OVERLAY_MIN_CSS_PX_PER_CELL,
-  MESH_SIZE,
-  midpointElevation,
-} from "./coords";
+import { GRID_OVERLAY_MIN_CSS_PX_PER_CELL, MESH_SIZE, midpointElevation } from "./coords";
 import { CastleLayer } from "./layers/castleLayer";
 import { LandingLayer } from "./layers/landingLayer";
-import {
-  OccupantsLayer,
-  type OccupantsLayerGeometries,
-} from "./layers/occupantsLayer";
+import { OccupantsLayer, type OccupantsLayerGeometries } from "./layers/occupantsLayer";
 import { WalksLayer, type WalkLine } from "./layers/walksLayer";
 import { COLOR_BOUNDARY, OVERLAY_Y_BIAS } from "./layers/palette";
 
@@ -229,10 +222,7 @@ export class MarkersLayer {
   }
 
   getInteractiveMeshes(): THREE.Object3D[] {
-    return [
-      ...this.occupants.getInteractiveMeshes(),
-      ...this.castle.getInteractiveMeshes(),
-    ];
+    return [...this.occupants.getInteractiveMeshes(), ...this.castle.getInteractiveMeshes()];
   }
 
   cellForInstance(mesh: THREE.Object3D, instanceId: number): OccupiedCell | null {
@@ -276,10 +266,30 @@ function buildBoundarySquare(): THREE.LineSegments {
    * eventual lift if the terrain mesh ever leaves the Y=0 plane. */
   const y = midpointElevation() + OVERLAY_Y_BIAS;
   const verts = new Float32Array([
-    -half, y, -half, +half, y, -half,
-    +half, y, -half, +half, y, +half,
-    +half, y, +half, -half, y, +half,
-    -half, y, +half, -half, y, -half,
+    -half,
+    y,
+    -half,
+    +half,
+    y,
+    -half,
+    +half,
+    y,
+    -half,
+    +half,
+    y,
+    +half,
+    +half,
+    y,
+    +half,
+    -half,
+    y,
+    +half,
+    -half,
+    y,
+    +half,
+    -half,
+    y,
+    -half,
   ]);
   const geom = new THREE.BufferGeometry();
   geom.setAttribute("position", new THREE.BufferAttribute(verts, 3));
@@ -322,10 +332,7 @@ function buildGridLines(stride: number, rgu: number): THREE.LineSegments {
     verts.push(wxMin, yA, -wzA, wxMax, yB, -wzA);
   }
   const geom = new THREE.BufferGeometry();
-  geom.setAttribute(
-    "position",
-    new THREE.BufferAttribute(new Float32Array(verts), 3),
-  );
+  geom.setAttribute("position", new THREE.BufferAttribute(new Float32Array(verts), 3));
   const mat = new THREE.LineBasicMaterial({
     color: COLOR_BOUNDARY,
     transparent: true,
@@ -346,16 +353,8 @@ function buildSharedGeometries(): OccupantsLayerGeometries {
   /* Encounter shape: axis-aligned SQUARE. Vertices at (±1, 0, ±1);
    * scaled by dotR gives a half-extent of dotR. */
   const diamondGeom = new THREE.BufferGeometry();
-  const dVerts = new Float32Array([
-    -1, 0, -1,
-    1, 0, -1,
-    1, 0, 1,
-    -1, 0, 1,
-  ]);
-  diamondGeom.setAttribute(
-    "position",
-    new THREE.BufferAttribute(dVerts, 3),
-  );
+  const dVerts = new Float32Array([-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1]);
+  diamondGeom.setAttribute("position", new THREE.BufferAttribute(dVerts, 3));
   diamondGeom.setIndex([0, 3, 2, 0, 2, 1]);
   diamondGeom.computeVertexNormals();
   diamondGeom.computeBoundingSphere();

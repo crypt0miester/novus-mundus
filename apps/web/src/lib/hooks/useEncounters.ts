@@ -13,12 +13,15 @@ export function useEncounters(cityId: number | null | undefined) {
   useEffect(() => {
     if (cityId == null) return;
 
-    client.fetchEncountersInCity(cityId, { aliveOnly: true }).then((results) => {
-      const store = useAccountStore.getState();
-      for (const r of results) {
-        if (r.account) store.upsertEncounter(r.pubkey, r.account);
-      }
-    }).catch(() => {});
+    client
+      .fetchEncountersInCity(cityId, { aliveOnly: true })
+      .then((results) => {
+        const store = useAccountStore.getState();
+        for (const r of results) {
+          if (r.account) store.upsertEncounter(r.pubkey, r.account);
+        }
+      })
+      .catch(() => {});
   }, [cityId, client]);
 
   // Filter encounters for this city — exclude dead/despawned
@@ -29,7 +32,7 @@ export function useEncounters(cityId: number | null | undefined) {
       (e) =>
         e.account.cityId === cityId &&
         e.account.health.gtn(0) &&
-        e.account.despawnAt.toNumber() > now
+        e.account.despawnAt.toNumber() > now,
     );
   }, [encounters, cityId]);
 

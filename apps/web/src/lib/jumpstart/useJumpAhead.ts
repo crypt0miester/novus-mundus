@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
+  Keypair,
   LAMPORTS_PER_SOL,
-  PublicKey,
+  type PublicKey,
   type TransactionInstruction,
   type VersionedTransaction,
 } from "@solana/web3.js";
@@ -18,18 +19,23 @@ import {
   createBuildBuildingInstruction,
   createBuildingSpeedupInstruction,
   createCompleteBuildingInstruction,
-  createHireUnitsInstruction,
-  noviToDeci,
+  createPurchaseSubscriptionInstruction,
+  createMintHeroInstruction,
+  createStartResearchInstruction,
+  createSpeedUpResearchInstruction,
+  createCompleteResearchInstruction,
+  getResearchName,
   parseTransactionError,
   GameError,
   BuildingType,
 } from "novus-mundus-sdk";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { getTemplateMeta } from "@/lib/hero-image/template-map";
 import { refetchAccounts } from "@/lib/store/refetch";
 import type { CityChoice } from "@/components/arrival/Arrival";
 import type { JumpStep, JumpPhase } from "@/components/arrival/JumpAhead";
-import { type JumpRecipe, buildingName, jumpTierLamports } from "./recipes";
+import { type JumpRecipe, buildingName, jumpTierLamports, subscriptionTierName } from "./recipes";
 import { loadJump, saveJump, clearJump, type PersistedJump } from "./persist";
 
 /**
@@ -56,6 +62,13 @@ type PlannedStep =
       label: string;
       instructions: TransactionInstruction[];
       computeUnits: number;
+      /** Extra signers (e.g. an ephemeral hero-mint keypair) that must
+       *  partial-sign before the wallet signs as fee payer. */
+      signers?: Keypair[];
+      /** Marks a step that pays SOL (subscription, hero mint, gem/NOVI packs).
+       *  The first such step in the plan is where the pre-flight balance check
+       *  runs — derived from the plan rather than re-encoding step order. */
+      spendsSol?: boolean;
     }
   | { kind: "build"; id: string; label: string; buildingType: BuildingType };
 
@@ -84,9 +97,7 @@ function buildSpeedupIxs(
   buildingType: BuildingType,
   speedups: number,
 ): TransactionInstruction[] {
-  const ix: TransactionInstruction[] = [
-    createBuildBuildingInstruction(accounts, { buildingType }),
-  ];
+  const ix: TransactionInstruction[] = [createBuildBuildingInstruction(accounts, { buildingType })];
   for (let i = 0; i < speedups; i++) {
     ix.push(
       createBuildingSpeedupInstruction(accounts, {
@@ -112,9 +123,7 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
   const steps: PlannedStep[] = [];
 
   const gemPurchases = recipe.purchases.filter((p) => GEM_PACK_ITEM_IDS.has(p.itemId));
-  const marketGatedPurchases = recipe.purchases.filter(
-    (p) => !GEM_PACK_ITEM_IDS.has(p.itemId),
-  );
+  const marketGatedPurchases = recipe.purchases.filter((p) => !GEM_PACK_ITEM_IDS.has(p.itemId));
 
   // 1. Stake the claim — init_user + init_player + create_progress.
   steps.push({
@@ -135,13 +144,55 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     ],
   });
 
-  // 2. Raise the estate + the tier's gem-pack purchases — gems fund the build
-  //    speedups and bypass the Market gate, so they're safe to buy now.
+  // 2. Activate the subscription. Its bundle (units, weapons, NOVI, cash) is the
+  //    army the jump used to hand-hire, and its XP grant lifts the player's
+  //    level past each hero's rarity gate, so it must run before the heroes.
+  //    Paid in SOL to the treasury; needs EXT_RESEARCH (set in the stake step).
+  if (recipe.subscriptionTier !== null) {
+    steps.push({
+      kind: "fixed",
+      id: "subscribe",
+      label: `Activate ${subscriptionTierName(recipe.subscriptionTier)} patronage`,
+      computeUnits: 120_000,
+      spendsSol: true,
+      instructions: [
+        createPurchaseSubscriptionInstruction(
+          { owner, gameEngine, paymentAuthority: owner, treasury },
+          { paymentType: 0, tier: recipe.subscriptionTier },
+        ),
+      ],
+    });
+  }
+
+  // 3. Recruit heroes. One minted NFT per template, each its own atomic tx with
+  //    an ephemeral mint keypair as a co-signer. SOL to the treasury. Run after
+  //    the subscription so its XP has cleared each hero's level gate.
+  for (const h of recipe.heroes) {
+    const heroMint = Keypair.generate();
+    steps.push({
+      kind: "fixed",
+      id: `hero-${h.templateId}`,
+      label: `Recruit ${getTemplateMeta(h.templateId)?.name ?? `Hero ${h.templateId}`}`,
+      computeUnits: 90_000,
+      signers: [heroMint],
+      spendsSol: true,
+      instructions: [
+        createMintHeroInstruction(
+          { minter: owner, gameEngine, heroMint: heroMint.publicKey, treasury },
+          { templateId: h.templateId },
+        ),
+      ],
+    });
+  }
+
+  // 4. Raise the estate and the tier's gem-pack purchases. Gems fund the build
+  //    and research speedups and bypass the Market gate, so they're safe now.
   steps.push({
     kind: "fixed",
     id: "estate",
     label: "Raise the estate",
     computeUnits: 400_000 + 80_000 * gemPurchases.length,
+    spendsSol: gemPurchases.length > 0,
     instructions: [
       createCreateEstateInstruction(accounts, { cityId: city.cityId }),
       ...gemPurchases.map((p) =>
@@ -153,9 +204,9 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     ],
   });
 
-  // 2b. Buy land plots when the recipe outgrows the estate's 4 starting slots
-  //     — the Mansion plus every recipe building each needs a slot, or the
-  //     build halts with BuildingSlotFull.
+  // 4b. Buy land plots when the recipe outgrows the estate's 4 starting slots.
+  //     The Mansion plus every recipe building each needs a slot, or the build
+  //     halts with BuildingSlotFull.
   const buildingCount = 1 + recipe.buildings.length; // Mansion is prepended
   const extraPlots = Math.max(
     0,
@@ -165,18 +216,13 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     steps.push({
       kind: "fixed",
       id: "plots",
-      label:
-        extraPlots === 1
-          ? "Expand the estate"
-          : `Expand the estate (${extraPlots} plots)`,
+      label: extraPlots === 1 ? "Expand the estate" : `Expand the estate (${extraPlots} plots)`,
       computeUnits: 200_000 * extraPlots,
-      instructions: Array.from({ length: extraPlots }, () =>
-        createBuyPlotInstruction(accounts),
-      ),
+      instructions: Array.from({ length: extraPlots }, () => createBuyPlotInstruction(accounts)),
     });
   }
 
-  // 3. Buildings — Mansion is the prerequisite for every other building.
+  // 5. Buildings. The Mansion is the prerequisite for every other building.
   for (const buildingType of [BuildingType.Mansion, ...recipe.buildings]) {
     steps.push({
       kind: "build",
@@ -186,15 +232,16 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     });
   }
 
-  // 4. Stock the reserve — NOVI packs (and any other Market-gated purchases)
-  //    have to wait until the Market is built. Skipped when the recipe has
-  //    only gem packs.
+  // 6. Stock the reserve. NOVI packs (and any other Market-gated purchase) have
+  //    to wait until the Market is built. Skipped when the recipe has only gem
+  //    packs.
   if (marketGatedPurchases.length > 0) {
     steps.push({
       kind: "fixed",
       id: "stock",
       label: "Stock the reserve",
       computeUnits: 100_000 + 80_000 * marketGatedPurchases.length,
+      spendsSol: true,
       instructions: marketGatedPurchases.map((p) =>
         createPurchaseItemInstruction(
           { buyer: owner, gameEngine, itemId: p.itemId, treasury },
@@ -204,22 +251,35 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     });
   }
 
-  // 5. Muster the garrison — hires run last (Barracks must stand first).
-  // `h.novi` in the recipes is in display NOVI; the chain consumes raw
-  // deci-NOVI (mint decimals=1), so convert exactly like every other hire
-  // call site.
-  if (recipe.hires.length > 0) {
+  // 7. Research. One step per Battle node, driving the line to its target
+  //    level. Each level is `start + speedup(0) + complete` in one atomic tx:
+  //    speedup(0) collapses the whole research timer (the same gem-funded trick
+  //    a build uses), and complete settles on the same clock. create_progress
+  //    (the EXT_RESEARCH unlock) already ran in the stake step, and the Academy
+  //    built above clears the Battle-category gate at Lv1.
+  for (const r of recipe.research) {
+    const instructions: TransactionInstruction[] = [];
+    for (let level = 1; level <= r.targetLevel; level++) {
+      instructions.push(
+        createStartResearchInstruction({ owner, gameEngine, researchType: r.researchType }),
+        createSpeedUpResearchInstruction(
+          { owner, gameEngine, researchType: r.researchType },
+          { speedUpSeconds: 0 },
+        ),
+        createCompleteResearchInstruction({
+          payer: owner,
+          playerOwner: owner,
+          gameEngine,
+          researchType: r.researchType,
+        }),
+      );
+    }
     steps.push({
       kind: "fixed",
-      id: "muster",
-      label: "Muster the garrison",
-      computeUnits: 350_000,
-      instructions: recipe.hires.map((h) =>
-        createHireUnitsInstruction(accounts, {
-          unitType: h.unitType,
-          noviAmount: noviToDeci(h.novi),
-        }),
-      ),
+      id: `research-${r.researchType}`,
+      label: `Research ${getResearchName(r.researchType)} to Lv${r.targetLevel}`,
+      computeUnits: 60_000 + 50_000 * r.targetLevel,
+      instructions,
     });
   }
 
@@ -265,6 +325,30 @@ export function useJumpAhead() {
     [],
   );
 
+  // The subscription's SOL cost is oracle-derived (cost_usd_cents × 1e9 /
+  // usd_price_cents), so it's read live from the GameEngine rather than baked
+  // into the recipe's fixed price. Returns 0 when the recipe has no
+  // subscription or the oracle price isn't loaded yet.
+  const subscriptionLamports = useCallback(
+    (recipe: JumpRecipe): number => {
+      if (recipe.subscriptionTier === null) return 0;
+      const acct = geData?.account;
+      const tierCfg = acct?.subscriptionTiers?.[recipe.subscriptionTier];
+      const usdPriceCents = acct?.usdPriceCents?.toNumber?.() ?? 0;
+      const costCents = tierCfg?.costInUsdCents?.toNumber?.() ?? 0;
+      if (!usdPriceCents || !costCents) return 0;
+      return Math.floor((costCents * LAMPORTS_PER_SOL) / usdPriceCents);
+    },
+    [geData],
+  );
+
+  // Full pre-flight / display price: the fixed packs + hero mints, plus the
+  // live subscription lamports.
+  const tierPriceLamports = useCallback(
+    (recipe: JumpRecipe): number => jumpTierLamports(recipe) + subscriptionLamports(recipe),
+    [subscriptionLamports],
+  );
+
   const refetchBalance = useCallback(async () => {
     if (!publicKey) {
       setWalletSol(null);
@@ -290,17 +374,14 @@ export function useJumpAhead() {
     setState((s) => ({ ...s, log: [...s.log, line] }));
   }, []);
 
-  const setStepStatus = useCallback(
-    (id: string, status: JumpStep["status"], detail?: string) => {
-      setState((s) => ({
-        ...s,
-        steps: s.steps.map((st) =>
-          st.id === id ? { ...st, status, detail: detail ?? st.detail } : st,
-        ),
-      }));
-    },
-    [],
-  );
+  const setStepStatus = useCallback((id: string, status: JumpStep["status"], detail?: string) => {
+    setState((s) => ({
+      ...s,
+      steps: s.steps.map((st) =>
+        st.id === id ? { ...st, status, detail: detail ?? st.detail } : st,
+      ),
+    }));
+  }, []);
 
   /** Poll a signature to confirmation; throws on on-chain error. */
   const confirm = useCallback(
@@ -343,11 +424,7 @@ export function useJumpAhead() {
       let lastErr: unknown = null;
       for (let base = 0; base <= MAX_SPEEDUPS; base += PROBE_CHUNK) {
         const counts: number[] = [];
-        for (
-          let n = base;
-          n <= Math.min(base + PROBE_CHUNK - 1, MAX_SPEEDUPS);
-          n++
-        ) {
+        for (let n = base; n <= Math.min(base + PROBE_CHUNK - 1, MAX_SPEEDUPS); n++) {
           counts.push(n);
         }
         const sims = await Promise.all(
@@ -414,11 +491,12 @@ export function useJumpAhead() {
           // when the wallet prompt finally returns.
           let tx: VersionedTransaction;
           if (step.kind === "fixed") {
-            tx = await client.buildVersionedTransaction(
-              step.instructions,
-              publicKey,
-              { computeUnits: step.computeUnits },
-            );
+            tx = await client.buildVersionedTransaction(step.instructions, publicKey, {
+              computeUnits: step.computeUnits,
+            });
+            // Hero-mint steps carry ephemeral keypairs that must co-sign the new
+            // NFT asset; they partial-sign before the wallet signs as fee payer.
+            if (step.signers?.length) tx.sign(step.signers);
           } else {
             appendLog(`${step.label} — calibrating speedups…`);
             const speedups = await probeBuildSpeedups(
@@ -439,10 +517,9 @@ export function useJumpAhead() {
           }
 
           const signed = await signTransaction(tx);
-          const sig = await client.connection.sendRawTransaction(
-            signed.serialize(),
-            { skipPreflight: false },
-          );
+          const sig = await client.connection.sendRawTransaction(signed.serialize(), {
+            skipPreflight: false,
+          });
           appendLog(`${step.label} — sent ${sig.slice(0, 8)}…`);
           await confirm(sig);
 
@@ -479,22 +556,12 @@ export function useJumpAhead() {
         setState((s) => ({
           ...s,
           phase: "failed",
-          steps: s.steps.map((st) =>
-            st.id === activeStepId ? { ...st, status: "failed" } : st,
-          ),
+          steps: s.steps.map((st) => (st.id === activeStepId ? { ...st, status: "failed" } : st)),
           log: [...s.log, `Halted: ${msg}`],
         }));
       }
     },
-    [
-      publicKey,
-      signTransaction,
-      client,
-      appendLog,
-      setStepStatus,
-      confirm,
-      probeBuildSpeedups,
-    ],
+    [publicKey, signTransaction, client, appendLog, setStepStatus, confirm, probeBuildSpeedups],
   );
 
   const start = useCallback(
@@ -526,17 +593,18 @@ export function useJumpAhead() {
         // truth for which steps are already done.
         const existing = loadJump();
         const journal: PersistedJump =
-          existing &&
-          existing.tier === recipe.tier &&
-          existing.city.cityId === city.cityId
+          existing && existing.tier === recipe.tier && existing.city.cityId === city.cityId
             ? existing
             : { tier: recipe.tier, city, done: [] };
         saveJump(journal);
 
-        // Don't take it on faith that the wallet is funded — the gem pack in
-        // the "estate" step is the run's real SOL cost, so while that step is
-        // still pending, verify the balance covers the tier price up front.
-        if (!journal.done.includes("estate")) {
+        // Don't take it on faith that the wallet is funded. While the first
+        // SOL-spending step (the subscription, then heroes, then the estate gem
+        // packs) is still pending, verify the balance covers the full tier price
+        // (fixed packs/heroes + the live subscription). The step is read off the
+        // plan via its `spendsSol` flag, so the gate can't drift from step order.
+        const firstSolStep = planned.find((p) => p.kind === "fixed" && p.spendsSol);
+        if (firstSolStep && !journal.done.includes(firstSolStep.id)) {
           let balance: number | null = null;
           try {
             balance = await client.connection.getBalance(publicKey);
@@ -545,23 +613,21 @@ export function useJumpAhead() {
                real failure on its own. */
           }
           if (balance !== null) setWalletSol(balance);
-          const costLamports = jumpTierLamports(recipe);
+          const costLamports = tierPriceLamports(recipe);
           if (balance !== null && balance < costLamports) {
             setState((s) => ({
               ...s,
               phase: "failed",
               log: [
                 ...s.log,
-                `Not enough SOL — ${recipe.label} costs ${costLamports / LAMPORTS_PER_SOL} SOL.`,
+                `Not enough SOL. ${recipe.label} costs about ${(costLamports / LAMPORTS_PER_SOL).toFixed(2)} SOL.`,
               ],
             }));
             return;
           }
         }
 
-        const skipCount = planned.filter((p) =>
-          journal.done.includes(p.id),
-        ).length;
+        const skipCount = planned.filter((p) => journal.done.includes(p.id)).length;
         setState({
           steps: planned.map((p) => {
             const done = journal.done.includes(p.id);
@@ -584,7 +650,7 @@ export function useJumpAhead() {
         runningRef.current = false;
       }
     },
-    [publicKey, geData, client, runPlan],
+    [publicKey, geData, client, runPlan, tierPriceLamports],
   );
 
   /**
@@ -611,14 +677,14 @@ export function useJumpAhead() {
     ) {
       return state.log;
     }
-    const cost = jumpTierLamports(recipeRef.current);
+    const cost = tierPriceLamports(recipeRef.current);
     if (walletSol < cost) return state.log;
     return state.log.map((line) =>
       line.startsWith("Not enough SOL")
-        ? `Balance now ${(walletSol / LAMPORTS_PER_SOL).toFixed(2)} SOL — resume when ready.`
+        ? `Balance now ${(walletSol / LAMPORTS_PER_SOL).toFixed(2)} SOL. Resume when ready.`
         : line,
     );
-  }, [state.log, state.phase, state.steps.length, walletSol]);
+  }, [state.log, state.phase, state.steps.length, walletSol, tierPriceLamports]);
 
-  return { ...state, log: displayLog, walletSol, refetchBalance, start, resume };
+  return { ...state, log: displayLog, walletSol, refetchBalance, tierPriceLamports, start, resume };
 }

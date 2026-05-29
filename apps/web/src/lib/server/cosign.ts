@@ -1,9 +1,5 @@
 import "server-only";
-import type {
-  AddressLookupTableAccount,
-  PublicKey,
-  TransactionInstruction,
-} from "@solana/web3.js";
+import type { AddressLookupTableAccount, PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { gameAuthorityKeypair, serverClient } from "./game-authority";
 
 /**

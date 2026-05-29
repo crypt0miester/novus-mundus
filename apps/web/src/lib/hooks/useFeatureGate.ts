@@ -11,11 +11,11 @@ export { BuildingId, BuildingName };
 
 // Extension flags (matches SDK ExtensionFlags)
 const Ext = {
-  RESEARCH:  1 << 0,
-  HEROES:    1 << 1,
+  RESEARCH: 1 << 0,
+  HEROES: 1 << 1,
   INVENTORY: 1 << 2,
-  RALLY:     1 << 3,
-  TEAM:      1 << 4,
+  RALLY: 1 << 3,
+  TEAM: 1 << 4,
 } as const;
 
 interface Requirement {
@@ -85,10 +85,7 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     { estate: true },
     { building: { type: BuildingId.Barracks, level: 1 } },
   ],
-  [FEATURES.HIRE_OPERATIVE]: [
-    { estate: true },
-    { building: { type: BuildingId.Camp, level: 1 } },
-  ],
+  [FEATURES.HIRE_OPERATIVE]: [{ estate: true }, { building: { type: BuildingId.Camp, level: 1 } }],
   [FEATURES.COLLECT_CASH]: [{ estate: true }],
   [FEATURES.COLLECT_MINING]: [
     { estate: true },
@@ -100,19 +97,13 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     { building: { type: BuildingId.Dock, level: 1 } },
     { researchFlag: "hasFishing" },
   ],
-  [FEATURES.COLLECT_FARMING]: [
-    { estate: true },
-    { building: { type: BuildingId.Farm, level: 1 } },
-  ],
+  [FEATURES.COLLECT_FARMING]: [{ estate: true }, { building: { type: BuildingId.Farm, level: 1 } }],
   [FEATURES.PURCHASE_EQUIPMENT]: [
     { estate: true },
     { building: { type: BuildingId.Market, level: 1 } },
   ],
   [FEATURES.PURCHASE_STAMINA]: [],
-  [FEATURES.VAULT_TRANSFER]: [
-    { estate: true },
-    { building: { type: BuildingId.Vault, level: 5 } },
-  ],
+  [FEATURES.VAULT_TRANSFER]: [{ estate: true }, { building: { type: BuildingId.Vault, level: 5 } }],
   [FEATURES.ATTACK_ENCOUNTER]: [
     { estate: true },
     { building: { type: BuildingId.Stables, level: 1 } },
@@ -136,14 +127,8 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     { extension: Ext.TEAM },
     { team: true },
   ],
-  [FEATURES.RALLY_JOIN]: [
-    { extension: Ext.TEAM },
-    { team: true },
-  ],
-  [FEATURES.HERO_MINT]: [
-    { estate: true },
-    { building: { type: BuildingId.Sanctuary, level: 1 } },
-  ],
+  [FEATURES.RALLY_JOIN]: [{ extension: Ext.TEAM }, { team: true }],
+  [FEATURES.HERO_MINT]: [{ estate: true }, { building: { type: BuildingId.Sanctuary, level: 1 } }],
   [FEATURES.HERO_LOCK]: [
     { estate: true },
     // hero/lock.rs gates on Sanctuary (require_sanctuary), not Citadel.
@@ -166,10 +151,7 @@ const REQUIREMENTS: Record<string, Requirement[]> = {
     { estate: true },
     { building: { type: BuildingId.Academy, level: 1 } },
   ],
-  [FEATURES.FORGE_CRAFT]: [
-    { estate: true },
-    { building: { type: BuildingId.Forge, level: 1 } },
-  ],
+  [FEATURES.FORGE_CRAFT]: [{ estate: true }, { building: { type: BuildingId.Forge, level: 1 } }],
   [FEATURES.ARENA_JOIN]: [],
   [FEATURES.DUNGEON_ENTER]: [
     { estate: true },
@@ -232,7 +214,8 @@ const EXT_GUIDANCE: Record<number, { label: string; href: string; narrative: str
   [Ext.RALLY]: {
     label: "Run a Rally",
     href: "/team",
-    narrative: "A war-band must rally before this opens — join your House to a Rally on the Team page.",
+    narrative:
+      "A war-band must rally before this opens — join your House to a Rally on the Team page.",
   },
   [Ext.HEROES]: {
     label: "Lock your first hero",
@@ -315,8 +298,7 @@ function evaluateReq(
       label: guide?.label ?? `Unlock ${extName}`,
       detail: `Requires ${extName}`,
       href: guide?.href ?? "/shop",
-      narrative:
-        guide?.narrative ?? "This way is shut for now. It opens further along the climb.",
+      narrative: guide?.narrative ?? "This way is shut for now. It opens further along the climb.",
     };
   }
   if (req.team && !hasTeamFlag) {
@@ -324,8 +306,7 @@ function evaluateReq(
       label: "Join a Team",
       detail: "Team membership is required",
       href: "/team",
-      narrative:
-        "This is past the reach of one pair of hands. It waits on a House at your back.",
+      narrative: "This is past the reach of one pair of hands. It waits on a House at your back.",
     };
   }
   if (req.notTraveling && playerAccount && isTraveling(playerAccount)) {
@@ -358,8 +339,7 @@ const CREATE_PLAYER_MISSING: MissingRequirement = {
   label: "Create a Player",
   detail: "You need to create a player first",
   href: "/dashboard",
-  narrative:
-    "No one has come up the road to claim this. The climb begins with a lord to make it.",
+  narrative: "No one has come up the road to claim this. The climb begins with a lord to make it.",
 };
 
 export function useFeatureGate(feature: string): GateResult {
@@ -393,7 +373,8 @@ export function useFeatureGate(feature: string): GateResult {
     const buildings = estateData?.account?.buildings ?? null;
     const extensions = player.extensions ?? 0;
     const teamPubkey = player.team;
-    const hasTeamFlag = !!teamPubkey && teamPubkey.toBase58() !== "11111111111111111111111111111111";
+    const hasTeamFlag =
+      !!teamPubkey && teamPubkey.toBase58() !== "11111111111111111111111111111111";
 
     const missing: MissingRequirement[] = [];
     for (const req of reqs) {
@@ -426,7 +407,8 @@ function usePageGate(features: string[]): GateResult {
     const buildings = estateData?.account?.buildings ?? null;
     const extensions = player.extensions ?? 0;
     const teamPubkey = player.team;
-    const hasTeamFlag = !!teamPubkey && teamPubkey.toBase58() !== "11111111111111111111111111111111";
+    const hasTeamFlag =
+      !!teamPubkey && teamPubkey.toBase58() !== "11111111111111111111111111111111";
 
     const allMissing: MissingRequirement[] = [];
     let anyAllowed = false;

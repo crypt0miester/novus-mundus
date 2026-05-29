@@ -19,23 +19,28 @@ export function useTeam(teamPubkey: PublicKey | null | undefined) {
       return;
     }
     // If we already have this team, skip
-    if (entry && entry.pubkey.equals(teamPubkey)) {
+    if (entry?.pubkey.equals(teamPubkey)) {
       setFetchDone(true);
       return;
     }
 
     setFetchDone(false);
-    connection.getAccountInfo(teamPubkey).then((info) => {
-      if (info) {
-        const account = parseTeam(info);
-        if (account) useAccountStore.getState().setTeam(teamPubkey, account);
-      }
-    }).catch(() => {}).finally(() => setFetchDone(true));
+    connection
+      .getAccountInfo(teamPubkey)
+      .then((info) => {
+        if (info) {
+          const account = parseTeam(info);
+          if (account) useAccountStore.getState().setTeam(teamPubkey, account);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFetchDone(true));
   }, [teamPubkey?.toBase58(), connection, entry]);
 
-  const data = entry && teamPubkey && entry.pubkey.equals(teamPubkey)
-    ? { pubkey: entry.pubkey, account: entry.account, exists: true }
-    : null;
+  const data =
+    entry && teamPubkey && entry.pubkey.equals(teamPubkey)
+      ? { pubkey: entry.pubkey, account: entry.account, exists: true }
+      : null;
 
   return {
     data,

@@ -2,13 +2,11 @@ import "server-only";
 import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
 import { verifySignIn } from "@solana/wallet-standard-util";
-import type {
-  SolanaSignInInput,
-  SolanaSignInOutput,
-} from "@solana/wallet-standard-features";
+import type { SolanaSignInInput, SolanaSignInOutput } from "@solana/wallet-standard-features";
 import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
+  claimNonce,
   issueNonce,
   issueSessionToken,
   verifyNonce,
@@ -57,7 +55,10 @@ export async function POST(req: Request) {
     return fail("login challenge expired — please try again", 401);
   }
   const host = req.headers.get("host");
-  if (input.domain && host && input.domain !== host) {
+  // Anti-phishing domain binding is mandatory: reject unless the signed domain
+  // is present and matches this host. The legit client always sends its own
+  // host (see src/lib/cosign.ts), so omitting domain cannot bypass the check.
+  if (!(input.domain && host && input.domain === host)) {
     return fail("domain mismatch", 401);
   }
 
@@ -85,6 +86,12 @@ export async function POST(req: Request) {
     owner = new PublicKey(output.account.address).toBase58();
   } catch {
     return fail("invalid account address", 401);
+  }
+
+  // Single-use replay guard: a captured payload mints at most one session
+  // within its TTL. Fails open if Redis is down — login must not depend on it.
+  if (!(await claimNonce(input.nonce))) {
+    return fail("login challenge already used", 401);
   }
 
   const res = NextResponse.json({ owner });

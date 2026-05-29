@@ -4,17 +4,13 @@ import { useMemo } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { TransactionInstruction } from "@solana/web3.js";
 import {
-  derivePlayerPda,
-  deriveLootPda,
-  deriveLocationPda,
-  toGrid,
-  createAttackEncounterInstruction,
   createPurchaseStaminaInstruction,
   isTraveling,
   getEncounterStaminaCost,
   calculateDistanceMeters,
   ENCOUNTER_ATTACK_RANGE_METERS,
 } from "novus-mundus-sdk";
+import { buildAttackEncounterIx } from "@/lib/chain/travel";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -93,28 +89,15 @@ export function EncounterDetailPanel({ encounterPubkey }: { encounterPubkey: str
     prepend: TransactionInstruction[] = [],
   ) => {
     if (!publicKey || !player || !encounter) throw new Error("No target");
-    const ge = client.gameEngine;
     const enc = encounter.account;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [loot] = deriveLootPda(playerPda, player.lootCounter.toNumber());
-    const [encounterLocation] = deriveLocationPda(
-      ge,
-      enc.cityId,
-      toGrid(enc.locationLat),
-      toGrid(enc.locationLong),
-    );
-    const locationCreatorRefund = geData?.account?.authority ?? publicKey;
-    const ix = createAttackEncounterInstruction(
-      {
-        owner: publicKey,
-        gameEngine: ge,
-        encounter: encounter.pubkey,
-        loot,
-        encounterLocation,
-        locationCreatorRefund,
-      },
-      { encounterId: enc.id.toNumber() },
-    );
+    const ix = buildAttackEncounterIx({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      gameAuthority: geData?.account?.authority,
+      player,
+      encounterPubkey: encounter.pubkey,
+      encounter: enc,
+    });
     const maxHealth = enc.maxHealth.toNumber();
     return transact
       .mutateAsync({
@@ -133,30 +116,18 @@ export function EncounterDetailPanel({ encounterPubkey }: { encounterPubkey: str
     if (!publicKey || !player || !encounter) throw new Error("No target");
     const ge = client.gameEngine;
     const enc = encounter.account;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [loot] = deriveLootPda(playerPda, player.lootCounter.toNumber());
-    const [encounterLocation] = deriveLocationPda(
-      ge,
-      enc.cityId,
-      toGrid(enc.locationLat),
-      toGrid(enc.locationLong),
-    );
-    const locationCreatorRefund = geData?.account?.authority ?? publicKey;
     const staminaIx = createPurchaseStaminaInstruction(
       { gameEngine: ge, owner: publicKey },
       { amount: 1 },
     );
-    const attackIx = createAttackEncounterInstruction(
-      {
-        owner: publicKey,
-        gameEngine: ge,
-        encounter: encounter.pubkey,
-        loot,
-        encounterLocation,
-        locationCreatorRefund,
-      },
-      { encounterId: enc.id.toNumber() },
-    );
+    const attackIx = buildAttackEncounterIx({
+      owner: publicKey,
+      gameEngine: ge,
+      gameAuthority: geData?.account?.authority,
+      player,
+      encounterPubkey: encounter.pubkey,
+      encounter: enc,
+    });
     const maxHealth = enc.maxHealth.toNumber();
     return transact
       .mutateAsync({

@@ -61,9 +61,9 @@ export function HeroDetailPanel({
   onBurn,
 }: HeroDetailPanelProps) {
   const attrs = hero.asset?.attributes ?? {};
-  const level = attrs["Level"] ? parseInt(attrs["Level"]) : null;
-  const xp = attrs["XP"] ? parseInt(attrs["XP"]) : null;
-  const heroTemplateId = parseInt(attrs["Template"] || "0");
+  const level = attrs.Level ? parseInt(attrs.Level, 10) : null;
+  const xp = attrs.XP ? parseInt(attrs.XP, 10) : null;
+  const heroTemplateId = parseInt(attrs.Template || "0", 10);
   const buffs = Object.entries(attrs).filter(
     ([key]) => !IGNORED_ATTRS.has(key) && key !== "Level" && key !== "XP",
   );
@@ -74,7 +74,7 @@ export function HeroDetailPanel({
     levelUpGate.allowed && fragments >= cost && currentLevel < levelCap && levelCap > 0;
   const atCap = currentLevel >= levelCap && levelCap > 0;
 
-  const tpl = templates.find((e) => String(e.account.templateId) === attrs["Template"])?.account;
+  const tpl = templates.find((e) => String(e.account.templateId) === attrs.Template)?.account;
   const interactive =
     selected?.type === "locked"
       ? { heroMint: hero.address, slotIndex: (selected as { slot: number }).slot }
@@ -125,9 +125,7 @@ export function HeroDetailPanel({
                     {icon && <GameIcon id={icon} title={meta?.name} size={18} />}
                     {meta?.name ?? key}
                   </span>
-                  <span className="font-mono text-xs font-semibold text-text-primary">
-                    {value}
-                  </span>
+                  <span className="font-mono text-xs font-semibold text-text-primary">{value}</span>
                 </div>
               );
             })}
@@ -136,19 +134,19 @@ export function HeroDetailPanel({
       )}
 
       <div className="space-y-1 text-[10px] text-text-muted">
-        {attrs["Template"] && (
+        {attrs.Template && (
           <div>
-            Template: <span className="font-mono">{attrs["Template"]}</span>
+            Template: <span className="font-mono">{attrs.Template}</span>
           </div>
         )}
-        {attrs["Serial"] && (
+        {attrs.Serial && (
           <div>
-            Serial: <span className="font-mono">{attrs["Serial"]}</span>
+            Serial: <span className="font-mono">{attrs.Serial}</span>
           </div>
         )}
-        {attrs["Origin"] && (
+        {attrs.Origin && (
           <div>
-            Origin: <span className="font-mono">{attrs["Origin"]}</span>
+            Origin: <span className="font-mono">{attrs.Origin}</span>
           </div>
         )}
       </div>
@@ -188,9 +186,7 @@ export function HeroDetailPanel({
             <div className="flex items-center justify-between text-xs">
               <span className="text-text-muted">Level cap</span>
               <span className="font-mono text-text-secondary">
-                {levelCap > 0
-                  ? `Lv${levelCap} (Sanctuary Lv${sanctuaryLevel})`
-                  : "No Sanctuary"}
+                {levelCap > 0 ? `Lv${levelCap} (Sanctuary Lv${sanctuaryLevel})` : "No Sanctuary"}
               </span>
             </div>
             {atCap && (
@@ -244,9 +240,7 @@ export function HeroDetailPanel({
                     Lock to Slot
                   </TxButton>
                 </div>
-                {emptySlots === 0 && (
-                  <p className="text-[10px] text-danger">Unlock a slot first</p>
-                )}
+                {emptySlots === 0 && <p className="text-[10px] text-danger">Unlock a slot first</p>}
               </>
             ) : (
               <div className="space-y-2 rounded-md border border-border-gold/40 bg-surface px-3 py-2">

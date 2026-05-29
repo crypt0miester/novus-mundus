@@ -30,10 +30,7 @@ const ACTIVE = 2;
 const UPGRADING = 3;
 
 /** Buildings 0-15 the player owns and has active that are playable in `window`. */
-function ownedWindowBuildings(
-  estate: EstateAccount,
-  window: TimeWindow,
-): number[] {
+function ownedWindowBuildings(estate: EstateAccount, window: TimeWindow): number[] {
   const owned: number[] = [];
   for (let b = 1; b < WINDOW_BUILDING_MAX; b += 1) {
     if (!buildingAllowedWindows(b).includes(window)) continue;
@@ -70,9 +67,7 @@ export function windowCompletionBonus(
   // being submitted now counts as done.
   const stale = isDailyStateStale(estate, nowSeconds);
   const allDone = required.every(
-    (b) =>
-      b === buildingType ||
-      (!stale && isActivityDoneThisWindow(estate, b, window)),
+    (b) => b === buildingType || (!stale && isActivityDoneThisWindow(estate, b, window)),
   );
   return allDone ? WINDOW_COMPLETION_BONUS : 0;
 }

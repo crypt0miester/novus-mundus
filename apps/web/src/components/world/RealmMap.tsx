@@ -14,57 +14,64 @@ import {
 } from "@/lib/hooks/world";
 import { convexHull, inflate, smoothClosedPath, type Pt } from "./util/hull";
 import { useZoomPan } from "./util/useZoomPan";
-import { useNow } from "@/lib/hooks/useNow";
+import { useChainNow } from "@/lib/hooks/useChainTime";
+import { calculateLocalTime } from "novus-mundus-sdk";
+import { PHASES } from "@/lib/hooks/useWorldClock";
 import styles from "./RealmMap.module.css";
 import { getCityLore } from "@/lib/cityLore";
 
-/**
- * Solar position helpers — used by the day/night terminator overlay.
- * Low-accuracy formulas (ignores equation of time, eccentricity, etc.); the
- * terminator just needs to look right to a few minutes of arc, not run a
- * navy's chronometer.
- *
- * Subsolar point = the lat/long where the sun is directly overhead.
- *   - Latitude  = solar declination (≈ tilt × sin of orbital phase).
- *   - Longitude = -15°/hr × (UTC hours − 12).  Each hour rotates the meridian
- *                 of solar noon 15° westward.
- *
- * Terminator at longitude L:
- *   The great-circle line where the sun is exactly on the horizon. Solving
- *   `cos(c) = sin(decl)·sin(lat) + cos(decl)·cos(lat)·cos(L − Λ) = 0`
- *   for latitude gives `tan(lat) = -cos(L − Λ) / tan(decl)`.
- *
- * Day/night side:
- *   For declination > 0 (N summer), everywhere SOUTH of the terminator curve
- *   is in night — so we close the night polygon along the BOTTOM of the
- *   viewBox. For declination < 0 (N winter), night is to the north — close
- *   along the TOP. At equinox tan(decl) → 0 so the curve becomes near-
- *   vertical at Δλ = ±90°; we clamp to a small ε to keep atan finite.
- */
-interface SubsolarPoint {
-  latDeg: number;
-  longDeg: number;
+// Day/night overlay helpers.
+//
+// The game's time-of-day is LONGITUDE-ONLY: `calculateLocalTime(chainTs, lon)`
+// is a real-24h cycle anchored to the chain clock, offset by longitude like a
+// timezone — no latitude, no season (this mirrors the on-chain `get_time_of_day`
+// in `time_cycle.rs`). So the map's day/night is a set of vertical longitude
+// bands, NOT an astronomical terminator: a city's shade depends only on its
+// longitude, exactly as its on-chain clock and NOVI multipliers do. Two cities
+// at the same longitude always share the same shade.
+
+// PHASES index for a 0-999 local time. Order matches `PHASES` in useWorldClock
+// (DeepNight, Dawn, Morning, Midday, Afternoon, Dusk, Evening) and the on-chain
+// `get_time_of_day` bands.
+function phaseIndexForLocalTime(localTime: number): number {
+  if (localTime < 125) return 0; // DeepNight
+  if (localTime < 250) return 1; // Dawn (golden hour)
+  if (localTime < 375) return 2; // Morning
+  if (localTime < 625) return 3; // Midday
+  if (localTime < 750) return 4; // Afternoon
+  if (localTime < 875) return 5; // Dusk (golden hour)
+  return 6; // Evening
 }
 
-function subsolarPoint(date: Date): SubsolarPoint {
-  /* Day-of-year approximation. Mar 21 (vernal equinox) ≈ day 81. */
-  const start = Date.UTC(date.getUTCFullYear(), 0, 1);
-  const dayOfYear = (date.getTime() - start) / 86_400_000;
-  const declDeg = 23.44 * Math.sin((2 * Math.PI * (dayOfYear - 81)) / 365.25);
-  const utcHours = date.getUTCHours() + date.getUTCMinutes() / 60 + date.getUTCSeconds() / 3600;
-  const subsolarLong = -(utcHours - 12) * 15;
-  /* Wrap to [-180, 180]. */
-  const wrapped = ((((subsolarLong + 180) % 360) + 360) % 360) - 180;
-  return { latDeg: declDeg, longDeg: wrapped };
+type PhaseShade = "night" | "twilight" | "day";
+
+// How a phase shades the map: night (DeepNight/Evening) gets the full wash, the
+// golden hours (Dawn/Dusk) a lighter twilight strip, daylight nothing.
+function phaseShade(index: number): PhaseShade {
+  if (index === 0 || index === 6) return "night";
+  if (index === 1 || index === 5) return "twilight";
+  return "day";
 }
 
-function terminatorLat(longDeg: number, declDeg: number, subsolarLongDeg: number): number {
-  const decl = (declDeg * Math.PI) / 180;
-  const dLong = ((longDeg - subsolarLongDeg) * Math.PI) / 180;
-  const tanDecl = Math.tan(decl);
-  /* Clamp away from zero so the equinox doesn't blow up to ±∞. */
-  const denom = Math.abs(tanDecl) < 1e-4 ? Math.sign(tanDecl || 1) * 1e-4 : tanDecl;
-  return (Math.atan(-Math.cos(dLong) / denom) * 180) / Math.PI;
+// Format a 0-999 local time as an "HH:MM" wall-clock — the same mapping the
+// WorldClock chrome uses (1000 local-time units == 1440 minutes).
+function localTimeToClock(localTime: number): string {
+  const totalMin = Math.floor((localTime / 1000) * 1440);
+  const hh = String(Math.floor(totalMin / 60)).padStart(2, "0");
+  const mm = String(totalMin % 60).padStart(2, "0");
+  return `${hh}:${mm}`;
+}
+
+// Night is retinted to deep sepia for the realm-map wash ONLY. The shared PHASES
+// palette stays indigo/violet for the WorldClock chrome and the NOVI multiplier
+// readouts, but on the cream parchment a warm umber reads as the chart darkening
+// at nightfall rather than a purple cast. DeepNight (idx 0) / Evening (idx 6) are
+// the only "night" phases (see phaseShade); twilight and day keep their PHASES
+// colours, which are already warm.
+const NIGHT_WASH_TINT = { 0: "#3f3326", 6: "#463a2c" } as const;
+function washColor(idx: number, shade: PhaseShade): string {
+  if (shade === "night") return idx === 0 ? NIGHT_WASH_TINT[0] : NIGHT_WASH_TINT[6];
+  return PHASES[idx].color;
 }
 
 export { styles as realmMapStyles };
@@ -129,6 +136,17 @@ function toNum(v: unknown): number {
 const VB_W = 1000;
 const VB_H = 720;
 const PAD = 80;
+
+// The day/night wash bleeds a full viewBox past every edge so it fills the
+// letterbox margins (in fullscreen the sheet is wider than the 7:5 viewBox, so
+// "meet" leaves bars the wash must cover) and runs off-sheet when panned — an
+// "endless" horizontal sweep, never a contained box. The sheet's overflow:hidden
+// clips the excess. The gradient samples real longitudes across this whole span,
+// so the cycle simply continues past the kingdom rather than stretching.
+const WASH_X = -VB_W;
+const WASH_Y = -VB_H;
+const WASH_W = VB_W * 3;
+const WASH_H = VB_H * 3;
 
 /** Project city lat/long into the viewBox, north up. */
 function project(cities: { account: { latitude: number; longitude: number } }[]): {
@@ -249,7 +267,9 @@ export function RealmMap({
       const rect = el.getBoundingClientRect();
       const w = rect.width || VB_W;
       const h = rect.height || VB_H;
-      setSheetSize((prev) => (Math.abs(prev.w - w) > 2 || Math.abs(prev.h - h) > 2 ? { w, h } : prev));
+      setSheetSize((prev) =>
+        Math.abs(prev.w - w) > 2 || Math.abs(prev.h - h) > 2 ? { w, h } : prev,
+      );
     };
     measure();
     const ro = new ResizeObserver(measure);
@@ -366,84 +386,93 @@ export function RealmMap({
     return { kingdomHull: fat, kingdomPath: smoothClosedPath(fat, 0.55) };
   }, [nodes]);
 
-  /* Day/night terminator overlay. Re-runs once a minute — the terminator
-     moves ~15° / hour, so a 60 s tick is well under the perceptual threshold. */
-  const nowSeconds = useNow();
-  const terminator = useMemo(() => {
-    if (!cities || cities.length < 2) return null;
-    const { lat0, lon0, latR, lonR } = project(cities);
-    /* Quantize to 1-minute resolution so the path string stays stable
-       between frames within a minute (lets React skip <path d=...> reflows). */
-    const minute = Math.floor(nowSeconds / 60);
-    const now = new Date(minute * 60 * 1000);
-    const sub = subsolarPoint(now);
+  /* Day/night overlay — a continuous horizontal wash matching the game's
+     on-chain time-of-day. The clock is LONGITUDE-ONLY, so this is a strictly
+     horizontal gradient (x-only): every stop is a vertical isochrone meridian,
+     two cities at the same longitude provably share a shade, and there's no
+     latitude term or curved terminator. Anchored to the chain clock (same as the
+     WorldClock chrome and every NOVI multiplier); re-renders on useChainNow's
+     tick, geometry quantized to the minute so the stop list never jitters. */
+  const chainNow = useChainNow();
+  const dayNight = useMemo(() => {
+    if (!cities || cities.length < 1) return null;
+    const { lon0, lonR } = project(cities);
+    const ts = Math.floor(chainNow / 60) * 60;
+    const xOf = (lon: number) => PAD + ((lon - lon0) / lonR) * (VB_W - 2 * PAD);
 
-    /* Sample longitudes spanning the kingdom + a generous margin so the
-       terminator runs off the visible sheet rather than being clipped to
-       the kingdom's own extent. */
+    /* The wash: evenly spaced stops across the FULL viewBox width, each coloured
+       by the local time at that longitude. Even spacing keeps the stop COUNT
+       constant tick-to-tick (only the colours shift), so React keys stay stable
+       and there's no flicker.
+
+       Two ramps, one per theme, because multiply darkens but screen lightens:
+       SHADOW (light "paper", multiply) deepens the NIGHT longitudes into dusk
+       while day keeps only a faint gold breath; GLOW (dark vellum, screen) lifts
+       the DAY longitudes into warm daylight while night stays near-black. Same
+       colours, inverted opacity ramp — sharing one ramp is what made night read
+       as day on the dark theme. */
+    // More stops than before because only the central ~1/3 of the extended rect
+    // is on-sheet — keep that visible slice smooth.
+    const STOPS = 150;
+    const lonAtOffset = (o: number) =>
+      lon0 + ((WASH_X + o * WASH_W - PAD) / (VB_W - 2 * PAD)) * lonR;
+    type Stop = { offset: number; color: string; opacity: number };
+    const shadowStops: Stop[] = [];
+    const glowStops: Stop[] = [];
+    for (let i = 0; i <= STOPS; i++) {
+      const o = i / STOPS;
+      const idx = phaseIndexForLocalTime(calculateLocalTime(ts, lonAtOffset(o)));
+      const shade = phaseShade(idx);
+      const color = washColor(idx, shade);
+      shadowStops.push({
+        offset: o,
+        color,
+        opacity: shade === "night" ? 0.55 : shade === "twilight" ? 0.4 : 0,
+      });
+      glowStops.push({
+        offset: o,
+        color,
+        opacity: shade === "day" ? 0.18 : shade === "twilight" ? 0.11 : 0.03,
+      });
+    }
+
+    /* Track the local-noon and local-midnight meridians so we can anchor the
+       sliding HH:MM labels. Sampled a touch wider than the sheet so a meridian
+       just off-frame still resolves. */
     const margin = 40;
-    const samples = 96;
+    const samples = 240;
     const minLong = lon0 - margin;
     const maxLong = lon0 + lonR + margin;
-    type Pt2 = { x: number; y: number };
-    const toVB = (lat: number, lon: number): Pt2 => ({
-      x: PAD + ((lon - lon0) / lonR) * (VB_W - 2 * PAD),
-      y: PAD + (1 - (lat - lat0) / latR) * (VB_H - 2 * PAD),
-    });
-
-    const curve: Pt2[] = [];
+    let noonX: number | null = null;
+    let midnightX: number | null = null;
+    let bestNoon = Number.POSITIVE_INFINITY;
+    let bestMid = Number.POSITIVE_INFINITY;
     for (let i = 0; i <= samples; i++) {
       const lon = minLong + ((maxLong - minLong) * i) / samples;
-      const lat = terminatorLat(lon, sub.latDeg, sub.longDeg);
-      curve.push(toVB(lat, lon));
+      const localTime = calculateLocalTime(ts, lon);
+      const x = xOf(lon);
+      const dNoon = Math.abs(localTime - 500);
+      if (dNoon < bestNoon) {
+        bestNoon = dNoon;
+        noonX = x;
+      }
+      const dMid = Math.min(localTime, 1000 - localTime);
+      if (dMid < bestMid) {
+        bestMid = dMid;
+        midnightX = x;
+      }
     }
-    /* Twilight band — same shape, offset poleward by ~6° (civil twilight)
-       on the day side of the terminator. */
-    const twilightOffset = sub.latDeg >= 0 ? 6 : -6;
-    const twilight: Pt2[] = [];
-    for (let i = 0; i <= samples; i++) {
-      const lon = minLong + ((maxLong - minLong) * i) / samples;
-      const lat = terminatorLat(lon, sub.latDeg, sub.longDeg) + twilightOffset;
-      twilight.push(toVB(lat, lon));
-    }
 
-    /* Night side: decl > 0 → south of terminator (close along BOTTOM of vb).
-                   decl < 0 → north of terminator (close along TOP of vb). */
-    const closeBottom = sub.latDeg >= 0;
-    const farY = closeBottom ? VB_H + 100 : -100;
-    const ptStr = (p: Pt2) => `${p.x} ${p.y}`;
-    const nightPath =
-      `M ${ptStr(curve[0]!)} ` +
-      curve
-        .slice(1)
-        .map((p) => `L ${ptStr(p)}`)
-        .join(" ") +
-      ` L ${curve[curve.length - 1]!.x} ${farY}` +
-      ` L ${curve[0]!.x} ${farY} Z`;
-    /* Twilight band: the curve and the twilight-offset curve sandwich the
-       dawn/dusk gradient strip. */
-    const bandPath =
-      `M ${ptStr(curve[0]!)} ` +
-      curve
-        .slice(1)
-        .map((p) => `L ${ptStr(p)}`)
-        .join(" ") +
-      ` L ${ptStr(twilight[twilight.length - 1]!)} ` +
-      twilight
-        .slice(0, -1)
-        .reverse()
-        .map((p) => `L ${ptStr(p)}`)
-        .join(" ") +
-      " Z";
-
-    /* Twilight gradient direction (orthogonal-ish to the terminator). On a
-       flat lat/lon projection the terminator runs roughly east-west, so the
-       gradient is north-south. Reverse direction for southern declination. */
-    const gradY1 = closeBottom ? "0%" : "100%";
-    const gradY2 = closeBottom ? "100%" : "0%";
-
-    return { nightPath, bandPath, gradY1, gradY2 };
-  }, [cities, nowSeconds]);
+    return {
+      shadowStops,
+      glowStops,
+      /* Only label a meridian when it's actually on the sheet. */
+      noonX: bestNoon <= 35 ? noonX : null,
+      midnightX: bestMid <= 35 ? midnightX : null,
+      noonLabel: localTimeToClock(500),
+      midnightLabel: localTimeToClock(0),
+    };
+  }, [cities, chainNow]);
 
   const selected = nodes.find((n) => n.city.cityId === selectedId) ?? null;
 
@@ -514,11 +543,7 @@ export function RealmMap({
   const mobileInitialKeyConsumedRef = useRef(false);
   useEffect(() => {
     if (!fullscreen) return;
-    if (
-      !isDesktop &&
-      !mobileInitialKeyConsumedRef.current &&
-      panelOpenKey != null
-    ) {
+    if (!isDesktop && !mobileInitialKeyConsumedRef.current && panelOpenKey != null) {
       mobileInitialKeyConsumedRef.current = true;
       lastPanelKeyRef.current = panelOpenKey;
       return;
@@ -595,30 +620,91 @@ export function RealmMap({
                   geography, they should grow with zoom. */}
               {kingdomPath && <path className={styles.kingdomShape} d={kingdomPath} />}
 
-              {/* Day/night terminator — sits above the kingdom wash, below
-                  terrain glyphs, roads and cities so it reads as atmosphere,
-                  not chrome. */}
-              {terminator && (
-                <>
+              {/* Day/night — a continuous horizontal wash matching the game's
+                  on-chain time-of-day (longitude-only, latitude-independent: a
+                  strictly horizontal gradient, never a curved terminator). Sits
+                  above the kingdom wash, below terrain/roads/cities so it reads as
+                  atmosphere. pointer-events:none (see CSS) so click-to-deselect
+                  still hits the parchment. Small Cinzel HH:MM labels ride the
+                  noon/midnight meridians and slide west as the chain clock turns. */}
+              {dayNight && (
+                <g className={styles.dayNightLayer}>
                   <defs>
                     <linearGradient
-                      id="rm-twilight"
-                      x1="0%"
-                      y1={terminator.gradY1}
-                      x2="0%"
-                      y2={terminator.gradY2}
+                      id="dayNightShadow"
+                      x1="0"
+                      y1="0"
+                      x2="1"
+                      y2="0"
+                      gradientUnits="objectBoundingBox"
                     >
-                      <stop offset="0%" stopColor="rgba(40, 25, 8, 0.18)" />
-                      <stop offset="100%" stopColor="rgba(40, 25, 8, 0)" />
+                      {dayNight.shadowStops.map((s) => (
+                        <stop
+                          key={s.offset}
+                          offset={s.offset}
+                          stopColor={s.color}
+                          stopOpacity={s.opacity}
+                        />
+                      ))}
+                    </linearGradient>
+                    <linearGradient
+                      id="dayNightGlow"
+                      x1="0"
+                      y1="0"
+                      x2="1"
+                      y2="0"
+                      gradientUnits="objectBoundingBox"
+                    >
+                      {dayNight.glowStops.map((s) => (
+                        <stop
+                          key={s.offset}
+                          offset={s.offset}
+                          stopColor={s.color}
+                          stopOpacity={s.opacity}
+                        />
+                      ))}
                     </linearGradient>
                   </defs>
-                  <path className={styles.nightWash} d={terminator.nightPath} />
-                  <path
-                    className={styles.twilightBand}
-                    d={terminator.bandPath}
-                    fill="url(#rm-twilight)"
+                  {/* Light "paper" shows the multiply shadow (deepens night);
+                      dark vellum shows the screen glow (lifts day). CSS toggles
+                      which rect is visible per body[data-theme]. */}
+                  <rect
+                    className={styles.washShadow}
+                    x={WASH_X}
+                    y={WASH_Y}
+                    width={WASH_W}
+                    height={WASH_H}
+                    fill="url(#dayNightShadow)"
                   />
-                </>
+                  <rect
+                    className={styles.washGlow}
+                    x={WASH_X}
+                    y={WASH_Y}
+                    width={WASH_W}
+                    height={WASH_H}
+                    fill="url(#dayNightGlow)"
+                  />
+                  {dayNight.noonX !== null && (
+                    <g
+                      transform={`translate(${dayNight.noonX} ${PAD * 0.6}) scale(${labelMultiplier / zoom.scale})`}
+                    >
+                      <text className={styles.meridianLabel} x={0} y={0} fontSize={9}>
+                        {dayNight.noonLabel}
+                      </text>
+                      <line className={styles.meridianTick} x1={0} y1={4} x2={0} y2={12} />
+                    </g>
+                  )}
+                  {dayNight.midnightX !== null && (
+                    <g
+                      transform={`translate(${dayNight.midnightX} ${PAD * 0.6}) scale(${labelMultiplier / zoom.scale})`}
+                    >
+                      <text className={styles.meridianLabel} x={0} y={0} fontSize={9}>
+                        {dayNight.midnightLabel}
+                      </text>
+                      <line className={styles.meridianTick} x1={0} y1={4} x2={0} y2={12} />
+                    </g>
+                  )}
+                </g>
               )}
 
               {/* Travel path — origin → destination, dashed, with a marker at
@@ -627,47 +713,47 @@ export function RealmMap({
                   `vector-effect: non-scaling-stroke` (via the CSS class) keeps
                   the dash widths constant regardless of zoom; the marker uses
                   a counter-scale group for the same reason. */}
-              {travel && (() => {
-                const from = nodes.find((n) => n.city.cityId === travel.fromCityId);
-                const to = nodes.find((n) => n.city.cityId === travel.toCityId);
-                if (!from || !to || from === to) return null;
-                const t = Math.min(1, Math.max(0, travel.pct / 100));
-                const mx = from.x + (to.x - from.x) * t;
-                const my = from.y + (to.y - from.y) * t;
-                // While intercity-flying, the player's "home" is in motion —
-                // detach the home flag from the origin city (handled in the
-                // city-dot loop below) and pin it to the travel marker so the
-                // visual matches "I have left this city".
-                const markerCarriesFlag = travel.fromCityId === homeCity;
-                return (
-                  <g className={styles.travelGroup} aria-hidden>
-                    <line
-                      className={styles.travelLine}
-                      x1={from.x}
-                      y1={from.y}
-                      x2={to.x}
-                      y2={to.y}
-                      // Belt-and-suspenders: the CSS class also sets
-                      // vector-effect, but some browsers honour the attribute
-                      // form more reliably under heavy SVG transforms.
-                      vectorEffect="non-scaling-stroke"
-                    />
-                    <g transform={`translate(${mx} ${my}) scale(${labelMultiplier / zoom.scale})`}>
-                      <circle className={styles.travelMarkerHalo} cx={0} cy={0} r={7} />
-                      <circle className={styles.travelMarker} cx={0} cy={0} r={3.5} />
-                      {markerCarriesFlag && (
-                        // Same flag shape as the city-side homeFlag, offset
-                        // above the marker. Offsets are tuned to the marker's
-                        // r=3.5 rather than a city's variable n.size.
-                        <polygon
-                          className={styles.homeFlag}
-                          points="-1,-7 -1,-19 7,-15 -1,-11"
-                        />
-                      )}
+              {travel &&
+                (() => {
+                  const from = nodes.find((n) => n.city.cityId === travel.fromCityId);
+                  const to = nodes.find((n) => n.city.cityId === travel.toCityId);
+                  if (!from || !to || from === to) return null;
+                  const t = Math.min(1, Math.max(0, travel.pct / 100));
+                  const mx = from.x + (to.x - from.x) * t;
+                  const my = from.y + (to.y - from.y) * t;
+                  // While intercity-flying, the player's "home" is in motion —
+                  // detach the home flag from the origin city (handled in the
+                  // city-dot loop below) and pin it to the travel marker so the
+                  // visual matches "I have left this city".
+                  const markerCarriesFlag = travel.fromCityId === homeCity;
+                  return (
+                    <g className={styles.travelGroup} aria-hidden>
+                      <line
+                        className={styles.travelLine}
+                        x1={from.x}
+                        y1={from.y}
+                        x2={to.x}
+                        y2={to.y}
+                        // Belt-and-suspenders: the CSS class also sets
+                        // vector-effect, but some browsers honour the attribute
+                        // form more reliably under heavy SVG transforms.
+                        vectorEffect="non-scaling-stroke"
+                      />
+                      <g
+                        transform={`translate(${mx} ${my}) scale(${labelMultiplier / zoom.scale})`}
+                      >
+                        <circle className={styles.travelMarkerHalo} cx={0} cy={0} r={7} />
+                        <circle className={styles.travelMarker} cx={0} cy={0} r={3.5} />
+                        {markerCarriesFlag && (
+                          // Same flag shape as the city-side homeFlag, offset
+                          // above the marker. Offsets are tuned to the marker's
+                          // r=3.5 rather than a city's variable n.size.
+                          <polygon className={styles.homeFlag} points="-1,-7 -1,-19 7,-15 -1,-11" />
+                        )}
+                      </g>
                     </g>
-                  </g>
-                );
-              })()}
+                  );
+                })()}
 
               <g>
                 {renderOrder.map((n) => {
@@ -861,39 +947,37 @@ export function RealmMap({
         </div>
       </div>
 
-        <>
-          <button
-            type="button"
-            className={styles.mobileStatusPill}
-            onClick={() => setPanelOpen(true)}
-            aria-label={selected ? `Show ${selected.city.name} details` : "Show realm details"}
-          >
-            <span className={styles.mobileStatusLabel}>
-              {selected ? selected.city.name : kingdomName}
-            </span>
-            {!selected && (
-              <span className={styles.mobileStatusMeta}>
-                · {totalPlayers.toLocaleString()} citizens · {nodes.length} cities
-              </span>
-            )}
-          </button>
-          <BottomSheet
-            open={mobileSheetOpen}
-            onClose={() => setPanelOpen(false)}
-            title={scrollHead ?? (selected ? "the city" : "the chart")}
-          >
-            {renderPanelBody({
-              selected,
-              homeCity,
-              renderSelected,
-              renderDefault,
-              typeCounts,
-              kingdomName,
-              theme,
-              kingdomStart: toNum(eng?.kingdomStartTime),
-            })}
-          </BottomSheet>
-        </>
+      <button
+        type="button"
+        className={styles.mobileStatusPill}
+        onClick={() => setPanelOpen(true)}
+        aria-label={selected ? `Show ${selected.city.name} details` : "Show realm details"}
+      >
+        <span className={styles.mobileStatusLabel}>
+          {selected ? selected.city.name : kingdomName}
+        </span>
+        {!selected && (
+          <span className={styles.mobileStatusMeta}>
+            · {totalPlayers.toLocaleString()} citizens · {nodes.length} cities
+          </span>
+        )}
+      </button>
+      <BottomSheet
+        open={mobileSheetOpen}
+        onClose={() => setPanelOpen(false)}
+        title={scrollHead ?? (selected ? "the city" : "the chart")}
+      >
+        {renderPanelBody({
+          selected,
+          homeCity,
+          renderSelected,
+          renderDefault,
+          typeCounts,
+          kingdomName,
+          theme,
+          kingdomStart: toNum(eng?.kingdomStartTime),
+        })}
+      </BottomSheet>
     </div>
   );
 }

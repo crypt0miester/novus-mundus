@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { calculateStaminaRegeneration, type PlayerCore } from "novus-mundus-sdk";
+import { useChainTimeOffset } from "./useChainTime";
 
 interface StaminaResult {
   /** Encounter stamina right now, with regeneration applied. */
@@ -22,10 +23,11 @@ interface StaminaResult {
  * `setCurrent` with an unchanged value is a no-op, so this only re-renders the
  * caller when stamina actually crosses a regen interval.
  */
-export function useStamina(
-  player: PlayerCore | null | undefined,
-): StaminaResult {
+export function useStamina(player: PlayerCore | null | undefined): StaminaResult {
   const [current, setCurrent] = useState(0);
+  // The regen math applies a time-of-day bonus keyed off the cluster clock, so
+  // anchor `now` to it rather than the device wall clock.
+  const chainOffset = useChainTimeOffset();
 
   const stored = player?.encounterStamina?.toNumber();
   const lastUpdate = player?.lastStaminaUpdate?.toNumber();
@@ -33,7 +35,7 @@ export function useStamina(
   // `PlayerCore.currentLong` is an f64 in degrees (`state/player.rs:104`),
   // NOT the ×10000 grid form (that's `LocationAccount.grid_long`). Pass
   // through directly so stamina regen respects the player's actual timezone.
-  const longitude = player ? player.currentLong ?? 0 : undefined;
+  const longitude = player ? (player.currentLong ?? 0) : undefined;
   const heroRegenBps = player?.heroStaminaRegenBps ?? 0;
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function useStamina(
     }
 
     const update = () => {
-      const now = Math.floor(Date.now() / 1000);
+      const now = Math.floor(Date.now() / 1000) + chainOffset;
       const [regenerated] = calculateStaminaRegeneration(
         stored,
         max,
@@ -62,7 +64,7 @@ export function useStamina(
     update();
     const interval = setInterval(update, 1000);
     return () => clearInterval(interval);
-  }, [stored, lastUpdate, max, longitude, heroRegenBps]);
+  }, [stored, lastUpdate, max, longitude, heroRegenBps, chainOffset]);
 
   return { current, max: max ?? 0 };
 }

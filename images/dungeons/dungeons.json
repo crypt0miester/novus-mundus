@@ -1,0 +1,42 @@
+{
+  "_comment": "Dungeon splash manifest. 16:9 full-color atmospheric scenes for the four seeded dungeon templates, generated at 1024x576 and exported as 1280x720 webp (no alpha key). Per docs/design/DUNGEON_ART.md: one base splash (entry choice + leaderboard header) and one boss splash (pre-floor-10 reveal) per dungeon, for 8 entries total. Base splashes are a clean creature-free environment; boss splashes render the creature as a dramatic dark silhouette against the lit scene. The dungeon name is overlaid directly on the art at runtime (drop shadow for legibility, no dark gradient), so the art stays fully lit edge to edge. Floor-transition splashes are rendered at runtime by overlaying the base splash with a 50% black gradient + floor number, so no extra generation needed. Per-dungeon accent color is baked into the subject prompt AND surfaced at runtime as a CSS frame ring via apps/web/src/lib/dungeons/splash.ts.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   576,
+    "steps":    4,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "export": {
+    "subdir":   "dungeons",
+    "filename": "id",
+    "canvas":   [1280, 720],
+    "upscale":  1,
+    "alphaKey": false,
+    "format":   "webp",
+    "quality":  82
+  },
+
+  "preamble": "Single atmospheric dungeon scene. One isolated threshold or chamber, viewed straight on, no people figures unless specified, no UI, no text.",
+
+  "style": {
+    "splash": "Style: richly detailed painterly fantasy dungeon scene in full color, moody atmospheric lighting with the entry's accent color as the dominant glow. The accent color is named in each entry's subject string (one of ember orange #D97A3A, cold violet #8E6FCB, ember red #C7423A, or abyssal cyan #3C8A9E). Crisp environmental detail, deep atmospheric shadow, cohesive matte-painting finish. Any creature named in the subject is rendered as a dramatic dark silhouette against the lit scene; the environment itself is never a flat silhouette."
+  },
+
+  "tail": "Composition: 16:9 landscape, the scene fills the frame with clear readable depth and detail, lit edge to edge by the scene's own light sources. Scene only, absolutely no text, no letters, no numbers, no UI, no scene clutter, no black bars or dark empty bands.",
+
+  "entries": [
+    { "id": "dungeon-1-goblin-caves",      "templateId": 1, "accent": "#D97A3A", "seed": 3201, "subject": "A narrow rocky cave mouth set into a craggy cliff wall, a small smoldering firepit just inside the entrance casting an ember glow across the wet stone, scattered bones and crude wooden totems at the threshold, no creatures present. Ember-orange (#D97A3A) firelight glow from the firepit." },
+    { "id": "dungeon-1-goblin-caves-boss", "templateId": 1, "accent": "#D97A3A", "seed": 3211, "subject": "A wide firelit rocky cave chamber strewn with hanging bone trophies and a banked central fire, a single large hunched goblin chieftain rendered as a dramatic dark silhouette standing centered against the glowing chamber. Ember-orange (#D97A3A) rim light haloing the silhouette." },
+    { "id": "dungeon-2-shadow-crypt",      "templateId": 2, "accent": "#8E6FCB", "seed": 3202, "subject": "A carved stone archway opening into a shadowed crypt, a single cold-violet flame burning in an iron wall sconce beside the arch, its light spilling across worn stone steps and engraved sarcophagus lids, no creatures present. Cold-violet (#8E6FCB) glow from the sconce flame." },
+    { "id": "dungeon-2-shadow-crypt-boss", "templateId": 2, "accent": "#8E6FCB", "seed": 3212, "subject": "A long crypt nave with narrow stone columns receding to either side, a single skeletal lich enthroned at the far end rendered as a dramatic dark silhouette against pooled cold-violet light. Cold-violet (#8E6FCB) rim light haloing the silhouette." },
+    { "id": "dungeon-3-dragons-lair",      "templateId": 3, "accent": "#C7423A", "seed": 3203, "subject": "A wide volcanic cave chamber with a glowing magma pool at its center, jagged basalt rock shelves and scattered gold coins and goblets catching the ember light, no creatures present. Ember-red (#C7423A) glow rising from the magma pool." },
+    { "id": "dungeon-3-dragons-lair-boss", "templateId": 3, "accent": "#C7423A", "seed": 3213, "subject": "A wide ember-lit cave chamber with a heaped hoard of treasure at its center, a single great dragon coiled around the hoard with head raised and wings half-folded, rendered as a dramatic dark silhouette against the glowing chamber. Ember-red (#C7423A) rim light haloing the silhouette." },
+    { "id": "dungeon-4-abyssal-depths",      "templateId": 4, "accent": "#3C8A9E", "seed": 770077, "subject": "A pillared sunken stone corridor receding into deep teal water, shafts of abyssal-cyan light falling between the columns onto a silt floor strewn with broken masonry and coral, no creatures present. Abyssal-cyan (#3C8A9E) light from above the corridor." },
+    { "id": "dungeon-4-abyssal-depths-boss", "templateId": 4, "accent": "#3C8A9E", "seed": 3214, "subject": "A vast flooded stone cavern lit by an abyssal-cyan glow, a massive many-tentacled leviathan with a single luminous eye rising through the center, rendered as a dramatic dark silhouette against the lit water. Abyssal-cyan (#3C8A9E) rim light haloing the silhouette." }
+  ]
+}

@@ -228,7 +228,7 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
       <h2 className="tier-title mb-2 font-display text-2xl font-bold tracking-wide lowercase">
         Where you make your stand
       </h2>
-      <p className="mb-7 max-w-md text-center text-sm leading-relaxed text-text-secondary lowercase">
+      <p className="mb-7 text-center text-sm leading-relaxed text-text-secondary lowercase">
         Every settlement was raised on the bones of an old-world city. The ground you choose decides
         the life you will fight for.
       </p>

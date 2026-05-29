@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  GameFooter,
-  GameHeader,
-  GameTimer,
-  useFireOnce,
-  useIndexedSelection,
-} from "./_shell";
+import { GameFooter, GameHeader, GameTimer, useFireOnce, useIndexedSelection } from "./_shell";
 
 /** Client-safe SetSelect presentation (server `set-select` archetype). */
 export interface SetSelectPresentation {
@@ -36,9 +30,7 @@ export function SetSelectGame({ presentation, submitting, onSubmit }: SetSelectG
 
   const flagged = selected.filter(Boolean).length;
 
-  const fireSubmit = useFireOnce(() =>
-    onSubmit(items.map((_, i) => selected[i] ?? false)),
-  );
+  const fireSubmit = useFireOnce(() => onSubmit(items.map((_, i) => selected[i] ?? false)));
 
   return (
     <div className="space-y-3">
@@ -53,11 +45,7 @@ export function SetSelectGame({ presentation, submitting, onSubmit }: SetSelectG
           </span>
         }
       />
-      <GameTimer
-        totalMs={MS_PER_ITEM * items.length}
-        paused={submitting}
-        onExpire={fireSubmit}
-      />
+      <GameTimer totalMs={MS_PER_ITEM * items.length} paused={submitting} onExpire={fireSubmit} />
 
       <p className="text-sm text-text-secondary">{instruction}</p>
       <div className="grid gap-2 sm:grid-cols-2">
@@ -94,11 +82,7 @@ export function SetSelectGame({ presentation, submitting, onSubmit }: SetSelectG
           );
         })}
       </div>
-      <GameFooter
-        submitLabel="Submit"
-        submitting={submitting}
-        onSubmit={fireSubmit}
-      />
+      <GameFooter submitLabel="Submit" submitting={submitting} onSubmit={fireSubmit} />
     </div>
   );
 }

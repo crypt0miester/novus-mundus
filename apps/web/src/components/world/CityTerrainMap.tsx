@@ -29,16 +29,10 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import {
-  OCCUPANT_PLAYER,
-  OCCUPANT_ENCOUNTER,
-  toGrid,
-} from "novus-mundus-sdk";
+import { Radar, RefreshCw } from "lucide-react";
+import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER, toGrid } from "novus-mundus-sdk";
 import { useSettings, type MapMode } from "@/lib/store/settings";
-import {
-  useCityOccupied,
-  type OccupiedCell,
-} from "@/lib/hooks/useCityOccupied";
+import { useCityOccupied, type OccupiedCell } from "@/lib/hooks/useCityOccupied";
 import styles from "./CityTerrainMap.module.css";
 import {
   CityTerrainMap2DFallback,
@@ -78,8 +72,9 @@ export type {
 // in the bundle, but the WebGL scene is never mounted.
 const ENABLE_3D_MAP = true;
 
-const CityTerrainMapWebGL: ComponentType<CityTerrainMapWebGLProps> | null =
-  ENABLE_3D_MAP ? CityTerrainMapWebGLImpl : null;
+const CityTerrainMapWebGL: ComponentType<CityTerrainMapWebGLProps> | null = ENABLE_3D_MAP
+  ? CityTerrainMapWebGLImpl
+  : null;
 
 /**
  * One-shot WebGL2 capability probe. The result is cached at module scope —
@@ -130,404 +125,421 @@ interface CityTerrainMap3DSceneProps extends CityTerrainMapProps {
 }
 
 const CityTerrainMap3DScene = forwardRef<CityTerrainMapHandle, CityTerrainMap3DSceneProps>(
-function CityTerrainMap3DScene({
-  Renderer,
-  ...props
-}, ref) {
-  const mapMode = useSettings((s) => s.mapMode);
-  const setMapMode = useSettings((s) => s.setMapMode);
+  function CityTerrainMap3DScene({ Renderer, ...props }, ref) {
+    const mapMode = useSettings((s) => s.mapMode);
+    const setMapMode = useSettings((s) => s.setMapMode);
 
-  /* Focus payload — orchestrator-owned state that mirrors the
-   * Canvas2D fallback's `focusCell` imperative handle. The 3D
-   * renderer's useEffect on `focusRequest` does the actual camera
-   * tween; we just push the payload (with a monotonic `nonce` so
-   * back-to-back focuses to the same cell still re-fire). */
-  const [focusRequest, setFocusRequest] = useState<{
-    nonce: number;
-    gridLat: number;
-    gridLong: number;
-    durationMs?: number;
-  } | null>(null);
+    /* Focus payload — orchestrator-owned state that mirrors the
+     * Canvas2D fallback's `focusCell` imperative handle. The 3D
+     * renderer's useEffect on `focusRequest` does the actual camera
+     * tween; we just push the payload (with a monotonic `nonce` so
+     * back-to-back focuses to the same cell still re-fire). */
+    const [focusRequest, setFocusRequest] = useState<{
+      nonce: number;
+      gridLat: number;
+      gridLong: number;
+      durationMs?: number;
+    } | null>(null);
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      focusCell: (
-        gridLat: number,
-        gridLong: number,
-        opts?: { scale?: number; durationMs?: number },
-      ) => {
-        /* `scale` is the 2D fallback's pan-zoom scale; the 3D path
-         * uses camera distance internally, so we pass only the
-         * coords + duration through and let the renderer pick a
-         * near-max-zoom distance. Keep `opts.scale` accepted in the
-         * signature so callers don't have to branch on renderer.
-         *
-         * Functional setState so back-to-back focusCell calls within
-         * the same render cycle still produce monotonically-increasing
-         * nonces — without it, multiple calls before React commits the
-         * state update would all read the same stale `focusRequest`
-         * via closure and produce identical nonces, defeating the
-         * re-fire-on-same-coords contract. */
-        void opts?.scale;
-        setFocusRequest((prev) => ({
-          nonce: (prev?.nonce ?? 0) + 1,
-          gridLat,
-          gridLong,
-          durationMs: opts?.durationMs,
-        }));
-      },
-    }),
-    [],
-  );
+    useImperativeHandle(
+      ref,
+      () => ({
+        focusCell: (
+          gridLat: number,
+          gridLong: number,
+          opts?: { scale?: number; durationMs?: number },
+        ) => {
+          /* `scale` is the 2D fallback's pan-zoom scale; the 3D path
+           * uses camera distance internally, so we pass only the
+           * coords + duration through and let the renderer pick a
+           * near-max-zoom distance. Keep `opts.scale` accepted in the
+           * signature so callers don't have to branch on renderer.
+           *
+           * Functional setState so back-to-back focusCell calls within
+           * the same render cycle still produce monotonically-increasing
+           * nonces — without it, multiple calls before React commits the
+           * state update would all read the same stale `focusRequest`
+           * via closure and produce identical nonces, defeating the
+           * re-fire-on-same-coords contract. */
+          void opts?.scale;
+          setFocusRequest((prev) => ({
+            nonce: (prev?.nonce ?? 0) + 1,
+            gridLat,
+            gridLong,
+            durationMs: opts?.durationMs,
+          }));
+        },
+      }),
+      [],
+    );
 
-  /* Capability state: `webglAvailable` is the initial probe; `webglLost`
-   * flips true if the scene's `webglcontextlost` fires mid-session. When
-   * either is false the component short-circuits to the 2D fallback. No
-   * in-app retry today — recovery from a permanent context loss is a
-   * page refresh. */
-  const [webglAvailable] = useState<boolean>(canUseWebGL2);
-  const [webglLost, setWebglLost] = useState(false);
-  const [touchSupport] = useState<boolean>(detectTouchSupport);
-  /* `outOfBoundsNotice` is shown when the user clicks a corner of the
-   * square mesh outside the inscribed gameplay disc. Auto-clears
-   * after ~2.5 s or on the next click. */
-  const [outOfBoundsNotice, setOutOfBoundsNotice] = useState(false);
+    /* Capability state: `webglAvailable` is the initial probe; `webglLost`
+     * flips true if the scene's `webglcontextlost` fires mid-session. When
+     * either is false the component short-circuits to the 2D fallback. No
+     * in-app retry today — recovery from a permanent context loss is a
+     * page refresh. */
+    const [webglAvailable] = useState<boolean>(canUseWebGL2);
+    const [webglLost, setWebglLost] = useState(false);
+    const [touchSupport] = useState<boolean>(detectTouchSupport);
+    /* `outOfBoundsNotice` is shown when the user clicks a corner of the
+     * square mesh outside the inscribed gameplay disc. Auto-clears
+     * after ~2.5 s or on the next click. */
+    const [outOfBoundsNotice, setOutOfBoundsNotice] = useState(false);
 
-  const useWebGL = webglAvailable && !webglLost;
+    const useWebGL = webglAvailable && !webglLost;
 
-  const [hover, setHover] = useState<HoverReadout | null>(null);
-  const [zoom, setZoom] = useState(1);
-  const [cellsVisible, setCellsVisible] = useState(false);
-  const [touchOrbitEnabled, setTouchOrbitEnabled] = useState(false);
-  const [resetTrigger, setResetTrigger] = useState(0);
-  /* Active hovered occupant + its projected CSS-px position. The 3D
-   * renderer fires `onActiveOccupant` on pointer-move (or null when
-   * the pointer is over empty terrain). The orchestrator renders
-   * Variant B (cosmetic frame + badge + title + level/tier readout)
-   * anchored to `screen.{x,y}` so the tooltip tracks the cell across
-   * camera moves. */
-  const [activeOccupant, setActiveOccupant] = useState<{
-    cell: OccupiedCell;
-    screen: { x: number; y: number };
-  } | null>(null);
+    const [hover, setHover] = useState<HoverReadout | null>(null);
+    const [zoom, setZoom] = useState(1);
+    const [cellsVisible, setCellsVisible] = useState(false);
+    const [touchOrbitEnabled, setTouchOrbitEnabled] = useState(false);
+    const [resetTrigger, setResetTrigger] = useState(0);
+    /* Active hovered occupant + its projected CSS-px position. The 3D
+     * renderer fires `onActiveOccupant` on pointer-move (or null when
+     * the pointer is over empty terrain). The orchestrator renders
+     * Variant B (cosmetic frame + badge + title + level/tier readout)
+     * anchored to `screen.{x,y}` so the tooltip tracks the cell across
+     * camera moves. */
+    const [activeOccupant, setActiveOccupant] = useState<{
+      cell: OccupiedCell;
+      screen: { x: number; y: number };
+    } | null>(null);
 
-  const {
-    data: occupied,
-    isLoading: occupancyLoading,
-    error: occupancyError,
-  } = useCityOccupied(props.cityAccount.cityId);
+    const {
+      data: occupied,
+      isLoading: occupancyLoading,
+      error: occupancyError,
+      refetch: refetchOccupancy,
+    } = useCityOccupied(props.cityAccount.cityId);
 
-  const playerCount = occupied.filter((c) => c.occupantType === OCCUPANT_PLAYER).length;
-  const encounterCount = occupied.filter(
-    (c) => c.occupantType === OCCUPANT_ENCOUNTER,
-  ).length;
-  // Post flat-strategy there are no anchors; biome is sampled from
-  // biomeSeed at use-time, so the disc is never "empty".
-  const terrainEmpty = false;
+    const playerCount = occupied.filter((c) => c.occupantType === OCCUPANT_PLAYER).length;
+    const encounterCount = occupied.filter((c) => c.occupantType === OCCUPANT_ENCOUNTER).length;
+    // Post flat-strategy there are no anchors; biome is sampled from
+    // biomeSeed at use-time, so the disc is never "empty".
+    const terrainEmpty = false;
 
-  // Distance from city centre to the selected landing cell, mirroring
-  // the 2D fallback's "Landing chosen · X m from centre" readout so the
-  // 3D path doesn't silently lose the pick confirmation.
-  // 0.0001° ≈ 11 m at the equator — same constant the fallback uses.
-  const selectedDistM = useMemo(() => {
-    if (!props.selected) return 0;
-    const cityLatGrid = toGrid(props.cityAccount.latitude);
-    const cityLongGrid = toGrid(props.cityAccount.longitude);
-    const ox = props.selected.gridLong - cityLongGrid;
-    const oy = props.selected.gridLat - cityLatGrid;
-    return Math.round(Math.sqrt(ox * ox + oy * oy) * 11);
-  }, [props.selected, props.cityAccount.latitude, props.cityAccount.longitude]);
+    // Distance from city centre to the selected landing cell, mirroring
+    // the 2D fallback's "Landing chosen · X m from centre" readout so the
+    // 3D path doesn't silently lose the pick confirmation.
+    // 0.0001° ≈ 11 m at the equator — same constant the fallback uses.
+    const selectedDistM = useMemo(() => {
+      if (!props.selected) return 0;
+      const cityLatGrid = toGrid(props.cityAccount.latitude);
+      const cityLongGrid = toGrid(props.cityAccount.longitude);
+      const ox = props.selected.gridLong - cityLongGrid;
+      const oy = props.selected.gridLat - cityLatGrid;
+      return Math.round(Math.sqrt(ox * ox + oy * oy) * 11);
+    }, [props.selected, props.cityAccount.latitude, props.cityAccount.longitude]);
 
-  const handlePick = (info: PickInfo) => {
-    /* Any click clears a stale out-of-bounds notice — the user's
-     * second tap implicitly dismisses the previous one. */
-    setOutOfBoundsNotice(false);
-    /* Click missed mesh entirely (raycast off the plate) -> deselect. */
-    if (info.outOfBounds && info.gridLat === 0 && info.gridLong === 0) {
-      props.onEntitySelect?.(null);
-      return;
-    }
-    /* On the square mesh but outside the inscribed gameplay disc.
-     * The square AABB pan clamp keeps the visible region inside the
-     * mesh, but the user can still click a far corner that's
-     * outside the chain's circular disc — surface a brief notice so
-     * "nothing happened" reads as a deliberate boundary rather than
-     * a broken click. */
-    if (info.outOfBounds) {
-      props.onEntitySelect?.(null);
-      setOutOfBoundsNotice(true);
-      return;
-    }
-    if (info.entityAtCell) {
-      props.onEntitySelect?.(info.entityAtCell);
-      return;
-    }
-    /* Empty cell. Set landing destination but PRESERVE the entity
-     * selection if one is active — the user is most likely picking
-     * a neighbour cell to walk to an encounter they just selected
-     * for striking. Clearing the entity here would hide the
-     * EntityPanel + its Approach button, leaving the user with no
-     * clear path to the strike. */
-    if (!props.onSelect) return;
-    if (!info.passable) return;
-    props.onSelect(info.gridLat, info.gridLong);
-  };
+    const handlePick = (info: PickInfo) => {
+      /* Any click clears a stale out-of-bounds notice — the user's
+       * second tap implicitly dismisses the previous one. */
+      setOutOfBoundsNotice(false);
+      /* Click missed mesh entirely (raycast off the plate) -> deselect. */
+      if (info.outOfBounds && info.gridLat === 0 && info.gridLong === 0) {
+        props.onEntitySelect?.(null);
+        return;
+      }
+      /* On the square mesh but outside the inscribed gameplay disc.
+       * The square AABB pan clamp keeps the visible region inside the
+       * mesh, but the user can still click a far corner that's
+       * outside the chain's circular disc — surface a brief notice so
+       * "nothing happened" reads as a deliberate boundary rather than
+       * a broken click. */
+      if (info.outOfBounds) {
+        props.onEntitySelect?.(null);
+        setOutOfBoundsNotice(true);
+        return;
+      }
+      if (info.entityAtCell) {
+        props.onEntitySelect?.(info.entityAtCell);
+        return;
+      }
+      /* Empty cell. Set landing destination but PRESERVE the entity
+       * selection if one is active — the user is most likely picking
+       * a neighbour cell to walk to an encounter they just selected
+       * for striking. Clearing the entity here would hide the
+       * EntityPanel + its Approach button, leaving the user with no
+       * clear path to the strike. */
+      if (!props.onSelect) return;
+      if (!info.passable) return;
+      props.onSelect(info.gridLat, info.gridLong);
+    };
 
-  /* Auto-dismiss the out-of-bounds notice after a moment so it
-   * doesn't linger if the user takes no follow-up action. */
-  useEffect(() => {
-    if (!outOfBoundsNotice) return;
-    const id = window.setTimeout(() => setOutOfBoundsNotice(false), 2500);
-    return () => window.clearTimeout(id);
-  }, [outOfBoundsNotice]);
+    /* Auto-dismiss the out-of-bounds notice after a moment so it
+     * doesn't linger if the user takes no follow-up action. */
+    useEffect(() => {
+      if (!outOfBoundsNotice) return;
+      const id = window.setTimeout(() => setOutOfBoundsNotice(false), 2500);
+      return () => window.clearTimeout(id);
+    }, [outOfBoundsNotice]);
 
-  /* Reset the active hover tooltip whenever the city changes — old
-   * cells reference a different occupant set and would render stale
-   * data against the new city's anchor. Declared BEFORE the
-   * `if (!useWebGL) return ...` short-circuit below: a mid-session
-   * WebGL context-loss would otherwise drop this hook from the
-   * render and trigger React's "rendered fewer hooks" invariant
-   * crash. */
-  useEffect(() => {
-    setActiveOccupant(null);
-  }, [props.cityAccount.cityId]);
+    /* Reset the active hover tooltip whenever the city changes — old
+     * cells reference a different occupant set and would render stale
+     * data against the new city's anchor. Declared BEFORE the
+     * `if (!useWebGL) return ...` short-circuit below: a mid-session
+     * WebGL context-loss would otherwise drop this hook from the
+     * render and trigger React's "rendered fewer hooks" invariant
+     * crash. */
+    useEffect(() => {
+      setActiveOccupant(null);
+    }, [props.cityAccount.cityId]);
 
-  const handleToggleMode = () => {
-    setMapMode(mapMode === "iso" ? "flat" : "iso");
-  };
+    const handleToggleMode = () => {
+      setMapMode(mapMode === "iso" ? "flat" : "iso");
+    };
 
-  const handleModeCommitted = (_m: MapMode) => {
-    _m;
-  };
+    const handleModeCommitted = (_m: MapMode) => {
+      _m;
+    };
 
-  /* Inspection-band label / active-tooltip click handler. Mirrors
-   * the 2D fallback's behaviour (`CityTerrainMap2DFallback.tsx:1681`):
-   * focus the camera AND commit the entity selection so the panel
-   * opens. The same handler powers both the floating CSS2DObject
-   * pills in the 3D scene and the Variant B hover tooltip. */
-  const handleLabelClick = (cell: OccupiedCell) => {
-    setFocusRequest((prev) => ({
-      nonce: (prev?.nonce ?? 0) + 1,
-      gridLat: cell.gridLat,
-      gridLong: cell.gridLong,
-    }));
-    if (props.onEntitySelect) {
-      props.onEntitySelect({
-        pubkey: cell.occupant,
-        occupantType: cell.occupantType,
+    /* Inspection-band label / active-tooltip click handler. Mirrors
+     * the 2D fallback's behaviour (`CityTerrainMap2DFallback.tsx:1681`):
+     * focus the camera AND commit the entity selection so the panel
+     * opens. The same handler powers both the floating CSS2DObject
+     * pills in the 3D scene and the Variant B hover tooltip. */
+    const handleLabelClick = (cell: OccupiedCell) => {
+      setFocusRequest((prev) => ({
+        nonce: (prev?.nonce ?? 0) + 1,
         gridLat: cell.gridLat,
         gridLong: cell.gridLong,
-      });
+      }));
+      if (props.onEntitySelect) {
+        props.onEntitySelect({
+          pubkey: cell.occupant,
+          occupantType: cell.occupantType,
+          gridLat: cell.gridLat,
+          gridLong: cell.gridLong,
+        });
+      }
+    };
+
+    // WebGL unavailable or context lost mid-session: short-circuit to the
+    // bare 2D fallback. The fallback owns its own .root/.label/.canvasWrap
+    // /.readout/.legend chrome, so wrapping it in the orchestrator's chrome
+    // would double every header and aria-live region. We lose the retry
+    // overlay (no UI to bump retryCounter), but the user can refresh to
+    // re-probe WebGL — and ENABLE_3D_MAP=false means this branch ships
+    // dormant until 3D is reactivated anyway.
+    if (!useWebGL) {
+      return <CityTerrainMap2DFallback {...props} />;
     }
-  };
 
-  // WebGL unavailable or context lost mid-session: short-circuit to the
-  // bare 2D fallback. The fallback owns its own .root/.label/.canvasWrap
-  // /.readout/.legend chrome, so wrapping it in the orchestrator's chrome
-  // would double every header and aria-live region. We lose the retry
-  // overlay (no UI to bump retryCounter), but the user can refresh to
-  // re-probe WebGL — and ENABLE_3D_MAP=false means this branch ships
-  // dormant until 3D is reactivated anyway.
-  if (!useWebGL) {
-    return <CityTerrainMap2DFallback {...props} />;
-  }
-
-  /* Variant B tooltip — full cosmetic preview (frame + badge + title
-   * + level/tier readout) anchored to the hovered occupant's
-   * projected canvas-relative XY. Mirrors the 2D fallback's
-   * activeTooltip block (CityTerrainMap2DFallback.tsx:1928-2017) so
-   * the two paths read identically. Suppressed when getDotTooltip
-   * is undefined (read-only surfaces). */
-  const activeTooltipNode = (() => {
-    if (!activeOccupant || !props.getDotTooltip) return null;
-    const t = props.getDotTooltip(
-      activeOccupant.cell.occupant,
-      activeOccupant.cell.occupantType,
-    );
-    if (!t) return null;
-    const titleEntry = t.titleId ? getCosmeticTitle(t.titleId) : null;
-    const hasFrame = (t.frameId ?? 0) > 0;
-    const hasBadge = (t.badgeId ?? 0) > 0;
-    const showLeftCol = hasFrame || hasBadge;
-    const nowMs = Date.now();
-    /* Animated colour resolves per-render — close enough to the
-     * 2D fallback's per-rAF tick for a hover bubble that the user
-     * stares at briefly. */
-    const colorNow =
-      t.nameColorHex && t.nameColorAnim
-        ? animatedColorToRgba(
-            animatedColorAt(t.nameColorHex, t.nameColorAnim, nowMs),
-          )
-        : t.nameColorHex ?? null;
-    const animClass = t.nameColorAnim
-      ? cosmeticColorAnimationClass({
-          id: 0,
-          name: "",
-          rarity: "common",
-          hex: t.nameColorHex ?? "#000",
-          animation: t.nameColorAnim,
-        })
-      : null;
-    return (
-      <div
-        className={styles.dotTooltip}
-        style={{
-          left: `${activeOccupant.screen.x}px`,
-          top: `${activeOccupant.screen.y}px`,
-          borderColor: t.accent ?? undefined,
-          display: "flex",
-          gap: "0.5rem",
-          alignItems: "center",
-        }}
-        role="tooltip"
-        aria-hidden="true"
-      >
-        {showLeftCol && (
-          <CosmeticFrame id={t.frameId ?? 0} size={36}>
-            {hasBadge ? (
-              <CosmeticBadge id={t.badgeId ?? 0} size={32} />
-            ) : (
-              <span
-                aria-hidden
-                style={{
-                  width: 20,
-                  height: 20,
-                  borderRadius: "50%",
-                  background: "var(--readout-tint, #efe2c4)",
-                }}
-              />
-            )}
-          </CosmeticFrame>
-        )}
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <div
-            className={`${styles.dotTooltipPrimary} ${animClass ?? ""}`}
-            style={colorNow ? { color: colorNow } : undefined}
-          >
-            {t.primary}
-          </div>
-          <div className={styles.dotTooltipSecondary}>{t.secondary}</div>
-          {titleEntry && (
+    /* Variant B tooltip — full cosmetic preview (frame + badge + title
+     * + level/tier readout) anchored to the hovered occupant's
+     * projected canvas-relative XY. Mirrors the 2D fallback's
+     * activeTooltip block (CityTerrainMap2DFallback.tsx:1928-2017) so
+     * the two paths read identically. Suppressed when getDotTooltip
+     * is undefined (read-only surfaces). */
+    const activeTooltipNode = (() => {
+      if (!activeOccupant || !props.getDotTooltip) return null;
+      const t = props.getDotTooltip(activeOccupant.cell.occupant, activeOccupant.cell.occupantType);
+      if (!t) return null;
+      const titleEntry = t.titleId ? getCosmeticTitle(t.titleId) : null;
+      const hasFrame = (t.frameId ?? 0) > 0;
+      const hasBadge = (t.badgeId ?? 0) > 0;
+      const showLeftCol = hasFrame || hasBadge;
+      const nowMs = Date.now();
+      /* Animated colour resolves per-render — close enough to the
+       * 2D fallback's per-rAF tick for a hover bubble that the user
+       * stares at briefly. */
+      const colorNow =
+        t.nameColorHex && t.nameColorAnim
+          ? animatedColorToRgba(animatedColorAt(t.nameColorHex, t.nameColorAnim, nowMs))
+          : (t.nameColorHex ?? null);
+      const animClass = t.nameColorAnim
+        ? cosmeticColorAnimationClass({
+            id: 0,
+            name: "",
+            rarity: "common",
+            hex: t.nameColorHex ?? "#000",
+            animation: t.nameColorAnim,
+          })
+        : null;
+      return (
+        <div
+          className={styles.dotTooltip}
+          style={{
+            left: `${activeOccupant.screen.x}px`,
+            top: `${activeOccupant.screen.y}px`,
+            borderColor: t.accent ?? undefined,
+            display: "flex",
+            gap: "0.5rem",
+            alignItems: "center",
+          }}
+          role="tooltip"
+          aria-hidden="true"
+        >
+          {showLeftCol && (
+            <CosmeticFrame id={t.frameId ?? 0} size={36}>
+              {hasBadge ? (
+                <CosmeticBadge id={t.badgeId ?? 0} size={32} />
+              ) : (
+                <span
+                  aria-hidden
+                  style={{
+                    width: 20,
+                    height: 20,
+                    borderRadius: "50%",
+                    background: "var(--readout-tint, #efe2c4)",
+                  }}
+                />
+              )}
+            </CosmeticFrame>
+          )}
+          <div style={{ minWidth: 0, flex: 1 }}>
             <div
-              style={{
-                marginTop: "0.25rem",
-                display: "inline-block",
-                fontSize: "0.55rem",
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                padding: "0.1rem 0.35rem",
-                border: `1px solid ${RARITY_BORDER[titleEntry.rarity]}`,
-                color: RARITY_BORDER[titleEntry.rarity],
-                background: "var(--readout-tint)",
-              }}
+              className={`${styles.dotTooltipPrimary} ${animClass ?? ""}`}
+              style={colorNow ? { color: colorNow } : undefined}
             >
-              {titleEntry.displayName}
+              {t.primary}
+            </div>
+            <div className={styles.dotTooltipSecondary}>{t.secondary}</div>
+            {titleEntry && (
+              <div
+                style={{
+                  marginTop: "0.25rem",
+                  display: "inline-block",
+                  fontSize: "0.55rem",
+                  letterSpacing: "0.18em",
+                  textTransform: "uppercase",
+                  padding: "0.1rem 0.35rem",
+                  border: `1px solid ${RARITY_BORDER[titleEntry.rarity]}`,
+                  color: RARITY_BORDER[titleEntry.rarity],
+                  background: "var(--readout-tint)",
+                }}
+              >
+                {titleEntry.displayName}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    })();
+
+    // Occupancy fetch state. The hook already exposes loading + error;
+    // surface both so a still-scanning city, a truly-empty city, and a
+    // failed fetch read as three distinct states instead of one blank
+    // disc. Error wins over loading (a failed retry shouldn't read as
+    // still-scanning).
+    const occupancyStatusNode = occupancyError ? (
+      <div className={styles.occupancyError} role="status" aria-live="polite">
+        <span>Could not load occupants</span>
+        <button type="button" className={styles.occupancyRetry} onClick={() => refetchOccupancy()}>
+          <RefreshCw size={11} aria-hidden />
+          Retry
+        </button>
+      </div>
+    ) : occupancyLoading ? (
+      <div
+        className={`${styles.occupancyStatus} ${styles.scouting}`}
+        role="status"
+        aria-live="polite"
+      >
+        <Radar size={11} aria-hidden />
+        <span>Scanning city…</span>
+      </div>
+    ) : null;
+
+    const rendererNode = (
+      <Renderer
+        cityAccount={props.cityAccount}
+        selected={props.selected}
+        selectedEntity={props.selectedEntity ?? null}
+        occupied={occupied}
+        travel={props.travel}
+        otherWalks={props.otherWalks}
+        myPlayerPubkey={props.myPlayerPubkey}
+        autoFocusCell={props.autoFocusCell}
+        mapMode={mapMode}
+        onModeCommitted={handleModeCommitted}
+        onPick={handlePick}
+        onHover={setHover}
+        onZoomChange={setZoom}
+        onCellsVisibleChange={setCellsVisible}
+        onContextLost={() => setWebglLost(true)}
+        touchOrbitEnabled={touchOrbitEnabled}
+        resetTrigger={resetTrigger}
+        getDotTooltip={props.getDotTooltip}
+        teamMatePubkeys={props.teamMatePubkeys}
+        onActiveOccupant={setActiveOccupant}
+        focusRequest={focusRequest}
+        onLabelClick={handleLabelClick}
+      />
+    );
+
+    return (
+      <div className={styles.root}>
+        <div
+          className={styles.canvasWrap}
+          role="application"
+          aria-label={`Terrain disc for ${props.cityAccount.name}. Click an occupant to inspect them, or pick an empty cell to land. Scroll or pinch to zoom, drag to pan, double-click to zoom in.`}
+          onPointerLeave={() => setActiveOccupant(null)}
+        >
+          {rendererNode}
+          {activeTooltipNode}
+          <button
+            type="button"
+            className={`${styles.togglePill} ${styles.toggle3DPill}`}
+            onClick={handleToggleMode}
+            aria-pressed={mapMode === "iso"}
+            title={mapMode === "iso" ? "Switch to top-down (2D)" : "Switch to tilted view (3D)"}
+          >
+            {mapMode === "iso" ? "2D" : "3D"}
+          </button>
+          {touchSupport && (
+            <button
+              type="button"
+              className={`${styles.togglePill} ${styles.orbitTogglePill}`}
+              onClick={() => setTouchOrbitEnabled((v) => !v)}
+              aria-pressed={touchOrbitEnabled}
+              title={
+                touchOrbitEnabled
+                  ? "Two-finger drag rotates (tap to switch back to pan)"
+                  : "Two-finger drag pans (tap to enable rotate)"
+              }
+            >
+              ⤺
+            </button>
+          )}
+          {/* Reset chip — mirror the 2D fallback's `view.scale > 1.001`
+           * gate so the chip only appears once the user has actually
+           * zoomed in. At default zoom it would be a no-op affordance. */}
+          {zoom > 1.001 && (
+            <button
+              type="button"
+              className={styles.resetBtn}
+              onClick={(e) => {
+                e.stopPropagation();
+                setResetTrigger((n) => n + 1);
+              }}
+              aria-label="Reset view"
+              title="Reset view"
+            >
+              ↻
+            </button>
+          )}
+          {outOfBoundsNotice && (
+            <div className={styles.outOfBoundsNotice} role="status" aria-live="polite">
+              Outside city bounds
             </div>
           )}
         </div>
+        <div className={styles.readout} aria-live="polite">
+          {hover ? (
+            <>
+              <span className={hover.passable ? "" : styles.impassable}>{hover.label}</span>
+              <span>·</span>
+              <span>{hover.distM.toLocaleString()}m from centre</span>
+              {!hover.passable && <span>· impassable</span>}
+            </>
+          ) : props.selected ? (
+            <span>Landing chosen · {selectedDistM.toLocaleString()}m from centre</span>
+          ) : (
+            <span>click a player or wild to inspect, or pick an empty cell to land.</span>
+          )}
+        </div>
+        {occupancyStatusNode}
       </div>
     );
-  })();
-
-  const rendererNode = (
-    <Renderer
-      cityAccount={props.cityAccount}
-      selected={props.selected}
-      selectedEntity={props.selectedEntity ?? null}
-      occupied={occupied}
-      travel={props.travel}
-      otherWalks={props.otherWalks}
-      myPlayerPubkey={props.myPlayerPubkey}
-      autoFocusCell={props.autoFocusCell}
-      mapMode={mapMode}
-      onModeCommitted={handleModeCommitted}
-      onPick={handlePick}
-      onHover={setHover}
-      onZoomChange={setZoom}
-      onCellsVisibleChange={setCellsVisible}
-      onContextLost={() => setWebglLost(true)}
-      touchOrbitEnabled={touchOrbitEnabled}
-      resetTrigger={resetTrigger}
-      getDotTooltip={props.getDotTooltip}
-      teamMatePubkeys={props.teamMatePubkeys}
-      onActiveOccupant={setActiveOccupant}
-      focusRequest={focusRequest}
-      onLabelClick={handleLabelClick}
-    />
-  );
-
-  return (
-    <div className={styles.root}>
-      <div
-        className={styles.canvasWrap}
-        role="application"
-        aria-label={`Terrain disc for ${props.cityAccount.name}. Click an occupant to inspect them, or pick an empty cell to land. Scroll or pinch to zoom, drag to pan, double-click to zoom in.`}
-        onPointerLeave={() => setActiveOccupant(null)}
-      >
-        {rendererNode}
-        {activeTooltipNode}
-        <button
-          type="button"
-          className={`${styles.togglePill} ${styles.toggle3DPill}`}
-          onClick={handleToggleMode}
-          aria-pressed={mapMode === "iso"}
-          title={mapMode === "iso" ? "Switch to top-down (2D)" : "Switch to tilted view (3D)"}
-        >
-          {mapMode === "iso" ? "2D" : "3D"}
-        </button>
-        {touchSupport && (
-          <button
-            type="button"
-            className={`${styles.togglePill} ${styles.orbitTogglePill}`}
-            onClick={() => setTouchOrbitEnabled((v) => !v)}
-            aria-pressed={touchOrbitEnabled}
-            title={
-              touchOrbitEnabled
-                ? "Two-finger drag rotates (tap to switch back to pan)"
-                : "Two-finger drag pans (tap to enable rotate)"
-            }
-          >
-            ⤺
-          </button>
-        )}
-        {/* Reset chip — mirror the 2D fallback's `view.scale > 1.001`
-         * gate so the chip only appears once the user has actually
-         * zoomed in. At default zoom it would be a no-op affordance. */}
-        {zoom > 1.001 && (
-          <button
-            type="button"
-            className={styles.resetBtn}
-            onClick={(e) => {
-              e.stopPropagation();
-              setResetTrigger((n) => n + 1);
-            }}
-            aria-label="Reset view"
-            title="Reset view"
-          >
-            ↻
-          </button>
-        )}
-        {outOfBoundsNotice && (
-          <div className={styles.outOfBoundsNotice} role="status" aria-live="polite">
-            Outside city bounds
-          </div>
-        )}
-      </div>
-      <div className={styles.readout} aria-live="polite">
-        {hover ? (
-          <>
-            <span className={hover.passable ? "" : styles.impassable}>{hover.label}</span>
-            <span>·</span>
-            <span>{hover.distM.toLocaleString()}m from centre</span>
-            {!hover.passable && <span>· impassable</span>}
-          </>
-        ) : props.selected ? (
-          <span>Landing chosen · {selectedDistM.toLocaleString()}m from centre</span>
-        ) : (
-          <span>click a player or wild to inspect, or pick an empty cell to land.</span>
-        )}
-      </div>
-    </div>
-  );
-});
+  },
+);

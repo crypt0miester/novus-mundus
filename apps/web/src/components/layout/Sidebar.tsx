@@ -38,7 +38,7 @@ export function TierSwitcher() {
               "rounded px-2 py-1 text-xs transition-colors",
               active === i
                 ? "bg-surface-overlay tier-accent-text"
-                : "text-text-muted hover:text-text-secondary"
+                : "text-text-muted hover:text-text-secondary",
             )}
           >
             {i} {name}

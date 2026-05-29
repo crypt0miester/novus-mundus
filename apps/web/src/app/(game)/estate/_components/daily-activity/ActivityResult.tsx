@@ -25,7 +25,7 @@ export function ActivityResult({ title, score, summary, onClose }: ActivityResul
     const duration = 900;
     const tick = (t: number) => {
       const p = Math.min(1, (t - start) / duration);
-      const eased = 1 - Math.pow(1 - p, 3);
+      const eased = 1 - (1 - p) ** 3;
       setShown(Math.round(eased * score));
       if (p < 1) raf = requestAnimationFrame(tick);
     };

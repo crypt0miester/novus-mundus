@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -24,6 +24,7 @@ import {
   type EventAccount,
   type EventParticipation,
 } from "novus-mundus-sdk";
+import { eventSplashPath } from "@/lib/events/splash";
 
 const STATUS_LABEL: Record<number, string> = {
   [EventStatus.Pending]: "Upcoming",
@@ -71,6 +72,7 @@ export function EventCard({
   const startTime = event.startTime.toNumber();
   const endTime = event.endTime.toNumber();
   const status = event.status;
+  const splash = eventSplashPath(eventId, startTime, endTime);
 
   const leaderboard = useMemo(
     () => event.leaderboard.slice(0, event.leaderboardCount),
@@ -186,23 +188,32 @@ export function EventCard({
 
   return (
     <div className={`card ${status === EventStatus.Active ? "accent-border" : ""}`}>
-      {/* Header */}
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <div className="font-display text-lg font-bold tracking-wide text-text-primary">
-            {event.name || `Event #${eventId}`}
-          </div>
-          <div className="mt-0.5 text-xs text-text-muted">
-            {event.participantCount.toLocaleString()} participant
-            {event.participantCount === 1 ? "" : "s"}
-            {event.minLevel > 1 && ` · min level ${event.minLevel}`}
-          </div>
-        </div>
+      {/* Splash banner with the event name overlaid directly on the art */}
+      <div
+        className="relative mb-2 aspect-[16/9] w-full overflow-hidden rounded-lg border border-border-default"
+        style={{
+          backgroundImage: `url(${splash})`,
+          backgroundSize: "cover",
+          backgroundPosition: "center",
+        }}
+      >
         <span
-          className={`shrink-0 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[status] ?? "bg-zinc-800 text-text-muted"}`}
+          className={`absolute right-2 top-2 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[status] ?? "bg-zinc-800 text-text-muted"}`}
         >
           {STATUS_LABEL[status] ?? `Status ${status}`}
         </span>
+        <div className="absolute inset-x-0 bottom-0 p-3">
+          <div className="font-display text-lg font-bold tracking-wide text-zinc-50 [text-shadow:0_1px_2px_rgba(0,0,0,0.95),0_2px_10px_rgba(0,0,0,0.85)]">
+            {event.name || `Event #${eventId}`}
+          </div>
+        </div>
+      </div>
+
+      {/* Participation meta */}
+      <div className="mb-1 text-xs text-text-muted">
+        {event.participantCount.toLocaleString()} participant
+        {event.participantCount === 1 ? "" : "s"}
+        {event.minLevel > 1 && ` · min level ${event.minLevel}`}
       </div>
 
       {/* Prize + timing */}

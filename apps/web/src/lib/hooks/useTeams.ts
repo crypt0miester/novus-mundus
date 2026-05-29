@@ -25,9 +25,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
  * the singleton is owned by the /team page; this is owned by anyone
  * rendering a roster (map disc, EntityPanel, leaderboard…).
  */
-export function useTeams(
-  pubkeys: PublicKey[] | undefined | null,
-): Map<string, TeamAccount> {
+export function useTeams(pubkeys: PublicKey[] | undefined | null): Map<string, TeamAccount> {
   const { connection } = useConnection();
   const client = useNovusMundusClient();
   const gameEngineKey = client.gameEngine.toBase58();
@@ -86,7 +84,10 @@ export function useTeams(
       }
       if (cancelled || collected.length === 0) return;
       upsertTeams(
-        collected.filter((e): e is { pubkey: PublicKey; account: NonNullable<ReturnType<typeof parseTeam>> } => e.account != null),
+        collected.filter(
+          (e): e is { pubkey: PublicKey; account: NonNullable<ReturnType<typeof parseTeam>> } =>
+            e.account != null,
+        ),
       );
     })();
 

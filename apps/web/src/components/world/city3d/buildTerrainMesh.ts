@@ -48,10 +48,7 @@ export const COLOR_TEXTURE_SIZE_HIGH = 4096;
  */
 export const COLOR_TEXTURE_SIZE_PREVIEW = 512;
 
-function wrapAsBiomeColorTexture(
-  data: Uint8Array,
-  texSize: number,
-): THREE.DataTexture {
+function wrapAsBiomeColorTexture(data: Uint8Array, texSize: number): THREE.DataTexture {
   const tex = new THREE.DataTexture(data, texSize, texSize, THREE.RGBAFormat);
   // LinearFilter for organic biome edges — replaces NearestFilter.
   tex.magFilter = THREE.LinearFilter;
@@ -104,10 +101,7 @@ export function buildTerrainMesh(
  * bake ran in a Worker — we receive the bytes via postMessage and
  * just need to wrap them in a DataTexture + Mesh on the main thread.
  */
-export function meshFromBakedPixels(
-  pixels: Uint8Array,
-  texSize: number,
-): BuiltTerrainMesh {
+export function meshFromBakedPixels(pixels: Uint8Array, texSize: number): BuiltTerrainMesh {
   const colorMap = wrapAsBiomeColorTexture(pixels, texSize);
   return buildMeshFromColorMap(colorMap);
 }

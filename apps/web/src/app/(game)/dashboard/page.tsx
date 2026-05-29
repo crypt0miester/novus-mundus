@@ -8,11 +8,7 @@ import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useLoot } from "@/lib/hooks/useLoot";
 import { useNoviBalance } from "@/lib/hooks/useNoviBalance";
 import { useStamina } from "@/lib/hooks/useStamina";
-import {
-  useCombatPower,
-  useTravelProgress,
-  useSubscriptionStatus,
-} from "@/lib/hooks/useDerived";
+import { useCombatPower, useTravelProgress, useSubscriptionStatus } from "@/lib/hooks/useDerived";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
 import { ProgressRing } from "@/components/shared/ProgressRing";
@@ -29,11 +25,7 @@ import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToMultiplier, formatTime, formatNumber } from "@/lib/utils";
-import {
-  xpRequiredForLevel,
-  levelProgressPercent,
-  deciToNovi,
-} from "novus-mundus-sdk";
+import { xpRequiredForLevel, levelProgressPercent, deciToNovi } from "novus-mundus-sdk";
 
 export default function DashboardPage() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
@@ -232,14 +224,15 @@ export default function DashboardPage() {
                             the game-state accounting (player.lockedNovi).
                             They should match; when they don't, the spendable
                             number is the wallet's, not the accounting's. */}
-                        {!novi.loading && deciToNovi(player.lockedNovi) !== deciToNovi(novi.raw) && (
-                          <div className="flex justify-between text-[11px] text-text-muted">
-                            <span>Vault accounting</span>
-                            <span className="font-mono tabular-nums">
-                              ◆ {deciToNovi(player.lockedNovi).toLocaleString()}
-                            </span>
-                          </div>
-                        )}
+                        {!novi.loading &&
+                          deciToNovi(player.lockedNovi) !== deciToNovi(novi.raw) && (
+                            <div className="flex justify-between text-[11px] text-text-muted">
+                              <span>Vault accounting</span>
+                              <span className="font-mono tabular-nums">
+                                ◆ {deciToNovi(player.lockedNovi).toLocaleString()}
+                              </span>
+                            </div>
+                          )}
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Cash</span>
                           <span className="flex items-center gap-1">

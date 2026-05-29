@@ -1,9 +1,4 @@
-import type {
-  Archetype,
-  Difficulty,
-  GeneratedPuzzle,
-  RandomSource,
-} from "../types";
+import type { Archetype, Difficulty, GeneratedPuzzle, RandomSource } from "../types";
 import { asAnswerArray, mergeContent } from "./helpers";
 
 /**
@@ -50,16 +45,9 @@ const DEFAULT_CONTENT: AssignmentContent = {
   names: ["Item"],
 };
 
-function generate(
-  rng: RandomSource,
-  difficulty: Difficulty,
-  content?: unknown,
-): GeneratedPuzzle {
+function generate(rng: RandomSource, difficulty: Difficulty, content?: unknown): GeneratedPuzzle {
   const c = mergeContent(DEFAULT_CONTENT, content);
-  const binCount = Math.max(
-    2,
-    Math.min(c.bins.length, difficulty.bins ?? c.bins.length),
-  );
+  const binCount = Math.max(2, Math.min(c.bins.length, difficulty.bins ?? c.bins.length));
   const count = Math.max(3, difficulty.items ?? 6);
   const span = Math.floor(100 / binCount);
 

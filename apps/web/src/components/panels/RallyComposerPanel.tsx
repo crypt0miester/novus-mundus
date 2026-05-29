@@ -11,7 +11,7 @@ import {
   parseCastle,
   isNullPubkey,
   isTraveling,
-  RallyTargetType,
+  type RallyTargetType,
 } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useTeam } from "@/lib/hooks/useTeam";
@@ -203,9 +203,7 @@ export function RallyComposerPanel({
   // ─── Early states ───────────────────────────────────────────────
 
   if (!teamId) {
-    return (
-      <p className="text-sm text-text-muted">Join a team to raise a rally.</p>
-    );
+    return <p className="text-sm text-text-muted">Join a team to raise a rally.</p>;
   }
 
   if (targetAlive === false) {
@@ -325,11 +323,7 @@ export function RallyComposerPanel({
         </div>
       )}
 
-      <TxButton
-        onClick={handleCreate}
-        disabled={submitDisabled}
-        className="hidden md:block"
-      >
+      <TxButton onClick={handleCreate} disabled={submitDisabled} className="hidden md:block">
         Raise Rally
       </TxButton>
     </div>

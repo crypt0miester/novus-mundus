@@ -24,10 +24,6 @@ export function generatePuzzle(
     throw new Error(`no mini-game configured for building ${building}`);
   }
   const rng = new Rng("estate.minigame", estatePda, `${building}:${day}:${window}`);
-  const generated = ARCHETYPES[config.archetype].generate(
-    rng,
-    config.difficulty,
-    config.content,
-  );
+  const generated = ARCHETYPES[config.archetype].generate(rng, config.difficulty, config.content);
   return { archetype: config.archetype, ...generated };
 }

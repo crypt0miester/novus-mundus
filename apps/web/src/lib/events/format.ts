@@ -7,15 +7,43 @@
 
 import { formatNoviAmount, type NovusMundusEvent } from "novus-mundus-sdk";
 
-function bn(v: unknown): number {
-  if (typeof v === "number") return v;
-  if (typeof v === "bigint") return Number(v);
-  if (v && typeof (v as any).toNumber === "function") return (v as any).toNumber();
-  return Number(v) || 0;
+// Structural BN: the SDK ships its own bn.js types and the web app's root
+// install is a different version, so naming bn.js's `BN` across the module
+// boundary trips TS2345. A minimal shape avoids the duplicate type identity
+// while still describing what we read off event data.
+interface BnLike {
+  toNumber(): number;
 }
 
-function fmt(v: unknown): string {
+// Numeric event-data fields arrive in one of these shapes. Live events (from
+// useTransact) carry BN / number / bigint; events replayed from IndexedDB via
+// the ActivityFeed carry the serialized form, where serializeEventData() in
+// store/events.ts stringifies BN to keep u64 precision across JSON. A decimal
+// string is a faithful value, not an "absent" field; there is still no branch
+// that coerces a missing field to a fake zero. A legitimately-optional field
+// would be modelled `BnNumeric | undefined` and branched on presence at the
+// call site.
+type BnNumeric = number | bigint | string | BnLike;
+
+function bn(v: BnNumeric): number {
+  if (typeof v === "number") return v;
+  if (typeof v === "bigint") return Number(v);
+  if (typeof v === "string") return Number(v);
+  return v.toNumber();
+}
+
+function fmt(v: BnNumeric): string {
   return bn(v).toLocaleString();
+}
+
+// PublicKey fields, like the numeric ones above, arrive in two shapes: a live
+// PublicKey object on useTransact events, or a base58 string on events replayed
+// from IndexedDB (serializeEventData() stringifies via toBase58()). Both reduce
+// to the same base58 text, so callers can slice() either uniformly.
+type B58 = string | { toBase58(): string };
+
+function addr(v: B58): string {
+  return typeof v === "string" ? v : v.toBase58();
 }
 
 interface EventMessage {
@@ -28,22 +56,31 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     // ── Combat ─────────────────────────────────────────────
     case "PlayerAttacked": {
       const d = event.data;
-      const target = d.defenderName || d.defender.toBase58().slice(0, 6);
+      const target = d.defenderName || addr(d.defender).slice(0, 6);
       if (d.attackerWon) {
-        return { title: "Attack Successful", message: `Defeated ${target} — stole $${fmt(d.cashStolen)} cash` };
+        return {
+          title: "Attack Successful",
+          message: `Defeated ${target}, stole $${fmt(d.cashStolen)} cash`,
+        };
       }
       return { title: "Attack Failed", message: `${target} defended successfully` };
     }
     case "EncounterAttacked": {
       const d = event.data;
-      return { title: "Encounter Hit", message: `Dealt ${fmt(d.damageDealt)} damage, ${fmt(d.healthRemaining)} HP remaining` };
+      return {
+        title: "Encounter Hit",
+        message: `Dealt ${fmt(d.damageDealt)} damage, ${fmt(d.healthRemaining)} HP remaining`,
+      };
     }
     case "EncounterDefeated": {
       const d = event.data;
       const parts = [];
       if (bn(d.lootCash) > 0) parts.push(`$${fmt(d.lootCash)} cash`);
       if (bn(d.lootNovi) > 0) parts.push(`${formatNoviAmount(bn(d.lootNovi))} NOVI`);
-      return { title: "Encounter Defeated!", message: parts.length > 0 ? `Loot: ${parts.join(", ")}` : "No loot dropped" };
+      return {
+        title: "Encounter Defeated!",
+        message: parts.length > 0 ? `Loot: ${parts.join(", ")}` : "No loot dropped",
+      };
     }
 
     // ── Economy ────────────────────────────────────────────
@@ -62,7 +99,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     }
     case "CashTransferred": {
       const d = event.data;
-      const to = d.toName || d.to.toBase58().slice(0, 6);
+      const to = d.toName || addr(d.to).slice(0, 6);
       return { title: "Cash Sent", message: `$${fmt(d.amount)} transferred to ${to}` };
     }
     case "EquipmentPurchased":
@@ -103,7 +140,10 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
       return { title: "Estate Founded", message: "Your estate has been established" };
     case "BuildingStarted": {
       const d = event.data;
-      return { title: "Construction Started", message: `Building plot ${d.plot} under construction` };
+      return {
+        title: "Construction Started",
+        message: `Building plot ${d.plot} under construction`,
+      };
     }
     case "BuildingCompleted":
       return { title: "Building Complete", message: "Construction finished" };

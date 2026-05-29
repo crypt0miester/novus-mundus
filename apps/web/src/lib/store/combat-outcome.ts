@@ -3,9 +3,7 @@ import type { NovusMundusEvent } from "novus-mundus-sdk";
 import type { TxPhase } from "@/components/shared/TxButton";
 
 /** Re-runs the same attack; shaped to drop straight into a TxButton's onClick. */
-export type AttackAgain = (
-  reportPhase: (phase: TxPhase) => void,
-) => Promise<string>;
+export type AttackAgain = (reportPhase: (phase: TxPhase) => void) => Promise<string>;
 
 /**
  * Out-of-band context the modal needs but can't read from the events alone.

@@ -9,11 +9,7 @@ import { MinigameSession } from "./MinigameSession";
 import { StanceChoice, stanceName } from "./choices/StanceChoice";
 import { BlessingChoice } from "./choices/BlessingChoice";
 import { ActivityResult } from "./ActivityResult";
-import {
-  useDailyActivities,
-  WINDOW_LABEL,
-  type OwnedActivity,
-} from "./useDailyActivities";
+import { useDailyActivities, WINDOW_LABEL, type OwnedActivity } from "./useDailyActivities";
 
 interface DailyActivityPanelProps {
   building: number;
@@ -72,9 +68,7 @@ export function DailyActivityPanel({ building, onClose }: DailyActivityPanelProp
   const dailyReady = !!daily;
   const activity = daily?.owned.find((a) => a.meta.building === building) ?? null;
   const gated = !started && (!dailyReady || (!!activity && activity.status !== "available"));
-  const gateMessage = activity
-    ? windowGateMessage(activity)
-    : "Checking today's window…";
+  const gateMessage = activity ? windowGateMessage(activity) : "Checking today's window…";
 
   const runChoice = async (payload: { choice?: number; heroMint?: string }, summary: string) => {
     setSubmitting(true);

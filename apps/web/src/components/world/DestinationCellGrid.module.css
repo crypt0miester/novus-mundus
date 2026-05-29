@@ -26,7 +26,10 @@
   font-size: 0.78rem;
   line-height: 1;
   cursor: not-allowed;
-  transition: background 0.15s ease, color 0.15s ease, transform 0.15s ease;
+  transition:
+    background 0.15s ease,
+    color 0.15s ease,
+    transform 0.15s ease;
 }
 
 .empty {
@@ -44,12 +47,7 @@
 .occupied {
   opacity: 0.35;
   color: var(--ink-soft, #6b4a2a);
-  background:
-    repeating-linear-gradient(
-      45deg,
-      transparent 0 3px,
-      currentColor 3px 3.5px
-    );
+  background: repeating-linear-gradient(45deg, transparent 0 3px, currentColor 3px 3.5px);
   background-color: transparent;
 }
 
@@ -62,7 +60,8 @@
   border: 1px solid var(--seal, #b45309);
   color: var(--seal, #b45309);
   font-weight: 700;
-  box-shadow: 0 0 0 1px var(--seal, #b45309) inset,
+  box-shadow:
+    0 0 0 1px var(--seal, #b45309) inset,
     0 0 8px var(--seal-glow, rgba(180, 83, 9, 0.3));
 }
 
@@ -76,11 +75,25 @@
   color: var(--ink-soft, #6b4a2a);
   font-style: italic;
 }
-.legendSel { color: var(--seal, #b45309); font-style: normal; }
-.legendCtr { color: var(--ink, #2e1f10); font-style: normal; }
-.legendOcc { color: var(--ink-faint, #b89a72); font-style: normal; }
+.legendSel {
+  color: var(--seal, #b45309);
+  font-style: normal;
+}
+.legendCtr {
+  color: var(--ink, #2e1f10);
+  font-style: normal;
+}
+.legendOcc {
+  color: var(--ink-faint, #b89a72);
+  font-style: normal;
+}
 
 @keyframes pulse {
-  0%, 100% { opacity: 0.4; }
-  50% { opacity: 0.7; }
+  0%,
+  100% {
+    opacity: 0.4;
+  }
+  50% {
+    opacity: 0.7;
+  }
 }

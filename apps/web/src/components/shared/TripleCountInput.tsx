@@ -47,7 +47,14 @@ interface TripleCountInputProps {
  * Three number inputs that write into a tuple, each clamped to [0, available].
  * Used for committing units / weapons / operatives to an action.
  */
-export function TripleCountInput({ labels, available, value, onChange, icons, dense }: TripleCountInputProps) {
+export function TripleCountInput({
+  labels,
+  available,
+  value,
+  onChange,
+  icons,
+  dense,
+}: TripleCountInputProps) {
   const setIndex = (i: number, n: number) => {
     const next = [...value] as [number, number, number];
     next[i] = n;

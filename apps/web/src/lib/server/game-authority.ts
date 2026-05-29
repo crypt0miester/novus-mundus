@@ -11,14 +11,9 @@ import bs58 from "bs58";
  * the `/api/cosign/*` route handlers (Node runtime).
  */
 
-const RPC_URL =
-  process.env.RPC_URL ??
-  process.env.NEXT_PUBLIC_RPC_URL ??
-  "http://127.0.0.1:8899";
+const RPC_URL = process.env.RPC_URL ?? process.env.NEXT_PUBLIC_RPC_URL ?? "http://127.0.0.1:8899";
 
-export const KINGDOM_ID = Number(
-  process.env.KINGDOM_ID ?? process.env.NEXT_PUBLIC_KINGDOM_ID ?? 0,
-);
+export const KINGDOM_ID = Number(process.env.KINGDOM_ID ?? process.env.NEXT_PUBLIC_KINGDOM_ID ?? 0);
 
 /** Accepts either a base58 secret key or a JSON byte array (Solana CLI format). */
 function decodeSecretKey(raw: string): Uint8Array {

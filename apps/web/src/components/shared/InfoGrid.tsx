@@ -28,9 +28,7 @@ export function InfoGrid({ items, columns = 4, className }: InfoGridProps) {
     <div className={cn("grid gap-3", colClass, className)}>
       {items.map((item, i) => (
         <div key={i} className="rounded-lg bg-surface/60 px-3 py-2">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
-            {item.label}
-          </div>
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">{item.label}</div>
           <div
             className={cn(
               "mt-0.5 font-mono text-sm font-semibold tabular-nums",
@@ -39,9 +37,7 @@ export function InfoGrid({ items, columns = 4, className }: InfoGridProps) {
           >
             {item.value}
             {item.suffix && (
-              <span className="ml-0.5 text-[10px] font-normal text-zinc-500">
-                {item.suffix}
-              </span>
+              <span className="ml-0.5 text-[10px] font-normal text-zinc-500">{item.suffix}</span>
             )}
           </div>
         </div>

@@ -13,10 +13,8 @@ export function useAllCities() {
   const active = useAccountStore((s) => s.subscriptionActive);
 
   const data = useMemo(
-    () =>
-      Array.from(cities.values())
-        .sort((a, b) => a.account.cityId - b.account.cityId),
-    [cities]
+    () => Array.from(cities.values()).sort((a, b) => a.account.cityId - b.account.cityId),
+    [cities],
   );
 
   return {

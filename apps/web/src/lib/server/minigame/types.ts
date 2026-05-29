@@ -13,13 +13,7 @@ import type { TimeWindow } from "novus-mundus-sdk";
  */
 
 /** The six puzzle archetypes. */
-export type ArchetypeName =
-  | "mcq"
-  | "set-select"
-  | "assignment"
-  | "ordering"
-  | "memory"
-  | "reflex";
+export type ArchetypeName = "mcq" | "set-select" | "assignment" | "ordering" | "memory" | "reflex";
 
 /** Per-building difficulty knobs — archetype-specific, read with defaults. */
 export type Difficulty = Record<string, number>;
@@ -64,11 +58,7 @@ export interface Archetype {
    * difficulty, and optional per-building content (flavor labels, or a
    * question bank). Archetypes that need no content ignore the third argument.
    */
-  generate(
-    rng: RandomSource,
-    difficulty: Difficulty,
-    content?: unknown,
-  ): GeneratedPuzzle;
+  generate(rng: RandomSource, difficulty: Difficulty, content?: unknown): GeneratedPuzzle;
   /** Apply one move (multi-move archetypes only). */
   applyMove?(puzzle: unknown, progress: unknown, move: unknown): MoveOutcome;
   /**

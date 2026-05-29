@@ -12,6 +12,7 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { NumberField } from "@/components/shared/NumberField";
 import { FeatureLayout } from "./feature-layout";
+import { BuildingShowcase } from "./building-showcase";
 import { createConvertMaterialsInstruction } from "novus-mundus-sdk";
 
 const MATERIAL_TIERS = [
@@ -91,18 +92,21 @@ export function WorkshopTab() {
   return (
     <FeatureLayout
       main={
-        /* Material inventory */
-        <div className="grid gap-2 grid-cols-5">
-          {ALL_MATERIALS.map((m) => {
-            const val = player?.[m.field]?.toNumber?.() ?? 0;
-            return (
-              <div key={m.name} className="card text-center">
-                <div className="text-[10px] text-text-muted">{m.name}</div>
-                <GoldNumber value={val} size="sm" glow={val > 0} />
-              </div>
-            );
-          })}
-        </div>
+        <>
+          <BuildingShowcase buildingId={BuildingId.Workshop} icon="unit-artisan" />
+          {/* Material inventory */}
+          <div className="grid gap-2 grid-cols-5">
+            {ALL_MATERIALS.map((m) => {
+              const val = player?.[m.field]?.toNumber?.() ?? 0;
+              return (
+                <div key={m.name} className="card text-center">
+                  <div className="text-[10px] text-text-muted">{m.name}</div>
+                  <GoldNumber value={val} size="sm" glow={val > 0} />
+                </div>
+              );
+            })}
+          </div>
+        </>
       }
       aside={
         /* Conversion panel */

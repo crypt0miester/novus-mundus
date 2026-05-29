@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
-import { type CityAccount } from "novus-mundus-sdk";
+import type { CityAccount } from "novus-mundus-sdk";
 import {
   biomeAffinity,
   biomeAt,

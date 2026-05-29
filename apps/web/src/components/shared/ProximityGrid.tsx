@@ -1,12 +1,8 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import {
-  calculateDistanceMeters,
-  deriveLocationPda,
-  GRID_PRECISION,
-  toGrid,
-} from "novus-mundus-sdk";
+import { calculateDistanceMeters, GRID_PRECISION, toGrid } from "novus-mundus-sdk";
+import { cellLocationPda } from "@/lib/chain/travel";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -84,7 +80,7 @@ export function ProximityGrid({
   const [occupancy, setOccupancy] = useState<(boolean | null)[]>(() => new Array(9).fill(null));
 
   useEffect(() => {
-    const pdas = cells.map((c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0]);
+    const pdas = cells.map((c) => cellLocationPda(ge, cityId, c.gridLat, c.gridLong));
     client.connection
       .getMultipleAccountsInfo(pdas)
       .then((accounts) => setOccupancy(accounts.map((a) => a !== null)))

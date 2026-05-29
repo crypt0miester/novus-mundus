@@ -43,11 +43,11 @@ export default function LandingPage() {
       {/* Wallet connect */}
       <WalletMultiButton
         style={{
-          background: "#18181b",
-          border: "1px solid #92400e",
+          background: "var(--nm-bg-raised)",
+          border: "1px solid var(--tier-accent)",
           borderRadius: "0.5rem",
           fontWeight: 600,
-          color: "#fbbf24",
+          color: "var(--tier-accent-bright)",
           padding: "0.75rem 2rem",
         }}
       />

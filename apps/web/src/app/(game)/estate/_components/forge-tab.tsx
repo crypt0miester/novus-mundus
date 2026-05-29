@@ -9,8 +9,6 @@ import { useConnection } from "@solana/wallet-adapter-react";
 import { useQuery } from "@tanstack/react-query";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
-import { GoldCountdown } from "@/components/shared/GoldCountdown";
-import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import {
@@ -425,7 +423,7 @@ export function ForgeTab() {
                 Quality:
                 <select
                   value={equipTier}
-                  onChange={(e) => setEquipTier(parseInt(e.target.value))}
+                  onChange={(e) => setEquipTier(parseInt(e.target.value, 10))}
                   className="ml-2 rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
                 >
                   {QUALITY_TIERS.filter((q) => q.id > 0).map((q) => (

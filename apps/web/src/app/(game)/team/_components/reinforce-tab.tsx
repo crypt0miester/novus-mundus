@@ -348,102 +348,102 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
       {/* Send Reinforcements — hidden when this tab is rendered inside Forces
           (sending lives on the EntityPanel via ReinforceComposerPanel). */}
       {!hideComposer && (
-      <div className="card">
-        <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
-          Send Reinforcements
-        </h3>
-        <div className="space-y-3">
-          <div>
-            <label className="text-sm text-text-muted">
-              Target Player Address:
-              <input
-                type="text"
-                value={targetAddress}
-                onChange={(e) => setTargetAddress(e.target.value)}
-                placeholder="Wallet address..."
-                className="mt-1 w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
-              />
-            </label>
-            {targetAddress.trim() && !isValidAddress && (
-              <p className="text-xs text-red-400">Invalid Solana address</p>
-            )}
-          </div>
-          {/* Units & weapons committed to the reinforcement */}
-          <div>
-            <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              Defensive Units
+        <div className="card">
+          <h3 className="mb-4 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Send Reinforcements
+          </h3>
+          <div className="space-y-3">
+            <div>
+              <label className="text-sm text-text-muted">
+                Target Player Address:
+                <input
+                  type="text"
+                  value={targetAddress}
+                  onChange={(e) => setTargetAddress(e.target.value)}
+                  placeholder="Wallet address..."
+                  className="mt-1 w-full rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary placeholder-text-muted"
+                />
+              </label>
+              {targetAddress.trim() && !isValidAddress && (
+                <p className="text-xs text-red-400">Invalid Solana address</p>
+              )}
             </div>
-            <TripleCountInput
-              labels={DEFENSIVE_UNIT_LABELS}
-              icons={DEFENSIVE_UNIT_ICONS}
-              available={ownedUnits}
-              value={reinUnits}
-              onChange={setReinUnits}
-            />
-            <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-              Weapons
-            </div>
-            <TripleCountInput
-              labels={WEAPON_LABELS}
-              icons={WEAPON_ICONS}
-              available={ownedWeapons}
-              value={reinWeapons}
-              onChange={setReinWeapons}
-            />
-          </div>
-          {/* Hero picker — only rendered when the player has at least one
-              locked hero. Buttons (one per filled slot) instead of a select
-              so common cases (1 hero) are a single tap. */}
-          {lockedHeroes.some((h) => h !== null) && (
+            {/* Units & weapons committed to the reinforcement */}
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                Hero (optional)
+                Defensive Units
               </div>
-              <div className="mt-1 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  onClick={() => setReinHeroSlot(NO_HERO_SLOT)}
-                  className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                    reinHeroSlot === NO_HERO_SLOT
-                      ? "border-border-gold/50 bg-accent/30 text-text-gold"
-                      : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
-                  }`}
-                >
-                  None
-                </button>
-                {lockedHeroes.map((h, i) =>
-                  h ? (
-                    <button
-                      key={i}
-                      type="button"
-                      onClick={() => setReinHeroSlot(i)}
-                      className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                        reinHeroSlot === i
-                          ? "border-border-gold/50 bg-accent/30 text-text-gold"
-                          : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
-                      }`}
-                    >
-                      {h.name}
-                    </button>
-                  ) : null,
-                )}
+              <TripleCountInput
+                labels={DEFENSIVE_UNIT_LABELS}
+                icons={DEFENSIVE_UNIT_ICONS}
+                available={ownedUnits}
+                value={reinUnits}
+                onChange={setReinUnits}
+              />
+              <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                Weapons
               </div>
+              <TripleCountInput
+                labels={WEAPON_LABELS}
+                icons={WEAPON_ICONS}
+                available={ownedWeapons}
+                value={reinWeapons}
+                onChange={setReinWeapons}
+              />
             </div>
-          )}
-          <div className="flex flex-wrap gap-3">
-            <TxButton
-              onClick={handleSend}
-              disabled={
-                !isValidAddress ||
-                traveling ||
-                (reinUnits.every((n) => n === 0) && reinWeapons.every((n) => n === 0))
-              }
-            >
-              Send Reinforcement
-            </TxButton>
+            {/* Hero picker — only rendered when the player has at least one
+              locked hero. Buttons (one per filled slot) instead of a select
+              so common cases (1 hero) are a single tap. */}
+            {lockedHeroes.some((h) => h !== null) && (
+              <div>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Hero (optional)
+                </div>
+                <div className="mt-1 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setReinHeroSlot(NO_HERO_SLOT)}
+                    className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      reinHeroSlot === NO_HERO_SLOT
+                        ? "border-border-gold/50 bg-accent/30 text-text-gold"
+                        : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
+                    }`}
+                  >
+                    None
+                  </button>
+                  {lockedHeroes.map((h, i) =>
+                    h ? (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setReinHeroSlot(i)}
+                        className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          reinHeroSlot === i
+                            ? "border-border-gold/50 bg-accent/30 text-text-gold"
+                            : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
+                        }`}
+                      >
+                        {h.name}
+                      </button>
+                    ) : null,
+                  )}
+                </div>
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
+              <TxButton
+                onClick={handleSend}
+                disabled={
+                  !isValidAddress ||
+                  traveling ||
+                  (reinUnits.every((n) => n === 0) && reinWeapons.every((n) => n === 0))
+                }
+              >
+                Send Reinforcement
+              </TxButton>
+            </div>
           </div>
         </div>
-      </div>
       )}
 
       {/* In-Flight Reinforcements */}

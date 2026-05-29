@@ -30,14 +30,9 @@ export interface CompositionParams {
   constellation: Array<{ x: number; y: number }>;
 }
 
-export function fingerprintFromPubkey(
-  pubkey: Uint8Array,
-  state: HeroState,
-): CompositionParams {
+export function fingerprintFromPubkey(pubkey: Uint8Array, state: HeroState): CompositionParams {
   if (pubkey.length !== 32) {
-    throw new Error(
-      `fingerprintFromPubkey: expected 32 bytes, got ${pubkey.length}`,
-    );
+    throw new Error(`fingerprintFromPubkey: expected 32 bytes, got ${pubkey.length}`);
   }
   const b = pubkey;
 

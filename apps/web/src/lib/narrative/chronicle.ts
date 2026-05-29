@@ -91,8 +91,7 @@ export const JOURNEY_BEATS: readonly JourneyBeat[] = [
     act: 1,
     key: "barracks",
     label: "Raise the Barracks",
-    framing:
-      "Walls for the people who fight. A holding needs them before it needs anything else.",
+    framing: "Walls for the people who fight. A holding needs them before it needs anything else.",
     done: (f) => f.hasBuilding(BuildingId.Barracks),
   },
   {
@@ -106,24 +105,21 @@ export const JOURNEY_BEATS: readonly JourneyBeat[] = [
     act: 1,
     key: "hire",
     label: "Take in your first people",
-    framing:
-      "Word crossed the road. Someone walked here to find out if it was true.",
+    framing: "Word crossed the road. Someone walked here to find out if it was true.",
     done: (f) => f.units > 0,
   },
   {
     act: 1,
     key: "market",
     label: "Raise the Market",
-    framing:
-      "The holding's first window on the world — a place to trade what the land gives.",
+    framing: "The holding's first window on the world — a place to trade what the land gives.",
     done: (f) => f.hasBuilding(BuildingId.Market),
   },
   {
     act: 2,
     key: "academy",
     label: "Raise the Academy",
-    framing:
-      "The old world left knowledge in the ash. The Academy is where it is dug up.",
+    framing: "The old world left knowledge in the ash. The Academy is where it is dug up.",
     done: (f) => f.hasBuilding(BuildingId.Academy),
   },
   {
@@ -137,8 +133,7 @@ export const JOURNEY_BEATS: readonly JourneyBeat[] = [
     act: 2,
     key: "stables",
     label: "Raise the Stables",
-    framing:
-      "The road out. Past the Stables, the map is larger than one holding.",
+    framing: "The road out. Past the Stables, the map is larger than one holding.",
     done: (f) => f.hasBuilding(BuildingId.Stables),
   },
   {
@@ -167,8 +162,7 @@ export const JOURNEY_BEATS: readonly JourneyBeat[] = [
     act: 5,
     key: "crown",
     label: "Take a crown",
-    framing:
-      "A ruin once asked what it could become. A seat. A crown. The climb earned it.",
+    framing: "A ruin once asked what it could become. A seat. A crown. The climb earned it.",
     done: (f) => f.ownsCastle,
   },
 ];

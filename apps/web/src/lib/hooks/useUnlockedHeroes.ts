@@ -6,9 +6,7 @@ import { PublicKey } from "@solana/web3.js";
 import { parseAssetV1, type ParsedAssetV1 } from "novus-mundus-sdk";
 
 /** MPL Core program — owns hero NFT (AssetV1) accounts. */
-const MPL_CORE_PROGRAM_ID = new PublicKey(
-  "CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d",
-);
+const MPL_CORE_PROGRAM_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
 
 export interface UnlockedHero {
   mint: PublicKey;
@@ -49,7 +47,7 @@ export function useUnlockedHeroes(): UnlockedHero[] {
           try {
             const asset = parseAssetV1(account.data);
             // Only hero assets carry a "Template" attribute.
-            if (!asset || !asset.attributes["Template"]) continue;
+            if (!asset?.attributes.Template) continue;
             found.push({ mint: pubkey, name: asset.name || "Hero", asset });
           } catch {
             /* skip unparseable assets */

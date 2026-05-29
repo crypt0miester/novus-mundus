@@ -71,10 +71,7 @@ export class LandingLayer {
     this.group.add(this.ring);
 
     /* Crosshair — built at unit scale, scaled per zoom in `update`. */
-    const crossVerts = new Float32Array([
-      -1, 0, 0, 1, 0, 0,
-      0, 0, -1, 0, 0, 1,
-    ]);
+    const crossVerts = new Float32Array([-1, 0, 0, 1, 0, 0, 0, 0, -1, 0, 0, 1]);
     const crossGeom = new THREE.BufferGeometry();
     crossGeom.setAttribute("position", new THREE.BufferAttribute(crossVerts, 3));
     this.cross = new THREE.LineSegments(
@@ -96,10 +93,7 @@ export class LandingLayer {
     this.cityLongGrid = center.cityLongGrid;
   }
 
-  update(
-    selected: { gridLat: number; gridLong: number } | null,
-    cssPxPerCell: number,
-  ): void {
+  update(selected: { gridLat: number; gridLong: number } | null, cssPxPerCell: number): void {
     if (!selected) {
       this.ring.visible = false;
       this.cross.visible = false;

@@ -15,10 +15,7 @@ import { deriveCastlePda, parseCastle } from "novus-mundus-sdk";
  * ran on the old one. We gate `data` on the cached entry matching the
  * requested PDA, and let the in-flight fetch repopulate.
  */
-export function useCastle(
-  cityId: number | null | undefined,
-  castleId: number | null | undefined
-) {
+export function useCastle(cityId: number | null | undefined, castleId: number | null | undefined) {
   const entry = useAccountStore((s) => s.castle);
   const client = useNovusMundusClient();
   const { connection } = useConnection();
@@ -57,8 +54,7 @@ export function useCastle(
     };
   }, [requestedPubkey, connection]);
 
-  const matchesRequest =
-    !!entry && !!requestedPubkey && entry.pubkey.equals(requestedPubkey);
+  const matchesRequest = !!entry && !!requestedPubkey && entry.pubkey.equals(requestedPubkey);
   const data = matchesRequest
     ? { pubkey: entry.pubkey, account: entry.account, exists: true }
     : null;

@@ -5,7 +5,7 @@ import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useEstate } from "@/lib/hooks/useEstate";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useQuery } from "@tanstack/react-query";
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -14,12 +14,10 @@ import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { FeatureGate } from "@/components/shared/FeatureGate";
-import { NoviGenerator } from "@/components/shared/NoviGenerator";
-import { NoviRewards } from "@/components/shared/NoviRewards";
 import { NumberField } from "@/components/shared/NumberField";
 import { BuildingId, FEATURES } from "@/lib/hooks/useFeatureGate";
-import { buildingFraming } from "@/lib/narrative";
 import { FeatureLayout } from "./feature-layout";
+import { BuildingShowcase } from "./building-showcase";
 import {
   createCollectResourcesInstruction,
   createTransferCashInstruction,
@@ -113,7 +111,7 @@ export function VaultTab() {
     <FeatureLayout
       main={
         <>
-          <p className="text-xs italic text-text-muted">{buildingFraming(BuildingId.Vault).line}</p>
+          <BuildingShowcase buildingId={BuildingId.Vault} icon="resource-cash" />
 
           {/* Cash collection — turning locked NOVI into spendable cash. */}
           <FeatureGate feature={FEATURES.COLLECT_CASH}>

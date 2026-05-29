@@ -105,8 +105,8 @@ export function Arrival({ hasPlayer, onComplete }: ArrivalProps) {
           role="alert"
           className="absolute left-1/2 top-4 z-20 w-[min(36rem,calc(100%-2rem))] -translate-x-1/2 rounded border border-border-warn bg-surface-raised px-4 py-2 text-xs lowercase text-text-warn shadow-sm"
         >
-          a previous unfinished jump couldn't be resumed under the new build.
-          you'll need to re-pick your ground.
+          a previous unfinished jump couldn't be resumed under the new build. you'll need to re-pick
+          your ground.
         </div>
       )}
       <div className="flex min-h-full flex-col items-center justify-center px-4 py-14">

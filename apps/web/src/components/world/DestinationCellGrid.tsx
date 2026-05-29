@@ -42,15 +42,11 @@ export function DestinationCellGrid({
     return result;
   }, [centerGridLat, centerGridLong]);
 
-  const [occupancy, setOccupancy] = useState<(boolean | null)[]>(
-    () => new Array(25).fill(null),
-  );
+  const [occupancy, setOccupancy] = useState<(boolean | null)[]>(() => new Array(25).fill(null));
 
   useEffect(() => {
     let cancelled = false;
-    const pdas = cells.map(
-      (c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0],
-    );
+    const pdas = cells.map((c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0]);
     client.connection
       .getMultipleAccountsInfo(pdas)
       .then((accts) => {
@@ -77,10 +73,10 @@ export function DestinationCellGrid({
             selected.gridLong === cell.gridLong;
 
           let cls = styles.cell;
-          if (isSelected) cls += " " + styles.selected;
-          else if (loading) cls += " " + styles.loading;
-          else if (!isEmpty) cls += " " + styles.occupied;
-          else cls += " " + styles.empty;
+          if (isSelected) cls += ` ${styles.selected}`;
+          else if (loading) cls += ` ${styles.loading}`;
+          else if (!isEmpty) cls += ` ${styles.occupied}`;
+          else cls += ` ${styles.empty}`;
 
           return (
             <button
@@ -89,13 +85,7 @@ export function DestinationCellGrid({
               disabled={!isEmpty}
               onClick={() => isEmpty && onSelect(cell.gridLat, cell.gridLong)}
               className={cls}
-              aria-label={
-                isCenter
-                  ? "City centre"
-                  : !isEmpty
-                    ? "Occupied cell"
-                    : "Empty cell"
-              }
+              aria-label={isCenter ? "City centre" : !isEmpty ? "Occupied cell" : "Empty cell"}
             >
               {loading ? "" : isSelected ? "✕" : !isEmpty ? "·" : isCenter ? "✦" : ""}
             </button>

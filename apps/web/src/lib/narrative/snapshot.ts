@@ -66,10 +66,7 @@ export interface EstateSnapshot {
 }
 
 /** Capture the current state into a snapshot. */
-export function computeSnapshot(
-  player: PlayerLike,
-  estate: EstateLike | null,
-): EstateSnapshot {
+export function computeSnapshot(player: PlayerLike, estate: EstateLike | null): EstateSnapshot {
   const n = (v: Numeric) => v.toNumber();
   return {
     at: Math.floor(Date.now() / 1000),
@@ -138,19 +135,13 @@ export interface ReportDiff {
 }
 
 /** Diff a prior snapshot against the current one. */
-export function diffSnapshot(
-  prev: EstateSnapshot,
-  now: EstateSnapshot,
-): ReportDiff {
+export function diffSnapshot(prev: EstateSnapshot, now: EstateSnapshot): ReportDiff {
   const prevByType = new Map(prev.buildings.map((b) => [b.type, b]));
   const buildingsRisen: number[] = [];
   const buildingsImproved: number[] = [];
   for (const b of now.buildings) {
     const was = prevByType.get(b.type);
-    if (
-      b.status === BuildingStatus.Active &&
-      (!was || was.status !== BuildingStatus.Active)
-    ) {
+    if (b.status === BuildingStatus.Active && (!was || was.status !== BuildingStatus.Active)) {
       buildingsRisen.push(b.type);
     } else if (was && b.level > was.level) {
       buildingsImproved.push(b.type);
@@ -166,8 +157,7 @@ export function diffSnapshot(
   const streakGained = gain(now.loginStreak, prev.loginStreak);
   const attacked = gain(now.totalDefenses, prev.totalDefenses);
   const joinedHouse = !prev.inHouse && now.inHouse;
-  const protectionEnded =
-    prev.protectionUntil > prev.at && now.protectionUntil <= now.at;
+  const protectionEnded = prev.protectionUntil > prev.at && now.protectionUntil <= now.at;
 
   // Treasury drift (NOVI regen, networth) is ambient, not news — left out of
   // hasNews so the Report only speaks when something real moved.

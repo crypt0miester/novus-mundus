@@ -95,9 +95,7 @@ export function TemplateDetailPanel({
         {t.account.requiredPlayerLevel > 0 && (
           <div className="flex items-center justify-between text-xs">
             <span className="text-text-muted">Required level</span>
-            <span
-              className={`font-mono ${meetsLevel ? "text-text-secondary" : "text-red-400"}`}
-            >
+            <span className={`font-mono ${meetsLevel ? "text-text-secondary" : "text-red-400"}`}>
               Lv{t.account.requiredPlayerLevel} {!meetsLevel && `(you: ${playerLevel})`}
             </span>
           </div>

@@ -1,23 +1,11 @@
 import "server-only";
 import { PublicKey, type TransactionInstruction } from "@solana/web3.js";
-import {
-  createEnterDungeonInstruction,
-  createPurchaseStaminaInstruction,
-} from "novus-mundus-sdk";
+import { createEnterDungeonInstruction, createPurchaseStaminaInstruction } from "novus-mundus-sdk";
 import { gameAuthorityKeypair } from "@/lib/server/game-authority";
-import {
-  gameEnginePda,
-  getDungeonRun,
-  getDungeonTemplate,
-  getPlayer,
-} from "@/lib/server/chain";
+import { gameEnginePda, getDungeonRun, getDungeonTemplate, getPlayer } from "@/lib/server/chain";
 import { rateLimited } from "@/lib/server/rate-limit";
 import { rollEnterRoom } from "@/lib/server/dungeon-logic";
-import {
-  coSignResponse,
-  fail,
-  parseSessionBody,
-} from "@/lib/server/route-helpers";
+import { coSignResponse, fail, parseSessionBody } from "@/lib/server/route-helpers";
 
 export const runtime = "nodejs";
 
@@ -80,10 +68,7 @@ export async function POST(req: Request) {
     const shortfall = template.staminaCost - player.encounterStamina.toNumber();
     if (shortfall > 0) {
       instructions.push(
-        createPurchaseStaminaInstruction(
-          { owner, gameEngine },
-          { amount: shortfall },
-        ),
+        createPurchaseStaminaInstruction({ owner, gameEngine }, { amount: shortfall }),
       );
     }
   }

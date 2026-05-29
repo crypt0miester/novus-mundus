@@ -18,14 +18,7 @@
  * camera/state changes only. Steady-state CPU usage is ~0%.
  */
 
-import {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import { toGrid, type CityAccount } from "novus-mundus-sdk";
 import { biomeKnobsFromCity, type BiomeKnobs } from "@/lib/world/biome";
@@ -50,23 +43,11 @@ function cityTerrain(city: CityAccount): CityTerrain {
  * useMemo it threads into setupCityScene + the rebuild effect. */
 import type { MapMode } from "@/lib/store/settings";
 import type { OccupiedCell } from "@/lib/hooks/useCityOccupied";
-import type {
-  CityTerrainEntity,
-  DotTooltip,
-  WalkLine,
-} from "../CityTerrainMap2DFallback";
+import type { CityTerrainEntity, DotTooltip, WalkLine } from "../CityTerrainMap2DFallback";
 
 import styles from "../CityTerrainMap.module.css";
-import {
-  MESH_SIZE,
-  METERS_PER_GRID_UNIT,
-  worldToGrid,
-} from "./coords";
-import {
-  setupCityScene,
-  type SceneRefs,
-  type SceneHandlersRef,
-} from "./hooks/setupCityScene";
+import { MESH_SIZE, METERS_PER_GRID_UNIT, worldToGrid } from "./coords";
+import { setupCityScene, type SceneRefs, type SceneHandlersRef } from "./hooks/setupCityScene";
 import { usePaintLoop } from "./hooks/usePaintLoop";
 import { useSceneInputs } from "./hooks/useSceneInputs";
 import { useSceneSync } from "./hooks/useSceneSync";
@@ -120,10 +101,7 @@ export interface CityTerrainMapWebGLProps {
    * label pool and the active hover tooltip with name + level + tier
    * + cosmetics. When undefined, labels and the active tooltip don't
    * render (matches the 2D fallback's behaviour). */
-  getDotTooltip?: (
-    occupant: string,
-    occupantType: number,
-  ) => DotTooltip | null;
+  getDotTooltip?: (occupant: string, occupantType: number) => DotTooltip | null;
   /* Pubkeys of OTHER players on the local viewer's team — passed
    * straight through to the inspection-band label sizer (teammates
    * get a higher priority so collisions hide neutrals first). */
@@ -203,9 +181,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
       const r = el.getBoundingClientRect();
       const w = Math.max(1, Math.round(r.width));
       const h = Math.max(1, Math.round(r.height));
-      setSize((prev) =>
-        Math.abs(prev.w - w) > 4 || Math.abs(prev.h - h) > 4 ? { w, h } : prev,
-      );
+      setSize((prev) => (Math.abs(prev.w - w) > 4 || Math.abs(prev.h - h) > 4 ? { w, h } : prev));
     };
     const schedule = () => {
       if (timeoutId !== null) clearTimeout(timeoutId);
@@ -274,15 +250,9 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     /* eslint-disable-next-line react-hooks/exhaustive-deps */
   }, []);
 
-
   /* ─── Helpers (closed over refs) ─────────────────────────── */
 
-  const { requestRender } = usePaintLoop(
-    refs,
-    propsRef,
-    updateScaleBar,
-    updateCompass,
-  );
+  const { requestRender } = usePaintLoop(refs, propsRef, updateScaleBar, updateCompass);
 
   const {
     handleClick,
@@ -433,7 +403,7 @@ function updateScaleBar(r: SceneRefs): void {
     }
   }
   const barPx = Math.round(scaleM / mPerPx);
-  const label = scaleM >= 1000 ? scaleM / 1000 + " km" : scaleM + " m";
+  const label = scaleM >= 1000 ? `${scaleM / 1000} km` : `${scaleM} m`;
   r.scaleBarEl.innerHTML = `<div class="${styles.scaleBarBar}" style="width:${barPx}px"></div><span>${label}</span>`;
 }
 

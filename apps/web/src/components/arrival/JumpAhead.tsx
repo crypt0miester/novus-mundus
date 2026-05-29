@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 /**
  * Jump-ahead progress stepper — the UI for the paid "skip the early game"
  * action. A flat panel that sits in the Arrival like any other beat: no
- * floating-card chrome. Step state reads as a disc filling in (hollow ring to 
+ * floating-card chrome. Step state reads as a disc filling in (hollow ring to
  * spinner to filled disc) — no checkmarks, which the game's iconography
  * doesn't use; the tier accent replaces any generic green.
  *
@@ -99,10 +99,7 @@ export function JumpAhead({
   walletSol,
   onRefetchBalance,
 }: JumpAheadProps) {
-  const doneCount = useMemo(
-    () => steps.filter((s) => s.status === "done").length,
-    [steps],
-  );
+  const doneCount = useMemo(() => steps.filter((s) => s.status === "done").length, [steps]);
   const progressPct = steps.length ? (doneCount / steps.length) * 100 : 0;
 
   return (
@@ -142,9 +139,7 @@ export function JumpAhead({
         <div
           className={cn(
             "h-full rounded-full transition-[width] duration-500 ease-out",
-            phase === "failed"
-              ? "bg-red-500/70"
-              : "bg-[var(--tier-accent-bright)]",
+            phase === "failed" ? "bg-red-500/70" : "bg-[var(--tier-accent-bright)]",
           )}
           style={{ width: `${progressPct}%` }}
         />
@@ -184,10 +179,7 @@ export function JumpAhead({
       {log && log.length > 0 && (
         <div className="mb-3 max-h-28 overflow-y-auto rounded-lg border border-border-default bg-surface-raised/60 px-3 py-2">
           {log.map((line, i) => (
-            <div
-              key={i}
-              className="font-mono text-[10px] leading-relaxed text-text-muted"
-            >
+            <div key={i} className="font-mono text-[10px] leading-relaxed text-text-muted">
               {line}
             </div>
           ))}

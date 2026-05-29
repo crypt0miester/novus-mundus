@@ -1,9 +1,4 @@
-import type {
-  Archetype,
-  Difficulty,
-  GeneratedPuzzle,
-  RandomSource,
-} from "../types";
+import type { Archetype, Difficulty, GeneratedPuzzle, RandomSource } from "../types";
 import { asAnswerArray } from "./helpers";
 
 /**
@@ -50,11 +45,7 @@ const BRIGHT = "★";
 const DIM = "☆";
 
 /** Sample `n` questions from a bank, shuffling each one's options. */
-function sampleFromBank(
-  rng: RandomSource,
-  pool: McqQuestion[],
-  n: number,
-): McqQuestion[] {
+function sampleFromBank(rng: RandomSource, pool: McqQuestion[], n: number): McqQuestion[] {
   return rng.sampleDistinct(pool, Math.min(n, pool.length)).map((q) => {
     const order = rng.sampleDistinct(
       q.options.map((_, i) => i),
@@ -70,11 +61,7 @@ function sampleFromBank(
 }
 
 /** Generate `n` "count the bright stars" questions. */
-function proceduralStars(
-  rng: RandomSource,
-  difficulty: Difficulty,
-  n: number,
-): McqQuestion[] {
+function proceduralStars(rng: RandomSource, difficulty: Difficulty, n: number): McqQuestion[] {
   const nOptions = Math.max(2, difficulty.options ?? 4);
   const minStars = Math.max(2, difficulty.minStars ?? 3);
   const maxStars = Math.max(minStars, difficulty.maxStars ?? 9);
@@ -104,11 +91,7 @@ function proceduralStars(
   return questions;
 }
 
-function generate(
-  rng: RandomSource,
-  difficulty: Difficulty,
-  content?: unknown,
-): GeneratedPuzzle {
+function generate(rng: RandomSource, difficulty: Difficulty, content?: unknown): GeneratedPuzzle {
   const n = Math.max(1, difficulty.questions ?? 5);
   const bank = content as McqBank | undefined;
   const questions =

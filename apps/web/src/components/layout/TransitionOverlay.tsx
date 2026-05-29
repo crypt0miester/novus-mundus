@@ -102,10 +102,7 @@ export function TransitionOverlay() {
     if (destination) {
       router.push(destination);
     }
-    setTimeout(
-      () => advance("exiting"),
-      isActBeat ? ACT_BEAT_HOLD_MS : HOLD_MS,
-    );
+    setTimeout(() => advance("exiting"), isActBeat ? ACT_BEAT_HOLD_MS : HOLD_MS);
   }, [destination, router, advance, isActBeat]);
 
   const runExit = useCallback(() => {
@@ -119,13 +116,10 @@ export function TransitionOverlay() {
 
     const tl = createTimeline({ defaults: { ease: "inQuad" } });
 
-    tl.add(
-      [subtitle, title, eyebrow].filter(Boolean) as HTMLElement[],
-      {
-        opacity: 0,
-        duration: EXIT_MS * 0.5,
-      },
-    )
+    tl.add([subtitle, title, eyebrow].filter(Boolean) as HTMLElement[], {
+      opacity: 0,
+      duration: EXIT_MS * 0.5,
+    })
       .add(
         [lineTop, lineBot],
         {

@@ -36,9 +36,22 @@ export function classifyEvent(
 
   // ── Personal scope ──────────────────────────────────────────
   const personalKeys = [
-    "player", "attacker", "defender", "owner", "sender", "receiver",
-    "from", "to", "creator", "killingBlowBy", "leader", "member",
-    "inviter", "invitee", "kicker", "kicked",
+    "player",
+    "attacker",
+    "defender",
+    "owner",
+    "sender",
+    "receiver",
+    "from",
+    "to",
+    "creator",
+    "killingBlowBy",
+    "leader",
+    "member",
+    "inviter",
+    "invitee",
+    "kicker",
+    "kicked",
   ];
   for (const key of personalKeys) {
     if (isMe(key)) {
@@ -50,24 +63,43 @@ export function classifyEvent(
   // ── Team scope ──────────────────────────────────────────────
   if (myTeamPubkey) {
     const teamEvents = new Set([
-      "TeamJoined", "TeamLeft", "MemberKicked", "LeadershipTransferred",
-      "TeamDisbanded", "TreasuryDeposit", "TreasuryWithdraw",
-      "MemberRankChanged", "InviteSent", "InviteAccepted", "InviteDeclined",
-      "InviteCancelled", "MotdUpdated", "TeamSettingsUpdated",
-      "TreasurySettingsUpdated", "TreasuryWithdrawRequested",
-      "TreasuryRequestApproved", "TreasuryRequestRejected",
-      "TreasuryRequestExecuted", "TreasuryRequestCancelled",
-      "RallyCreated", "RallyJoined", "RallyExecuted", "RallyCancelled",
-      "ReinforcementSent", "ReinforcementArrived",
-      "ReinforcementRecalled", "ReinforcementReturned",
+      "TeamJoined",
+      "TeamLeft",
+      "MemberKicked",
+      "LeadershipTransferred",
+      "TeamDisbanded",
+      "TreasuryDeposit",
+      "TreasuryWithdraw",
+      "MemberRankChanged",
+      "InviteSent",
+      "InviteAccepted",
+      "InviteDeclined",
+      "InviteCancelled",
+      "MotdUpdated",
+      "TeamSettingsUpdated",
+      "TreasurySettingsUpdated",
+      "TreasuryWithdrawRequested",
+      "TreasuryRequestApproved",
+      "TreasuryRequestRejected",
+      "TreasuryRequestExecuted",
+      "TreasuryRequestCancelled",
+      "RallyCreated",
+      "RallyJoined",
+      "RallyExecuted",
+      "RallyCancelled",
+      "ReinforcementSent",
+      "ReinforcementArrived",
+      "ReinforcementRecalled",
+      "ReinforcementReturned",
     ]);
 
     if (teamEvents.has(event.name)) {
       // Team events use `team: PublicKey` — match by pubkey
       const eventTeam = d.team;
-      const teamStr = typeof eventTeam === "string"
-        ? eventTeam
-        : (eventTeam as { toBase58?: () => string })?.toBase58?.();
+      const teamStr =
+        typeof eventTeam === "string"
+          ? eventTeam
+          : (eventTeam as { toBase58?: () => string })?.toBase58?.();
       if (teamStr === myTeamPubkey) {
         scopes.push("team");
       }
@@ -76,10 +108,19 @@ export function classifyEvent(
 
   // ── City scope ──────────────────────────────────────────────
   const cityEvents = new Set([
-    "EncounterSpawned", "EncounterDefeated", "EncounterAttacked",
-    "PlayerAttacked", "CastleCreated", "CastleClaimed", "CastleConquered",
-    "CastleDefended", "CastleAttacked", "CastleTransitionProgress",
-    "CastleStatusChanged", "CastleProtectionExpired", "KingForceRemoved",
+    "EncounterSpawned",
+    "EncounterDefeated",
+    "EncounterAttacked",
+    "PlayerAttacked",
+    "CastleCreated",
+    "CastleClaimed",
+    "CastleConquered",
+    "CastleDefended",
+    "CastleAttacked",
+    "CastleTransitionProgress",
+    "CastleStatusChanged",
+    "CastleProtectionExpired",
+    "KingForceRemoved",
   ]);
 
   if (cityEvents.has(event.name)) {

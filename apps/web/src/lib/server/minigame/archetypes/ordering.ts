@@ -1,9 +1,4 @@
-import type {
-  Archetype,
-  Difficulty,
-  GeneratedPuzzle,
-  RandomSource,
-} from "../types";
+import type { Archetype, Difficulty, GeneratedPuzzle, RandomSource } from "../types";
 import { asAnswerArray, mergeContent } from "./helpers";
 
 /**
@@ -43,11 +38,7 @@ const DEFAULT_CONTENT: OrderingContent = {
   ascending: true,
 };
 
-function generate(
-  rng: RandomSource,
-  difficulty: Difficulty,
-  content?: unknown,
-): GeneratedPuzzle {
+function generate(rng: RandomSource, difficulty: Difficulty, content?: unknown): GeneratedPuzzle {
   const c = mergeContent(DEFAULT_CONTENT, content);
   const count = Math.max(3, difficulty.items ?? 5);
 

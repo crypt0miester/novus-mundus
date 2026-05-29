@@ -54,8 +54,7 @@ function activityStatus(
   if (windows.length === 0) return "unbuilt";
 
   const stale = isDailyStateStale(estate, now);
-  const done =
-    !stale && windows.some((w) => isActivityDoneThisWindow(estate, building, w));
+  const done = !stale && windows.some((w) => isActivityDoneThisWindow(estate, building, w));
   if (done) return "done";
 
   const cw = currentTimeWindow(estate, now);

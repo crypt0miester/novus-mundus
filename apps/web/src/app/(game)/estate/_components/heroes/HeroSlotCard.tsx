@@ -38,7 +38,7 @@ export function HeroSlotCard({
   }
 
   const attrs = hero?.asset?.attributes ?? {};
-  const level = attrs["Level"] ? parseInt(attrs["Level"]) : null;
+  const level = attrs.Level ? parseInt(attrs.Level, 10) : null;
   const roleLabel = isDefensive ? "DEF" : isMeditating ? "MED" : "ACT";
   const roleColor = isDefensive
     ? "text-blue-400"
@@ -62,9 +62,7 @@ export function HeroSlotCard({
             {roleLabel} · Slot {index}
           </div>
         </div>
-        {level != null && (
-          <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>
-        )}
+        {level != null && <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>}
       </div>
     </div>
   );

@@ -2,29 +2,36 @@
  * Jump-ahead recipes — declarative tier definitions for the paid "skip the
  * early game" action.
  *
- * A jump replays *real* program instructions — the same init / build / buy /
- * hire calls a hand-played early game would issue, just batched behind one
- * signature and speedup-calibrated. There is no cheat instruction.
+ * A jump replays *real* program instructions — the same init / build /
+ * subscribe / mint / research calls a hand-played game would issue, just
+ * batched behind one flow and speedup-calibrated. There is no cheat instruction.
  *
- * Each tier's price is *exactly* the sum of its `purchases` (SOL-priced gem and
- * NOVI packs); `jumpTierLamports` is the single source of truth, so the picker
- * button and the pre-flight balance check always match what `purchase_item`
- * charges on-chain. Buildings, plots and hires are paid from NOVI — the 1M
- * starter balance plus anything the purchases add — never from SOL.
+ * What the SOL buys, in order of power:
+ *  - A SUBSCRIPTION (the dominant lever). One `purchase_subscription` grants a
+ *    large permanent bundle (defensive + operative units, weapons, armor, NOVI,
+ *    cash, reputation, XP) plus a 30-day buff window (generation multiplier,
+ *    daily-reward multiplier, raised locked-NOVI cap, synchrony, travel). This
+ *    is the army — it dwarfs anything hand-hiring could add, so the jump no
+ *    longer hires units or buys equipment itself.
+ *  - HEROES. Each `mint_hero` is a permanent SOL-priced NFT. Rarity is gated by
+ *    player level (Common Lv1, Rare Lv5), so the jump mints heroes AFTER the
+ *    subscription, whose XP grant lifts the level past the Rare gate.
+ *  - Build/research SPEEDUPS + a kept GEM/NOVI WAR-CHEST. Gem packs pay the
+ *    build and research speedups; the generous surplus, plus the NOVI packs
+ *    (which credit `cash_on_hand`), are the player's to keep as a starting reserve.
+ *
+ * PRICING. The gem/NOVI packs and hero mints are FIXED-lamport costs summed by
+ * `jumpTierLamports`. The subscription is SOL but priced through the DAO oracle
+ * (`usd_cents × 1e9 / usd_price_cents`), so its lamport cost is DYNAMIC and is
+ * added at runtime from the live GameEngine (see useJumpAhead). The displayed
+ * tier price and the pre-flight balance check are therefore `jumpTierLamports +
+ * the live subscription lamports`, not a static constant.
  */
 
-import { LAMPORTS_PER_SOL } from "@solana/web3.js";
 import { BuildingType } from "novus-mundus-sdk";
 import { BuildingName } from "@/lib/buildings";
 
 export type JumpTier = "settled" | "established" | "veteran";
-
-/** A unit hire — `unitType` 0/1/2 = defensive tiers, paid from starter NOVI. */
-export interface JumpHire {
-  unitType: number;
-  /** Locked NOVI to spend. Fresh players start with 1,000,000 (STARTER_LOCKED_NOVI). */
-  novi: number;
-}
 
 /** One SOL-priced shop purchase, run in the estate step. */
 export interface JumpPurchase {
@@ -34,14 +41,46 @@ export interface JumpPurchase {
   quantity: number;
 }
 
+/**
+ * One research line driven to `targetLevel`, replayed level by level
+ * (`start_research` + a gem `speed_up_research` + `complete_research` per
+ * level, exactly like a build is rushed). Needs an Academy, so only tiers that
+ * build one carry research. Battle nodes (Attack/Defense) clear at Academy
+ * Lv1 — the level a jump builds — so the recipes stay in that family.
+ */
+export interface JumpResearch {
+  /** Research node id. 0 = Attack, 1 = Defense. Both are Battle nodes, which
+   *  clear at the Academy Lv1 a jump builds; the chain derives the category
+   *  from the template, so the recipe never needs to pass it. */
+  researchType: number;
+  /** Level to reach; each level is one start + speedup + complete cycle. */
+  targetLevel: number;
+}
+
+/**
+ * One hero to mint — a permanent SOL-priced NFT. `mint_hero` enforces a
+ * level gate by rarity, so the templates a tier lists must be reachable by the
+ * level the tier's subscription XP confers (Common Lv1, Rare Lv5).
+ */
+export interface JumpHeroMint {
+  /** Hero template id — see `JUMP_HERO_LAMPORTS` / `cli/data/heroes.ts`. */
+  templateId: number;
+}
+
 export interface JumpRecipe {
   tier: JumpTier;
   /** Header tag shown in the stepper. */
   label: string;
   /**
-   * SOL-priced shop purchases — gem packs (for build speedups; the surplus is
-   * the player's to keep) and NOVI packs. Their summed lamport cost *is* the
-   * tier price — see `jumpTierLamports`.
+   * Subscription tier to activate: 0 Rookie / 1 Expert / 2 Epic / 3 Legendary,
+   * or null for none. Paid in SOL (oracle-priced); grants the unit/weapon/
+   * NOVI/cash bundle, the buff window, and the raised caps that make the jump
+   * feel big. Minted before the heroes so its XP unlocks their rarity gate.
+   */
+  subscriptionTier: number | null;
+  /**
+   * SOL-priced shop purchases — gem packs (build/research speedups, surplus
+   * kept) and NOVI packs (credit cash on hand). Part of the fixed tier price.
    */
   purchases: JumpPurchase[];
   /**
@@ -50,8 +89,10 @@ export interface JumpRecipe {
    * also buys land plots when the count outgrows the estate's 4 starting slots.
    */
   buildings: BuildingType[];
-  /** Unit hires run after the buildings (Barracks must exist first). */
-  hires: JumpHire[];
+  /** Heroes to mint (permanent SOL NFTs), after the subscription's XP grant. */
+  heroes: JumpHeroMint[];
+  /** Battle research lines; empty for tiers that build no Academy. */
+  research: JumpResearch[];
 }
 
 /**
@@ -68,31 +109,48 @@ export const JUMP_SHOP_LAMPORTS: Record<number, number> = {
 };
 
 /**
- * The three tiers. Each `purchases` list is composed to sum to a round SOL
- * price; buildings deepen with the tier. Gem packs are sized well past the
- * speedups a jump needs (~1.3k / ~7.7k / ~10.3k gems) — the surplus is a
- * starting stash. NOVI packs round the price out and seed a NOVI reserve;
- * buildings/plots/hires themselves fit inside the 1M starter balance.
+ * Mint cost (lamports) of each hero template the jumps mint — mirrors the
+ * `mintCostLamports` in `cli/data/heroes.ts`. Common = 0.1 SOL, Rare = 0.25 SOL.
+ */
+export const JUMP_HERO_LAMPORTS: Record<number, number> = {
+  1: 100_000_000, // Roman Centurion (Common)
+  2: 100_000_000, // Viking Raider (Common)
+  10: 250_000_000, // Alexander the Great (Rare)
+  11: 250_000_000, // Julius Caesar (Rare)
+  12: 250_000_000, // Leonidas (Rare)
+};
+
+/**
+ * The three tiers. The subscription is the headline power grant; heroes are the
+ * permanent collectible spend; the gem/NOVI packs cover the speedups and leave
+ * a war-chest. Each tier's nominal price (1 / 5 / 10 SOL at the default oracle)
+ * is the fixed packs + hero mints plus the tier's subscription:
+ *  - settled     ≈ 0.85 packs + 0.10 hero + 0.05 Rookie sub
+ *  - established ≈ 4.30 packs + 0.60 heroes + 0.10 Expert sub
+ *  - veteran     ≈ 8.55 packs + 0.95 heroes + 0.50 Epic sub
+ * The subscription portion floats with the SOL/USD oracle, so the live total
+ * can differ from the nominal when SOL is off $100.
  */
 export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
   settled: {
     tier: "settled",
     label: "Settled",
-    // 1 SOL = 0.8 (10k gems) + 0.2 (40k NOVI)
+    subscriptionTier: 0, // Rookie — modest bundle; ~100 XP keeps the player at Lv1 (Common heroes only).
     purchases: [
-      { itemId: 7, quantity: 1 },
-      { itemId: 5, quantity: 4 },
+      { itemId: 7, quantity: 1 }, // 10k gems for build speedups + stash
+      { itemId: 5, quantity: 1 }, // 10k NOVI (cash)
     ],
     buildings: [BuildingType.Market, BuildingType.Barracks],
-    hires: [{ unitType: 0, novi: 50_000 }],
+    heroes: [{ templateId: 1 }], // 1 Common
+    research: [],
   },
   established: {
     tier: "established",
     label: "Established",
-    // 5 SOL = 4.8 (60k gems) + 0.2 (40k NOVI)
+    subscriptionTier: 1, // Expert — ~1,000 XP lifts the player to ~Lv5, unlocking Rare heroes.
     purchases: [
-      { itemId: 7, quantity: 6 },
-      { itemId: 5, quantity: 4 },
+      { itemId: 7, quantity: 5 }, // 50k gems
+      { itemId: 5, quantity: 6 }, // 60k NOVI (cash)
     ],
     buildings: [
       BuildingType.Barracks,
@@ -101,19 +159,20 @@ export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
       BuildingType.TransportBay,
       BuildingType.Academy,
     ],
-    hires: [
-      { unitType: 0, novi: 150_000 },
-      { unitType: 1, novi: 100_000 },
+    heroes: [{ templateId: 1 }, { templateId: 10 }, { templateId: 12 }], // Common + 2 Rare
+    research: [
+      { researchType: 0, targetLevel: 3 },
+      { researchType: 1, targetLevel: 3 },
     ],
   },
   veteran: {
     tier: "veteran",
     label: "Veteran",
-    // 10 SOL = 7 (100k gems) + 2.4 (30k gems) + 0.6 (120k NOVI)
+    subscriptionTier: 2, // Epic — ~10,000 XP lifts the player to ~Lv9, well past the Rare gate.
     purchases: [
-      { itemId: 8, quantity: 1 },
-      { itemId: 7, quantity: 3 },
-      { itemId: 5, quantity: 12 },
+      { itemId: 8, quantity: 1 }, // 100k gems
+      { itemId: 7, quantity: 1 }, // 10k gems
+      { itemId: 5, quantity: 15 }, // 150k NOVI (cash)
     ],
     buildings: [
       BuildingType.Barracks,
@@ -124,35 +183,38 @@ export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
       BuildingType.Academy,
       BuildingType.Citadel,
     ],
-    hires: [
-      { unitType: 0, novi: 300_000 },
-      { unitType: 1, novi: 200_000 },
-      { unitType: 2, novi: 100_000 },
+    heroes: [
+      { templateId: 1 },
+      { templateId: 2 },
+      { templateId: 10 },
+      { templateId: 11 },
+      { templateId: 12 },
+    ], // 2 Common + 3 Rare
+    research: [
+      { researchType: 0, targetLevel: 5 },
+      { researchType: 1, targetLevel: 5 },
     ],
   },
 };
 
-export const JUMP_TIER_ORDER: readonly JumpTier[] = [
-  "settled",
-  "established",
-  "veteran",
-];
+export const JUMP_TIER_ORDER: readonly JumpTier[] = ["settled", "established", "veteran"];
 
 /**
- * Exact lamport cost of a tier — the sum of its shop purchases, and the single
- * source of truth for the price (picker button + pre-flight balance check). It
- * equals what `purchase_item` charges on-chain, so the two never diverge.
+ * FIXED lamport cost of a tier — the sum of its gem/NOVI shop purchases and its
+ * hero mints. This is the static part of the price. The subscription is added
+ * at runtime (its SOL cost is oracle-derived), so the full pre-flight cost is
+ * `jumpTierLamports(recipe) + <live subscription lamports>` — see useJumpAhead.
  */
 export function jumpTierLamports(recipe: JumpRecipe): number {
-  return recipe.purchases.reduce(
+  const packs = recipe.purchases.reduce(
     (sum, p) => sum + (JUMP_SHOP_LAMPORTS[p.itemId] ?? 0) * p.quantity,
     0,
   );
-}
-
-/** A tier's price in SOL, for display. */
-export function jumpTierSol(recipe: JumpRecipe): number {
-  return jumpTierLamports(recipe) / LAMPORTS_PER_SOL;
+  const heroes = recipe.heroes.reduce(
+    (sum, h) => sum + (JUMP_HERO_LAMPORTS[h.templateId] ?? 0),
+    0,
+  );
+  return packs + heroes;
 }
 
 /**
@@ -162,4 +224,16 @@ export function jumpTierSol(recipe: JumpRecipe): number {
  */
 export function buildingName(b: BuildingType | number): string {
   return BuildingName[b] ?? `Building ${b}`;
+}
+
+const SUBSCRIPTION_TIER_NAME: Record<number, string> = {
+  0: "Rookie",
+  1: "Expert",
+  2: "Epic",
+  3: "Legendary",
+};
+
+/** Display name for a subscription tier, for step labels. */
+export function subscriptionTierName(t: number): string {
+  return SUBSCRIPTION_TIER_NAME[t] ?? `Tier ${t}`;
 }

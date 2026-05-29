@@ -74,7 +74,9 @@ function pick(messages: string[]): string {
 export function enterMessage(): string {
   return pick(getCachedAct() >= 4 ? LEGENDARY_ENTER_MESSAGES : ENTER_MESSAGES);
 }
-export function spectateMessage(): string { return pick(SPECTATE_MESSAGES); }
+export function spectateMessage(): string {
+  return pick(SPECTATE_MESSAGES);
+}
 export function exitMessage(): string {
   return pick(getCachedAct() >= 4 ? LEGENDARY_EXIT_MESSAGES : EXIT_MESSAGES);
 }
@@ -129,6 +131,5 @@ export const useTransitionStore = create<TransitionStore>((set) => ({
 
   advance: (phase) => set({ phase }),
 
-  reset: () =>
-    set({ phase: "idle", kind: "wipe", message: "", actName: "", destination: null }),
+  reset: () => set({ phase: "idle", kind: "wipe", message: "", actName: "", destination: null }),
 }));

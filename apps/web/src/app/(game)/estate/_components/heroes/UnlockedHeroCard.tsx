@@ -10,7 +10,7 @@ interface UnlockedHeroCardProps {
 
 export function UnlockedHeroCard({ hero, isSelected, onClick }: UnlockedHeroCardProps) {
   const attrs = hero.asset.attributes;
-  const level = attrs["Level"] ? parseInt(attrs["Level"]) : null;
+  const level = attrs.Level ? parseInt(attrs.Level, 10) : null;
 
   return (
     <div
@@ -26,9 +26,7 @@ export function UnlockedHeroCard({ hero, isSelected, onClick }: UnlockedHeroCard
           </div>
           <div className="text-[10px] font-medium text-text-gold">Unlocked</div>
         </div>
-        {level != null && (
-          <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>
-        )}
+        {level != null && <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>}
       </div>
     </div>
   );

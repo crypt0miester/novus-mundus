@@ -1,0 +1,43 @@
+{
+  "_comment": "Empty-state illustration manifest. Quiet square silhouettes used by the shared <EmptyState> component in place of sterile text blocks. Per docs/design/EMPTY_STATES.md: each empty-state surface gets a small silhouette + heading + primary action prompt. Generated at 1024x1024 (matches Bonsai's proven scale) and downsampled to 800x800 webp during export since these sit inside cards, not full-bleed. Style is intentionally quieter than banners/dungeons/castles — NO rim light, NO accent color — just matte black silhouette. Empty states should feel still, not heroic.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1024,
+    "height":   1024,
+    "steps":    4,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "export": {
+    "subdir":   "empty-states",
+    "filename": "id",
+    "canvas":   [800, 800],
+    "upscale":  1,
+    "format":   "webp",
+    "quality":  82
+  },
+
+  "preamble": "Single quiet object silhouette. One isolated subject at rest, centered, no scene, no ground, no background details, no people figures.",
+
+  "style": {
+    "quiet": "Style: a single flat matte black (#0a0a0a) silhouette of the subject with NO rim light, NO halo, NO glow, NO gradient — just a clean uniform black shape reading at small size. The subject must be unambiguous in pure silhouette. Color: black on a pure flat solid white (#FFFFFF) background for alpha-keying in post."
+  },
+
+  "tail": "Composition: square 1:1, subject occupies the central 50-60% of the frame with generous negative space on all sides. Subject only — absolutely no text, no letters, no numbers, no people, no figures, no scene clutter.",
+
+  "entries": [
+    { "id": "empty-team",         "surface": "team-list",          "seed": 393393, "subject": "Two identical heraldic heater shields standing upright side by side with a small gap of empty space between them, each shield broad and about as wide as it is tall, with a wide flat top edge and two straight shoulders that curve and taper down to a single point at the bottom like a classic coat-of-arms shield; no flat bottoms, no rounded bucket bottoms, no flared feet, and no bar or cap across the top." },
+    { "id": "empty-rally",        "surface": "rally-panel",        "seed": 376376, "subject": "A single tall banner pole planted upright in the ground, its banner cloth completely furled and wound tightly around the upper half of the pole so no flag is spread or flying, the furled cloth a slim bundle hugging the pole, hanging straight down and still." },
+    { "id": "empty-encounter",    "surface": "encounter-list",     "seed": 3503, "subject": "A lone wooden signpost at a crossroad, the directional arms pointing in three directions with no destinations written on them." },
+    { "id": "empty-hero-slot",    "surface": "hero-slot",          "seed": 3504, "subject": "A small empty stone pedestal with a laurel wreath resting flat on top of it, nothing else on the pedestal." },
+    { "id": "empty-castle",       "surface": "castle-list",        "seed": 378378, "subject": "A short fortified stone keep with crenellated battlements and a single tall empty flagpole rising bare from its highest tower, with no flag and no banner attached anywhere on the pole, just the bare pole and a slack rope hanging straight down against it." },
+    { "id": "empty-dungeon",      "surface": "catacombs-run",      "seed": 382382, "subject": "A single heavy closed iron door with no handle, and to one side a single iron wall-sconce holding one cold unlit torch with no flame, no fire, no smoke and no glow of any kind, just the dark shape of an extinguished torch in its bracket." },
+    { "id": "empty-expedition",   "surface": "expedition-panel",   "seed": 385385, "subject": "A stowed flat-bed wagon at rest, beside it a tightly folded map lying flat on the ground as a plain closed rectangular bundle with no drawing or lines on its surface, and a tied bedroll nearby, all still." },
+    { "id": "empty-loot",         "surface": "loot-list",          "seed": 3508, "subject": "An open empty treasure chest with the lid flung back to its hinges, the interior visibly empty, no coins, no gems." },
+    { "id": "empty-event",        "surface": "events-list",        "seed": 3509, "subject": "A snuffed iron ceremonial cauldron on a tripod, a single thin line of cold smoke rising from the cauldron mouth." },
+    { "id": "empty-locked-tier",  "surface": "subscription-gate",  "seed": 3510, "subject": "A heavy iron padlock hung from a chain across an iron gate, the chain wrapped twice through the gate bars." }
+  ]
+}

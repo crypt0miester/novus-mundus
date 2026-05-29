@@ -3,7 +3,7 @@
 import { useRef, useState, useCallback } from "react";
 import { animate } from "animejs";
 import { Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, prefersReducedMotion } from "@/lib/utils";
 import { useHoldCharge } from "@/lib/hooks/useHoldCharge";
 
 export type TxPhase = "idle" | "preparing" | "signing" | "sending" | "confirmed" | "failed";
@@ -62,16 +62,25 @@ export function TxButton({
 
       try {
         setPhase("preparing");
+        // Reset the progress fill so each run starts empty — the animejs
+        // tween does this via its `0%` keyframe; the reduced-motion snap below
+        // needs it done explicitly.
+        if (progressRef.current) progressRef.current.style.width = "0%";
 
         const reportPhase = (p: TxPhase) => {
           setPhase(p);
-          // Progress bar for sending phase
+          // Progress bar for sending phase. Honour reduced motion — snap the
+          // fill straight to its end state instead of tweening across 4s.
           if (p === "sending" && progressRef.current) {
-            animate(progressRef.current, {
-              width: ["0%", "100%"],
-              duration: 4000,
-              ease: "inOutQuad",
-            });
+            if (prefersReducedMotion()) {
+              progressRef.current.style.width = "100%";
+            } else {
+              animate(progressRef.current, {
+                width: ["0%", "100%"],
+                duration: 4000,
+                ease: "inOutQuad",
+              });
+            }
           }
         };
 
@@ -109,6 +118,10 @@ export function TxButton({
   // A tx is in flight — keep the action label, just add a spinner.
   const isWorking = phase === "preparing" || phase === "signing" || phase === "sending";
   const charging = holdEnabled && hold.count > 0;
+  // When reduced motion is requested, drop the press-scale and snap the
+  // hold-charge fill (no width transition) — matching the snap applied to the
+  // sending progress bar above.
+  const reducedMotion = prefersReducedMotion();
 
   return (
     <button
@@ -120,7 +133,7 @@ export function TxButton({
         "relative flex select-none items-center justify-center overflow-hidden rounded-lg px-4 py-2 text-sm font-semibold transition-colors w-full text-center",
         variantClasses[variant],
         disabled && "cursor-not-allowed opacity-50",
-        phase === "preparing" && "scale-[0.97]",
+        phase === "preparing" && !reducedMotion && "scale-[0.97]",
         phase === "confirmed" && "bg-green-600 text-white",
         phase === "failed" && "bg-red-600 text-white",
         phase !== "idle" && phase !== "confirmed" && phase !== "failed" && "cursor-wait",
@@ -136,7 +149,10 @@ export function TxButton({
       {/* Hold-charge fill — ramps with the count while the button is held */}
       {charging && (
         <div
-          className="absolute inset-y-0 left-0 bg-white/15 transition-[width] duration-150 ease-out"
+          className={cn(
+            "absolute inset-y-0 left-0 bg-white/15",
+            !reducedMotion && "transition-[width] duration-150 ease-out",
+          )}
           style={{ width: `${(hold.count / (holdMax ?? 1)) * 100}%` }}
         />
       )}

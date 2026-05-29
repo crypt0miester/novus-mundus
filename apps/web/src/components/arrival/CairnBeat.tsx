@@ -59,12 +59,7 @@ export function CairnBeat({ city, onEnter }: CairnBeatProps) {
             ? arrivalLine(city.name, city.spawnFlavor, city.spawnBearing)
             : cairnBeat("arrival")}
         </p>
-        <BeatButton
-          reveal
-          disabled={!estateReady}
-          disabledTone="waiting"
-          onClick={onEnter}
-        >
+        <BeatButton reveal disabled={!estateReady} disabledTone="waiting" onClick={onEnter}>
           {estateReady ? "Enter the holding" : "The stone is waking…"}
         </BeatButton>
       </div>

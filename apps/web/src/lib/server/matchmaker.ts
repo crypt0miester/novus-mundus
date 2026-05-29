@@ -1,5 +1,5 @@
 import "server-only";
-import { PublicKey } from "@solana/web3.js";
+import type { PublicKey } from "@solana/web3.js";
 import {
   ARENA_MAX_BATTLES_PER_OPPONENT,
   ARENA_MAX_DAILY_BATTLES,
@@ -83,9 +83,7 @@ export async function findMatch(
       const da = Math.abs(a.account.eloRating - challenger.eloRating);
       const db = Math.abs(b.account.eloRating - challenger.eloRating);
       if (da !== db) return da - db;
-      return a.account.player
-        .toBase58()
-        .localeCompare(b.account.player.toBase58());
+      return a.account.player.toBase58().localeCompare(b.account.player.toBase58());
     });
 
   // Resolve wallets in closest-ELO order and take the first that resolves, so

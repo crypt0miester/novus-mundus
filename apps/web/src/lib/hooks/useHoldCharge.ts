@@ -31,11 +31,7 @@ export interface HoldCharge {
  * The button captures the pointer on press, so a release anywhere still fires;
  * a `pointercancel` (the OS stealing the gesture) aborts without firing.
  */
-export function useHoldCharge({
-  max,
-  onFire,
-  stepMs = 180,
-}: UseHoldChargeOptions): HoldCharge {
+export function useHoldCharge({ max, onFire, stepMs = 180 }: UseHoldChargeOptions): HoldCharge {
   const [count, setCount] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // Refs so the running interval / handlers never close over stale values.

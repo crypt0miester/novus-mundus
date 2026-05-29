@@ -3,7 +3,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { TransactionInstruction } from "@solana/web3.js";
-import { Keypair, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
+import type { Keypair, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { notify } from "@/lib/notify";
 import { useSettings } from "@/lib/store/settings";
@@ -59,10 +59,6 @@ function waitForTxViaLogSub(signature: string, timeoutMs: number): Promise<strin
     pendingTxs.set(signature, { resolve, reject, timeout });
   });
 }
-
-// Side channel: mutationFn stores events here for onSuccess
-
-const recentTxEvents = new Map<string, NovusMundusEvent[]>();
 
 // Hook
 
@@ -139,11 +135,8 @@ export function useTransact() {
         logs = await fallbackConfirm(signature);
       }
 
-      // Parse and stash events for onSuccess to pick up
+      // Parse events for onSuccess to pick up (returned on the result)
       const events = parseEventsFromLogs(logs);
-      if (events.length > 0) {
-        recentTxEvents.set(signature, events);
-      }
 
       return { signature, events };
 
@@ -243,7 +236,7 @@ export function useTransact() {
 
 function extractTimestamp(event: NovusMundusEvent): number {
   const d = event.data as never as Record<string, { toNumber?: () => number }>;
-  const ts = d["timestamp"];
+  const ts = d.timestamp;
   if (ts && typeof ts === "object" && ts.toNumber) {
     return ts.toNumber();
   }

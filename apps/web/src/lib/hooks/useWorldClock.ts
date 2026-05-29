@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  TimeOfDay,
-  calculateLocalTime,
-  getSecondsUntilNextPeriod,
-} from "novus-mundus-sdk";
+import { TimeOfDay, calculateLocalTime, getSecondsUntilNextPeriod } from "novus-mundus-sdk";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useChainNow } from "@/lib/hooks/useChainTime";
 
@@ -32,13 +28,13 @@ export interface PhaseMeta {
  * single palette serves both, no per-theme variant.
  */
 export const PHASES: readonly PhaseMeta[] = [
-  { phase: TimeOfDay.DeepNight, name: "Deep Night", start: 0,   color: "#565d92", body: "moon" },
-  { phase: TimeOfDay.Dawn,      name: "Dawn",       start: 125, color: "#c0764a", body: "sunrise" },
-  { phase: TimeOfDay.Morning,   name: "Morning",    start: 250, color: "#b1923f", body: "sun" },
-  { phase: TimeOfDay.Midday,    name: "Midday",     start: 375, color: "#c0911e", body: "sun" },
-  { phase: TimeOfDay.Afternoon, name: "Afternoon",  start: 625, color: "#b67c3a", body: "sun" },
-  { phase: TimeOfDay.Dusk,      name: "Dusk",       start: 750, color: "#b06044", body: "sunset" },
-  { phase: TimeOfDay.Evening,   name: "Evening",    start: 875, color: "#6a5f97", body: "moon" },
+  { phase: TimeOfDay.DeepNight, name: "Deep Night", start: 0, color: "#565d92", body: "moon" },
+  { phase: TimeOfDay.Dawn, name: "Dawn", start: 125, color: "#c0764a", body: "sunrise" },
+  { phase: TimeOfDay.Morning, name: "Morning", start: 250, color: "#b1923f", body: "sun" },
+  { phase: TimeOfDay.Midday, name: "Midday", start: 375, color: "#c0911e", body: "sun" },
+  { phase: TimeOfDay.Afternoon, name: "Afternoon", start: 625, color: "#b67c3a", body: "sun" },
+  { phase: TimeOfDay.Dusk, name: "Dusk", start: 750, color: "#b06044", body: "sunset" },
+  { phase: TimeOfDay.Evening, name: "Evening", start: 875, color: "#6a5f97", body: "moon" },
 ];
 
 /** Width of a phase in local-time units. */

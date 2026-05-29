@@ -39,9 +39,7 @@ export function useChainTimeOffset(): number {
       try {
         const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY);
         if (cancelled || !info) return;
-        const chainTs = Number(
-          info.data.readBigInt64LE(CLOCK_UNIX_TIMESTAMP_OFFSET),
-        );
+        const chainTs = Number(info.data.readBigInt64LE(CLOCK_UNIX_TIMESTAMP_OFFSET));
         const deviceTs = Math.floor(Date.now() / 1000);
         setOffset(chainTs - deviceTs);
       } catch {
@@ -77,10 +75,7 @@ export function useChainNow(tickMs = 30_000): number {
   const [deviceSec, setDeviceSec] = useState(() => Math.floor(Date.now() / 1000));
 
   useEffect(() => {
-    const t = setInterval(
-      () => setDeviceSec(Math.floor(Date.now() / 1000)),
-      tickMs,
-    );
+    const t = setInterval(() => setDeviceSec(Math.floor(Date.now() / 1000)), tickMs);
     return () => clearInterval(t);
   }, [tickMs]);
 

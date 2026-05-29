@@ -10,13 +10,13 @@ export function formatNumber(
   fmt: "compact" | "full" | "novi" | "percentage" = "compact",
 ): string {
   if (fmt === "compact") {
-    if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(1) + "B";
-    if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-    if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
     return n.toLocaleString();
   }
-  if (fmt === "novi") return n.toLocaleString() + " NOVI";
-  if (fmt === "percentage") return n.toFixed(1) + "%";
+  if (fmt === "novi") return `${n.toLocaleString()} NOVI`;
+  if (fmt === "percentage") return `${n.toFixed(1)}%`;
   return n.toLocaleString();
 }
 
@@ -47,17 +47,25 @@ export function shortenAddress(address: string, chars = 4): string {
 
 /** Convert basis points to percentage string: 7500 to "75%" */
 export function bpsToPercent(bps: number): string {
-  return (bps / 100).toFixed(bps % 100 === 0 ? 0 : 1) + "%";
+  return `${(bps / 100).toFixed(bps % 100 === 0 ? 0 : 1)}%`;
 }
 
 /** Convert basis points to multiplier string: 15000 to "1.5x" */
 export function bpsToMultiplier(bps: number): string {
-  return (bps / 10000).toFixed(bps % 10000 === 0 ? 0 : 1) + "x";
+  return `${(bps / 10000).toFixed(bps % 10000 === 0 ? 0 : 1)}x`;
 }
 
 /** True when n is a Fibonacci number — re-exported from the SDK, the canonical
  *  port of the on-chain `is_fibonacci`. */
 export { isFibonacci } from "novus-mundus-sdk";
+
+/** True when the user has asked for reduced motion. SSR-safe — false on the
+ *  server, where no media query is available. */
+export function prefersReducedMotion(): boolean {
+  return (
+    typeof window !== "undefined" && window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
+}
 
 /**
  * Coerce a BN (or BN-like) to a JS number, clamped to `Number.MAX_SAFE_INTEGER`.

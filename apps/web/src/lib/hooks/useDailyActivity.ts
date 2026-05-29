@@ -18,13 +18,7 @@ import { useTransact } from "./useTransact";
 export type Presentation = unknown;
 
 /** The puzzle archetype a session runs (server `DAILY_ACTIVITY_MINIGAMES.md`). */
-export type Archetype =
-  | "mcq"
-  | "set-select"
-  | "assignment"
-  | "ordering"
-  | "memory"
-  | "reflex";
+export type Archetype = "mcq" | "set-select" | "assignment" | "ordering" | "memory" | "reflex";
 
 export interface StartResponse {
   sessionId: string;
@@ -49,8 +43,7 @@ export function useDailyActivity() {
 
   /** Start (or resume) a mini-game session for a building. */
   const startSession = useCallback(
-    (building: number) =>
-      requestJson<StartResponse>(`/api/minigame/estate/${building}/start`, {}),
+    (building: number) => requestJson<StartResponse>(`/api/minigame/estate/${building}/start`, {}),
     [requestJson],
   );
 
@@ -92,10 +85,7 @@ export function useDailyActivity() {
 
   /** Co-sign and submit a Class A choice (Citadel stance / Sanctuary blessing). */
   const submitChoice = useCallback(
-    async (
-      building: number,
-      payload: { choice?: number; heroMint?: string },
-    ): Promise<void> => {
+    async (building: number, payload: { choice?: number; heroMint?: string }): Promise<void> => {
       const { transaction } = await requestJson<{ transaction: string }>(
         "/api/cosign/estate/daily-activity",
         { buildingType: building, ...payload },

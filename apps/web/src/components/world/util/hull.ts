@@ -11,12 +11,11 @@ export interface Pt {
   y: number;
 }
 
-const cross = (o: Pt, a: Pt, b: Pt) =>
-  (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+const cross = (o: Pt, a: Pt, b: Pt) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
 
 /** Lower-then-upper hull. Returns CCW polygon, no repeated first/last point. */
 export function convexHull(points: Pt[]): Pt[] {
-  const pts = [...points].sort((a, b) => (a.x - b.x) || (a.y - b.y));
+  const pts = [...points].sort((a, b) => a.x - b.x || a.y - b.y);
   if (pts.length < 3) return pts;
 
   const lower: Pt[] = [];
@@ -81,5 +80,5 @@ export function smoothClosedPath(poly: Pt[], t = 0.5): string {
     const c2y = p2.y - (p3.y - p1.y) * (t / 6);
     d += ` C ${c1x} ${c1y}, ${c2x} ${c2y}, ${p2.x} ${p2.y}`;
   }
-  return d + " Z";
+  return `${d} Z`;
 }

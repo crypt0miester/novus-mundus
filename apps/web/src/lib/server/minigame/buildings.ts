@@ -82,10 +82,20 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       tagline: "Pick the nets that hauled a true catch.",
     },
     content: {
-      instruction: "Pick the nets that hauled a true catch — a net runs full when the catch beats the cast.",
+      instruction:
+        "Pick the nets that hauled a true catch — a net runs full when the catch beats the cast.",
       aLabel: "Cast",
       bLabel: "Catch",
-      names: ["North Net", "Reef Net", "Deep Line", "Tide Trap", "Drift Net", "Weir", "Pole Line", "Crab Pot"],
+      names: [
+        "North Net",
+        "Reef Net",
+        "Deep Line",
+        "Tide Trap",
+        "Drift Net",
+        "Weir",
+        "Pole Line",
+        "Crab Pot",
+      ],
     },
   },
   [BuildingType.Vault]: {
@@ -96,10 +106,20 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       tagline: "Flag the flawed wards before they fail.",
     },
     content: {
-      instruction: "Flag the flawed wards — a ward is flawed when its strength falls short of the strain on it.",
+      instruction:
+        "Flag the flawed wards — a ward is flawed when its strength falls short of the strain on it.",
       aLabel: "Strength",
       bLabel: "Strain",
-      names: ["Iron Ward", "Stone Seal", "Old Lock", "Rune Bar", "Deadbolt", "Chain Gate", "Watch Glyph", "Trap Sill"],
+      names: [
+        "Iron Ward",
+        "Stone Seal",
+        "Old Lock",
+        "Rune Bar",
+        "Deadbolt",
+        "Chain Gate",
+        "Watch Glyph",
+        "Trap Sill",
+      ],
     },
   },
   [BuildingType.Mine]: {
@@ -110,10 +130,20 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       tagline: "Pick the seams that run with gems.",
     },
     content: {
-      instruction: "Pick the gem-bearing seams — a seam runs rich when its glint outshines its dross.",
+      instruction:
+        "Pick the gem-bearing seams — a seam runs rich when its glint outshines its dross.",
       aLabel: "Dross",
       bLabel: "Glint",
-      names: ["North Seam", "Deep Seam", "Cliff Vein", "Old Shaft", "Ash Vein", "Low Cut", "Drift Seam", "Quartz Run"],
+      names: [
+        "North Seam",
+        "Deep Seam",
+        "Cliff Vein",
+        "Old Shaft",
+        "Ash Vein",
+        "Low Cut",
+        "Drift Seam",
+        "Quartz Run",
+      ],
     },
   },
 
@@ -129,7 +159,16 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       instruction: "Sort each piece of salvage into its grade by the purity reading.",
       valueLabel: "Purity",
       bins: ["Common", "Uncommon", "Rare"],
-      names: ["Bent Nail", "Cracked Plate", "Hinge", "Coil", "Strut", "Bracket", "Rivet Bag", "Gear Tooth"],
+      names: [
+        "Bent Nail",
+        "Cracked Plate",
+        "Hinge",
+        "Coil",
+        "Strut",
+        "Bracket",
+        "Rivet Bag",
+        "Gear Tooth",
+      ],
     },
   },
   [BuildingType.Camp]: {
@@ -143,7 +182,16 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       instruction: "Assign each recruit to a post by their aptitude reading.",
       valueLabel: "Aptitude",
       bins: ["Watch", "Patrol", "Vanguard"],
-      names: ["Recruit Vael", "Recruit Orin", "Recruit Sable", "Recruit Rook", "Recruit Wren", "Recruit Calla", "Recruit Dane", "Recruit Pike"],
+      names: [
+        "Recruit Vael",
+        "Recruit Orin",
+        "Recruit Sable",
+        "Recruit Rook",
+        "Recruit Wren",
+        "Recruit Calla",
+        "Recruit Dane",
+        "Recruit Pike",
+      ],
     },
   },
   [BuildingType.Farm]: {
@@ -157,14 +205,23 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       instruction: "Sort the harvest by its ripeness reading — what is not yet ripe is set aside.",
       valueLabel: "Ripeness",
       bins: ["Unripe", "Ripe"],
-      names: ["Ashgrain", "Emberroot", "Brimrice", "Soot Melon", "Cinder Bean", "Husk Gourd", "Coalcorn", "Glasswheat"],
+      names: [
+        "Ashgrain",
+        "Emberroot",
+        "Brimrice",
+        "Soot Melon",
+        "Cinder Bean",
+        "Husk Gourd",
+        "Coalcorn",
+        "Glasswheat",
+      ],
     },
   },
 
   // Reflex — timed Class C games
   [BuildingType.Barracks]: {
     archetype: "reflex",
-    difficulty: { rounds: 12, targetMs: 280, floorMs: 620 },
+    difficulty: { rounds: 7, targetMs: 280, floorMs: 620 },
     flavor: {
       title: "Morning Drill",
       tagline: "React to the sergeant's command — strike on the signal.",
@@ -190,7 +247,8 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
       tagline: "Order your counters to the opponent's tells.",
     },
     content: {
-      instruction: "Read the tells — order your counters from the weakest opening to the strongest.",
+      instruction:
+        "Read the tells — order your counters from the weakest opening to the strongest.",
       metricLabel: "Tell",
       names: ["Low Guard", "Feint", "Cross Step", "Shoulder Drop", "High Guard", "Pivot", "Bind"],
       ascending: true,
@@ -206,7 +264,15 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
     content: {
       instruction: "Set the warding glyphs in their proper order, the faintest ward first.",
       metricLabel: "Ward",
-      names: ["Glyph of Salt", "Glyph of Iron", "Glyph of Ash", "Glyph of Bone", "Glyph of Deep", "Glyph of Watch", "Glyph of Seal"],
+      names: [
+        "Glyph of Salt",
+        "Glyph of Iron",
+        "Glyph of Ash",
+        "Glyph of Bone",
+        "Glyph of Deep",
+        "Glyph of Watch",
+        "Glyph of Seal",
+      ],
       ascending: true,
     },
   },
@@ -220,7 +286,15 @@ const ESTATE_MINIGAMES: Partial<Record<BuildingType, BuildingMinigame>> = {
     content: {
       instruction: "Plan the route — order the waypoints from nearest to farthest.",
       metricLabel: "Leagues",
-      names: ["Old Bridge", "Mill Ford", "Ash Crossing", "Salt Road", "Ruin Gate", "Cliff Path", "Deepwood"],
+      names: [
+        "Old Bridge",
+        "Mill Ford",
+        "Ash Crossing",
+        "Salt Road",
+        "Ruin Gate",
+        "Cliff Path",
+        "Deepwood",
+      ],
       ascending: true,
     },
   },

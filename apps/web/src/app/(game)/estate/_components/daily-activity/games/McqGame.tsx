@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  GameFooter,
-  GameHeader,
-  GameTimer,
-  useFireOnce,
-  useIndexedSelection,
-} from "./_shell";
+import { GameFooter, GameHeader, GameTimer, useFireOnce, useIndexedSelection } from "./_shell";
 
 /** Client-safe MCQ presentation (server `mcq` archetype, key removed). */
 export interface McqPresentation {

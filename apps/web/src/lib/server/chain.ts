@@ -61,33 +61,25 @@ export function getPlayer(owner: PublicKey): Promise<PlayerAccount | null> {
 }
 
 /** The player's active dungeon run, or null if there is none. */
-export function getDungeonRun(
-  owner: PublicKey,
-): Promise<DungeonRunAccount | null> {
+export function getDungeonRun(owner: PublicKey): Promise<DungeonRunAccount | null> {
   const runPda = deriveDungeonRunPda(playerPda(owner))[0];
   return fetchParsed(runPda, parseDungeonRun);
 }
 
 /** A dungeon template by id. */
-export function getDungeonTemplate(
-  dungeonId: number,
-): Promise<DungeonTemplateAccount | null> {
+export function getDungeonTemplate(dungeonId: number): Promise<DungeonTemplateAccount | null> {
   const templatePda = deriveDungeonTemplatePda(dungeonId)[0];
   return fetchParsed(templatePda, parseDungeonTemplate);
 }
 
 /** A player's arena loadout (units / weapons / arena hero), or null. */
-export function getArenaLoadout(
-  player: PublicKey,
-): Promise<ArenaLoadoutAccount | null> {
+export function getArenaLoadout(player: PublicKey): Promise<ArenaLoadoutAccount | null> {
   const loadoutPda = deriveArenaLoadoutPda(gameEnginePda(), player)[0];
   return fetchParsed(loadoutPda, parseArenaLoadout);
 }
 
 /** The player's active expedition, or null if there is none. */
-export function getExpedition(
-  owner: PublicKey,
-): Promise<ExpeditionAccount | null> {
+export function getExpedition(owner: PublicKey): Promise<ExpeditionAccount | null> {
   return fetchParsed(expeditionPda(owner), parseExpedition);
 }
 

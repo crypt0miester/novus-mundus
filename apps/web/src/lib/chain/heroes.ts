@@ -8,7 +8,7 @@
 // HeroTemplate on chain. The caller (the /heroes/<pubkey> routes) treats
 // null as a 404.
 
-import { Connection, PublicKey } from "@solana/web3.js";
+import type { Connection, PublicKey } from "@solana/web3.js";
 import {
   derivePlayerPda,
   deriveHeroTemplatePda,
@@ -36,13 +36,13 @@ export async function fetchHero(
   const asset = parseAssetV1(info.data);
   if (!asset) return null;
 
-  const tplStr = asset.attributes["Template"];
+  const tplStr = asset.attributes.Template;
   if (!tplStr) return null;
 
   const templateId = parseInt(tplStr, 10);
   if (!Number.isFinite(templateId)) return null;
 
-  const levelStr = asset.attributes["Level"];
+  const levelStr = asset.attributes.Level;
   const parsedLevel = levelStr != null ? parseInt(levelStr, 10) : NaN;
   const level = Number.isFinite(parsedLevel) ? Math.max(1, parsedLevel) : 1;
 

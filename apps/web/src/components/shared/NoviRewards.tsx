@@ -146,10 +146,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     const amount = depositAmount;
     if (!amount || amount <= 0) throw new Error("Invalid amount");
     void client;
-    const ix = createDepositNoviInstruction(
-      { owner: publicKey },
-      { amount: noviToDeci(amount) },
-    );
+    const ix = createDepositNoviInstruction({ owner: publicKey }, { amount: noviToDeci(amount) });
     return transact
       .mutateAsync({
         instructions: [ix],

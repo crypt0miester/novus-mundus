@@ -30,8 +30,7 @@ const TABS: SubTab[] = [
 function MapContent() {
   const [tab, setTab] = useTabParam("realm");
   // Legacy ?tab=travel|cities URLs fall through to the Realm map.
-  const activeTab =
-    tab === "travel" || tab === "cities" ? "realm" : tab;
+  const activeTab = tab === "travel" || tab === "cities" ? "realm" : tab;
 
   return (
     <PageTransition>
@@ -94,7 +93,13 @@ function MapContent() {
 
 export default function MapPage() {
   return (
-    <Suspense fallback={<div className="flex min-h-[60vh] items-center justify-center text-text-muted">Loading...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-[60vh] items-center justify-center text-text-muted">
+          Loading...
+        </div>
+      }
+    >
       <MapContent />
     </Suspense>
   );

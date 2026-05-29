@@ -15,9 +15,7 @@ export function CoverageNote({ items }: CoverageNoteProps) {
     <div className="space-y-0.5 rounded-lg border border-border-gold/50 bg-accent/15 px-3 py-2 text-xs text-text-gold">
       {real.map((i) => (
         <div key={i.label}>
-          <span className="font-mono font-semibold tabular-nums">
-            {i.count.toLocaleString()}
-          </span>{" "}
+          <span className="font-mono font-semibold tabular-nums">{i.count.toLocaleString()}</span>{" "}
           {i.label}
         </div>
       ))}

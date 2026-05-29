@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  PACKET_DATA_SIZE,
-  type TransactionInstruction,
-  type PublicKey,
-} from "@solana/web3.js";
+import { PACKET_DATA_SIZE, type TransactionInstruction, type PublicKey } from "@solana/web3.js";
 import type { NovusMundusClient } from "novus-mundus-sdk";
 
 /**

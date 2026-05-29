@@ -5,7 +5,7 @@ import { useCallback } from "react";
 
 export function useTabParam(
   defaultTab: string,
-  paramName = "tab"
+  paramName = "tab",
 ): [string, (tab: string) => void] {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -24,7 +24,7 @@ export function useTabParam(
       const qs = params.toString();
       router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
     },
-    [searchParams, router, pathname, defaultTab, paramName]
+    [searchParams, router, pathname, defaultTab, paramName],
   );
 
   return [activeTab, setTab];

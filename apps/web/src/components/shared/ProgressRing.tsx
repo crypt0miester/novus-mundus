@@ -44,7 +44,7 @@ export function ProgressRing({
           fill="none"
           stroke="currentColor"
           strokeWidth="4"
-          className="text-zinc-800"
+          className="text-surface-overlay"
         />
         <circle
           cx="60"

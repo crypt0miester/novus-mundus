@@ -21,13 +21,13 @@ interface BadgeProps {
 }
 
 const variantStyles: Record<BadgeVariant, string> = {
-  default: "bg-zinc-800 text-zinc-300 border-zinc-700",
+  default: "bg-surface-overlay text-text-muted border-border-default",
   gold: "bg-accent/50 text-text-gold border-border-gold",
   success: "bg-emerald-950/50 text-emerald-400 border-emerald-800",
   danger: "bg-red-950/50 text-red-400 border-red-800",
   info: "bg-blue-950/50 text-blue-400 border-blue-800",
-  // Gold-intensity rarity ladder — grey (mundane) climbing to bright gold.
-  common: "bg-zinc-800 text-zinc-400 border-zinc-600",
+  // Gold-intensity rarity ladder — neutral (mundane) climbing to bright gold.
+  common: "bg-surface-overlay text-text-muted border-border-default",
   uncommon: "bg-zinc-700/50 text-zinc-200 border-zinc-500",
   rare: "bg-accent/50 text-gold-500 border-border-gold",
   epic: "bg-accent/40 text-gold-400 border-border-gold",
