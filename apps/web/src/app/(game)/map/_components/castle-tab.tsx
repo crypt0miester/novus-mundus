@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
+import { Check, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useUrlIntParam, useUrlPatch } from "@/lib/hooks/useUrlParam";
 import { usePlayer } from "@/lib/hooks/usePlayer";
@@ -205,9 +206,115 @@ export function CastleTab() {
     return castle.upgradeType > 0;
   }, [castle]);
 
+  /* Mirror the on-chain gates so the buttons explain *why* an action is
+   * blocked instead of firing a tx that bounces with a raw GameError.
+   * Claim eligibility -> claim_vacant_castle.rs (level / networth-millions /
+   * troops-thousands). Attackability -> CastleAccount::can_be_attacked. */
+  const nowSec = Math.floor(Date.now() / 1000);
+
+  const claimReqs = useMemo(() => {
+    if (!castle || !player) return [];
+    const networthMillions = Math.floor((player.networth?.toNumber?.() ?? 0) / 1_000_000);
+    const troops =
+      (player.defensiveUnit1?.toNumber?.() ?? 0) +
+      (player.defensiveUnit2?.toNumber?.() ?? 0) +
+      (player.defensiveUnit3?.toNumber?.() ?? 0);
+    const troopsThousands = Math.floor(troops / 1_000);
+    return [
+      {
+        label: "Level",
+        have: String(player.level ?? 0),
+        need: String(castle.minLevel ?? 0),
+        ok: (player.level ?? 0) >= (castle.minLevel ?? 0),
+      },
+      {
+        label: "Net worth",
+        have: `${networthMillions}M`,
+        need: `${castle.minNetworthMillions ?? 0}M`,
+        ok: networthMillions >= (castle.minNetworthMillions ?? 0),
+      },
+      {
+        label: "Troops",
+        have: `${troopsThousands}k`,
+        need: `${castle.minTroopsThousands ?? 0}k`,
+        ok: troopsThousands >= (castle.minTroopsThousands ?? 0),
+      },
+    ];
+  }, [castle, player]);
+
+  // Residue from a force-removed king blocks a claim with CastleNotVacant.
+  const claimBlockedByResidue = !!castle && ((castle.garrisonCount ?? 0) > 0 || (castle.courtCount ?? 0) > 0);
+  const canClaim = claimReqs.length > 0 && claimReqs.every((r) => r.ok) && !claimBlockedByResidue;
+
+  const attackInfo = useMemo<{ attackable: boolean; reason: string; opensAt: number | null }>(() => {
+    if (!castle) return { attackable: false, reason: "No castle here.", opensAt: null };
+    const contestEnd = castle.contestEndAt?.toNumber?.() ?? 0;
+    const watchtowerBps = (castle.watchtowerLevel ?? 0) * 1000;
+    const protSecs = Math.floor(
+      ((castle.protectionDuration?.toNumber?.() ?? 0) * (10_000 + watchtowerBps)) / 10_000,
+    );
+    const protectionEnd = contestEnd + protSecs;
+    switch (castle.status) {
+      case 0: // Vacant
+        return {
+          attackable: false,
+          reason: "The seat is empty. There is no garrison to fight; claim it instead.",
+          opensAt: null,
+        };
+      case 1: // Contest
+        return nowSec < contestEnd
+          ? { attackable: true, reason: "", opensAt: null }
+          : {
+              attackable: false,
+              reason: "The contest has ended and protection is settling over the seat.",
+              opensAt: null,
+            };
+      case 2: // Protected
+        return nowSec >= protectionEnd
+          ? { attackable: true, reason: "", opensAt: null }
+          : {
+              attackable: false,
+              reason: "The seat is shielded by protection. It cannot be moved against yet.",
+              opensAt: protectionEnd,
+            };
+      case 3: // Vulnerable
+        return { attackable: true, reason: "", opensAt: null };
+      case 4: // Transitioning
+        return nowSec < contestEnd
+          ? { attackable: true, reason: "", opensAt: null }
+          : { attackable: false, reason: "The transition window has closed.", opensAt: null };
+      default:
+        return { attackable: false, reason: "This seat cannot be contested right now.", opensAt: null };
+    }
+  }, [castle, nowSec]);
+
   // Check team prerequisite
   const teamKey = player?.team;
   const hasTeam = !!teamKey && teamKey.toBase58() !== "11111111111111111111111111111111";
+
+  /* Garrison gates mirror join_garrison.rs / leave_garrison.rs /
+   * claim_garrison_loot.rs. You may only garrison a held castle that
+   * your own House holds, and only when its tier supports a garrison
+   * (Outposts have max_garrison = 0). */
+  const tierSupportsGarrison = (castle?.maxGarrison ?? 0) > 0;
+  const onCastleTeam = !!castle && !!teamKey && castle.hasKing && castle.team.equals(teamKey);
+  const canSeeGarrison = onCastleTeam && tierSupportsGarrison;
+  const garrisonFull = !!castle && (castle.garrisonCount ?? 0) >= (castle.maxGarrison ?? 0);
+  const myGarrison = useMemo(
+    () =>
+      publicKey ? garrisonRoster.find((g) => g.ownerWallet?.equals(publicKey)) ?? null : null,
+    [garrisonRoster, publicKey],
+  );
+  const inGarrison = !!myGarrison;
+  const hasUnclaimedLoot =
+    !!myGarrison &&
+    !myGarrison.account.lootClaimed &&
+    (myGarrison.account.lootMelee?.toNumber?.() ?? 0) +
+      (myGarrison.account.lootRanged?.toNumber?.() ?? 0) +
+      (myGarrison.account.lootSiege?.toNumber?.() ?? 0) >
+      0;
+  const noContribution =
+    garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0);
 
   const handleClaimVacant = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -772,78 +879,102 @@ export function CastleTab() {
             </div>
           )}
 
-          {/* Garrison Actions */}
+          {/* Garrison Actions — only rendered for a held castle your own
+           * House holds whose tier supports a garrison. When you are not
+           * yet in it you contribute to join; once in it you leave or
+           * claim captured loot. */}
+          {canSeeGarrison && (
           <div className="card">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
               Garrison Actions
             </h3>
-            {/* Contribute units & weapons to the castle garrison */}
-            <div className="rounded-lg border border-zinc-800 p-3">
-              <h4 className="mb-2 text-xs font-semibold text-text-muted">Contribute to Garrison</h4>
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                Defensive Units
-              </div>
-              <TripleCountInput
-                labels={DEFENSIVE_UNIT_LABELS}
-                icons={DEFENSIVE_UNIT_ICONS}
-                available={availUnits}
-                value={garrisonUnits}
-                onChange={setGarrisonUnits}
-              />
-              <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                Weapons
-              </div>
-              <TripleCountInput
-                labels={WEAPON_LABELS}
-                icons={WEAPON_ICONS}
-                available={availWeapons}
-                value={garrisonWeapons}
-                onChange={setGarrisonWeapons}
-              />
-              <div className="mt-2">
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                  Hero
+            {inGarrison ? (
+              <div className="space-y-3">
+                <p className="text-xs text-text-secondary">
+                  You stand with this garrison.
+                  {hasUnclaimedLoot
+                    ? " Weapons captured in its defense are waiting for you."
+                    : " There are no captured weapons to claim right now."}
+                </p>
+                <div className="flex flex-wrap gap-3">
+                  <TxButton onClick={handleLeaveGarrison} variant="danger">
+                    Leave Garrison
+                  </TxButton>
+                  <TxButton
+                    onClick={handleClaimGarrisonLoot}
+                    variant="secondary"
+                    disabled={!hasUnclaimedLoot}
+                  >
+                    Claim Garrison Loot
+                  </TxButton>
                 </div>
-                <select
-                  value={garrisonHeroSlot}
-                  onChange={(e) => setGarrisonHeroSlot(Number(e.target.value))}
-                  className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
-                >
-                  <option value={NO_HERO_SLOT}>No hero</option>
-                  {lockedHeroes.map((h, i) =>
-                    h ? (
-                      <option key={i} value={i}>
-                        Slot {i}: {h.name}
-                      </option>
-                    ) : null,
+              </div>
+            ) : (
+              /* Contribute units & weapons to the castle garrison */
+              <div className="rounded-lg border border-zinc-800 p-3">
+                <h4 className="mb-2 text-xs font-semibold text-text-muted">
+                  Contribute to Garrison
+                </h4>
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Defensive Units
+                </div>
+                <TripleCountInput
+                  labels={DEFENSIVE_UNIT_LABELS}
+                  icons={DEFENSIVE_UNIT_ICONS}
+                  available={availUnits}
+                  value={garrisonUnits}
+                  onChange={setGarrisonUnits}
+                />
+                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                  Weapons
+                </div>
+                <TripleCountInput
+                  labels={WEAPON_LABELS}
+                  icons={WEAPON_ICONS}
+                  available={availWeapons}
+                  value={garrisonWeapons}
+                  onChange={setGarrisonWeapons}
+                />
+                <div className="mt-2">
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    Hero
+                  </div>
+                  <select
+                    value={garrisonHeroSlot}
+                    onChange={(e) => setGarrisonHeroSlot(Number(e.target.value))}
+                    className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
+                  >
+                    <option value={NO_HERO_SLOT}>No hero</option>
+                    {lockedHeroes.map((h, i) =>
+                      h ? (
+                        <option key={i} value={i}>
+                          Slot {i}: {h.name}
+                        </option>
+                      ) : null,
+                    )}
+                  </select>
+                  {lockedHeroes.every((h) => h === null) && (
+                    <p className="mt-1 text-[10px] text-text-muted">
+                      Lock a hero in the Heroes tab to commit one.
+                    </p>
                   )}
-                </select>
-                {lockedHeroes.every((h) => h === null) && (
-                  <p className="mt-1 text-[10px] text-text-muted">
-                    Lock a hero in the Heroes tab to commit one.
+                </div>
+                {garrisonFull && (
+                  <p className="mt-2 text-xs italic text-text-muted">
+                    The garrison is full ({castle.garrisonCount} / {castle.maxGarrison}). No more
+                    swords can be added until a seat frees.
                   </p>
                 )}
+                <TxButton
+                  onClick={handleJoinGarrison}
+                  variant="secondary"
+                  className="mt-3 w-full"
+                  disabled={noContribution || garrisonFull}
+                >
+                  Join Garrison
+                </TxButton>
               </div>
-              <TxButton
-                onClick={handleJoinGarrison}
-                variant="secondary"
-                className="mt-3 w-full"
-                disabled={
-                  garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0)
-                }
-              >
-                Join Garrison
-              </TxButton>
-            </div>
-
-            <div className="mt-3 flex flex-wrap gap-3">
-              <TxButton onClick={handleLeaveGarrison} variant="danger">
-                Leave Garrison
-              </TxButton>
-              <TxButton onClick={handleClaimGarrisonLoot} variant="secondary">
-                Claim Garrison Loot
-              </TxButton>
-            </div>
+            )}
 
             {/* Garrison roster */}
             <div className="mt-4 space-y-2">
@@ -885,23 +1016,81 @@ export function CastleTab() {
               )}
             </div>
           </div>
+          )}
 
-          {/* Actions */}
-          <div className="flex flex-wrap gap-3">
-            {castle.status === 0 && <TxButton onClick={handleClaimVacant}>Claim Castle</TxButton>}
-            <div className="flex items-center gap-2">
-              <TxButton onClick={handleAttackCastle} variant="danger">
-                Attack Castle
-              </TxButton>
-              <button
-                onClick={() => setDriveBy(!driveBy)}
-                className={`rounded-lg px-3 py-2 text-sm ${
-                  driveBy ? "bg-accent/30 text-text-gold" : "text-text-muted"
-                }`}
-              >
-                Drive-by
-              </button>
-            </div>
+          {/* Actions — Vacant seats are claimed (gated on eligibility);
+           * held seats are attacked (gated on attackability). The two are
+           * mutually exclusive on-chain, so we surface only the one that
+           * applies and explain when it is blocked. */}
+          <div className="card space-y-3">
+            {castle.status === 0 ? (
+              <>
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Claim Requirements
+                </h3>
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                  {claimReqs.map((r) => (
+                    <span key={r.label} className="inline-flex items-center gap-1">
+                      {r.ok ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-400" />
+                      ) : (
+                        <X className="h-3.5 w-3.5 text-red-400" />
+                      )}
+                      <span className={r.ok ? "text-text-secondary" : "text-red-400"}>
+                        {r.label} {r.have} / {r.need}
+                      </span>
+                    </span>
+                  ))}
+                </div>
+                {claimBlockedByResidue && (
+                  <p className="text-xs italic text-text-muted">
+                    The previous court has not yet dispersed. The seat must be swept clean before it
+                    can be claimed.
+                  </p>
+                )}
+                {!canClaim && !claimBlockedByResidue && (
+                  <p className="text-xs italic text-text-muted">
+                    You do not yet meet the terms to take this seat.
+                  </p>
+                )}
+                <TxButton onClick={handleClaimVacant} disabled={!canClaim}>
+                  Claim Castle
+                </TxButton>
+              </>
+            ) : (
+              <>
+                {!attackInfo.attackable && (
+                  <p className="flex flex-wrap items-center gap-1 text-xs italic text-text-muted">
+                    {attackInfo.reason}
+                    {attackInfo.opensAt != null && (
+                      <GoldCountdown endsAt={attackInfo.opensAt} format="compact" label="Opens in" />
+                    )}
+                  </p>
+                )}
+                <div className="flex items-center gap-2">
+                  <TxButton
+                    onClick={handleAttackCastle}
+                    variant="danger"
+                    disabled={!attackInfo.attackable}
+                  >
+                    Attack Castle
+                  </TxButton>
+                  <button
+                    onClick={() => setDriveBy(!driveBy)}
+                    className={`rounded-lg px-3 py-2 text-sm ${
+                      driveBy ? "bg-accent/30 text-text-gold" : "text-text-muted"
+                    }`}
+                  >
+                    Drive-by
+                  </button>
+                </div>
+                {attackInfo.attackable && (
+                  <p className="text-[10px] text-text-muted">
+                    You must stand within striking range of the castle and not be traveling.
+                  </p>
+                )}
+              </>
+            )}
           </div>
         </>
       ) : (

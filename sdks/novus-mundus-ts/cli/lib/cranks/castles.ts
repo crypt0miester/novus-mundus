@@ -24,12 +24,12 @@ import {
   createFinalizeTransitionInstruction,
 } from '../../../src/instructions/castle';
 
-/** Castle status enum values (from on-chain) */
+/** Castle status enum values (from on-chain — see constants.rs CASTLE_STATUS_*) */
 const CASTLE_STATUS = {
   VACANT: 0,
-  PROTECTED: 1,
-  VULNERABLE: 2,
-  CONTEST: 3,
+  CONTEST: 1,
+  PROTECTED: 2,
+  VULNERABLE: 3,
   TRANSITIONING: 4,
 } as const;
 

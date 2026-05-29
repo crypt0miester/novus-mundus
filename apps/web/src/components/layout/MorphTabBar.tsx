@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { animate, spring, stagger } from "animejs";
-import { Plus, X } from "lucide-react";
+import { Plus, X, ChevronLeft } from "lucide-react";
 import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 
 import { usePlayer } from "@/lib/hooks/usePlayer";
@@ -12,6 +12,9 @@ import { useEstate } from "@/lib/hooks/useEstate";
 import { useFeatureGate, FEATURES } from "@/lib/hooks/useFeatureGate";
 import { useRightPanelStore, type PanelAction } from "@/lib/store/right-panel";
 import { useSheetStore } from "@/lib/store/sheet";
+import { useMorphComposeStore } from "@/lib/store/morph-compose";
+import { useKeyboardInset } from "@/lib/hooks/useKeyboardInset";
+import { useIsPhone } from "@/lib/hooks/useMediaQuery";
 import { cn } from "@/lib/utils";
 import { TxButton } from "@/components/shared/TxButton";
 import { PRIMARY, SECONDARY, computePageLocks } from "./nav-config";
@@ -48,11 +51,19 @@ const NAV_GROUP_WIDTH = 342;
 const CIRCLE_SIZE = 56;
 const GROUP_GAP = 8;
 
+// Rollback flag (design §15). false = no compose shape: the bar keeps its three
+// shapes and ThreadRenderer renders the composer inline (today's behaviour).
+const COMPOSE_IN_BAR = true;
+// Compose pill geometry. Margin matches the wrapper's bottom inset; the pill
+// spans the viewport minus both margins (and the circle, when one shows), capped.
+const COMPOSE_MARGIN = 12;
+const COMPOSE_MAX = 560;
+
 type Mode = "nav" | "actions";
 // The bar's three resting shapes; the morph keys off this single value.
 // `actions` is the narrow centred pill (1-2 plain actions); `wide` is the
 // nav-group-width bar (3+ actions, or a dismiss ✕).
-type Shape = "nav" | "actions" | "wide";
+type Shape = "nav" | "actions" | "wide" | "compose";
 
 function prefersReducedMotion(): boolean {
   if (typeof window === "undefined") return false;
@@ -87,6 +98,18 @@ export function MorphTabBar() {
   // The most recently registered panel owns the bar; any earlier panels wait
   // their turn beneath it. With no entries the bar shows its nav tabs.
   const panelActions = morphActions[morphActions.length - 1]?.actions ?? [];
+
+  // Compose shape: a surface (team dock / full-page DM) hosting its composer in
+  // the bar. Store-driven and phone-gated; the bar is `md:hidden`, and isPhone
+  // also keeps a non-phone-gated future consumer from registering above `md`
+  // (where it would portal into a `display:none` slot and trap the draft).
+  const composeEntries = useMorphComposeStore((s) => s.entries);
+  const setComposeSlot = useMorphComposeStore((s) => s.setSlotEl);
+  const composeTop = composeEntries[composeEntries.length - 1];
+  const isPhone = useIsPhone();
+  const composeActive = COMPOSE_IN_BAR && isPhone && composeTop !== undefined;
+  const composeDismiss = composeTop?.dismiss ?? null;
+  const kbInset = useKeyboardInset();
 
   // While a bottom sheet is open the bar always carries a ✕ that closes it,
   // appended as a `kind: "dismiss"` action so it renders as the standalone
@@ -158,8 +181,10 @@ export function MorphTabBar() {
 
   // One value drives the morph. The pill is the same DOM element in every
   // shape; only its width, which layer is in flow, and the circle slot's
-  // tenant change between them.
-  const shape: Shape = wide ? "wide" : mode;
+  // tenant change between them. Compose is top-priority: an open composer owns
+  // the whole bar over wide/actions/nav. Store-driven, NOT gated on topSheet,
+  // so the full-page DM (which has no sheet) still enters compose.
+  const shape: Shape = composeActive ? "compose" : wide ? "wide" : mode;
 
   // A content-only sheet (a dismiss ✕ but no panel actions) has nothing for
   // the pill to carry. It stays mounted as an invisible spacer — so the morph
@@ -171,11 +196,42 @@ export function MorphTabBar() {
   // — minus the circle's slot when a dismiss ✕ takes it.
   const wideBarWidth = dismiss ? NAV_GROUP_WIDTH - GROUP_GAP - CIRCLE_SIZE : NAV_GROUP_WIDTH;
 
+  // Compose spans most of the viewport. The circle allowance is subtracted only
+  // when a circle actually renders (a sheet to close, or a surface dismiss); with
+  // neither, the pill spans the full inner width. `vw` starts at 0 (not measured)
+  // and is filled from window on the first compose-active frame, then tracked on
+  // resize/rotate. The 0 is a not-yet-measured sentinel, not a fallback shim.
+  const composeHasCircle = !!topSheet || !!composeDismiss;
+  const [vw, setVw] = useState(0);
+  const composeWidth = Math.min(
+    (vw || (typeof window === "undefined" ? COMPOSE_MAX : window.innerWidth)) -
+      2 * COMPOSE_MARGIN -
+      (composeHasCircle ? CIRCLE_SIZE + GROUP_GAP : 0),
+    COMPOSE_MAX,
+  );
+  useEffect(() => {
+    if (!composeActive) return;
+    const onResize = () => setVw(window.innerWidth);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, [composeActive]);
+
   // Refs the morph animations write to.
   const pillRef = useRef<HTMLDivElement | null>(null);
   const navLayerRef = useRef<HTMLDivElement | null>(null);
   const actionLayerRef = useRef<HTMLDivElement | null>(null);
+  const composeLayerRef = useRef<HTMLDivElement | null>(null);
+  const slotRef = useRef<HTMLDivElement | null>(null);
   const prevShape = useRef<Shape>("nav");
+
+  // Maps a shape to the layer in flow / visible for it. nav has its own layer;
+  // actions and wide share the action layer; compose has the slot layer.
+  const layerFor = (s: Shape): HTMLDivElement | null => {
+    if (s === "nav") return navLayerRef.current;
+    if (s === "compose") return composeLayerRef.current;
+    return actionLayerRef.current; // actions | wide
+  };
 
   // Width-morph bookkeeping. The pill animates its width between shapes —
   // CSS can't transition a content-driven `auto` width — so anime.js drives
@@ -265,6 +321,18 @@ export function MorphTabBar() {
     return () => ro.disconnect();
   }, []);
 
+  // Publish the slot DOM node so the owning surface can portal its <Composer/>
+  // into it. The slot lives in the always-mounted compose layer, so it is never
+  // removed; the cleanup nulls the store before this effect re-runs or the bar
+  // unmounts, so a consumer reading `slotEl` can't portal into a stale node.
+  useEffect(() => {
+    if (shape === "compose") {
+      setComposeSlot(slotRef.current);
+      return () => setComposeSlot(null);
+    }
+    setComposeSlot(null);
+  }, [shape, setComposeSlot]);
+
   // Morph whenever the shape flips. The pill is one persistent element in
   // every shape, so its buttons stay put — only what's *inside* transforms.
   // Three things move:
@@ -291,11 +359,18 @@ export function MorphTabBar() {
       // Where the pill rests after the morph: a pinned width for wide, or
       // back to content-driven `auto` for nav / 1-2 actions.
       const settle = () => {
-        pill.style.width = to === "wide" ? `${wideBarWidth}px` : "auto";
+        pill.style.width =
+          to === "wide"
+            ? `${wideBarWidth}px`
+            : to === "compose"
+              ? `${composeWidth}px`
+              : "auto";
       };
       let toW: number;
       if (to === "wide") {
         toW = wideBarWidth;
+      } else if (to === "compose") {
+        toW = composeWidth;
       } else {
         pill.style.width = "auto";
         toW = pill.offsetWidth;
@@ -319,24 +394,28 @@ export function MorphTabBar() {
 
     if (from === to) return;
 
-    const navLayer = navLayerRef.current;
-    const actionLayer = actionLayerRef.current;
-    if (!navLayer || !actionLayer) return;
+    const outgoing = layerFor(from);
+    const incoming = layerFor(to);
+    if (!outgoing || !incoming) return;
 
     if (reduce) {
-      navLayer.style.opacity = to === "nav" ? "1" : "0";
-      actionLayer.style.opacity = to === "nav" ? "0" : "1";
+      // Set every layer's opacity explicitly so none is left visible.
+      for (const s of ["nav", "actions", "wide", "compose"] as const) {
+        const el = layerFor(s);
+        if (el) el.style.opacity = el === incoming ? "1" : "0";
+      }
       return;
     }
 
-    const outgoing = from === "nav" ? navLayer : actionLayer;
-    const incoming = to === "nav" ? navLayer : actionLayer;
     const incomingChildren = Array.from(
       incoming.querySelectorAll<HTMLElement>("[data-morph-item]"),
     );
 
     // actions ↔ wide stay on the *same* action layer — there's no second
     // layer to cross-fade, so the buttons just re-deal as the pill resizes.
+    // compose enters via the exit/enter path below; it has no [data-morph-item]
+    // children, so the per-child stagger is a no-op and the plain layer
+    // fade + rise carries it.
     if (incoming === outgoing) {
       animate(incomingChildren, {
         translateY: [10, 0],
@@ -376,7 +455,7 @@ export function MorphTabBar() {
       delay: stagger(36, { start: EXIT_MS - 40 }),
       ease: SPRING_OPEN,
     });
-  }, [shape, wideBarWidth]);
+  }, [shape, wideBarWidth, composeWidth]);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
@@ -385,7 +464,16 @@ export function MorphTabBar() {
   return (
     <div
       className="pointer-events-none fixed inset-x-0 z-[60] flex justify-center md:hidden"
-      style={{ bottom: "max(12px, env(safe-area-inset-bottom))" }}
+      style={{
+        bottom: "max(12px, env(safe-area-inset-bottom))",
+        // Lift the whole bar by the keyboard inset while composing, so the
+        // textarea rides above the keyboard. translateY is compositor-cheap and
+        // stacks on the resolved `bottom` (no safe-area double-count); the
+        // anime.js width-morph never touches this wrapper.
+        transform: composeActive ? `translateY(${-kbInset}px)` : undefined,
+        transition: "transform 180ms cubic-bezier(0.32, 0.72, 0, 1)",
+        willChange: composeActive ? "transform" : undefined,
+      }}
     >
       {/* Row — the pill and (when the shape has one) its circle, centred as a
           group. One structure for every shape: the pill is a single persistent
@@ -471,7 +559,16 @@ export function MorphTabBar() {
         <div
           ref={pillRef}
           className={cn(
-            "relative flex h-14 items-center justify-center overflow-hidden rounded-full",
+            "relative flex justify-center",
+            // Compose holds a 56px floor (min-h-14) so a single-line pill matches
+            // the dismiss circle's height beside it, grows upward to fit a
+            // multi-line draft (capped), keeps its corners soft, and must not clip
+            // the textarea/reply-chip; the other shapes are the fixed-height
+            // clipped pill. anime.js animates width only, so height/radius ride a
+            // short CSS transition.
+            shape === "compose"
+              ? "h-auto min-h-14 max-h-40 items-center rounded-3xl transition-[height,border-radius] duration-200"
+              : "h-14 items-center overflow-hidden rounded-full",
             pillEmpty
               ? "pointer-events-none"
               : "pointer-events-auto border border-border-default bg-[var(--nm-bg-bar)]/95 shadow-xl shadow-black/40 backdrop-blur",
@@ -544,14 +641,31 @@ export function MorphTabBar() {
               shape === "actions" ? "relative" : "absolute inset-0",
             )}
             style={{
-              opacity: shape === "nav" ? 0 : 1,
-              pointerEvents: shape === "nav" ? "none" : "auto",
+              opacity: shape === "actions" || shape === "wide" ? 1 : 0,
+              pointerEvents: shape === "actions" || shape === "wide" ? "auto" : "none",
               willChange: "opacity, transform",
             }}
           >
             {rowActions.map((a) => (
               <ActionButton key={a.id} action={a} wide={wide} />
             ))}
+          </div>
+
+          {/* COMPOSE layer — `relative` only in compose (the slot drives the
+              pinned width and full height); an inactive `absolute` overlay
+              otherwise. Its single child is the empty slot the owning surface
+              portals its <Composer/> into. No `data-morph-item` children, so the
+              cross-fade treats it as a plain fade + rise. */}
+          <div
+            ref={composeLayerRef}
+            className={cn("w-full", shape === "compose" ? "relative" : "absolute inset-0")}
+            style={{
+              opacity: shape === "compose" ? 1 : 0,
+              pointerEvents: shape === "compose" ? "auto" : "none",
+              willChange: "opacity, transform",
+            }}
+          >
+            <div ref={slotRef} className="w-full px-1 py-1" />
           </div>
         </div>
 
@@ -597,6 +711,31 @@ export function MorphTabBar() {
             <X className="h-6 w-6" />
           </button>
         )}
+        {/* Compose circle — `self-end` keeps it bottom-anchored as the pill grows
+            upward. A surface-supplied control (full-page DM back chevron) wins;
+            otherwise the synthesized sheet-close (team dock). With neither, no
+            circle and the pill spans the full width. */}
+        {shape === "compose" &&
+          (() => {
+            const onTap = composeDismiss
+              ? composeDismiss.onClick
+              : topSheet
+                ? () => topSheet.close()
+                : undefined;
+            if (!onTap) return null;
+            const isBack = composeDismiss?.icon === "back";
+            const DismissIcon = isBack ? ChevronLeft : X;
+            return (
+              <button
+                type="button"
+                aria-label={isBack ? "Back" : "Close"}
+                onClick={onTap}
+                className="pointer-events-auto flex h-14 w-14 shrink-0 items-center justify-center self-end rounded-full border border-border-default bg-[var(--nm-bg-bar)]/95 text-text-secondary shadow-xl shadow-black/40 backdrop-blur transition-colors active:bg-surface-overlay/60"
+              >
+                <DismissIcon className="h-6 w-6" />
+              </button>
+            );
+          })()}
       </div>
       {/* /row */}
     </div>

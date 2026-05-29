@@ -8,13 +8,19 @@
 // so this hook just forwards the result and surfaces `congested`.
 //
 // Key access: encrypted scopes (Team/Rally/Castle/DM) read thread keys from the
-// authenticated HttpKeyProvider, which the chain gates per membership and the
-// join-epoch. On a 401 (WtAuthRequiredError) we run the SIWS session bootstrap
-// once via ensureSession and retry the key fetch a single time.
+// session-gated HttpKeyProvider. Reading NEVER auto-prompts: a 401 just records
+// signed-out in the session store and the message stays locked, so a burst of
+// undecryptable messages can no longer pop a wallet dialog per message. When the
+// session is missing, `authState` is `locked` and ThreadRenderer shows the
+// one-click SignInGate; signing in flips the store to `in`, which rebuilds the
+// client (status is a useMemo dep) and re-reads with a live cookie. Sending DOES
+// require a session (the SDK does not swallow a post-time key error), so post()
+// establishes one on the Send gesture, through the same deduped ensureSession.
 //
 // Encounter scope is plaintext by chain rule (flags bit0 = 0, key_version = 0).
 // We MUST NOT fetch any key for it; we hand the SDK a provider that refuses to
 // derive keys, which is never exercised because plaintext bodies skip decrypt.
+// Encounter never gates and never touches the session store.
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PublicKey, type Transaction } from "@solana/web3.js";
@@ -34,6 +40,7 @@ import {
 } from "novus-mundus-sdk";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useAccountStore } from "@/lib/store/accounts";
+import { useSessionStore } from "@/lib/store/session";
 import { ensureSession } from "@/lib/cosign";
 import { notify } from "@/lib/notify";
 import {
@@ -42,6 +49,13 @@ import {
   type WtMessage,
   type ReactionChip,
 } from "@/lib/store/war-table";
+
+// The viewer's access to a thread, derived in the hook and consumed by
+// ThreadRenderer. Encounter (plaintext) is always `open`; an encrypted thread is
+// `open` only with a live session, `locked` when signed-out (show the gate), and
+// `unknown` while the session probe is still resolving (show a spinner, not the
+// gate, so a returning signed-in user gets no lock flash).
+export type WarTableAuthState = "unknown" | "locked" | "open";
 
 export interface UseWarTableOptions {
   // base58 PlayerAccount PDA of the DM peer; required for DM scope key access.
@@ -80,6 +94,11 @@ export interface UseWarTableResult {
   pin: (id: string) => Promise<string>;
   // Unpin (kind=6 with a zero parent). No tombstone is required to unpin.
   unpin: () => Promise<string>;
+  // Viewer access for this thread; drives the ThreadRenderer sign-in gate.
+  authState: WarTableAuthState;
+  // Establish a SIWS session so an encrypted thread can be read (the gate click).
+  // Deduped with the Send-path sign-in, so the two never double-prompt.
+  signInToRead: () => Promise<void>;
 }
 
 const textDecoder = new TextDecoder();
@@ -141,34 +160,36 @@ function pinHexFrom(read: ReadMessage[]): string {
   return idToHex(first.pinnedId);
 }
 
-// A key provider that delegates to the real HttpKeyProvider but, on a lapsed
-// session (401), runs ensureSession once and retries the underlying call a
-// single time. Owning the retry here keeps it transparent to every SDK code
-// path (read, subscribe, post) rather than scattering it across call sites.
-class SessionRetryKeyProvider implements ThreadKeyProvider {
-  constructor(
-    private readonly inner: ThreadKeyProvider,
-    private readonly reauth: () => Promise<void>,
-  ) {}
+// A key provider that delegates to the real HttpKeyProvider and records session
+// status as a side effect, but NEVER prompts. A success confirms a live session
+// (markKeyOk); a 401 (WtAuthRequiredError) means the session lapsed or was never
+// established, so it records signed-out and rethrows. On the read path the SDK
+// swallows the rethrow per blob (decodeAndDecrypt), leaving the message locked
+// rather than erroring; ThreadRenderer then shows the gate off the store status.
+// This is the load-bearing fix for the prompt storm: with no reauth here, a
+// burst of undecryptable messages can no longer fan out into N wallet dialogs.
+class SessionAwareKeyProvider implements ThreadKeyProvider {
+  constructor(private readonly inner: ThreadKeyProvider) {}
 
-  private async withRetry<T>(call: () => Promise<T>): Promise<T> {
+  private async track<T>(call: () => Promise<T>): Promise<T> {
     try {
-      return await call();
+      const result = await call();
+      useSessionStore.getState().markKeyOk();
+      return result;
     } catch (err) {
       if (err instanceof WtAuthRequiredError) {
-        await this.reauth();
-        return call();
+        useSessionStore.getState().markSignedOut();
       }
       throw err;
     }
   }
 
   getKey(threadPda: PublicKey, version: number): Promise<Uint8Array> {
-    return this.withRetry(() => this.inner.getKey(threadPda, version));
+    return this.track(() => this.inner.getKey(threadPda, version));
   }
 
   getCurrentVersion(threadPda: PublicKey): Promise<number> {
-    return this.withRetry(() => this.inner.getCurrentVersion(threadPda));
+    return this.track(() => this.inner.getCurrentVersion(threadPda));
   }
 }
 
@@ -212,6 +233,18 @@ export function useWarTable(
   const peer = opts.peer;
   const threadBase58 = threadPda.toBase58();
   const isEncounter = scope === WarTableScope.Encounter;
+  const sessionStatus = useSessionStore((s) => s.status);
+  // Viewer access for this thread. Encounter is always open (plaintext); an
+  // encrypted thread follows the session: in -> open, out -> locked (gate),
+  // unknown -> still resolving (spinner, no gate, so signed-in users get no
+  // lock flash).
+  const authState: WarTableAuthState = isEncounter
+    ? "open"
+    : sessionStatus === "in"
+      ? "open"
+      : sessionStatus === "out"
+        ? "locked"
+        : "unknown";
   // base58 of the connected wallet, used to populate SDK-side reaction `mine`
   // and `myReactionId` on the seed read. Live reactions resolve mine in the
   // renderer from reactorWallets; this only pre-fills the seed un-react target.
@@ -219,7 +252,12 @@ export function useWarTable(
 
   // Build the war-table client for this thread. Encounter scope uses a key
   // provider that refuses to derive keys (plaintext only); every other scope
-  // uses the session-gated HTTP key route wrapped with one reauth retry.
+  // uses the session-gated HTTP key route, recording status but never prompting.
+  // sessionStatus is a dep on purpose: the HttpKeyProvider caches keys per
+  // instance, so a signed-out -> signed-in transition MUST mint a fresh provider
+  // (and re-run the seed effect below) to re-fetch the versions that 401'd while
+  // locked. Without this the gate would clear but the bubbles stay locked.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sessionStatus is an intentional rebuild trigger, not read in the memo body
   const wtClient = useMemo(() => {
     // Bind the browser fetch, but never touch `window` during SSR; the key
     // route is only ever called client-side from the effect/post paths, so the
@@ -228,26 +266,23 @@ export function useWarTable(
       typeof window === "undefined" ? fetch : window.fetch.bind(window);
     const keyProvider: ThreadKeyProvider = isEncounter
       ? new NoKeyProvider()
-      : new SessionRetryKeyProvider(
-          new HttpKeyProvider(fetchFn, "", scope, peer),
-          async () => {
-            if (!signIn) {
-              throw new Error(
-                "This wallet does not support Sign In With Solana; cannot read war-table keys.",
-              );
-            }
-            await ensureSession(signIn);
-          },
-        );
+      : new SessionAwareKeyProvider(new HttpKeyProvider(fetchFn, "", scope, peer));
     return new WarTableClient({ connection: client.connection, keyProvider });
-    // signIn is captured by the reauth closure; rebuild if it changes identity.
-  }, [client.connection, scope, peer, isEncounter, signIn]);
+  }, [client.connection, scope, peer, isEncounter, sessionStatus]);
 
   // Seed the store from the chain history, then keep it live via onLogs. The
   // store actions are stable Zustand setters, so they are read off getState()
   // rather than subscribed (matches the codebase hook convention).
   useEffect(() => {
     let cancelled = false;
+    // Known signed-out on an encrypted thread: the gate is shown, so skip the
+    // seed read and the live subscription entirely. No wasted 401, no socket
+    // held while gated. Signing in flips sessionStatus, which rebuilds wtClient
+    // and re-runs this effect with a live cookie.
+    if (!isEncounter && sessionStatus === "out") {
+      useWarTableStore.getState().setThreadLoading(threadBase58, false);
+      return;
+    }
     // Reconstruct the thread key from the stable base58 string so the effect's
     // only identity dependency is that string, not a possibly-fresh PublicKey.
     const thread = new PublicKey(threadBase58);
@@ -305,7 +340,7 @@ export function useWarTable(
       clearInterval(interval);
       if (typeof window !== "undefined") window.removeEventListener("focus", onFocus);
     };
-  }, [wtClient, threadBase58, scope, myWallet]);
+  }, [wtClient, threadBase58, scope, myWallet, isEncounter, sessionStatus]);
 
   const post = useCallback(
     async (body: PostMessageBody): Promise<string> => {
@@ -330,6 +365,21 @@ export function useWarTable(
           throw new Error("DM scope requires a peer player.");
         }
         gateAccounts = [senderPlayer, new PublicKey(peer)];
+      }
+
+      // An encrypted post needs a live session to derive the thread key, and
+      // unlike the read path the SDK does NOT swallow a post-time key error. So
+      // establish one on the Send gesture, through the same deduped ensureSession
+      // the gate uses (a concurrent gate click and Send share one prompt). A
+      // signed-out reader sees the gate and never reaches here; this also covers
+      // a lapse between opening the thread and sending. Encounter is plaintext.
+      if (!isEncounter && useSessionStore.getState().status !== "in") {
+        if (!signIn) {
+          throw new Error(
+            "This wallet does not support Sign In With Solana; cannot post to the war-table.",
+          );
+        }
+        await ensureSession(signIn);
       }
 
       // Optimistic echo: show the message instantly under a temporary id that
@@ -380,8 +430,21 @@ export function useWarTable(
         throw err;
       }
     },
-    [wtClient, threadPda, scope, peer, publicKey, signTransaction, myPlayerPda],
+    [wtClient, threadPda, scope, peer, publicKey, signTransaction, myPlayerPda, isEncounter, signIn],
   );
+
+  // Establish a SIWS session so an encrypted thread can be read (the gate click).
+  // Routed through the deduped ensureSession, so a gate click and a Send cannot
+  // double-prompt. On success cosign marks the store `in`, which rebuilds the
+  // client and re-reads with a live cookie.
+  const signInToRead = useCallback(async (): Promise<void> => {
+    if (!signIn) {
+      throw new Error(
+        "This wallet does not support Sign In With Solana; cannot read war-table messages.",
+      );
+    }
+    await ensureSession(signIn);
+  }, [signIn]);
 
   // Reply (kind=3) quoting the parent. The optimistic echo shows the reply text
   // immediately; MessageBubble already renders the parent quote.
@@ -489,5 +552,7 @@ export function useWarTable(
     myReactionId,
     pin,
     unpin,
+    authState,
+    signInToRead,
   };
 }

@@ -25,7 +25,7 @@ export function FeatureLayout({ main, aside }: FeatureLayoutProps) {
     return <div className="space-y-4">{main}</div>;
   }
   return (
-    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-4">
+    <div className="lg:grid lg:grid-cols-[minmax(0,1fr)_20rem] lg:items-start lg:gap-4 px-1">
       <div className="space-y-4">{main}</div>
       <div className="mt-4 space-y-4 lg:sticky lg:top-0 lg:mt-8">{aside}</div>
     </div>

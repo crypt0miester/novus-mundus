@@ -71,6 +71,7 @@ import {
 } from "novus-mundus-sdk";
 import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
 import { MobileTeamDock } from "@/components/war-table/MobileTeamDock";
+import { useIsMobile } from "@/lib/hooks/useMediaQuery";
 
 const RANK_LABELS: Record<number, string> = {
   0: "Leader",
@@ -970,6 +971,11 @@ export function TeamTab() {
 
   const [sidebarSection, setSidebarSection] = useState<"chat" | "treasury" | "settings">("chat");
   const [mobileTeamOpen, setMobileTeamOpen] = useState(false);
+  // The desktop sidebar is `hidden lg:flex` (CSS-hidden on mobile but still
+  // MOUNTED). Its team-chat ThreadRenderer would then mark every incoming
+  // message read on mobile, defeating the dock's unread dot, so the desktop
+  // chat is gated to not mount below lg; the MobileTeamDock owns chat there.
+  const isMobile = useIsMobile();
 
   return (
     <div className="flex h-full flex-col gap-3">
@@ -1385,8 +1391,10 @@ export function TeamTab() {
                   ))}
                 </div>
 
-                {/* War-table thread for the House */}
-                {sidebarSection === "chat" && team && teamData?.pubkey && (
+                {/* War-table thread for the House. Gated to desktop: on mobile
+                    the MobileTeamDock owns the chat, and mounting this hidden
+                    copy would mark messages read and break the unread dot. */}
+                {!isMobile && sidebarSection === "chat" && team && teamData?.pubkey && (
                   <div className="flex min-h-0 flex-1 flex-col">
                     <ThreadRenderer
                       threadPda={teamData.pubkey}
@@ -1644,23 +1652,24 @@ export function TeamTab() {
               ))}
             </div>
 
-            {/* War-table. The BottomSheet content is content-sized, so a
-                definite viewport-relative height is needed here — otherwise
-                ThreadRenderer's h-full has no bounded parent to resolve against
-                and collapses to its min height with dead space below. h-[60dvh]
-                gives the list a real height to fill (it scrolls internally) and
-                keeps the composer pinned, and the sheet sizes to it under 92vh. */}
+            {/* War-table. The cap rides on the renderer's own flex column (via
+                maxHeightClass), so the message list scrolls internally and the
+                composer stays pinned, the same way the rally and encounter
+                panels work with their default max-h-96. The BottomSheet then
+                sizes to it: a short thread is a short sheet, a long one caps
+                well under the 92vh sheet ceiling. max-h-none here would let the
+                list grow unbounded and scroll the whole sheet, dragging the
+                composer off-screen. */}
             {sidebarSection === "chat" && team && teamData?.pubkey && (
-              <div>
-                <ThreadRenderer
-                  threadPda={teamData.pubkey}
-                  scope={WarTableScope.Team}
-                  canPost={true}
-                  canPin={(m) => isOfficerPlus || m.senderWallet === publicKey?.toBase58()}
-                  placeholder="write a message..."
-                  maxHeightClass="max-h-none"
-                />
-              </div>
+              <ThreadRenderer
+                threadPda={teamData.pubkey}
+                scope={WarTableScope.Team}
+                canPost={true}
+                canPin={(m) => isOfficerPlus || m.senderWallet === publicKey?.toBase58()}
+                placeholder="write a message..."
+                maxHeightClass="max-h-[70dvh]"
+                composeInBar={mobileTeamOpen}
+              />
             )}
 
             {/* Treasury */}

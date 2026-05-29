@@ -13,30 +13,19 @@
 // peek subscription is gated to mobile so the desktop sidebar stays the single
 // subscriber for the team thread.
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useMemo, type ReactNode } from "react";
 import type { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { ChevronUp, Shield } from "lucide-react";
 import { WarTableScope, idToHex } from "novus-mundus-sdk";
 import { BottomSheet } from "@/components/shared/BottomSheet";
 import { useThreadPeek } from "@/lib/hooks/useThreadPeek";
+import { useIsMobile } from "@/lib/hooks/useMediaQuery";
 import { useWtReadStore } from "@/lib/store/wt-read";
+import { PlayerName } from "@/components/war-table/PlayerName";
+import { useSenderIdentity } from "@/components/war-table/MessageBubble";
 
 const textDecoder = new TextDecoder();
-
-// matchMedia mobile flag, mirroring BottomSheet's 1024px breakpoint.
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mql = window.matchMedia("(min-width: 1024px)");
-    const sync = () => setIsMobile(!mql.matches);
-    sync();
-    mql.addEventListener("change", sync);
-    return () => mql.removeEventListener("change", sync);
-  }, []);
-  return isMobile;
-}
 
 export interface MobileTeamDockProps {
   threadPda: PublicKey | null;
@@ -63,14 +52,25 @@ export function MobileTeamDock({ threadPda, title, open, onOpenChange, children 
   const mine = !!latest && !!publicKey && latest.senderWallet.equals(publicKey);
   const unread = !!latest && !!threadB58 && !mine && latestIdHex > lastSeen;
 
+  // Decoded body of the latest message; empty when there is none or it is locked.
+  const body = useMemo(
+    () => (latest?.decrypted ? textDecoder.decode(latest.payload).trim() : ""),
+    [latest],
+  );
+
   const peekText = useMemo(() => {
     if (!latest) return "Plan the next move with your House";
-    if (latest.decrypted) {
-      const text = textDecoder.decode(latest.payload).trim();
-      return text.length > 0 ? text : "New message";
-    }
+    if (latest.decrypted) return body.length > 0 ? body : "New message";
     return "New messages";
-  }, [latest]);
+  }, [latest, body]);
+
+  // Prefix the peek with the sender (team chat is a group, so who said it
+  // matters), but only for a real decrypted message, not the empty-state copy or
+  // a locked "New messages" strip. The sender PDA derives from the wallet the
+  // same way the bubbles resolve it.
+  const senderWallet = latest ? latest.senderWallet.toBase58() : "";
+  const senderPda = useSenderIdentity(senderWallet);
+  const showSender = !!latest && latest.decrypted && body.length > 0;
 
   const markSeen = () => {
     if (latest && threadB58) markReadStore(threadB58, latestIdHex);
@@ -107,7 +107,21 @@ export function MobileTeamDock({ threadPda, title, open, onOpenChange, children 
             <span className="block text-[11px] font-semibold uppercase tracking-wider text-text-muted">
               {title}
             </span>
-            <span className="block truncate text-sm text-text-secondary">{peekText}</span>
+            <span className="block truncate text-sm text-text-secondary">
+              {showSender ? (
+                <span className="font-medium text-text-primary">
+                  {mine ? (
+                    "You: "
+                  ) : (
+                    <>
+                      <PlayerName playerPda={senderPda} fallbackKey={senderWallet} />
+                      {": "}
+                    </>
+                  )}
+                </span>
+              ) : null}
+              {peekText}
+            </span>
           </span>
           <ChevronUp className="h-4 w-4 shrink-0 text-text-muted" aria-hidden />
         </span>

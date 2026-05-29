@@ -130,6 +130,12 @@ export interface GarrisonContributionAccount {
   joinedAt: BN;
   lastClaimedAt: BN;
   bump: number;
+  /** Weapons captured from attackers, claimable via claim_garrison_loot. */
+  lootMelee: BN;
+  lootRanged: BN;
+  lootSiege: BN;
+  /** True once this contribution's loot has been claimed. */
+  lootClaimed: boolean;
   /** castle.membership_epoch snapshotted at join (servable key range starts here). */
   joinedAtEpoch: number;
 }
@@ -347,13 +353,29 @@ export function deserializeGarrisonContribution(data: Uint8Array | Buffer): Garr
   reader.skip(24); // melee_weapons, ranged_weapons, siege_weapons
   reader.skip(32); // hero_mint
   reader.skip(8); // hero_defense_bps, hero_weapon_eff_bps, _padding2
-  reader.skip(24); // loot_melee, loot_ranged, loot_siege
-  reader.skip(1); // loot_claimed (bool)
+  const lootMelee = reader.readU64();
+  const lootRanged = reader.readU64();
+  const lootSiege = reader.readU64();
+  const lootClaimed = reader.readBool();
   reader.skip(3); // _pad_garrison_align
   const joinedAtEpoch = reader.readU32();
   const lastClaimedAt = joinedAt; // Not in Rust struct; using joinedAt for compatibility
 
-  return { castle, contributor, du1, du2, du3, joinedAt, lastClaimedAt, bump, joinedAtEpoch };
+  return {
+    castle,
+    contributor,
+    du1,
+    du2,
+    du3,
+    joinedAt,
+    lastClaimedAt,
+    bump,
+    lootMelee,
+    lootRanged,
+    lootSiege,
+    lootClaimed,
+    joinedAtEpoch,
+  };
 }
 
 export function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCastleRewardAccount {

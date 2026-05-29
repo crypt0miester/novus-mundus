@@ -181,7 +181,7 @@ export function ShopTab() {
               </span>
               {timeInfo.purchasingMult > 1.05 ? (
                 <span className="text-[11px] text-text-gold">
-                  Purchasing bonus active ({((timeInfo.purchasingMult - 1) * 100).toFixed(0)}%
+                  bonus ({((timeInfo.purchasingMult - 1) * 100).toFixed(0)}%
                   discount)
                 </span>
               ) : timeInfo.purchasingMult < 0.95 ? (

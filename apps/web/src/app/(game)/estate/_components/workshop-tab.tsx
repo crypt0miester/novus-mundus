@@ -121,7 +121,7 @@ export function WorkshopTab() {
           {/* Tier selector */}
           <div className="mb-4">
             <div className="text-xs text-text-muted mb-2">Convert From:</div>
-            <div className="flex gap-2">
+            <div className="flex gap-2 flex-wrap">
               {MATERIAL_TIERS.map((tier) => {
                 const locked = workshopLevel < (WORKSHOP_LEVEL_REQ[tier.id] ?? 99);
                 return (
@@ -145,7 +145,10 @@ export function WorkshopTab() {
               })}
             </div>
             <div className="mt-1 text-[11px] text-text-muted">
-              {fromMat?.name} &rarr; {toName} &middot; Available: {availableFrom.toLocaleString()}{" "}
+              {fromMat?.name} {">"} {toName}
+            </div>
+            <div className="mt-1 text-[11px] text-text-muted">
+              Available: {availableFrom.toLocaleString()}{" "}
               (max {maxConversions} conversions)
             </div>
           </div>
@@ -173,8 +176,7 @@ export function WorkshopTab() {
           </div>
           {!workshopOk && (
             <div className="mt-2 text-xs text-danger">
-              {fromMat?.name} to {toName} needs Workshop Lv {requiredWorkshop}. yours at Lv{" "}
-              {workshopLevel}.
+              {fromMat?.name} to {toName} needs Workshop Lv {requiredWorkshop}.
             </div>
           )}
           {workshopOk && convertAmount > maxConversions && maxConversions >= 0 && (

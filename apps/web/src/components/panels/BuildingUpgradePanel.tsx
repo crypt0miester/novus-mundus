@@ -12,7 +12,7 @@ import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel"
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { cn, formatNumber } from "@/lib/utils";
 import { BUILDING_FEATURE_MAP } from "@/lib/config/building-features";
-import { findBuilding, formatNoviAmount } from "novus-mundus-sdk";
+import { deciToNovi, findBuilding, formatNoviAmount } from "novus-mundus-sdk";
 import { buildingFraming, buildingPhase } from "@/lib/narrative";
 import { GameIcon } from "../shared/GameIcon";
 
@@ -314,7 +314,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
                   }`}
                 >
                   <div className="text-[11px] text-text-muted">Lv {u.level + 1}</div>
-                  <div className="text-xs font-semibold text-text-gold">{formatNumber(u.cost)}</div>
+                  <div className="text-xs font-semibold text-text-gold">{formatNumber(deciToNovi(u.cost))}</div>
                   <div className="text-[11px] text-text-muted">~{fmtHours(u.timeHours)}</div>
                 </div>
               );

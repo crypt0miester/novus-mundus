@@ -15,6 +15,7 @@
 
 import { use, useMemo } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { PublicKey } from "@solana/web3.js";
 import { ChevronLeft } from "lucide-react";
 import { deriveDmThreadPda, WarTableScope } from "novus-mundus-sdk";
@@ -50,6 +51,15 @@ function BackLink() {
 export default function DmConversationPage({ params }: { params: Promise<{ peer: string }> }) {
   const { peer } = use(params);
   const myPlayerPda = useAccountStore((s) => s.myPlayerPda);
+  const router = useRouter();
+
+  // Phone-only: the morph bar hosts the composer; its circle shows a back chevron
+  // to the inbox. router.push (not back) is deterministic and matches the header
+  // BackLink, so it never strands the player on a fresh history entry.
+  const composeDismiss = useMemo(
+    () => ({ icon: "back" as const, onClick: () => router.push("/messages") }),
+    [router],
+  );
 
   // Narrow the route param before deriving the thread PDA so a malformed peer is
   // a clean message here instead of a thrown PublicKey inside the renderer.
@@ -111,6 +121,8 @@ export default function DmConversationPage({ params }: { params: Promise<{ peer:
               canPost={true}
               placeholder="write a message..."
               maxHeightClass="max-h-none"
+              composeInBar
+              composeDismiss={composeDismiss}
             />
           )}
         </div>

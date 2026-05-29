@@ -1,9 +1,10 @@
 "use client";
 
 import { useCallback } from "react";
-import { VersionedTransaction } from "@solana/web3.js";
+import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import type { SolanaSignInInput, SolanaSignInOutput } from "@solana/wallet-standard-features";
+import { useSessionStore } from "@/lib/store/session";
 
 /**
  * Client helpers for the game_authority co-sign API (`/api/cosign/*`).
@@ -31,8 +32,27 @@ function bytesToBase64(bytes: Iterable<number>): string {
 
 type SignIn = (input?: SolanaSignInInput) => Promise<SolanaSignInOutput>;
 
-/** Run the SIWS handshake and establish the server session cookie. */
-async function establishSession(signIn: SignIn): Promise<void> {
+// A single in-flight SIWS handshake shared by every caller (the war-table gate
+// click, the Send gesture, and the co-sign 401 retry), so concurrent triggers
+// pop ONE wallet dialog rather than N. This is required state modeled directly,
+// not a shim: the dialog is a genuinely singleton resource.
+let inFlightSession: Promise<string> | null = null;
+
+/**
+ * Run the SIWS handshake and establish the server session cookie, returning the
+ * signed-in owner (base58). Deduped: concurrent callers share one wallet prompt.
+ * On success it records the owner in the session store, so any sign-in path
+ * (war-table gate, Send, or a co-sign retry) clears the war-table gate.
+ */
+function establishSession(signIn: SignIn): Promise<string> {
+  if (inFlightSession) return inFlightSession;
+  inFlightSession = runSiwsHandshake(signIn).finally(() => {
+    inFlightSession = null;
+  });
+  return inFlightSession;
+}
+
+async function runSiwsHandshake(signIn: SignIn): Promise<string> {
   const challenge = await fetch("/api/auth/siws");
   const { nonce } = (await challenge.json().catch(() => ({}))) as {
     nonce?: string;
@@ -68,13 +88,20 @@ async function establishSession(signIn: SignIn): Promise<void> {
     const { error } = (await res.json().catch(() => ({}))) as { error?: string };
     throw new Error(error ?? "Sign-in failed");
   }
+  const { owner } = (await res.json().catch(() => ({}))) as { owner?: string };
+  if (!owner) throw new Error("Sign-in succeeded but the server returned no owner");
+  // Reject a non-pubkey owner at the boundary, then bind the client session.
+  new PublicKey(owner);
+  useSessionStore.getState().markSignedIn(owner);
+  return owner;
 }
 
 /**
  * Establish the SIWS session cookie if one is needed (one wallet prompt).
  *
- * Exposed for the war-table key provider flow: a `HttpKeyProvider` 401 means
- * the session lapsed, so the hook calls this once and retries the key fetch.
+ * Exposed for the war-table sign-in gate and the Send gesture; both route here,
+ * and the shared in-flight promise above guarantees a single prompt even when
+ * they fire together.
  */
 export async function ensureSession(signIn: SignIn): Promise<void> {
   await establishSession(signIn);

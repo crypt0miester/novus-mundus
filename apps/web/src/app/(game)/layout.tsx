@@ -14,6 +14,7 @@ import { useTransitionStore, exitMessage } from "@/lib/store/transition";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useActWatch } from "@/lib/hooks/useActWatch";
 import { UnreadSync } from "@/lib/hooks/useUnread";
+import { SessionProbe } from "@/lib/store/session";
 
 export default function GameLayout({ children }: { children: React.ReactNode }) {
   const { connected } = useWallet();
@@ -67,6 +68,8 @@ export default function GameLayout({ children }: { children: React.ReactNode }) 
       <CombatOutcomeModal />
       {/* Global unread-messages sync (DM discovery + team peek); renders nothing. */}
       <UnreadSync />
+      {/* App-wide SIWS session probe + wallet-change reconcile; renders nothing. */}
+      <SessionProbe />
     </div>
   );
 }

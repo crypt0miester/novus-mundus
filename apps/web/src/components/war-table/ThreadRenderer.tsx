@@ -19,21 +19,27 @@
 // full-screen (the DM page passes maxHeightClass="max-h-none").
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { MessageSquare, SendHorizontal, LoaderCircle, Pin, Reply, X } from "lucide-react";
-import { WtKind, WarTableScope, WT_MAX_TEXT_BYTES } from "novus-mundus-sdk";
+import { MessageSquare, LoaderCircle, Pin, X } from "lucide-react";
+import { WtKind, WarTableScope } from "novus-mundus-sdk";
 import { useWarTable } from "@/lib/hooks/useWarTable";
 import { ZERO_ID, type WtMessage } from "@/lib/store/war-table";
 import { useWtReadStore } from "@/lib/store/wt-read";
+import { notify } from "@/lib/notify";
 import { cn } from "@/lib/utils";
-import { PlayerName } from "@/components/war-table/PlayerName";
 import {
   MessageBubble,
   placeholderFor,
-  useSenderIdentity,
   type GroupPos,
 } from "@/components/war-table/MessageBubble";
+import { Composer } from "@/components/war-table/Composer";
+import { SignInGate } from "@/components/war-table/SignInGate";
+import { useIsPhone } from "@/lib/hooks/useMediaQuery";
+import { useMorphCompose } from "@/lib/hooks/useMorphCompose";
+import { useKeyboardInset } from "@/lib/hooks/useKeyboardInset";
+import type { ComposeDismiss } from "@/lib/store/morph-compose";
 
 export interface ThreadRendererProps {
   threadPda: PublicKey;
@@ -51,6 +57,15 @@ export interface ThreadRendererProps {
   // is own-only; the team-chat embed passes an officer-aware predicate (D5:
   // officers-or-own for team, own otherwise). Keeps this component scope-agnostic.
   canPin?: (msg: WtMessage) => boolean;
+  // Phone-only opt-in: host the composer in the mobile morph bar instead of
+  // inline. Set by the team dock and the full-page DM; every other surface, and
+  // md+, keeps the inline composer.
+  composeInBar?: boolean;
+  // Dismiss control surfaced in the bar's circle while compose is active.
+  // Required when composeInBar is set on a surface with NO BottomSheet (the
+  // full-page DM): the bar can't synthesize a sheet-close there. Surfaces inside
+  // a BottomSheet (team dock) omit it; the sheet-close comes from useSheetStore.
+  composeDismiss?: ComposeDismiss;
 }
 
 // Map the chat WarTableScope to the actions-menu scope: only DM hides the
@@ -75,31 +90,10 @@ type RenderItem =
 
 const GROUP_GAP_SECS = 5 * 60;
 
-// Show the byte counter once the draft is within this many bytes of the limit.
-const BYTE_COUNTER_NEAR = 40;
-
-// UTF-8 byte length of a string. The war-table limit is on BYTES, not chars: a
-// 4-byte emoji costs 4. Shared by the compose guard and the live counter.
-const utf8Encoder = new TextEncoder();
-function utf8ByteLength(s: string): number {
-  return utf8Encoder.encode(s).length;
-}
-
-// Trim a string to at most maxBytes UTF-8 bytes without splitting a multi-byte
-// code point. Used to clamp paste/typing that would exceed the limit.
-function trimToByteLength(s: string, maxBytes: number): string {
-  if (utf8ByteLength(s) <= maxBytes) return s;
-  // Walk by code points (not UTF-16 units) so surrogate pairs stay intact.
-  let bytes = 0;
-  let out = "";
-  for (const ch of s) {
-    const chBytes = utf8Encoder.encode(ch).length;
-    if (bytes + chBytes > maxBytes) break;
-    bytes += chBytes;
-    out += ch;
-  }
-  return out;
-}
+// Bottom space each docked surface already reserves below the message list (the
+// game <main> pb-20, the team sheet content pb-18), which clears a resting
+// compose bar. The docked list only pads beyond this for a multi-line composer.
+const COMPOSE_AMBIENT_PAD = 60;
 
 // Local-day bucket for a unix-seconds timestamp. Uses the local date parts so
 // the day separator matches the viewer's calendar, not UTC.
@@ -234,6 +228,8 @@ export function ThreadRenderer({
   placeholder,
   maxHeightClass = "max-h-96",
   canPin,
+  composeInBar,
+  composeDismiss,
 }: ThreadRendererProps) {
   const {
     messages,
@@ -251,23 +247,37 @@ export function ThreadRenderer({
     myReactionId,
     pin,
     unpin,
+    authState,
+    signInToRead,
   } = useWarTable(threadPda, scope, { peer });
   const { publicKey } = useWallet();
   const connectedWallet = publicKey ? publicKey.toBase58() : null;
+
+  // Sign-in gate state (encrypted thread, no session). The handshake is deduped
+  // in ensureSession, so a gate click and a Send cannot double-prompt.
+  const [signingIn, setSigningIn] = useState(false);
+  const [signInError, setSignInError] = useState<string | null>(null);
+  const onSignIn = useCallback(async () => {
+    setSigningIn(true);
+    setSignInError(null);
+    try {
+      await signInToRead();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setSignInError(message);
+      notify.error({ title: "Could not sign in", message });
+    } finally {
+      setSigningIn(false);
+    }
+  }, [signInToRead]);
 
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   // The message being replied to (drives the composer chip), or null.
   const [replyTarget, setReplyTarget] = useState<WtMessage | null>(null);
-  // Resolve the reply target's PlayerAccount PDA from its wallet (same derivation
-  // the bubbles use) so the chip shows the player's name via PlayerName, matching
-  // the rest of the thread instead of a raw shortened address. The hook tolerates
-  // an empty string (returns null) when there is no active reply target.
-  const replyTargetPda = useSenderIdentity(replyTarget?.senderWallet ?? "");
   // A message id briefly ring-highlighted after a jump-to-parent, cleared on a timer.
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Top-of-list sentinel for scroll-up load-older, plus the distance-from-bottom
   // captured before a load-older so the layout effect can restore the viewport.
@@ -326,6 +336,40 @@ export function ThreadRenderer({
   const avatarSize = compact ? 28 : 32;
   const menuScope = menuScopeFor(scope);
 
+  // Phone-only: host the composer in the mobile morph bar instead of inline. The
+  // opt-in is per surface (team dock, full-page DM); everything else, and md+,
+  // keeps the inline composer.
+  const isPhone = useIsPhone();
+  // Only dock the composer to the morph bar once the thread is actually open;
+  // while gated (locked) or still resolving (unknown) there is no composer, so
+  // the bar must stay in nav mode rather than morph to an empty compose slot.
+  const dockToBar = isPhone && composeInBar === true && authState === "open";
+  const slotEl = useMorphCompose(dockToBar, composeDismiss);
+  const kbInset = useKeyboardInset();
+
+  // Track the docked composer's rendered height so the list can clear it when it
+  // grows multi-line. slotEl lives in the morph bar, independent of the list, so
+  // measuring it never feeds back into the list's own layout.
+  const [slotHeight, setSlotHeight] = useState(0);
+  useEffect(() => {
+    if (!dockToBar || !slotEl) {
+      setSlotHeight(0);
+      return;
+    }
+    const measure = () => setSlotHeight(slotEl.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(slotEl);
+    return () => ro.disconnect();
+  }, [dockToBar, slotEl]);
+
+  // The list only adds the keyboard inset plus any composer growth past the
+  // surface's ambient bottom pad, keeping the newest bubble above a multi-line
+  // composer and the on-screen keyboard. Zero (inline) keeps today's layout.
+  const listPadBottom = dockToBar
+    ? kbInset + Math.max(0, slotHeight - COMPOSE_AMBIENT_PAD)
+    : 0;
+
   // Auto-scroll to the newest message whenever the list changes. Keying on the
   // last message id as well as the count re-pins to the bottom when a pending
   // echo reconciles into its confirmed copy (count unchanged, id changes).
@@ -338,6 +382,15 @@ export function ThreadRenderer({
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [lastMessageId]);
+
+  // While docked in the bar, re-pin to the newest message before paint when the
+  // keyboard or composer height shifts the list's bottom inset, so the latest
+  // bubble stays above the input.
+  useLayoutEffect(() => {
+    if (!dockToBar) return;
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [dockToBar, listPadBottom]);
 
   // Load-older: remember the distance from the bottom, then page. The layout
   // effect below restores it once the older page has prepended.
@@ -382,6 +435,9 @@ export function ThreadRenderer({
   // unread badge on open, on each new message while viewing, and after our send.
   const markRead = useWtReadStore((s) => s.markRead);
   useEffect(() => {
+    // Only a viewer who can actually read the thread should clear its unread
+    // cursor; a signed-out viewer behind the gate must not silently mark it read.
+    if (authState !== "open") return;
     for (let i = messages.length - 1; i >= 0; i--) {
       const m = messages[i]!;
       if (!m.pending) {
@@ -389,33 +445,17 @@ export function ThreadRenderer({
         break;
       }
     }
-  }, [messages, threadPda, markRead]);
+  }, [messages, threadPda, markRead, authState]);
 
-  // Byte budget for the compose box. The war-table limit is on UTF-8 bytes
-  // (a 4-byte emoji costs 4), so the counter and the Send gate measure bytes,
-  // never characters. The textarea onChange already trims input to the limit, so
-  // overBudget should never be true in practice; it is kept as a defensive Send
-  // gate in case a value slips in some other way.
-  const draftBytes = useMemo(() => utf8ByteLength(draft), [draft]);
-  const remainingBytes = WT_MAX_TEXT_BYTES - draftBytes;
-  const overBudget = remainingBytes < 0;
-  const showByteCounter = remainingBytes <= BYTE_COUNTER_NEAR;
-
-  // Auto-grow the textarea up to the max-height pill cap, then let it scroll.
-  function autoGrow() {
-    const el = textareaRef.current;
-    if (!el) return;
-    el.style.height = "auto";
-    el.style.height = `${el.scrollHeight}px`;
-  }
-
-  async function handleSend() {
+  // Post the current draft: a reply (kind=3) quoting the target when one is set,
+  // else a plain text message. Clears the draft + reply chip only on success; a
+  // failure (surfaced by useWarTable via notify) keeps the draft for retry. The
+  // textarea onChange clamps input to the byte limit, so no length guard here.
+  const handleSend = useCallback(async () => {
     const text = draft.trim();
-    if (!text || sending || !canPost || utf8ByteLength(text) > WT_MAX_TEXT_BYTES) return;
+    if (!text || sending || !canPost) return;
     setSending(true);
     try {
-      // When a reply target is set, post a reply (kind=3) quoting it; otherwise
-      // a plain text message. Clear the reply chip only on success.
       if (replyTarget) {
         await replyTo(replyTarget.id, text);
         setReplyTarget(null);
@@ -423,15 +463,12 @@ export function ThreadRenderer({
         await post({ kind: WtKind.Text, payload: text });
       }
       setDraft("");
-      const el = textareaRef.current;
-      if (el) el.style.height = "auto";
     } catch {
-      // useWarTable already surfaces the failure via notify; keep the draft so
-      // the player can retry without retyping.
+      // Keep the draft so the player can retry without retyping.
     } finally {
       setSending(false);
     }
-  }
+  }, [draft, sending, canPost, replyTarget, replyTo, post]);
 
   // Toggle a reaction chip on a message: un-react when it is already mine (the
   // hook resolves my reaction message id), otherwise react with the emoji.
@@ -447,18 +484,65 @@ export function ThreadRenderer({
     [myReactionId, unreact, react],
   );
 
-  function onKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>) {
-    // Enter sends; Shift+Enter inserts a newline.
-    if (e.key === "Enter" && !e.shiftKey) {
-      e.preventDefault();
-      void handleSend();
-    }
+  // The composer element. Rendered inline by default; when docked (phone +
+  // composeInBar) it is portaled into the morph bar's slot. It keeps the same
+  // tree position in both branches, and the draft/sending state lives here on
+  // ThreadRenderer, so the portal flip (which remounts the element) never loses
+  // a half-typed message.
+  const composer = (
+    <Composer
+      draft={draft}
+      onDraftChange={setDraft}
+      onSubmit={() => void handleSend()}
+      sending={sending}
+      canPost={canPost}
+      placeholder={placeholder ?? "write a message..."}
+      replyTarget={replyTarget}
+      onClearReply={() => setReplyTarget(null)}
+      congested={congested}
+      threadId={threadPda.toBase58()}
+    />
+  );
+
+  // Container shell shared by the gate, the loading state, and the open thread,
+  // so the three stay identical and the BottomSheet / DM page does not jump
+  // between states. min-h-64 only for the compact embeds; the full-screen DM
+  // (max-h-none) must not carry a 16rem floor or it overflows short viewports.
+  // Only the open state adds gap-2 (it stacks pin banner + list + composer).
+  const shellClass = cn("flex h-full flex-col", compact && "min-h-64", maxHeightClass);
+
+  // Encrypted thread without a session: show the one-click gate instead of the
+  // list and composer. Encounter is plaintext, so its authState is always open
+  // and it never reaches here.
+  if (authState === "locked") {
+    return (
+      <div className={shellClass}>
+        <SignInGate
+          title={scope === WarTableScope.Dm ? "Encrypted conversation" : "Encrypted war-table"}
+          signingIn={signingIn}
+          error={signInError}
+          onSignIn={() => void onSignIn()}
+        />
+      </div>
+    );
   }
 
-  // min-h-64 only for the compact embeds; the full-screen DM (max-h-none) must
-  // not carry a 16rem floor or it overflows short mobile viewports.
+  // Session still resolving (probe in flight): a plain loading region, never the
+  // lock UI, so a returning signed-in user sees a spinner then messages with no
+  // gate flash.
+  if (authState === "unknown") {
+    return (
+      <div className={shellClass}>
+        <div className="flex flex-1 items-center justify-center gap-2 rounded-lg border border-border-default bg-surface/60 text-xs text-text-muted">
+          <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
+          Loading messages
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className={cn("flex h-full flex-col gap-2", compact && "min-h-64", maxHeightClass)}>
+    <div className={cn(shellClass, "gap-2")}>
       {pinnedMsg ? (
         <div className="flex items-center gap-2 rounded-lg border border-border-default bg-surface-overlay px-3 py-1.5 text-xs">
           <Pin className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
@@ -485,6 +569,7 @@ export function ThreadRenderer({
       <div
         ref={scrollRef}
         className="flex-1 space-y-1 overflow-y-auto rounded-lg border border-border-default bg-surface/60 px-3 py-3"
+        style={dockToBar ? { paddingBottom: listPadBottom } : undefined}
       >
         {hasMore ? (
           <div ref={topSentinelRef} className="flex justify-center py-2">
@@ -577,92 +662,10 @@ export function ThreadRenderer({
         )}
       </div>
 
-      <div className="flex flex-col gap-1">
-        {replyTarget ? (
-          <div className="flex items-center gap-2 rounded-lg border-l-2 border-accent bg-surface-overlay py-1.5 pl-2.5 pr-2 text-xs">
-            <Reply className="h-3.5 w-3.5 shrink-0 text-accent" aria-hidden />
-            <span className="flex min-w-0 flex-1 flex-col leading-tight">
-              <PlayerName
-                playerPda={replyTargetPda}
-                fallbackKey={replyTarget.senderWallet}
-                className="truncate font-semibold text-accent"
-              />
-              <span className="truncate text-text-muted">
-                {replyTarget.locked || replyTarget.tombstoned
-                  ? placeholderFor(replyTarget)
-                  : replyTarget.body}
-              </span>
-            </span>
-            <button
-              type="button"
-              onClick={() => setReplyTarget(null)}
-              aria-label="Cancel reply"
-              className="shrink-0 rounded-full p-1 text-text-muted transition-colors hover:bg-surface hover:text-text-primary"
-            >
-              <X className="h-3.5 w-3.5" aria-hidden />
-            </button>
-          </div>
-        ) : null}
-
-        <div className="flex items-end gap-2">
-          {/* Border + focus ring are set via inline style on purpose: the
-              Tailwind border utilities here inherit the tier-accent var on
-              :focus (the glaring orange outline). A fixed inline border stays
-              calm, and outline: none suppresses the browser's blue default. */}
-          <textarea
-            id={threadPda.toBase58()}
-            ref={textareaRef}
-            value={draft}
-            onChange={(e) => {
-              // Clamp to the byte limit on input so the draft can never exceed
-              // it (typing past the cap or pasting a long block is trimmed).
-              setDraft(trimToByteLength(e.target.value, WT_MAX_TEXT_BYTES));
-              autoGrow();
-            }}
-            onKeyDown={onKeyDown}
-            disabled={!canPost || sending}
-            rows={1}
-            placeholder={canPost ? (placeholder ?? "write a message...") : "Read-only"}
-            style={{ outline: "none" }}
-            className={cn(
-              "no-scrollbar min-h-10 max-h-32 flex-1 resize-none rounded-3xl border border-border-default bg-surface px-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted",
-              (!canPost || sending) && "cursor-not-allowed opacity-60",
-              "focus:border-accent/40 focus:outline-none",
-            )}
-          />
-          <button
-            type="button"
-            onClick={() => void handleSend()}
-            disabled={!canPost || sending || draft.trim().length === 0 || overBudget}
-            aria-label="Send message"
-            className={cn(
-              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-accent text-surface transition-opacity",
-              "disabled:cursor-not-allowed disabled:opacity-40",
-            )}
-          >
-            {sending ? (
-              <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
-            ) : (
-              <SendHorizontal className="h-4 w-4" aria-hidden />
-            )}
-          </button>
-        </div>
-        {showByteCounter && (
-          <p
-            className={cn(
-              "text-right text-[10px] tabular-nums",
-              overBudget ? "text-danger" : "text-text-muted",
-            )}
-          >
-            {remainingBytes} bytes left
-          </p>
-        )}
-        {congested && (
-          <p className="text-[10px] text-text-muted">
-            Network fees are high right now; your message was sent at the capped priority fee.
-          </p>
-        )}
-      </div>
+      {/* Composer: inline by default; portaled into the morph bar's slot when
+          docked (phone + composeInBar). Same tree position in both branches so
+          the instance survives the flip. */}
+      {dockToBar && slotEl ? createPortal(composer, slotEl) : composer}
     </div>
   );
 }

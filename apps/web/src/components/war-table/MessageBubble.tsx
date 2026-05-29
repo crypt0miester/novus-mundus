@@ -298,11 +298,14 @@ export function MessageBubble({
           {/* The actions menu. Absolutely-positioned just outside the bubble's
               inner edge so it never shifts the bubble layout; the trigger fades
               in on desktop hover, and the mobile long-press opens the same menu
-              (its trigger button is visually hidden on mobile). */}
+              (its trigger button is visually hidden on mobile). Centered with
+              inset-y-0 + flex rather than -translate-y-1/2: a transform here
+              would become the containing block for the menu's fixed BottomSheet,
+              trapping and clipping it (PlayerActionsMenu has no such wrapper). */}
           {showPlaceholder ? null : (
             <div
               className={cn(
-                "absolute top-1/2 -translate-y-1/2",
+                "absolute inset-y-0 flex items-center",
                 mine ? "-left-7" : "-right-7",
               )}
             >

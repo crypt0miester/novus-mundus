@@ -9,18 +9,31 @@
 // resolve the peer by reading the most recent DM transaction's account keys and
 // taking the gate account that is not ours.
 //
-// DM bodies are encrypted and the inbox does not fetch per-thread keys, so the
-// preview is a fixed label rather than decoded text. Live updates re-run
-// discovery when onLogs fires on the caller's PlayerAccount PDA.
+// DM bodies are encrypted. For the list preview we best-effort decrypt only the
+// newest message per thread, and only while signed in: a bare HttpKeyProvider
+// (no reauth wrapper) means a signed-out 401 is swallowed inside the SDK decode
+// (decrypted:false) and never prompts a SIWS popup, so the preview just falls
+// back to a fixed label. Live updates re-run discovery when onLogs fires on the
+// caller's PlayerAccount PDA, and a sign-in re-runs it so previews fill in.
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { PublicKey } from "@solana/web3.js";
-import { WarTableClient, idToHex, type ThreadKeyProvider } from "novus-mundus-sdk";
+import { PublicKey, type PartiallyDecodedInstruction } from "@solana/web3.js";
+import {
+  WarTableClient,
+  HttpKeyProvider,
+  WarTableScope,
+  PROGRAM_ID,
+  deriveDmThreadPda,
+  idToHex,
+  type ThreadKeyProvider,
+} from "novus-mundus-sdk";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useAccountStore } from "@/lib/store/accounts";
+import { useSessionStore } from "@/lib/store/session";
 import { useWarTableStore, type DmConvo } from "@/lib/store/war-table";
 
 const DM_PREVIEW_LABEL = "Encrypted message";
+const textDecoder = new TextDecoder();
 
 // The inbox never derives thread keys (no decryption here), so a provider that
 // refuses to derive is correct and makes the no-key intent explicit.
@@ -43,6 +56,9 @@ export function useDmInbox(): UseDmInboxResult {
   const myPlayerPda = useAccountStore((s) => s.myPlayerPda);
   const dmMap = useWarTableStore((s) => s.dmConversations);
   const setDmConversations = useWarTableStore((s) => s.setDmConversations);
+  // A sign-in (status flips to "in") re-runs refresh so previews that fell back
+  // to the placeholder while signed out get decrypted.
+  const sessionStatus = useSessionStore((s) => s.status);
 
   const [isLoading, setIsLoading] = useState(false);
   // A DM thread's peer never changes, so resolved peers are memoized by thread
@@ -50,8 +66,13 @@ export function useDmInbox(): UseDmInboxResult {
   // it has not seen before.
   const peerCache = useRef(new Map<string, string>());
 
-  // Resolve the peer PlayerAccount PDA for a DM thread by reading the most
-  // recent DM transaction's account keys (the gate account that is not mine).
+  // Resolve the peer PlayerAccount PDA for a DM thread from the most recent DM
+  // transaction. We must read the program INSTRUCTION's ordered accounts, not
+  // message.accountKeys: the compiler reorders the flat key list (signers first,
+  // then by writability), which scatters the two player gates and can leave the
+  // thread PDA in the last slot. The DM instruction layout is
+  // [thread, senderWallet, senderPlayer, gate0, gate1]; the two gates are both
+  // participants' PlayerAccount PDAs, so the peer is whichever gate isn't mine.
   const resolvePeer = useCallback(
     async (threadPda: PublicKey, mine: string): Promise<string | null> => {
       const sigs = await client.connection.getSignaturesForAddress(threadPda, { limit: 1 });
@@ -60,17 +81,38 @@ export function useDmInbox(): UseDmInboxResult {
       const tx = await client.connection.getParsedTransaction(sig, {
         maxSupportedTransactionVersion: 0,
       });
-      const keys = tx?.transaction.message.accountKeys;
-      if (!keys || keys.length < 5) return null;
-      // DM accounts: [thread, sender, senderPlayer, playerA, playerB]. The two
-      // gate-account player PDAs are the last two entries; the peer is the one
-      // that is not the connected player. We read the gate slots directly so we
-      // do not mistake the sender wallet for a player PDA.
-      const gateA = keys.at(-2)?.pubkey.toBase58();
-      const gateB = keys.at(-1)?.pubkey.toBase58();
-      if (gateA && gateA !== mine) return gateA;
-      if (gateB && gateB !== mine) return gateB;
-      return null;
+      const ix = tx?.transaction.message.instructions.find(
+        (i): i is PartiallyDecodedInstruction =>
+          "accounts" in i && i.programId.equals(PROGRAM_ID),
+      );
+      if (!ix || ix.accounts.length < 5) return null;
+      const gates = ix.accounts.slice(3).map((k) => k.toBase58());
+      return gates.find((g) => g !== mine) ?? null;
+    },
+    [client.connection],
+  );
+
+  // Best-effort decrypt of the newest message for the list preview. A bare
+  // HttpKeyProvider (no reauth wrapper) makes a signed-out 401 a swallowed
+  // decrypted:false inside the SDK decode, never a SIWS popup; any failure
+  // falls back to the fixed label.
+  const previewFor = useCallback(
+    async (threadPda: PublicKey, peer: string, fetchFn: typeof fetch): Promise<string> => {
+      try {
+        const wt = new WarTableClient({
+          connection: client.connection,
+          keyProvider: new HttpKeyProvider(fetchFn, "", WarTableScope.Dm, peer),
+        });
+        const msgs = await wt.readThread(threadPda, { limit: 5 });
+        const last = msgs.length > 0 ? msgs[msgs.length - 1]! : null;
+        if (last?.decrypted) {
+          const text = textDecoder.decode(last.payload).trim();
+          if (text.length > 0) return text;
+        }
+      } catch {
+        // network / decode failure — fall back to the placeholder.
+      }
+      return DM_PREVIEW_LABEL;
     },
     [client.connection],
   );
@@ -79,16 +121,24 @@ export function useDmInbox(): UseDmInboxResult {
     if (!myPlayerPda) return;
     const mine = myPlayerPda;
     const myPda = new PublicKey(mine);
+    // Attempt decryption unless we KNOW we're signed out — matching the
+    // conversation view (useWarTable), which only skips on "out" and still tries
+    // on "unknown" (probe pending/failed but the cookie may be valid). A bare
+    // 401 is swallowed to the placeholder; the sessionStatus dep re-runs this
+    // when the status resolves.
+    const trySign = sessionStatus !== "out";
+    const fetchFn: typeof fetch = typeof window === "undefined" ? fetch : window.fetch.bind(window);
     setIsLoading(true);
     try {
-      const wtClient = new WarTableClient({
+      const discoveryClient = new WarTableClient({
         connection: client.connection,
         keyProvider: new NoKeyProvider(),
       });
-      const discovered = await wtClient.discoverDmThreads(myPda);
+      const discovered = await discoveryClient.discoverDmThreads(myPda);
 
       // Resolve peers in parallel; a known thread skips the two-RPC lookup since
-      // its peer is immutable.
+      // its peer is immutable. The preview is re-read every refresh (the newest
+      // message changes) but only decrypted unless known signed-out.
       const convos = await Promise.all(
         discovered.map(async (conv): Promise<DmConvo | null> => {
           const threadPda = conv.threadPda.toBase58();
@@ -96,6 +146,19 @@ export function useDmInbox(): UseDmInboxResult {
           if (!peer) {
             const resolved = await resolvePeer(conv.threadPda, mine);
             if (!resolved) return null;
+            // Privacy guard: discoverDmThreads groups EVERY wt1 thread my player
+            // PDA touched and cannot read scope from the envelope, so a team /
+            // rally / castle thread I posted to would otherwise leak in as a fake
+            // conversation showing my own group posts. Prove this is really a DM
+            // between me and `resolved` by re-deriving the pair PDA; only a match
+            // is cached and surfaced.
+            let derived: string;
+            try {
+              derived = deriveDmThreadPda(myPda, new PublicKey(resolved))[0].toBase58();
+            } catch {
+              return null;
+            }
+            if (derived !== threadPda) return null;
             peer = resolved;
             peerCache.current.set(threadPda, peer);
           }
@@ -103,7 +166,9 @@ export function useDmInbox(): UseDmInboxResult {
             threadPda,
             peerPlayerPda: peer,
             lastMessageId: idToHex(conv.lastMessageId),
-            lastPreview: DM_PREVIEW_LABEL,
+            lastPreview: trySign
+              ? await previewFor(conv.threadPda, peer, fetchFn)
+              : DM_PREVIEW_LABEL,
           };
         }),
       );
@@ -111,7 +176,7 @@ export function useDmInbox(): UseDmInboxResult {
     } finally {
       setIsLoading(false);
     }
-  }, [client.connection, myPlayerPda, resolvePeer, setDmConversations]);
+  }, [client.connection, myPlayerPda, resolvePeer, previewFor, setDmConversations, sessionStatus]);
 
   useEffect(() => {
     if (!myPlayerPda) return;
