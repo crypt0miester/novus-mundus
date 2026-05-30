@@ -20,6 +20,8 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
+import { usePlayerPresence } from "@/lib/hooks/usePresence";
+import { PresenceDot } from "@/components/presence/PresenceDot";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
@@ -61,6 +63,10 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
 
   const ownerList = useMemo(() => (target ? [target.account.owner] : []), [target]);
   const domainNames = useDomainNames(ownerList);
+
+  // Presence for the target. playerPubkey is the PlayerAccount PDA the panel is
+  // opened with, so it feeds usePlayerPresence directly.
+  const presence = usePlayerPresence(playerPubkey);
 
   const pvpRange = PVP_RANGE;
   const playerTraveling = player ? isTraveling(player) : false;
@@ -172,7 +178,10 @@ export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
     <div className="space-y-4">
       {/* Target header */}
       <div className="text-center">
-        <div className="text-lg font-bold text-text-primary">{targetName}</div>
+        <div className="flex items-center justify-center gap-2">
+          <div className="text-lg font-bold text-text-primary">{targetName}</div>
+          <PresenceDot online={presence.online} hideOffline />
+        </div>
         <div className="text-xs text-text-muted">Level {target.account.level}</div>
       </div>
 

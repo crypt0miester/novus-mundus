@@ -46,6 +46,10 @@ export interface ThreadRendererProps {
   scope: WarTableScope;
   // base58 PlayerAccount PDA of the DM peer; only meaningful for DM scope.
   peer?: string;
+  // Post-time gate accounts the chain requires for Rally/Castle scopes (the
+  // RallyParticipant, or the castle garrison contribution — empty for the king).
+  // The embedding panel owns this context; other scopes ignore it.
+  gateAccounts?: PublicKey[];
   // when false the compose box is disabled (read-only access).
   canPost: boolean;
   // compose-box placeholder text.
@@ -131,15 +135,18 @@ function buildRenderItems(messages: WtMessage[], connectedWallet: string | null)
   };
 
   for (const msg of messages) {
-    // Reaction (5), pin (6) and tombstone (4) are control/fold messages, never
-    // their own bubble: a tombstone folds its victim (which renders the
-    // "[Message removed]" placeholder), so the kind=4 record must not also draw
-    // an empty bubble. Reactions/pins are already excluded by the store; this
-    // also guards the optimistic-pending window where they briefly live here.
+    // Reaction (5), pin (6), tombstone (4) and status (1) are control/fold
+    // messages, never their own bubble: a tombstone folds its victim (which
+    // renders the "[Message removed]" placeholder), so the kind=4 record must
+    // not also draw an empty bubble. Status (1) is the presence ping posted to
+    // the Public scope; it carries no chat text and is hidden defensively.
+    // Reactions/pins/status are already excluded by the store; this also guards
+    // the optimistic-pending window where they briefly live here.
     if (
       msg.kind === WtKind.Reaction ||
       msg.kind === WtKind.Pin ||
-      msg.kind === WtKind.Tombstone
+      msg.kind === WtKind.Tombstone ||
+      msg.kind === WtKind.Status
     )
       continue;
 
@@ -224,6 +231,7 @@ export function ThreadRenderer({
   threadPda,
   scope,
   peer,
+  gateAccounts,
   canPost,
   placeholder,
   maxHeightClass = "max-h-96",
@@ -249,7 +257,7 @@ export function ThreadRenderer({
     unpin,
     authState,
     signInToRead,
-  } = useWarTable(threadPda, scope, { peer });
+  } = useWarTable(threadPda, scope, { peer, gateAccounts });
   const { publicKey } = useWallet();
   const connectedWallet = publicKey ? publicKey.toBase58() : null;
 

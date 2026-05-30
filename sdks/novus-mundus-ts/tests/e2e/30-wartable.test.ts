@@ -13,6 +13,8 @@ import BN from 'bn.js';
 import bs58 from 'bs58';
 
 import {
+  createInitGameEngineInstruction,
+  deriveGameEnginePda,
   createTeamCreateInstruction,
   createTeamInviteInstruction,
   createTeamAcceptInviteInstruction,
@@ -58,6 +60,7 @@ import {
   createPostRallyMessageInstruction,
   createPostCastleMessageInstruction,
   createPostEncounterMessageInstruction,
+  createPostPublicMessageInstruction,
   createPostDmMessageInstruction,
 } from '../../src/index';
 import { GameError } from '../../src/errors';
@@ -189,7 +192,7 @@ describe('War Table', () => {
     const key = deriveThreadKey(K_MASTER, thread, epoch);
     const body = decodeBody(decryptBody(key, env.bodyNonce, env.body, env.aad));
     return {
-      id: encodeMessageId({ slot, txIndex: 0, logIndex }),
+      id: encodeMessageId({ slot, txDisc: 0, logIndex }),
       scope: WtScope.Team,
       senderWallet: env.senderWallet,
       threadPda: env.threadPda,
@@ -595,9 +598,33 @@ describe('War Table', () => {
     await expectTransactionToFail(ctx.svm, new Transaction().add(ixEnc), [player.keypair], GameError.WtKeyVersionMismatch);
   });
 
-  // 12. Encounter out-of-kingdom proxy: no PlayerAccount => access failure (O5)
+  // 11b. Public scope accepts plaintext (thread = the kingdom's GameEngine PDA,
+  // membership-free) and rejects an encrypted attempt, mirroring Encounter.
+  it('11b. public accepts plaintext and rejects an encrypted attempt', async () => {
+    // Any valid kingdom player may post to the per-kingdom public channel.
+    const player = await factory.createPlayer({ initialize: true, createEstate: true });
+    const text = 'rallying the kingdom';
+    const envelope = buildPlaintextEnvelope(ctx.gameEngine, player.publicKey, { kind: WtKind.Status, payload: text });
+    const ix = createPostPublicMessageInstruction(ctx.gameEngine, player.publicKey, player.playerPda, envelope);
+    const logs = sendAndGetLogs(new Transaction().add(ix), [player.keypair]);
+    const blobs = wt1Blobs(logs);
+    expect(blobs.length).toBe(1);
+    const env = decodeEnvelope(blobs[0]!);
+    expect(env.encrypted).toBe(false);
+    const body = decodeBody(env.body);
+    expect(body.kind).toBe(WtKind.Status);
+    expect(new TextDecoder().decode(body.payload)).toBe(text);
+
+    // An encrypted attempt (flags bit0 set, keyVersion 0) is rejected.
+    const encEnvelope = buildEncryptedEnvelope(ctx.gameEngine, player.publicKey, 0, { kind: WtKind.Text, payload: 'secret' });
+    const ixEnc = createPostPublicMessageInstruction(ctx.gameEngine, player.publicKey, player.playerPda, encEnvelope);
+    await expectTransactionToFail(ctx.svm, new Transaction().add(ixEnc), [player.keypair], GameError.WtKeyVersionMismatch);
+  });
+
+  // 12. Encounter out-of-kingdom proxy: no PlayerAccount => access failure (O5).
+  // The genuine cross-kingdom path (a real foreign-engine PlayerAccount) is
+  // test 12b below; this case covers the missing-account path.
   it('12. a sender with no PlayerAccount cannot post to an encounter', async () => {
-    // TODO: test true cross-kingdom (needs a second game engine in the SVM).
     const cityId = 8;
     const encounterPda = await spawnEncounter(cityId, 3);
 
@@ -608,6 +635,81 @@ describe('War Table', () => {
     const envelope = buildPlaintextEnvelope(encounterPda, stranger.publicKey, { kind: WtKind.Text, payload: 'who am i' });
     const ix = createPostEncounterMessageInstruction(encounterPda, stranger.publicKey, strangerPlayer, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [stranger]);
+  });
+
+  // 12b. TRUE cross-kingdom: a player who belongs to a SECOND game engine (a
+  // different kingdom) cannot post to this kingdom's encounter. Unlike test 12
+  // (which exercises the path by proxy via a missing PlayerAccount), the
+  // rejection here comes specifically from the encounter predicate's in-kingdom
+  // check (sender_player.game_engine != encounter.game_engine).
+  //
+  // A real second `init_game_engine` now succeeds (it reuses the existing global
+  // NOVI mint instead of recreating it), so this also regression-tests that
+  // fix. The foreign PLAYER, however, is synthesized rather than init'd:
+  // `init_player` grants starter NOVI via a MintTo whose authority is the FIRST
+  // kingdom's engine, so it fails with OwnerMismatch under a second kingdom — a
+  // separate, deeper multi-kingdom limitation (the single global NOVI mint has a
+  // single per-kingdom authority) that is out of scope here. The encounter
+  // predicate only reads `sender_player.game_engine`, so cloning a real player's
+  // bytes and repointing them at the second kingdom is exactly the shape the
+  // access check must reject.
+  it("12b. a player from another kingdom cannot post to this kingdom's encounter", async () => {
+    const cityId = 9;
+    const encounterPda = await spawnEncounter(cityId, 3);
+
+    // Stand up a real second game engine (kingdom 1). Succeeds because
+    // init_game_engine no longer recreates the global NOVI mint singleton.
+    const SECOND_KINGDOM_ID = 1;
+    const [secondEngine] = deriveGameEnginePda(SECOND_KINGDOM_ID);
+    await sendTransaction(
+      ctx.svm,
+      new Transaction().add(
+        createInitGameEngineInstruction({
+          authority: ctx.daoAuthority.publicKey,
+          treasuryWallet: ctx.treasury.publicKey,
+          kingdomId: SECOND_KINGDOM_ID,
+        }),
+      ),
+      [ctx.daoAuthority],
+    );
+    expect(secondEngine.equals(ctx.gameEngine)).toBe(false);
+
+    // Synthesize a PlayerAccount belonging to the second kingdom by cloning a
+    // real engine-1 player and repointing its identity. PlayerCore layout:
+    // account_key(1) | game_engine(@1, 32) | owner(@33, 32) | bump(@65, 1) | ...
+    const template = await factory.createPlayer({ initialize: true });
+    const templateInfo = ctx.svm.getAccount(template.playerPda)!;
+    const foreigner = Keypair.generate();
+    ctx.svm.airdrop(foreigner.publicKey, 1_000_000_000n);
+    const [foreignerPlayer, foreignerBump] = derivePlayerPda(secondEngine, foreigner.publicKey);
+
+    const data = Buffer.from(templateInfo.data);
+    secondEngine.toBuffer().copy(data, 1);
+    foreigner.publicKey.toBuffer().copy(data, 33);
+    data[65] = foreignerBump;
+    ctx.svm.setAccount(foreignerPlayer, {
+      data,
+      executable: false,
+      lamports: templateInfo.lamports,
+      owner: templateInfo.owner, // the novus program (load_checked_by_key requires it)
+      rentEpoch: 0,
+    });
+
+    // The synthesized account is a valid Player in the second kingdom.
+    const fp = await fetchPlayer(ctx.svm, foreignerPlayer);
+    expect(fp).not.toBeNull();
+    expect(fp!.gameEngine.equals(secondEngine)).toBe(true);
+    expect(fp!.owner.equals(foreigner.publicKey)).toBe(true);
+
+    // Posting to engine-1's encounter with the engine-2 PlayerAccount passes the
+    // ownership checks (the account is canonical for its own engine and the
+    // wallet signs) but is rejected by the in-kingdom predicate.
+    const envelope = buildPlaintextEnvelope(encounterPda, foreigner.publicKey, {
+      kind: WtKind.Text,
+      payload: 'wrong kingdom',
+    });
+    const ix = createPostEncounterMessageInstruction(encounterPda, foreigner.publicKey, foreignerPlayer, envelope);
+    await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [foreigner], GameError.WtNotInScope);
   });
 
   // 13. readThread orders by slot (here we assert ordering of recovered envelopes by slot)
@@ -626,7 +728,7 @@ describe('War Table', () => {
       const logs = sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
       const blobs = wt1Blobs(logs);
       expect(blobs.length).toBe(1);
-      ids.push({ slot: slotBefore, id: encodeMessageId({ slot: slotBefore, txIndex: 0, logIndex: 0 }) });
+      ids.push({ slot: slotBefore, id: encodeMessageId({ slot: slotBefore, txDisc: 0, logIndex: 0 }) });
       // Advance the slot so the next post lands in a strictly later slot.
       ctx.svm.warpToSlot(ctx.svm.getClock().slot + 1n);
       ctx.svm.expireBlockhash();
@@ -651,7 +753,7 @@ describe('War Table', () => {
       [leader.keypair],
     );
     expect(wt1Blobs(logs1).length).toBe(1);
-    const p1Id = encodeMessageId({ slot: slot1, txIndex: 0, logIndex: 0 });
+    const p1Id = encodeMessageId({ slot: slot1, txDisc: 0, logIndex: 0 });
 
     ctx.svm.warpToSlot(ctx.svm.getClock().slot + 1n);
     ctx.svm.expireBlockhash();
@@ -686,7 +788,7 @@ describe('War Table', () => {
       new Transaction().add(createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env1)),
       [leader.keypair],
     );
-    const p1Id = encodeMessageId({ slot: slot1, txIndex: 0, logIndex: 0 });
+    const p1Id = encodeMessageId({ slot: slot1, txDisc: 0, logIndex: 0 });
 
     ctx.svm.warpToSlot(ctx.svm.getClock().slot + 1n);
     ctx.svm.expireBlockhash();

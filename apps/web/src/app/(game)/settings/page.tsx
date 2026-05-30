@@ -9,6 +9,7 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { DomainPicker } from "@/components/shared/DomainPicker";
+import { PresenceButton } from "@/components/presence/PresenceButton";
 import { shortenAddress } from "@/lib/utils";
 import {
   deriveUserPda,
@@ -66,6 +67,8 @@ export default function SettingsPage() {
   const transact = useTransact();
   const numberFormat = useSettings((s) => s.numberFormat);
   const animationsEnabled = useSettings((s) => s.animationsEnabled);
+  const broadcastPresence = useSettings((s) => s.broadcastPresence);
+  const setBroadcastPresence = useSettings((s) => s.setBroadcastPresence);
   const explorer = useSettings((s) => s.explorer);
   const priorityFee = useSettings((s) => s.priorityFee);
   const themePreference = useSettings((s) => s.themePreference);
@@ -197,6 +200,10 @@ export default function SettingsPage() {
                       <span className="text-text-muted">City</span>
                       <span className="text-text-primary">City {player.currentCity}</span>
                     </div>
+                    <div className="flex items-center justify-between gap-2 text-sm">
+                      <span className="text-text-muted">Presence</span>
+                      <PresenceButton />
+                    </div>
                   </>
                 )}
               </div>
@@ -282,6 +289,27 @@ export default function SettingsPage() {
                     <span
                       className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
                         animationsEnabled ? "translate-x-5" : "translate-x-0"
+                      }`}
+                    />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <span className="text-text-primary">Broadcast presence</span>
+                    <p className="text-xs text-text-muted">
+                      Keep your online dot fresh by attaching a tiny presence ping to your transactions
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setBroadcastPresence(!broadcastPresence)}
+                    className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
+                      broadcastPresence ? "bg-primary" : "bg-zinc-700"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-0.5 left-0.5 h-5 w-5 rounded-full bg-white transition-transform ${
+                        broadcastPresence ? "translate-x-5" : "translate-x-0"
                       }`}
                     />
                   </button>

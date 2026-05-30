@@ -128,6 +128,20 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
     staleTime: 10_000,
   });
 
+  // The post-time gate account the chain's rally_predicate requires: the
+  // caller's RallyParticipant PDA (keyed on the wallet). Passed to the war-table
+  // embed so a participant's message clears the membership check on-chain.
+  const participantGate = useMemo(() => {
+    if (!publicKey || !rally) return undefined;
+    const [pda] = deriveRallyParticipantPda(
+      client.gameEngine,
+      rally.creator,
+      rally.id.toNumber(),
+      publicKey,
+    );
+    return [pda];
+  }, [publicKey, rally, client.gameEngine]);
+
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!rally) throw new Error("Rally not loaded");
@@ -610,6 +624,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
           <ThreadRenderer
             threadPda={rallyKey}
             scope={WarTableScope.Rally}
+            gateAccounts={participantGate}
             canPost={isParticipant}
             placeholder="Coordinate the rally..."
           />

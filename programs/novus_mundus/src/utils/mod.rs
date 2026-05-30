@@ -14,7 +14,10 @@ pub mod rent;
 #[allow(unused_imports)]
 pub use hint::{cold_path, unlikely};
 #[allow(unused_imports)]
-pub use io::{read_bytes32, read_i64, read_len_prefixed, read_u16, read_u32, read_u64, read_u8};
+pub use io::{
+    read_bytes32, read_f64, read_i32, read_i64, read_len_prefixed, read_u16, read_u32, read_u64,
+    read_u8,
+};
 pub use log_format::Pk;
 #[allow(unused_imports)]
 pub use rent::{rent_exempt_const, ACCOUNT_STORAGE_OVERHEAD, DEFAULT_LAMPORTS_PER_BYTE};

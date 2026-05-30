@@ -21,17 +21,26 @@ import { PageTransition } from "@/components/shared/PageTransition";
 import { PlayerName } from "@/components/war-table/PlayerName";
 import { PlayerAvatar } from "@/components/war-table/PlayerAvatar";
 import { NewMessageComposer } from "@/components/war-table/NewMessageComposer";
+import { PresenceDot } from "@/components/presence/PresenceDot";
 import { useDmInbox } from "@/lib/hooks/useDmInbox";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
+import { usePresence } from "@/lib/hooks/usePresence";
 import type { DmConvo } from "@/lib/store/war-table";
 
-function ConversationRow({ convo }: { convo: DmConvo }) {
+function ConversationRow({ convo, online }: { convo: DmConvo; online: boolean }) {
   return (
     <Link
       href={`/messages/${convo.peerPlayerPda}`}
       className="flex items-center gap-3 rounded-xl px-3 py-2.5 transition-colors hover:bg-surface-overlay"
     >
-      <PlayerAvatar playerPda={convo.peerPlayerPda} size={44} />
+      <div className="relative shrink-0">
+        <PlayerAvatar playerPda={convo.peerPlayerPda} size={44} />
+        <PresenceDot
+          online={online}
+          hideOffline
+          className="absolute bottom-0 right-0"
+        />
+      </div>
       <div className="min-w-0 flex-1">
         <div className="flex items-center gap-2">
           <PlayerName
@@ -57,6 +66,10 @@ function MessagesContent() {
     [conversations],
   );
   useDomainNames(peerPdas);
+
+  // Presence for every peer in the inbox: peerPlayerPda IS the PlayerAccount
+  // PDA, so it feeds usePresence directly. Only the visible rows are queried.
+  const presence = usePresence(peerPdas);
 
   return (
     <PageTransition>
@@ -94,7 +107,11 @@ function MessagesContent() {
           ) : (
             <div className="flex flex-col divide-y divide-border-default/50">
               {conversations.map((convo) => (
-                <ConversationRow key={convo.threadPda} convo={convo} />
+                <ConversationRow
+                  key={convo.threadPda}
+                  convo={convo}
+                  online={presence[convo.peerPlayerPda]?.online ?? false}
+                />
               ))}
             </div>
           )}

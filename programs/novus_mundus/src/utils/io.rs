@@ -47,6 +47,14 @@ pub fn read_u32(data: &[u8], offset: usize, label: &str) -> Result<u32, ProgramE
 }
 
 #[inline(always)]
+pub fn read_i32(data: &[u8], offset: usize, label: &str) -> Result<i32, ProgramError> {
+    match data.get(offset..offset + 4) {
+        Some(s) => Ok(i32::from_le_bytes(s.try_into().unwrap())),
+        None => Err(data_too_short(label, offset, 4, data.len())),
+    }
+}
+
+#[inline(always)]
 pub fn read_u64(data: &[u8], offset: usize, label: &str) -> Result<u64, ProgramError> {
     match data.get(offset..offset + 8) {
         Some(s) => Ok(u64::from_le_bytes(s.try_into().unwrap())),
@@ -58,6 +66,14 @@ pub fn read_u64(data: &[u8], offset: usize, label: &str) -> Result<u64, ProgramE
 pub fn read_i64(data: &[u8], offset: usize, label: &str) -> Result<i64, ProgramError> {
     match data.get(offset..offset + 8) {
         Some(s) => Ok(i64::from_le_bytes(s.try_into().unwrap())),
+        None => Err(data_too_short(label, offset, 8, data.len())),
+    }
+}
+
+#[inline(always)]
+pub fn read_f64(data: &[u8], offset: usize, label: &str) -> Result<f64, ProgramError> {
+    match data.get(offset..offset + 8) {
+        Some(s) => Ok(f64::from_le_bytes(s.try_into().unwrap())),
         None => Err(data_too_short(label, offset, 8, data.len())),
     }
 }

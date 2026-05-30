@@ -19,6 +19,8 @@ import { derivePlayerPda } from "novus-mundus-sdk";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { PlayerName } from "@/components/war-table/PlayerName";
 import { PlayerAvatar } from "@/components/war-table/PlayerAvatar";
+import { PresenceDot } from "@/components/presence/PresenceDot";
+import { usePlayerPresence } from "@/lib/hooks/usePresence";
 import { PlayerActionsMenu } from "@/components/war-table/PlayerActionsMenu";
 import { MessageActionsMenu } from "@/components/war-table/MessageActionsMenu";
 import { ReactionRow } from "@/components/war-table/ReactionRow";
@@ -144,6 +146,11 @@ export function MessageBubble({
   const lastOfGroup = groupPos === "single" || groupPos === "last";
   const firstReceived = !mine && showMeta && (groupPos === "single" || groupPos === "first");
 
+  // Presence for the sender, only resolved when this bubble actually draws the
+  // received avatar (the first bubble of a received group). Passing null
+  // otherwise keeps the RPC footprint to the visible avatars.
+  const presence = usePlayerPresence(firstReceived ? pda : null);
+
   // Actions-menu open state, shared by the desktop hover button and the mobile
   // long-press; the menu only mounts for non-placeholder bubbles.
   const [menuOpen, setMenuOpen] = useState(false);
@@ -185,13 +192,18 @@ export function MessageBubble({
   const avatarCell = mine ? null : (
     <div className="shrink-0" style={gutterStyle}>
       {firstReceived ? (
-        pda ? (
-          <PlayerActionsMenu playerPda={pda} scope={menuScope}>
+        <div className="relative">
+          {pda ? (
+            <PlayerActionsMenu playerPda={pda} scope={menuScope}>
+              <PlayerAvatar wallet={msg.senderWallet} size={avatarSize} />
+            </PlayerActionsMenu>
+          ) : (
             <PlayerAvatar wallet={msg.senderWallet} size={avatarSize} />
-          </PlayerActionsMenu>
-        ) : (
-          <PlayerAvatar wallet={msg.senderWallet} size={avatarSize} />
-        )
+          )}
+          {presence.online ? (
+            <PresenceDot online size={9} className="absolute bottom-0 right-0" />
+          ) : null}
+        </div>
       ) : null}
     </div>
   );

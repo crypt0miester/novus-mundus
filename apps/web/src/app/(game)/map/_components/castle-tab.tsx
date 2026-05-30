@@ -47,7 +47,11 @@ import {
   createClaimGarrisonLootInstruction,
   createAttackCastleInstruction,
   parsePlayer,
+  derivePlayerPda,
+  deriveGarrisonPda,
+  WarTableScope,
 } from "novus-mundus-sdk";
+import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
 import {
   CASTLE_TIER_NAMES,
   CASTLE_STATUS_NAMES,
@@ -315,6 +319,24 @@ export function CastleTab() {
       0;
   const noContribution =
     garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0);
+
+  /* Castle war-table (the War Council) — surfaced only to members who can both
+   * READ and POST on the web: the king and garrison members. The web key route
+   * serves keys to those two (court access is server-deferred, O6), so showing
+   * the embed to anyone else would only render a gate that never resolves. The
+   * chain's castle_predicate takes the garrison contribution account as the
+   * post gate (empty for the king), derived here from the selected castle. */
+  const myPlayerPda = useMemo(
+    () => (publicKey ? derivePlayerPda(client.gameEngine, publicKey)[0] : null),
+    [publicKey, client.gameEngine],
+  );
+  const canPostCastle = isKing || inGarrison;
+  const castleGate = useMemo<PublicKey[] | undefined>(() => {
+    if (!castlePda) return undefined;
+    if (isKing) return []; // king branch: no gate account
+    if (inGarrison && myPlayerPda) return [deriveGarrisonPda(castlePda, myPlayerPda)[0]];
+    return undefined;
+  }, [castlePda, isKing, inGarrison, myPlayerPda]);
 
   const handleClaimVacant = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -700,6 +722,24 @@ export function CastleTab() {
               </div>
             )}
           </div>
+
+          {/* War Council — the castle's encrypted war-table, for the king and
+           * garrison members of this seat. Hidden for everyone else (a
+           * non-member can neither read nor post). */}
+          {castlePda && canPostCastle && (
+            <div className="card flex flex-col">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                War Council
+              </h3>
+              <ThreadRenderer
+                threadPda={castlePda}
+                scope={WarTableScope.Castle}
+                gateAccounts={castleGate}
+                canPost={canPostCastle}
+                placeholder="Rally the garrison..."
+              />
+            </div>
+          )}
 
           {/* Court Positions */}
           <div className="card">

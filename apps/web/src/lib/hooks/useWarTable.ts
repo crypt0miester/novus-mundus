@@ -60,6 +60,12 @@ export type WarTableAuthState = "unknown" | "locked" | "open";
 export interface UseWarTableOptions {
   // base58 PlayerAccount PDA of the DM peer; required for DM scope key access.
   peer?: string;
+  // Post-time gate accounts for scopes whose membership account the chain
+  // requires but the thread PDA alone does not yield: Rally (the caller's
+  // RallyParticipant) and Castle (the garrison contribution; empty for the
+  // king). The embedding panel owns this context and passes it. Team/Encounter
+  // need none; DM derives its pair from `peer`.
+  gateAccounts?: PublicKey[];
 }
 
 export interface UseWarTableResult {
@@ -193,11 +199,11 @@ class SessionAwareKeyProvider implements ThreadKeyProvider {
   }
 }
 
-// Encounter scope is plaintext: no key derivation is allowed. The SDK never
-// calls this for plaintext bodies, so any call is a programming error.
+// Encounter and Public scopes are plaintext: no key derivation is allowed. The
+// SDK never calls this for plaintext bodies, so any call is a programming error.
 class NoKeyProvider implements ThreadKeyProvider {
   getKey(): Promise<Uint8Array> {
-    return Promise.reject(new Error("war table: Encounter scope is plaintext; no key fetch"));
+    return Promise.reject(new Error("war table: plaintext scope has no key to fetch"));
   }
   getCurrentVersion(): Promise<number> {
     return Promise.resolve(0);
@@ -231,14 +237,23 @@ export function useWarTable(
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   const peer = opts.peer;
+  // Post-time gate accounts (Rally/Castle). Serialize to a stable string so the
+  // post callback's identity only changes when the actual gate set changes, even
+  // if the caller hands a fresh array each render.
+  const postGate = opts.gateAccounts;
+  const gateKey = postGate ? postGate.map((a) => a.toBase58()).join(",") : "";
   const threadBase58 = threadPda.toBase58();
-  const isEncounter = scope === WarTableScope.Encounter;
+  // Encounter and Public are both PLAINTEXT, membership-free scopes (flags
+  // bit0 = 0, key_version = 0). isPlaintext gates every plaintext decision (no
+  // key fetch, always-open access, no signed-out seed skip, empty post-time
+  // gate accounts).
+  const isPlaintext = scope === WarTableScope.Encounter || scope === WarTableScope.Public;
   const sessionStatus = useSessionStore((s) => s.status);
-  // Viewer access for this thread. Encounter is always open (plaintext); an
+  // Viewer access for this thread. Plaintext scopes are always open; an
   // encrypted thread follows the session: in -> open, out -> locked (gate),
   // unknown -> still resolving (spinner, no gate, so signed-in users get no
   // lock flash).
-  const authState: WarTableAuthState = isEncounter
+  const authState: WarTableAuthState = isPlaintext
     ? "open"
     : sessionStatus === "in"
       ? "open"
@@ -250,8 +265,8 @@ export function useWarTable(
   // renderer from reactorWallets; this only pre-fills the seed un-react target.
   const myWallet = publicKey ? publicKey.toBase58() : undefined;
 
-  // Build the war-table client for this thread. Encounter scope uses a key
-  // provider that refuses to derive keys (plaintext only); every other scope
+  // Build the war-table client for this thread. Plaintext scopes (Encounter,
+  // Public) use a key provider that refuses to derive keys; every other scope
   // uses the session-gated HTTP key route, recording status but never prompting.
   // sessionStatus is a dep on purpose: the HttpKeyProvider caches keys per
   // instance, so a signed-out -> signed-in transition MUST mint a fresh provider
@@ -264,11 +279,11 @@ export function useWarTable(
     // global `fetch` placeholder on the server is never invoked.
     const fetchFn: typeof fetch =
       typeof window === "undefined" ? fetch : window.fetch.bind(window);
-    const keyProvider: ThreadKeyProvider = isEncounter
+    const keyProvider: ThreadKeyProvider = isPlaintext
       ? new NoKeyProvider()
       : new SessionAwareKeyProvider(new HttpKeyProvider(fetchFn, "", scope, peer));
     return new WarTableClient({ connection: client.connection, keyProvider });
-  }, [client.connection, scope, peer, isEncounter, sessionStatus]);
+  }, [client.connection, scope, peer, isPlaintext, sessionStatus]);
 
   // Seed the store from the chain history, then keep it live via onLogs. The
   // store actions are stable Zustand setters, so they are read off getState()
@@ -277,9 +292,10 @@ export function useWarTable(
     let cancelled = false;
     // Known signed-out on an encrypted thread: the gate is shown, so skip the
     // seed read and the live subscription entirely. No wasted 401, no socket
-    // held while gated. Signing in flips sessionStatus, which rebuilds wtClient
-    // and re-runs this effect with a live cookie.
-    if (!isEncounter && sessionStatus === "out") {
+    // held while gated. Plaintext scopes (Encounter, Public) never gate, so they
+    // always seed. Signing in flips sessionStatus, which rebuilds wtClient and
+    // re-runs this effect with a live cookie.
+    if (!isPlaintext && sessionStatus === "out") {
       useWarTableStore.getState().setThreadLoading(threadBase58, false);
       return;
     }
@@ -340,8 +356,9 @@ export function useWarTable(
       clearInterval(interval);
       if (typeof window !== "undefined") window.removeEventListener("focus", onFocus);
     };
-  }, [wtClient, threadBase58, scope, myWallet, isEncounter, sessionStatus]);
+  }, [wtClient, threadBase58, scope, myWallet, isPlaintext, sessionStatus]);
 
+  // biome-ignore lint/correctness/useExhaustiveDependencies: postGate is tracked via the stable gateKey string, not its (per-render) array identity
   const post = useCallback(
     async (body: PostMessageBody): Promise<string> => {
       if (!publicKey || !signTransaction) {
@@ -354,17 +371,20 @@ export function useWarTable(
       const sender = publicKey;
       const senderPlayer = new PublicKey(myPlayerPda);
       // Gate accounts per scope (canonical account list, spec section 2):
-      // Team/Encounter take none (membership resolves from sender_player). DM
-      // takes both PlayerAccount PDAs; we have them from senderPlayer + peer.
-      // Rally/Castle gate PDAs need rally/castle context the shared prop chain
-      // does not carry, so this generic post path supports Team, Encounter and
-      // DM; those scopes are the ones routed through ThreadRenderer today.
+      // Team/Encounter/Public take none (membership resolves from sender_player,
+      // and Encounter/Public are membership-free). DM takes both PlayerAccount
+      // PDAs; we have them from senderPlayer + peer. Rally/Castle gate PDAs need
+      // rally/castle context the thread PDA alone does not yield, so the embedding
+      // panel supplies them via opts.gateAccounts (Rally: the RallyParticipant;
+      // Castle: the garrison contribution, or empty for the king).
       let gateAccounts: PublicKey[] = [];
       if (scope === WarTableScope.Dm) {
         if (!peer) {
           throw new Error("DM scope requires a peer player.");
         }
         gateAccounts = [senderPlayer, new PublicKey(peer)];
+      } else if (scope === WarTableScope.Rally || scope === WarTableScope.Castle) {
+        gateAccounts = postGate ?? [];
       }
 
       // An encrypted post needs a live session to derive the thread key, and
@@ -372,8 +392,9 @@ export function useWarTable(
       // establish one on the Send gesture, through the same deduped ensureSession
       // the gate uses (a concurrent gate click and Send share one prompt). A
       // signed-out reader sees the gate and never reaches here; this also covers
-      // a lapse between opening the thread and sending. Encounter is plaintext.
-      if (!isEncounter && useSessionStore.getState().status !== "in") {
+      // a lapse between opening the thread and sending. Plaintext scopes
+      // (Encounter, Public) need no session.
+      if (!isPlaintext && useSessionStore.getState().status !== "in") {
         if (!signIn) {
           throw new Error(
             "This wallet does not support Sign In With Solana; cannot post to the war-table.",
@@ -430,7 +451,7 @@ export function useWarTable(
         throw err;
       }
     },
-    [wtClient, threadPda, scope, peer, publicKey, signTransaction, myPlayerPda, isEncounter, signIn],
+    [wtClient, threadPda, scope, peer, gateKey, publicKey, signTransaction, myPlayerPda, isPlaintext, signIn],
   );
 
   // Establish a SIWS session so an encrypted thread can be read (the gate click).

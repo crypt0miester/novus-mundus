@@ -58,18 +58,61 @@ derived from `WT_MASTER_SECRET` keyed on the on-chain `membership_epoch`.
   `ThreadRenderer`, and the team / rally / encounter / DM / PvP embeds + the
   Messages nav entry.
 
-See `docs/WAR_TABLE_DESIGN.md` (as-built design) and
-`docs/WAR_TABLE_IMPL_SPEC.md` (authoritative spec) for details.
-
 **Deferred follow-ups.**
-1. **Castle web embed.** Scope 2 (castle) is wired in chain + SDK but not
-   surfaced in any web panel, because no `CastleDetailPanel` exists yet. Add a
-   `ThreadRenderer scope={WarTableScope.Castle}` embed when that panel is built.
-2. **True cross-kingdom encounter e2e.** The current e2e seeds one game engine,
-   so the out-of-kingdom access path is exercised by proxy (a player with
-   no/foreign `PlayerAccount`). A genuine cross-kingdom test needs a second
-   `init_game_engine` in the same SVM to assert
-   `sender_player.game_engine != encounter.game_engine`.
+1. **Castle web embed.** `DONE` — surfaced as a "War Council" `ThreadRenderer`
+   card in the existing `CastleTab` (`castle-tab.tsx`), not a new panel (the tab
+   already is the castle detail surface). Shown only to members who can read AND
+   post on the web — the **king** and **garrison members** (court is server-
+   deferred, key-route O6). Gate accounts: empty for the king, the garrison
+   contribution PDA for a garrison member.
+   - Required plumbing: `useWarTable` / `ThreadRenderer` gained an optional
+     `gateAccounts` prop so the embedding panel supplies the Rally/Castle gate
+     the thread PDA can't yield. This also **fixed a latent rally bug** —
+     `RallyDetailPanel` was posting with an empty gate, which `rally_predicate`
+     rejects; it now passes `[participantPda]`.
+   - Remaining: court-member access (needs the key route's court branch, O6) and
+     an in-app castle-member playtest (pairs with #11).
+
+**Bug fixed this pass.** Same-slot message-id collision: ids were
+`slot|0|logIndex` with `logIndex` reset per tx, so two posts in one slot
+collided and `foldThread` dropped one. Id is now `slot(8) | txDisc(3) |
+logIndex(1)` where `txDisc` = the leading 3 bytes of the tx signature (stable
+and identical across the gTFA / standard / live read paths). Regression test in
+`tests/unit/wartable-crypto.test.ts`.
+
+**Multi-kingdom finding (out of scope, surfaced).** A second `init_game_engine`
+was fully broken: it unconditionally recreated the global NOVI mint singleton
+(`AccountAlreadyInUse`). Fixed to skip when the mint already exists, so a real
+second kingdom's engine account now creates. A deeper limitation remains: the
+NOVI mint authority is the FIRST kingdom's engine, so `init_player` (starter-NOVI
+MintTo) fails under any later kingdom with `OwnerMismatch`. Fully functional
+multi-kingdom needs a kingdom-agnostic mint authority across every mint CPI —
+not done here.
+
+**Public scope + presence (shipped this pass).** Added `WtScope.Public = 5`: a
+plaintext, membership-free war-table scope whose thread is the kingdom's
+GameEngine PDA (chain `public_predicate` = `sender_player.is_in_kingdom(thread)`,
+plaintext rules cloned from Encounter). Renamed dead `WtKind.Pledge` to
+`WtKind.Status` (value 1). Presence ("I'm online"): a manual `PresenceButton`
+(in Settings) posts an empty Status ping to Public via `usePresenceBeat`;
+`usePresence` reads online from `getSignaturesForAddress(playerPda).blockTime`
+(300s window), shown as a `PresenceDot` in the DM inbox, profile
+(`PvpDetailPanel`), and chat avatars. KIND=1 is hidden from chat bubbles. All
+green: chain `cargo build-sbf`, 931 SDK tests, web typecheck. Deferred: the
+public CHAT UI (a global channel feed) and CLI `--public` support (nit).
+
+**Presence piggyback + CU win (follow-on).** An opt-in `broadcastPresence`
+setting (default OFF) makes `useTransact` append a throttled (>=60s) +
+size-guarded (drops if the tx would exceed 1232 bytes; never fails the action)
+empty Status ping to normal transactions, keeping the online dot fresh during
+play. Builder: `lib/presence/ping.ts`. Also optimized the on-chain player load:
+`load_checked_by_key` now verifies the canonical PDA via `create_pda`
+(create_program_address) instead of `derive_pda` (find loop), cutting the
+war-table post from 3824 to 2334 CU (~39%) and every player load program-wide;
+security-equivalent, 724/724 e2e green. Remaining ~2334 CU is dominated by the
+single `create_program_address` hash (~1600); could reach ~700 by dropping the
+PDA re-derivation entirely (rely on program-owned + owner==signer), deliberately
+not done (weakens defense-in-depth for all scopes).
 
 
 ---
@@ -118,15 +161,6 @@ marginal friction at meaningful effort.
 gating at `WORKSHOP_LEVEL_REQ`). The TODO line said "heavily broken" without
 specifics — reproduce against current build and capture concrete bugs before
 fixing.
-
----
-
-## "Fix kit" — `TODO` (clarify)
-
-Original backlog line said "fix kit" with no further context. No "kit"
-subsystem turns up in the app (`@solana/kit` isn't imported, no `kit/` folder).
-Either a typo, shorthand for wallet adapter wiring, or a hero/loadout "kit"
-concept that hasn't shipped. Pin down before scheduling.
 
 ---
 

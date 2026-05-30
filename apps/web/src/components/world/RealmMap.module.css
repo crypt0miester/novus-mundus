@@ -1147,15 +1147,26 @@
   border-radius: 0.5rem;
   animation: panelFloatIn 160ms ease-out;
 }
+/* Opacity-only so the float-in never writes `transform` — that property is
+ * owned by anime.js Draggable once the panel is grabbed, and a competing
+ * keyframe transform would fight the drag offset. */
 @keyframes panelFloatIn {
   from {
     opacity: 0;
-    transform: translateY(-6px);
   }
   to {
     opacity: 1;
-    transform: translateY(0);
   }
+}
+
+/* The floating panel's header doubles as the drag handle (desktop). */
+.panelFloating .scrollHead {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
+}
+.panelFloating .scrollHead:active {
+  cursor: grabbing;
 }
 
 /* X close button inside the floating panel — top-right of the card.

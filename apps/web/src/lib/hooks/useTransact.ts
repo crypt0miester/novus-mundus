@@ -2,9 +2,11 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { PublicKey } from "@solana/web3.js";
 import type { TransactionInstruction } from "@solana/web3.js";
 import type { Keypair, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import { buildPresencePingInstruction } from "@/lib/presence/ping";
 import { notify } from "@/lib/notify";
 import { useSettings } from "@/lib/store/settings";
 import { useAccountStore } from "@/lib/store/accounts";
@@ -60,6 +62,25 @@ function waitForTxViaLogSub(signature: string, timeoutMs: number): Promise<strin
   });
 }
 
+// Presence piggyback (opt-in via settings.broadcastPresence). Throttle so a burst
+// of actions appends at most one ping per minute (presence only needs coarse
+// freshness), and never breach the Solana packet limit (the real action must
+// never fail because of a presence ping). lastPresencePingAt is module-scoped and
+// ephemeral by design — it resets on reload, which only means one extra ping.
+const PRESENCE_PING_THROTTLE_MS = 60_000;
+const PACKET_DATA_SIZE = 1232;
+let lastPresencePingAt = 0;
+
+// Serialized byte length of a (possibly unsigned) versioned tx; treats an
+// over-size tx (serialize throws past the packet limit) as too large.
+function serializedSize(tx: VersionedTransaction): number {
+  try {
+    return tx.serialize().length;
+  } catch {
+    return Number.MAX_SAFE_INTEGER;
+  }
+}
+
 // Hook
 
 interface TransactOptions {
@@ -96,12 +117,42 @@ export function useTransact() {
         // Pre-built versioned tx (co-signer path) — just sign
         tx = opts.versionedTx;
       } else if (opts.instructions) {
-        const { priorityFee } = useSettings.getState();
-        tx = await client.buildVersionedTransaction(opts.instructions, wallet.publicKey, {
-          computeUnits: 400_000,
-          computeUnitPrice: priorityFee,
-          lookupTables: opts.lookupTables,
-        });
+        const { priorityFee, broadcastPresence } = useSettings.getState();
+        const sender = wallet.publicKey;
+        const build = (ixs: TransactionInstruction[]) =>
+          client.buildVersionedTransaction(ixs, sender, {
+            computeUnits: 400_000,
+            computeUnitPrice: priorityFee,
+            lookupTables: opts.lookupTables,
+          });
+
+        // Opt-in presence piggyback: append an empty Status ping to the kingdom
+        // Public channel so normal play keeps the player's online dot fresh.
+        // Throttled to once per minute, and dropped if it would push the tx over
+        // the packet limit (the action must never fail because of presence).
+        const myPlayerPda = useAccountStore.getState().myPlayerPda;
+        const now = Date.now();
+        const wantPing =
+          broadcastPresence &&
+          !!myPlayerPda &&
+          now - lastPresencePingAt > PRESENCE_PING_THROTTLE_MS;
+
+        if (wantPing) {
+          const ping = buildPresencePingInstruction(
+            client.gameEngine,
+            sender,
+            new PublicKey(myPlayerPda!),
+          );
+          const withPing = await build([...opts.instructions, ping]);
+          if (serializedSize(withPing) <= PACKET_DATA_SIZE) {
+            tx = withPing;
+            lastPresencePingAt = now;
+          } else {
+            tx = await build(opts.instructions);
+          }
+        } else {
+          tx = await build(opts.instructions);
+        }
       } else {
         throw new Error("Must provide instructions or versionedTx");
       }

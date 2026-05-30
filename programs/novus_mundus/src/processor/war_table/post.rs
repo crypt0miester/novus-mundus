@@ -6,7 +6,7 @@
 use pinocchio::{AccountView, Address, ProgramResult};
 
 use super::access::{
-    self, SCOPE_CASTLE, SCOPE_DM, SCOPE_ENCOUNTER, SCOPE_RALLY, SCOPE_TEAM,
+    self, SCOPE_CASTLE, SCOPE_DM, SCOPE_ENCOUNTER, SCOPE_PUBLIC, SCOPE_RALLY, SCOPE_TEAM,
 };
 use crate::error::GameError;
 use crate::state::{AccountKey, CastleAccount, PlayerAccount, RallyAccount, TeamAccount};
@@ -50,7 +50,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         return Err(GameError::WtBadScope.into());
     }
     let scope = data[0];
-    if scope > SCOPE_DM {
+    if scope > SCOPE_PUBLIC {
         return Err(GameError::WtBadScope.into());
     }
 
@@ -163,6 +163,20 @@ fn enforce_key_version(
         }
         SCOPE_ENCOUNTER => {
             // Encounter is plaintext only: key_version == 0, flags bit0 == 0,
+            // and the body nonce must be all-zero (§1 step 8).
+            if key_version != 0 {
+                return Err(GameError::WtKeyVersionMismatch.into());
+            }
+            if flags & FLAG_ENCRYPTED != 0 {
+                return Err(GameError::WtKeyVersionMismatch.into());
+            }
+            if envelope[WT_BODY_NONCE_RANGE] != [0u8; 24] {
+                return Err(GameError::WtKeyVersionMismatch.into());
+            }
+            Ok(())
+        }
+        SCOPE_PUBLIC => {
+            // Public is plaintext only: key_version == 0, flags bit0 == 0,
             // and the body nonce must be all-zero (§1 step 8).
             if key_version != 0 {
                 return Err(GameError::WtKeyVersionMismatch.into());

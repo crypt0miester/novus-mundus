@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, Map as MapIcon, X } from "lucide-react";
+import { createDraggable, type Draggable } from "animejs";
 import { BottomSheet } from "@/components/shared/BottomSheet";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
@@ -19,6 +20,9 @@ import { calculateLocalTime } from "novus-mundus-sdk";
 import { PHASES } from "@/lib/hooks/useWorldClock";
 import styles from "./RealmMap.module.css";
 import { getCityLore } from "@/lib/cityLore";
+
+// localStorage key for the desktop floating panel's dragged offset.
+const PANEL_POS_KEY = "nm-realm-panel-pos";
 
 // Day/night overlay helpers.
 //
@@ -521,6 +525,15 @@ export function RealmMap({
   const panelOpenKey = actionId ?? (selectedId != null ? `city:${selectedId}` : null);
   const [panelOpen, setPanelOpen] = useState(false);
   const lastPanelKeyRef = useRef<string | null>(null);
+  // Draggable floating panel (desktop fullscreen). The panel is an absolute
+  // child of the relative `.shell`, so anime.js Draggable translates it within
+  // the shell (the map area). `.scrollHead` is the grab handle; the offset
+  // persists to localStorage and survives selection changes. Mirrors the
+  // CairnFloating pattern — React never sees a drag frame.
+  const shellRef = useRef<HTMLDivElement | null>(null);
+  const panelRef = useRef<HTMLElement | null>(null);
+  const panelHandleRef = useRef<HTMLDivElement | null>(null);
+  const panelDragRef = useRef<Draggable | null>(null);
   // Viewport — desktop ≥ 768 renders the floating card; below renders
   // the mobile chrome (BottomSheet + status pill).
   const [isDesktop, setIsDesktop] = useState(true);
@@ -559,6 +572,59 @@ export function RealmMap({
   const desktopPanelShown = !!fullscreen && isDesktop && panelOpen && panelOpenKey != null;
   const mobileSheetOpen = !!fullscreen && !isDesktop && panelOpen;
 
+  // Hand the floating panel to anime.js Draggable while it's shown. Drag is
+  // triggered from the header handle and bounded to the shell (the map area);
+  // the offset is restored on open and re-saved on release. Reverted on
+  // unmount so a re-open rebuilds it cleanly.
+  useEffect(() => {
+    if (!desktopPanelShown) return;
+    const panel = panelRef.current;
+    const handle = panelHandleRef.current;
+    const shell = shellRef.current;
+    if (!panel || !handle || !shell) return;
+
+    const d = createDraggable(panel, {
+      trigger: handle,
+      container: shell,
+      x: true,
+      y: true,
+      dragThreshold: 3, // a small wobble on the header stays a click, not a drag
+      onSettle: (self) => {
+        try {
+          localStorage.setItem(PANEL_POS_KEY, JSON.stringify({ x: self.x, y: self.y }));
+        } catch {
+          /* the position just won't persist */
+        }
+      },
+    });
+    panelDragRef.current = d;
+
+    // Restore a previously dragged offset; absent one it rests at the CSS
+    // anchor (the disc's top-right corner).
+    try {
+      const raw = localStorage.getItem(PANEL_POS_KEY);
+      if (raw) {
+        const p = JSON.parse(raw) as { x: number; y: number };
+        if (Number.isFinite(p.x) && Number.isFinite(p.y)) {
+          d.setX(p.x);
+          d.setY(p.y);
+        }
+      }
+    } catch {
+      /* fall back to the anchor */
+    }
+
+    // Keep the bounds honest when the viewport changes.
+    const onResize = () => panelDragRef.current?.refresh();
+    window.addEventListener("resize", onResize);
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      d.revert();
+      panelDragRef.current = null;
+    };
+  }, [desktopPanelShown]);
+
   if (citiesLoading) {
     return (
       <div className={styles.root} data-fullscreen={fullscreen ? "true" : undefined}>
@@ -574,7 +640,7 @@ export function RealmMap({
           <h1 className={styles.kingdom}>{kingdomName}</h1>
         </header>
       )}
-      <div className={styles.shell}>
+      <div ref={shellRef} className={styles.shell}>
         <div
           ref={zoom.containerRef}
           className={styles.sheet}
@@ -900,7 +966,7 @@ export function RealmMap({
          *  dismisses; next selection / action transition reopens. No
          *  slide animation — fades in/out only. */}
         {desktopPanelShown && (
-          <aside id="realm-map-panel" className={`${styles.scroll} ${styles.panelFloating}`}>
+          <aside ref={panelRef} id="realm-map-panel" className={`${styles.scroll} ${styles.panelFloating}`}>
             <button
               type="button"
               className={styles.panelClose}
@@ -909,7 +975,13 @@ export function RealmMap({
                 // onCloseRequest, then closes the panel. Crucially does
                 // NOT clear the city selection — the disc stays mounted
                 // so the player is still inside the city they were
-                // looking at.
+                // looking at. Also resets any dragged offset, so the next
+                // open starts back at the disc's top-right anchor.
+                try {
+                  localStorage.removeItem(PANEL_POS_KEY);
+                } catch {
+                  /* nothing to clear */
+                }
                 onCloseRequest?.();
                 setPanelOpen(false);
               }}
@@ -918,7 +990,7 @@ export function RealmMap({
             >
               <X className={styles.panelCloseIcon} aria-hidden />
             </button>
-            <div className={styles.scrollHead}>
+            <div ref={panelHandleRef} className={styles.scrollHead}>
               {scrollHead ?? (selected ? "the city" : "the chart")}
             </div>
             {renderPanelBody({

@@ -33,6 +33,7 @@ import {
   decryptBody,
   readProgramData,
   encodeMessageId,
+  txDiscFromSignature,
   hexToId,
   idToHex,
   derivePlayerPda,
@@ -46,7 +47,7 @@ import { LocalHmacKeyProvider, makeEpochResolver } from '../../../src/keyprovide
 const SCOPE_LABEL = ['Team', 'Rally', 'Castle', 'Encounter', 'Dm'];
 
 /** Human label per WtKind (index = kind value). */
-const KIND_NAMES = ['Text', 'Pledge', 'System', 'Reply', 'Tombstone', 'Reaction', 'Pin'];
+const KIND_NAMES = ['Text', 'Status', 'System', 'Reply', 'Tombstone', 'Reaction', 'Pin'];
 
 /**
  * Resolve `--as` to a signing Keypair: a path (absolute or relative to cwd), or
@@ -271,7 +272,7 @@ async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       body,
       signTx,
     );
-    const kindLabel = ['Text', 'Pledge', 'System', 'Reply', 'Tombstone', 'Reaction', 'Pin'][body.kind] ?? 'Text';
+    const kindLabel = ['Text', 'Status', 'System', 'Reply', 'Tombstone', 'Reaction', 'Pin'][body.kind] ?? 'Text';
     log.info(`Posted ${SCOPE_LABEL[scope]} ${kindLabel} to thread ${thread.toBase58()}`);
     log.info(`  from ${sender.toBase58().slice(0, 8)} | sig ${res.signature}`);
     if (res.congested) {
@@ -393,11 +394,17 @@ async function handleRead(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       if (decoded) {
         text = new TextDecoder().decode(decoded.payload);
         kindName = KIND_NAMES[decoded.kind] ?? 'Unknown';
-        if (decoded.kind !== WtKind.Text && decoded.kind !== WtKind.Pledge) {
+        if (decoded.kind !== WtKind.Text && decoded.kind !== WtKind.Status) {
           parentNote = `  [parent ${idToHex(decoded.parentId)}]`;
         }
       }
-      const idHexStr = idToHex(encodeMessageId({ slot: BigInt(slot), txIndex: 0, logIndex: idx }));
+      const idHexStr = idToHex(
+        encodeMessageId({
+          slot: BigInt(slot),
+          txDisc: txDiscFromSignature(sigInfo.signature),
+          logIndex: idx,
+        }),
+      );
       rows.push(`${idHexStr} | ${senderShort} | ${kindName} | v${env.keyVersion} | ${text}${parentNote}`);
     }
   }

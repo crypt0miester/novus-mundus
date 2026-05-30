@@ -24,7 +24,8 @@ use crate::{
 ///
 /// Creates:
 /// 1. GameEngine PDA (game state and authority for this kingdom)
-/// 2. NOVI token mint with GameEngine as mint authority (only for kingdom 0)
+/// 2. NOVI token mint with GameEngine as mint authority — created once by the
+///    first kingdom initialized; later kingdoms reuse the existing global mint
 ///
 /// # Accounts
 /// - [writable] game_engine: GameEngine PDA ([b"game_engine", kingdom_id])
@@ -96,33 +97,40 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
     }
     .invoke_signed(&[signer])?;
 
-    // 6. Create NOVI mint account
-    // Mint account size: 82 bytes for SPL Token Mint
-    const MINT_LEN: usize = 82;
-    let mint_lamports = crate::utils::rent_exempt_const(MINT_LEN);
+    // 6. Create + initialize the NOVI mint — but only once. The NOVI mint is a
+    // single global singleton shared by every kingdom (its address is the
+    // compile-time `NOVI_MINT_ADDRESS` constant), so it is created by the FIRST
+    // kingdom initialized and every later kingdom reuses it. Recreating it would
+    // fail with AccountAlreadyInUse and block any second kingdom. A non-zero
+    // lamport balance means the mint already exists.
+    if novi_mint.lamports() == 0 {
+        // Mint account size: 82 bytes for SPL Token Mint
+        const MINT_LEN: usize = 82;
+        let mint_lamports = crate::utils::rent_exempt_const(MINT_LEN);
 
-    let mint_bump_seed = [novi_mint_bump];
-    let mint_seeds = crate::seeds!(NOVI_MINT_SEED, &mint_bump_seed);
-    let mint_signer = pinocchio::cpi::Signer::from(&mint_seeds);
+        let mint_bump_seed = [novi_mint_bump];
+        let mint_seeds = crate::seeds!(NOVI_MINT_SEED, &mint_bump_seed);
+        let mint_signer = pinocchio::cpi::Signer::from(&mint_seeds);
 
-    CreateAccount {
-        from: authority,
-        to: novi_mint,
-        lamports: mint_lamports,
-        space: MINT_LEN as u64,
-        owner: &pinocchio_token::ID, // Mint owned by token program
+        CreateAccount {
+            from: authority,
+            to: novi_mint,
+            lamports: mint_lamports,
+            space: MINT_LEN as u64,
+            owner: &pinocchio_token::ID, // Mint owned by token program
+        }
+        .invoke_signed(&[mint_signer])?;
+
+        // 7. Initialize NOVI mint with the first GameEngine as authority.
+        InitializeMint {
+            mint: novi_mint,
+            rent_sysvar,
+            decimals: 1,                           // NOVI uses 1 decimal (values are ×10)
+            mint_authority: &expected_game_engine, // GameEngine PDA is mint authority
+            freeze_authority: None,                // No freeze authority
+        }
+        .invoke()?;
     }
-    .invoke_signed(&[mint_signer])?;
-
-    // 7. Initialize NOVI mint with GameEngine as authority
-    InitializeMint {
-        mint: novi_mint,
-        rent_sysvar,
-        decimals: 1,                           // NOVI uses 1 decimal (values are ×10)
-        mint_authority: &expected_game_engine, // GameEngine PDA is mint authority
-        freeze_authority: None,                // No freeze authority
-    }
-    .invoke()?;
 
     // 8. Initialize GameEngine state with kingdom configuration
     let mut game_engine_data_ref = game_engine.try_borrow_mut()?;

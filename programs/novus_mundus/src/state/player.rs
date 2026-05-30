@@ -834,9 +834,8 @@ impl PlayerCore {
         let loaded = unsafe {
             super::AccountKey::cast::<Self>(account, super::AccountKey::Player, "PlayerAccount")?
         };
-        let (expected_pda, bump) = Self::derive_pda(&loaded.game_engine, &loaded.owner);
+        let expected_pda = Self::create_pda(&loaded.game_engine, &loaded.owner, loaded.bump)?;
         crate::validation::require_pda_eq(account, &expected_pda, "PlayerAccount")?;
-        crate::validation::require_bump_eq(loaded.bump, bump, "PlayerAccount", account)?;
         Ok(loaded)
     }
 

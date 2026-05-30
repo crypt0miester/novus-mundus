@@ -16,6 +16,7 @@ use crate::{
     },
     state::{CityAccount, EncounterAccount, LocationAccount, PlayerAccount, OCCUPANT_ENCOUNTER},
     types::EncounterType,
+    utils::{read_i32, read_u8},
     validation::{require_key_match, require_signer, require_writable},
 };
 
@@ -97,23 +98,10 @@ pub fn process(
     //    [1..5]  grid_lat: i32 (LE)
     //    [5..9]  grid_long: i32 (LE)
 
-    if instruction_data.len() < 9 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
-    let encounter_type = EncounterType::try_from(instruction_data[0])?;
-    let client_grid_lat = i32::from_le_bytes([
-        instruction_data[1],
-        instruction_data[2],
-        instruction_data[3],
-        instruction_data[4],
-    ]);
-    let client_grid_long = i32::from_le_bytes([
-        instruction_data[5],
-        instruction_data[6],
-        instruction_data[7],
-        instruction_data[8],
-    ]);
+    // io.rs readers bounds-check each field, so no upfront length guard is needed.
+    let encounter_type = EncounterType::try_from(read_u8(instruction_data, 0, "spawn.encounter_type")?)?;
+    let client_grid_lat = read_i32(instruction_data, 1, "spawn.grid_lat")?;
+    let client_grid_long = read_i32(instruction_data, 5, "spawn.grid_long")?;
 
     // 4. Load GameEngine to Check Auto-Spawn vs Player-Spawn
 

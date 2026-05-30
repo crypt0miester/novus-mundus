@@ -1,5 +1,4 @@
 use pinocchio::{
-    error::ProgramError,
     sysvars::{clock::Clock, Sysvar},
     AccountView, Address, ProgramResult,
 };
@@ -77,23 +76,10 @@ pub fn process(
 
     // 2. Parse Instruction Data
 
-    if instruction_data.len() < 10 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-
+    // io.rs readers bounds-check each field, so no upfront length guard is needed.
     let destination_city_id = crate::utils::read_u16(instruction_data, 0, "destination_city_id")?;
-    let dest_grid_lat = i32::from_le_bytes([
-        instruction_data[2],
-        instruction_data[3],
-        instruction_data[4],
-        instruction_data[5],
-    ]);
-    let dest_grid_long = i32::from_le_bytes([
-        instruction_data[6],
-        instruction_data[7],
-        instruction_data[8],
-        instruction_data[9],
-    ]);
+    let dest_grid_lat = crate::utils::read_i32(instruction_data, 2, "intercity.dest_grid_lat")?;
+    let dest_grid_long = crate::utils::read_i32(instruction_data, 6, "intercity.dest_grid_long")?;
 
     // 3. Validate Signer
 

@@ -29,12 +29,18 @@ interface SettingsStore {
    * mesh.scale.y = 0); 3D = isometric tilt (pitch=35°, full elevation).
    * Persisted so the user's choice survives navigation and reload. */
   mapMode: MapMode;
+  /* Opt-in (default off): piggyback an empty presence "Status" ping onto the
+   * player's normal transactions (throttled in useTransact) so peers see their
+   * online dot stay fresh while they play. Off = presence refreshes only when
+   * they tap the manual "I'm online" button. */
+  broadcastPresence: boolean;
   setNumberFormat: (fmt: NumberFormat) => void;
   setAnimationsEnabled: (enabled: boolean) => void;
   setExplorer: (e: Explorer) => void;
   setPriorityFee: (fee: number) => void;
   setThemePreference: (t: ThemePreference) => void;
   setMapMode: (m: MapMode) => void;
+  setBroadcastPresence: (b: boolean) => void;
 }
 
 export const useSettings = create<SettingsStore>()(
@@ -46,12 +52,14 @@ export const useSettings = create<SettingsStore>()(
       priorityFee: 10_000,
       themePreference: "auto",
       mapMode: "flat",
+      broadcastPresence: false,
       setNumberFormat: (fmt) => set({ numberFormat: fmt }),
       setAnimationsEnabled: (enabled) => set({ animationsEnabled: enabled }),
       setExplorer: (e) => set({ explorer: e }),
       setPriorityFee: (fee) => set({ priorityFee: fee }),
       setThemePreference: (t) => set({ themePreference: t }),
       setMapMode: (m) => set({ mapMode: m }),
+      setBroadcastPresence: (b) => set({ broadcastPresence: b }),
     }),
     {
       name: "novus-settings",
@@ -96,6 +104,10 @@ export const useSettings = create<SettingsStore>()(
             : typeof p.mapMode === "string" && p.mapMode in LEGACY_MAP_MODE_MAP
               ? LEGACY_MAP_MODE_MAP[p.mapMode as string]!
               : current.mapMode,
+          broadcastPresence:
+            typeof p.broadcastPresence === "boolean"
+              ? p.broadcastPresence
+              : current.broadcastPresence,
         };
       },
     },

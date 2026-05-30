@@ -5,9 +5,10 @@
 // wire shape from WAR_TABLE_IMPL_SPEC sections 1 and 4.
 
 import { describe, it, expect } from 'bun:test';
-import { Keypair, PublicKey } from '@solana/web3.js';
+import { Keypair, PublicKey, type Connection } from '@solana/web3.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
+import bs58 from 'bs58';
 
 import {
   WT_MAGIC,
@@ -21,13 +22,16 @@ import {
   deriveThreadKey,
   encryptBody,
   decryptBody,
+  encodeBody,
   encodeEnvelope,
   decodeEnvelope,
   encodeMessageId,
+  decodeMessageId,
   hexToId,
   idToHex,
 } from '../../src/crypto/wartable';
-import { foldThread, type ReadMessage } from '../../src/wartable';
+import { foldThread, WarTableClient, type ReadMessage } from '../../src/wartable';
+import { LocalHmacKeyProvider } from '../../src/keyprovider/local';
 
 const K_MASTER = new Uint8Array(32).fill(7);
 
@@ -179,7 +183,7 @@ describe('War Table crypto', () => {
 
 describe('War Table message id codec', () => {
   it('hexToId round-trips against idToHex and idHex', () => {
-    const id = encodeMessageId({ slot: 12345n, txIndex: 0, logIndex: 7 });
+    const id = encodeMessageId({ slot: 12345n, txDisc: 0, logIndex: 7 });
     const hex = idToHex(id);
     expect(hex.length).toBe(WT_ID_LEN * 2);
     // idToHex must agree with the canonical Buffer hex (the store's idHex).
@@ -209,7 +213,7 @@ describe('War Table foldThread', () => {
   let logCounter = 0;
   function mkId(): Uint8Array {
     logCounter += 1;
-    return encodeMessageId({ slot: BigInt(logCounter), txIndex: 0, logIndex: 0 });
+    return encodeMessageId({ slot: BigInt(logCounter), txDisc: 0, logIndex: 0 });
   }
 
   function msg(
@@ -370,5 +374,98 @@ describe('War Table foldThread', () => {
     const raw = [msg(mkId(), WtKind.Reaction, ALICE, '\u{1F525}', orphanParent)];
     const { messages } = foldThread(raw);
     expect(messages.length).toBe(0);
+  });
+});
+
+describe('War Table message id layout (slot | txDisc | logIndex)', () => {
+  it('round-trips all three fields', () => {
+    const id = encodeMessageId({ slot: 0x1122334455667788n, txDisc: 0xabcdef, logIndex: 0x5a });
+    const back = decodeMessageId(id);
+    expect(back.slot).toBe(0x1122334455667788n);
+    expect(back.txDisc).toBe(0xabcdef);
+    expect(back.logIndex).toBe(0x5a);
+  });
+
+  it('orders by slot first (big-endian), so any later slot sorts after any earlier slot', () => {
+    // Max txDisc/logIndex in the earlier slot must still sort BEFORE the next slot.
+    const earlier = idToHex(encodeMessageId({ slot: 1n, txDisc: 0xffffff, logIndex: 255 }));
+    const later = idToHex(encodeMessageId({ slot: 2n, txDisc: 0, logIndex: 0 }));
+    expect(earlier < later).toBe(true);
+  });
+
+  it('separates same-slot transactions by txDisc', () => {
+    const a = encodeMessageId({ slot: 9n, txDisc: 0x000001, logIndex: 0 });
+    const b = encodeMessageId({ slot: 9n, txDisc: 0x000002, logIndex: 0 });
+    expect(idToHex(a)).not.toBe(idToHex(b));
+    expect(idToHex(a) < idToHex(b)).toBe(true);
+  });
+});
+
+// Regression for the same-slot id collision: two posts in ONE slot but in
+// DIFFERENT transactions used to share id slot|0|0 (logIndex reset per tx, no tx
+// discriminator), so foldThread's dedup-by-id dropped one. The signature-derived
+// txDisc now keeps them distinct. Exercises the standard read path against a
+// mocked Connection (no network).
+describe('War Table readThread same-slot collision', () => {
+  const THREAD = randomPubkey();
+  const SENDER = randomPubkey();
+
+  // A 64-byte signature whose leading bytes (the txDisc source) differ per tx.
+  function sig(lead: number): string {
+    const bytes = new Uint8Array(64);
+    bytes[0] = lead;
+    bytes[1] = (lead + 1) & 0xff;
+    bytes[2] = (lead + 2) & 0xff;
+    return bs58.encode(bytes);
+  }
+
+  // A plaintext (Encounter) wt1 envelope carrying `text`, as a Program-data line.
+  function logLine(text: string): string {
+    const body = encodeBody({
+      version: 0x01,
+      kind: WtKind.Text,
+      createdAt: 0n,
+      parentId: WT_ID_ZERO,
+      payload: new TextEncoder().encode(text),
+    });
+    const env = encodeEnvelope({
+      flags: 0,
+      threadPda: THREAD,
+      senderWallet: SENDER,
+      keyVersion: 0,
+      bodyNonce: zeros(WT_NONCE_LEN),
+      body,
+    });
+    return 'Program data: ' + Buffer.from(env).toString('base64');
+  }
+
+  it('keeps both messages posted in the same slot in different transactions', async () => {
+    const sigA = sig(10);
+    const sigB = sig(200);
+    const txBySig: Record<string, { slot: number; meta: { logMessages: string[] } }> = {
+      [sigA]: { slot: 777, meta: { logMessages: [logLine('alpha')] } },
+      [sigB]: { slot: 777, meta: { logMessages: [logLine('bravo')] } },
+    };
+    const fakeConnection = {
+      rpcEndpoint: 'http://mock',
+      // getSignaturesForAddress is newest-first; both share slot 777.
+      getSignaturesForAddress: async () => [
+        { signature: sigB, slot: 777 },
+        { signature: sigA, slot: 777 },
+      ],
+      getTransaction: async (s: string) => txBySig[s] ?? null,
+    } as unknown as Connection;
+
+    const client = new WarTableClient({
+      connection: fakeConnection,
+      keyProvider: new LocalHmacKeyProvider(K_MASTER, async () => 0),
+      getTransactionsForAddress: 'off',
+    });
+
+    const msgs = await client.readThread(THREAD);
+    const texts = msgs.map((m) => new TextDecoder().decode(m.payload)).sort();
+    expect(texts).toEqual(['alpha', 'bravo']);
+    // Distinct ids despite the identical slot — the collision is gone.
+    expect(idToHex(msgs[0]!.id)).not.toBe(idToHex(msgs[1]!.id));
   });
 });

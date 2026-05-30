@@ -6,12 +6,13 @@
 // (useWarTable, useDmInbox) seed this from the SDK WarTableClient (readThread /
 // subscribeThread / discoverDmThreads) and upsert live messages into it.
 //
-// Ordering is by the 12-byte chain coordinate id (slot | tx_index | log_index).
-// We compare it as raw bytes so the lexicographic order matches the on-chain
-// numeric order without re-parsing the integer fields. tx_index is not surfaced
-// by getTransaction (it reads 0 with txIndexResolved=false in the SDK), so two
-// messages in the same slot fall back to log_index ordering; this is a known,
-// documented limitation, not a fallback shim.
+// Ordering is by the 12-byte chain coordinate id (slot | txDisc | log_index).
+// We compare it as a hex string so the lexicographic order matches the on-chain
+// numeric order (big-endian) without re-parsing the integer fields. txDisc is
+// the leading 3 bytes of the transaction signature, a per-tx discriminator the
+// SDK derives identically on every read path, so two messages posted in the
+// same slot in different transactions get distinct ids instead of colliding.
+// Within a single slot, order is by txDisc (signature-arbitrary), then logIndex.
 //
 // Tombstone fold: a kind=4 (Tombstone) message names a parentId; ingesting it
 // marks that parent message tombstoned and clears its body. A tombstone whose
@@ -201,6 +202,11 @@ function matchesPending(pending: WtMessage, real: WtMessage): boolean {
 // message itself).
 function ingest(prev: ThreadEntry, msg: WtMessage): ThreadEntry {
   const pendingTombstones = new Set(prev.pendingTombstones);
+
+  // Status (kind=1) is the Public-scope presence ping: empty payload, never a
+  // chat bubble. Drop it before any fold so it cannot land in the message list
+  // (presence is read off chain signatures, not the store).
+  if (msg.kind === WtKind.Status) return prev;
 
   // A real (non-pending) message confirms at most one optimistic echo; drop it.
   // This applies to every kind, including reactions/pins/tombstones, which all
@@ -503,9 +509,12 @@ export const useWarTableStore = create<WtState>((set, get) => ({
       // The SDK fold leaks un-react and pin-clear tombstones as empty kind=4
       // bubbles (it only drops kind=5/6). Strip any kind=4 whose victim is not a
       // present chat bubble; those are un-react/pin tombstones, not chat deletes.
+      // Status (kind=1) presence pings are never bubbles either.
       const bubbleIds = new Set(incoming.map((m) => m.id));
       const visible = incoming.filter(
-        (m) => m.kind !== WtKind.Tombstone || bubbleIds.has(m.parentId),
+        (m) =>
+          m.kind !== WtKind.Status &&
+          (m.kind !== WtKind.Tombstone || bubbleIds.has(m.parentId)),
       );
 
       // Fold pending tombstones into the fresh list and sort deterministically.

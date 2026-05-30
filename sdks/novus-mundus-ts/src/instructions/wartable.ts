@@ -128,6 +128,22 @@ export function createPostEncounterMessageInstruction(
 }
 
 /**
+ * Public scope: no gate accounts (predicate is is_in_kingdom). The thread is
+ * the kingdom's GameEngine PDA, the per-kingdom public channel.
+ */
+export function createPostPublicMessageInstruction(
+  gameEnginePda: PublicKey,
+  sender: PublicKey,
+  senderPlayer: PublicKey,
+  envelope: Uint8Array,
+): TransactionInstruction {
+  return createPostWarTableMessageInstruction(
+    { thread: gameEnginePda, sender, senderPlayer, gateAccounts: [] },
+    { scope: WtScope.Public, envelope },
+  );
+}
+
+/**
  * DM scope: derives the pair thread PDA from the two PlayerAccount PDAs and
  * passes BOTH PlayerAccounts as gate_0/gate_1. The signer must own one of them.
  * The gate accounts include both players' PDAs so the recipient can discover

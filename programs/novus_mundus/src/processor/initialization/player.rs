@@ -14,7 +14,7 @@ use crate::{
     logic::location::{is_valid_latitude, is_valid_longitude},
     state::{CityAccount, GameEngine, LocationAccount, PlayerAccount},
     token_helpers::create_associated_token_account,
-    utils::read_u16,
+    utils::{read_f64, read_u16},
     validation::{derive_pda, require_key_match, require_owner, require_signer, require_writable},
 };
 
@@ -97,12 +97,9 @@ pub fn process(
     // [0..2] starting_city_id: u16
     // [2..10] spawn_lat: f64
     // [10..18] spawn_long: f64
-    if data.len() < 18 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
     let starting_city_id = read_u16(data, 0, "player.starting_city_id")?;
-    let spawn_lat = f64::from_le_bytes(data[2..10].try_into().unwrap());
-    let spawn_long = f64::from_le_bytes(data[10..18].try_into().unwrap());
+    let spawn_lat = read_f64(data, 2, "player.spawn_lat")?;
+    let spawn_long = read_f64(data, 10, "player.spawn_long")?;
 
     // Reject NaN / Inf / out-of-range f64 inputs before they reach
     // to_grid → saturating cast. Defence in depth: the AABB bounds

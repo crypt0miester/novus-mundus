@@ -4,8 +4,9 @@
 // discover helpers. The read path keys on the `wt1` magic in `Program data:`
 // log lines (the chain emits the raw envelope via sol_log_data with no event
 // discriminator), decodes, and best-effort decrypts. Ordering uses the
-// 12-byte message id (slot|tx_index|log_index); tx_index is not surfaced by
-// getTransaction so it is reported as 0 with txIndexResolved=false (R9/O4).
+// 12-byte message id (slot | txDisc | log_index): txDisc is the leading 3 bytes
+// of the transaction signature, a stable per-tx discriminator (identical on the
+// gTFA and standard read paths) so two posts in the same slot no longer collide.
 
 import {
   PublicKey,
@@ -14,6 +15,7 @@ import {
   type Connection,
   type TransactionInstruction,
 } from '@solana/web3.js';
+import bs58 from 'bs58';
 
 import {
   WtScope,
@@ -73,7 +75,28 @@ export interface WarTableClientOpts {
 /** Per-transaction log slice — the only thing the thread readers need. */
 interface TxLogs {
   slot: bigint;
+  /** Leading 3 bytes of the tx signature — the per-tx id discriminator. */
+  txDisc: number;
   logMessages: string[];
+}
+
+/**
+ * Derive a per-transaction message-id discriminator from a base58 transaction
+ * signature: the leading 3 bytes of the 64-byte signature as a u24. Stable
+ * across the gTFA and standard read paths and the live onLogs stream (all three
+ * see the same signature), and effectively unique among the handful of
+ * transactions one thread sees in a single slot, so same-slot posts no longer
+ * collide on id. Returns 0 if the signature is unparseable (degrades to the
+ * pre-fix same-slot behavior for that one tx only).
+ */
+export function txDiscFromSignature(signature: string): number {
+  try {
+    const bytes = bs58.decode(signature);
+    if (bytes.length < 3) return 0;
+    return ((bytes[0]! << 16) | (bytes[1]! << 8) | bytes[2]!) >>> 0;
+  } catch {
+    return 0;
+  }
 }
 
 /** How much of an address's history a thread read should pull. */
@@ -112,6 +135,42 @@ function isGtfaUnsupported(err: unknown): boolean {
   return /method not found|not supported|unsupported|unknown method/.test(msg);
 }
 
+/** One getTransactionsForAddress result item (only the fields we read). */
+interface GtfaItem {
+  slot: number;
+  meta?: { logMessages?: string[] | null };
+  /** Some providers surface the primary signature directly. */
+  signature?: string;
+  /**
+   * `transactionDetails: 'full'`. With base64 encoding this is
+   * `[base64Wire, 'base64']`; with json/jsonParsed it is `{ signatures: [...] }`.
+   */
+  transaction?: [string, string] | { signatures?: string[] };
+}
+
+/**
+ * Extract a gTFA item's primary (index-0) transaction signature as base58, so
+ * the standard and gTFA paths derive the SAME per-tx id discriminator. Prefers
+ * an explicit `signature`, else the parsed `signatures[0]`, else decodes the
+ * base64 wire bytes (a 1-byte shortvec count for <128 sigs, then signature 0).
+ */
+function gtfaSignature(item: GtfaItem): string | null {
+  if (typeof item.signature === 'string') return item.signature;
+  const tx = item.transaction;
+  if (Array.isArray(tx) && typeof tx[0] === 'string') {
+    try {
+      const raw = Buffer.from(tx[0], 'base64');
+      if (raw.length >= 1 + 64) return bs58.encode(raw.subarray(1, 1 + 64));
+    } catch {
+      // fall through to the parsed form / null
+    }
+  } else if (tx && !Array.isArray(tx) && Array.isArray(tx.signatures)) {
+    const s = tx.signatures[0];
+    if (typeof s === 'string') return s;
+  }
+  return null;
+}
+
 // One distinct emoji's folded reaction summary on a parent message. count is the
 // number of live (non-tombstoned) reactions of this emoji; reactorWallets is the
 // base58 wallet of each reactor in first-seen order. mine and myReactionId are
@@ -144,7 +203,13 @@ export interface ReadMessage {
   payload: Uint8Array;
   /** true when the body was decrypted (or is plaintext); false when no key. */
   decrypted: boolean;
-  /** true when the id's tx_index reflects real block position (currently never). */
+  /**
+   * Always false: the id's within-slot discriminator is derived from the
+   * transaction signature, not the on-chain transaction index (which the
+   * log/RPC read paths cannot resolve). Same-slot ids no longer collide, but
+   * within a slot they order by signature, not true block position. Kept for
+   * API stability.
+   */
   txIndexResolved: boolean;
   /** true when a Tombstone with this id's parent hid this message. */
   tombstoned?: boolean;
@@ -649,7 +714,7 @@ export class WarTableClient {
     }
     const json = (await res.json()) as {
       result?: {
-        data?: Array<{ slot: number; meta?: { logMessages?: string[] | null } }>;
+        data?: Array<GtfaItem>;
         paginationToken?: string | null;
       };
       error?: { code?: number; message?: string };
@@ -664,7 +729,13 @@ export class WarTableClient {
     const logs: TxLogs[] = [];
     for (const t of data) {
       const logMessages = t.meta?.logMessages;
-      if (logMessages) logs.push({ slot: BigInt(t.slot), logMessages });
+      if (!logMessages) continue;
+      const sig = gtfaSignature(t);
+      logs.push({
+        slot: BigInt(t.slot),
+        txDisc: sig ? txDiscFromSignature(sig) : 0,
+        logMessages,
+      });
     }
     const token = json.result?.paginationToken;
     return { logs, txCount: data.length, nextCursor: token ? `t:${token}` : null };
@@ -688,7 +759,11 @@ export class WarTableClient {
         maxSupportedTransactionVersion: 0,
       });
       if (!tx || !tx.meta || !tx.meta.logMessages) continue;
-      logs.push({ slot: BigInt(tx.slot), logMessages: tx.meta.logMessages });
+      logs.push({
+        slot: BigInt(tx.slot),
+        txDisc: txDiscFromSignature(sigInfo.signature),
+        logMessages: tx.meta.logMessages,
+      });
     }
     const nextCursor =
       sigs.length === pageLimit && sigs.length > 0
@@ -728,8 +803,9 @@ export class WarTableClient {
     };
     const bodyBytes = encodeBody(innerBody);
 
-    if (scope === WtScope.Encounter) {
-      // Plaintext path: flags=0, keyVersion=0, zero nonce.
+    if (scope === WtScope.Encounter || scope === WtScope.Public) {
+      // Plaintext path: flags=0, keyVersion=0, zero nonce. Both Encounter and
+      // Public are membership-free plaintext scopes.
       const envelope = encodeEnvelope({
         flags: 0,
         threadPda: accounts.thread,
@@ -843,11 +919,11 @@ export class WarTableClient {
     });
     const raw: ReadMessage[] = [];
 
-    for (const { slot, logMessages } of txs) {
+    for (const { slot, txDisc, logMessages } of txs) {
       const blobs = readProgramData(logMessages).filter(isWt1);
       let logIndex = 0;
       for (const blob of blobs) {
-        const msg = await this.decodeAndDecrypt(blob, slot, logIndex);
+        const msg = await this.decodeAndDecrypt(blob, slot, txDisc, logIndex);
         logIndex += 1;
         if (!msg) continue;
         raw.push(msg);
@@ -873,11 +949,11 @@ export class WarTableClient {
   ): Promise<ThreadPage> {
     const page = await this.fetchAddressPage(thread, opts.limit ?? 50, opts.cursor ?? null);
     const messages: ReadMessage[] = [];
-    for (const { slot, logMessages } of page.logs) {
+    for (const { slot, txDisc, logMessages } of page.logs) {
       const blobs = readProgramData(logMessages).filter(isWt1);
       let logIndex = 0;
       for (const blob of blobs) {
-        const msg = await this.decodeAndDecrypt(blob, slot, logIndex);
+        const msg = await this.decodeAndDecrypt(blob, slot, txDisc, logIndex);
         logIndex += 1;
         if (msg) messages.push(msg);
       }
@@ -901,11 +977,11 @@ export class WarTableClient {
       fetchAll: opts.fetchAll ?? false,
     });
     const raw: ReadMessage[] = [];
-    for (const { slot, logMessages } of txs) {
+    for (const { slot, txDisc, logMessages } of txs) {
       const blobs = readProgramData(logMessages).filter(isWt1);
       let logIndex = 0;
       for (const blob of blobs) {
-        const msg = await this.decodeAndDecrypt(blob, slot, logIndex);
+        const msg = await this.decodeAndDecrypt(blob, slot, txDisc, logIndex);
         logIndex += 1;
         if (!msg) continue;
         raw.push(msg);
@@ -937,7 +1013,7 @@ export class WarTableClient {
     const raw: ReadMessage[] = [];
     const systemItems: ReadMessage[] = [];
 
-    for (const { slot, logMessages } of txs) {
+    for (const { slot, txDisc, logMessages } of txs) {
       // One ordered blob list, one shared logIndex, per the section-8 risk note.
       const blobs = readProgramData(logMessages);
       let logIndex = 0;
@@ -945,7 +1021,7 @@ export class WarTableClient {
         const idx = logIndex;
         logIndex += 1;
         if (isWt1(blob)) {
-          const msg = await this.decodeAndDecrypt(blob, slot, idx);
+          const msg = await this.decodeAndDecrypt(blob, slot, txDisc, idx);
           if (msg) raw.push(msg);
           continue;
         }
@@ -956,7 +1032,7 @@ export class WarTableClient {
         const timestamp = (event.data as { timestamp?: { toString(): string } }).timestamp;
         const createdAt = timestamp === undefined ? 0n : BigInt(timestamp.toString());
         systemItems.push({
-          id: encodeMessageId({ slot, txIndex: 0, logIndex: idx }),
+          id: encodeMessageId({ slot, txDisc, logIndex: idx }),
           scope,
           senderWallet: thread,
           threadPda: thread,
@@ -995,14 +1071,14 @@ export class WarTableClient {
   ): Promise<ThreadPage> {
     const page = await this.fetchAddressPage(thread, opts.limit ?? 50, opts.cursor ?? null);
     const messages: ReadMessage[] = [];
-    for (const { slot, logMessages } of page.logs) {
+    for (const { slot, txDisc, logMessages } of page.logs) {
       const blobs = readProgramData(logMessages);
       let logIndex = 0;
       for (const blob of blobs) {
         const idx = logIndex;
         logIndex += 1;
         if (isWt1(blob)) {
-          const msg = await this.decodeAndDecrypt(blob, slot, idx);
+          const msg = await this.decodeAndDecrypt(blob, slot, txDisc, idx);
           if (msg) messages.push(msg);
           continue;
         }
@@ -1013,7 +1089,7 @@ export class WarTableClient {
         const timestamp = (event.data as { timestamp?: { toString(): string } }).timestamp;
         const createdAt = timestamp === undefined ? 0n : BigInt(timestamp.toString());
         messages.push({
-          id: encodeMessageId({ slot, txIndex: 0, logIndex: idx }),
+          id: encodeMessageId({ slot, txDisc, logIndex: idx }),
           scope,
           senderWallet: thread,
           threadPda: thread,
@@ -1033,8 +1109,9 @@ export class WarTableClient {
 
   /**
    * Subscribe to live thread messages via onLogs. The callback fires for each
-   * decoded wt1 message; tx_index is unavailable from the logs stream so
-   * txIndexResolved is false.
+   * decoded wt1 message; the id's within-slot discriminator comes from the
+   * notification's signature, identical to what the read paths derive, so a live
+   * message and its later read-back share one id.
    *
    * Reaction (kind=5), pin (kind=6) and tombstone (kind=4) messages are emitted
    * RAW, one per blob, exactly like text messages: the per-message stream cannot
@@ -1050,12 +1127,13 @@ export class WarTableClient {
       (logs, ctx) => {
         if (logs.err) return;
         const slot = BigInt(ctx.slot);
+        const txDisc = txDiscFromSignature(logs.signature);
         const blobs = readProgramData(logs.logs).filter(isWt1);
         let logIndex = 0;
         for (const blob of blobs) {
           const idx = logIndex;
           logIndex += 1;
-          void this.decodeAndDecrypt(blob, slot, idx).then((msg) => {
+          void this.decodeAndDecrypt(blob, slot, txDisc, idx).then((msg) => {
             if (msg) onMessage(msg);
           });
         }
@@ -1086,7 +1164,7 @@ export class WarTableClient {
     });
     const byThread = new Map<string, DmConversation>();
 
-    for (const { slot, logMessages } of txs) {
+    for (const { slot, txDisc, logMessages } of txs) {
       const blobs = readProgramData(logMessages).filter(isWt1);
       let logIndex = 0;
       for (const blob of blobs) {
@@ -1100,7 +1178,7 @@ export class WarTableClient {
         }
         // DM envelopes are encrypted with keyVersion 1; we cannot tell scope
         // from the envelope alone, so group by thread PDA and record the id.
-        const id = encodeMessageId({ slot, txIndex: 0, logIndex: idx });
+        const id = encodeMessageId({ slot, txDisc, logIndex: idx });
         const key = env.threadPda.toBase58();
         const existing = byThread.get(key);
         if (!existing || compareId(id, existing.lastMessageId) > 0) {
@@ -1115,6 +1193,7 @@ export class WarTableClient {
   private async decodeAndDecrypt(
     blob: Uint8Array,
     slot: bigint,
+    txDisc: number,
     logIndex: number,
   ): Promise<ReadMessage | null> {
     let env: WtEnvelope;
@@ -1124,7 +1203,7 @@ export class WarTableClient {
       return null;
     }
 
-    const id = encodeMessageId({ slot, txIndex: 0, logIndex });
+    const id = encodeMessageId({ slot, txDisc, logIndex });
     let payload: Uint8Array = new Uint8Array(0);
     let decrypted = false;
     let bodyBytes: Uint8Array | null = null;
@@ -1180,6 +1259,8 @@ export class WarTableClient {
 // so infer a best-effort scope for the read model: plaintext => Encounter,
 // keyVersion 1 => Dm, otherwise a membership scope (reported as Team as a
 // neutral default; the caller already knows the real scope from context).
+// Public is also a plaintext scope, so it is indistinguishable from Encounter
+// here; reporting Encounter is fine since the caller knows the real scope.
 function scopeFromFlags(env: WtEnvelope): WtScope {
   if (!env.encrypted) return WtScope.Encounter;
   if (env.keyVersion === 1) return WtScope.Dm;

@@ -24,7 +24,7 @@ import { deriveThreadKey } from "@/lib/server/war-table";
 export const runtime = "nodejs";
 
 /**
- * GET /api/wt/key/<threadBase58>?scope=<0..4>&from_version=<n>&peer=<playerPdaBase58?>
+ * GET /api/wt/key/<threadBase58>?scope=<0..5>&from_version=<n>&peer=<playerPdaBase58?>
  *
  * Serves the war-table thread keys a SIWS-authenticated caller is entitled to.
  * The master secret stays server-side; this route derives per-version keys and
@@ -102,9 +102,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
   if (
     !Number.isInteger(scopeNum) ||
     scopeNum < WtScope.Team ||
-    scopeNum > WtScope.Dm
+    scopeNum > WtScope.Public
   ) {
-    return fail("invalid 'scope' (expected 0..4)", 400);
+    return fail("invalid 'scope' (expected 0..5)", 400);
   }
   const scope = scopeNum as WtScope;
 
@@ -118,8 +118,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
     const gameEngine = serverClient().gameEngine;
     const callerPlayerPda = derivePlayerPda(gameEngine, wallet)[0];
 
-    // Encounter is plaintext: there is no key to serve.
-    if (scope === WtScope.Encounter) {
+    // Encounter and Public are plaintext, membership-free scopes: there is no
+    // key to serve.
+    if (scope === WtScope.Encounter || scope === WtScope.Public) {
       const body: KeyResponse = { current_version: 0, keys: [] };
       return NextResponse.json(body);
     }

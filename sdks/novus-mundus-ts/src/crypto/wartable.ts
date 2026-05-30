@@ -59,12 +59,17 @@ export enum WtScope {
   Castle = 2,
   Encounter = 3,
   Dm = 4,
+  // Public (=5): a plaintext, membership-free per-kingdom channel whose thread
+  // is the kingdom's GameEngine PDA. Any player of that kingdom may post.
+  Public = 5,
 }
 
 /** Inner-body message kind. */
 export enum WtKind {
   Text = 0,
-  Pledge = 1,
+  // Status (=1): a presence ping ("I'm online"). Plaintext, empty payload,
+  // posted to the Public scope. Hidden from chat bubbles defensively.
+  Status = 1,
   System = 2,
   Reply = 3,
   Tombstone = 4,
@@ -282,7 +287,14 @@ export interface WtBody {
 /** 12-byte message ordering coordinate. */
 export interface WtMessageId {
   slot: bigint;
-  txIndex: number;
+  /**
+   * Per-transaction discriminator: the leading 3 bytes of the transaction
+   * signature. Distinguishes transactions that share a slot so two posts in the
+   * same slot no longer collide on id. NOT the on-chain transaction index (which
+   * the log/RPC read paths cannot resolve); identical across the gTFA and
+   * standard read paths because both derive it from the same signature.
+   */
+  txDisc: number;
   logIndex: number;
 }
 
@@ -319,22 +331,30 @@ export function decodeBody(buf: Uint8Array): WtBody {
   return { version, kind, createdAt, parentId, payload };
 }
 
-// Encode a 12-byte message id: slot u64 BE | log_index u32 BE.
+// Encode a 12-byte message id: slot u64 BE (bytes 0-7) | txDisc u24 BE
+// (bytes 8-10) | log_index u8 (byte 11).
 // Big-endian on purpose so byte order == hex-string order == chronological
-// (slot, then logIndex) order. Every comparator relies on this: the SDK
-// compareId byte scan and the web store's plain hex-string compare both assume
-// lexicographic order equals chronological order, which only holds big-endian.
-// tx_index is not resolvable from logs (always 0), so it is not stored; the
-// 12 bytes are slot(8) + logIndex(4).
+// (slot first) order. Every comparator relies on this: the SDK compareId byte
+// scan and the web store's plain hex-string compare both assume lexicographic
+// order equals slot order, which only holds big-endian.
+// txDisc is the leading 3 bytes of the transaction signature — a stable per-tx
+// discriminator so two posts in the SAME slot get distinct ids (the on-chain tx
+// index is not resolvable from logs). logIndex (1 byte) separates multiple
+// Program-data blobs of one tx. Within a slot, ids order by txDisc
+// (signature-arbitrary, not wall-clock) then logIndex.
 export function encodeMessageId(id: WtMessageId): Uint8Array {
   const out = new Uint8Array(WT_ID_LEN);
   const view = new DataView(out.buffer);
   view.setBigUint64(0, id.slot, false);
-  view.setUint32(8, id.logIndex >>> 0, false);
+  const disc = id.txDisc >>> 0;
+  out[8] = (disc >>> 16) & 0xff;
+  out[9] = (disc >>> 8) & 0xff;
+  out[10] = disc & 0xff;
+  out[11] = id.logIndex & 0xff;
   return out;
 }
 
-// Decode a 12-byte message id. tx_index is not stored (always 0).
+// Decode a 12-byte message id (slot | txDisc | logIndex).
 export function decodeMessageId(buf: Uint8Array): WtMessageId {
   if (buf.length < WT_ID_LEN) {
     throw new Error(`message id too short: ${buf.length} < ${WT_ID_LEN}`);
@@ -342,8 +362,8 @@ export function decodeMessageId(buf: Uint8Array): WtMessageId {
   const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
   return {
     slot: view.getBigUint64(0, false),
-    txIndex: 0,
-    logIndex: view.getUint32(8, false),
+    txDisc: ((buf[8]! << 16) | (buf[9]! << 8) | buf[10]!) >>> 0,
+    logIndex: buf[11]!,
   };
 }
 

@@ -20,6 +20,7 @@ use crate::{
     events::KingdomCitiesInitialized,
     logic::location::{is_valid_latitude, is_valid_longitude},
     state::{CityAccount, GameEngine},
+    utils::io::{read_f64, read_len_prefixed, read_u16, read_u32, read_u8},
 };
 
 /// Maximum cities to initialize per batch (limited by account count in transaction)
@@ -59,12 +60,9 @@ pub fn process(
     accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse header
-    if instruction_data.len() < 3 {
-        return Err(ProgramError::InvalidInstructionData);
-    }
-    let start_city_id = u16::from_le_bytes([instruction_data[0], instruction_data[1]]);
-    let count = instruction_data[2] as usize;
+    // 1. Parse header (the io.rs readers bounds-check each field).
+    let start_city_id = read_u16(instruction_data, 0, "batch_cities.start_city_id")?;
+    let count = read_u8(instruction_data, 2, "batch_cities.count")? as usize;
 
     // Validate count
     if count == 0 || count > MAX_CITIES_PER_BATCH {
@@ -103,32 +101,23 @@ pub fn process(
         let city_id = start_city_id + i as u16;
         let city_account = &city_accounts[i];
 
-        // Parse name_len
-        if offset >= instruction_data.len() {
+        // Parse the 1-byte-length-prefixed name. read_len_prefixed bounds-checks
+        // the prefix and the bytes; the 32-byte cap is the only extra rule.
+        let (name_bytes, next_offset) = read_len_prefixed(instruction_data, offset, "city.name")?;
+        if name_bytes.len() > 32 {
             return Err(ProgramError::InvalidInstructionData);
         }
-        let name_len = instruction_data[offset] as usize;
-        offset += 1;
+        offset = next_offset;
 
-        if name_len > 32 || offset + name_len > instruction_data.len() {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-        let name_bytes = &instruction_data[offset..offset + name_len];
-        offset += name_len;
-
-        // Parse latitude (f64), longitude (f64), biome_seed (u32), city_type (u8),
-        // width_grid (u16), height_grid (u16), water_level_delta (i8),
-        // temp_bias (i8), moisture_bias (i8), coast (u8), landmass_seed (u8).
-        // Total: 8 + 8 + 4 + 1 + 2 + 2 + 5 = 30 bytes.
-        if offset + 30 > instruction_data.len() {
-            return Err(ProgramError::InvalidInstructionData);
-        }
-
-        let latitude = f64::from_le_bytes(instruction_data[offset..offset + 8].try_into().unwrap());
+        // Each field is read with a bounds-safe io.rs helper, so no upfront
+        // length guard is needed: a short payload errors at the first read past
+        // the end. Layout: latitude(f64) longitude(f64) biome_seed(u32)
+        // city_type(u8) width_grid(u16) height_grid(u16) water_level_delta(i8)
+        // temp_bias(i8) moisture_bias(i8) coast(u8) landmass_seed(u8).
+        let latitude = read_f64(instruction_data, offset, "city.latitude")?;
         offset += 8;
 
-        let longitude =
-            f64::from_le_bytes(instruction_data[offset..offset + 8].try_into().unwrap());
+        let longitude = read_f64(instruction_data, offset, "city.longitude")?;
         offset += 8;
 
         if !is_valid_latitude(latitude) {
@@ -138,34 +127,31 @@ pub fn process(
             return Err(GameError::InvalidLongitude.into());
         }
 
-        let biome_seed =
-            u32::from_le_bytes(instruction_data[offset..offset + 4].try_into().unwrap());
+        let biome_seed = read_u32(instruction_data, offset, "city.biome_seed")?;
         offset += 4;
 
-        let city_type = instruction_data[offset];
+        let city_type = read_u8(instruction_data, offset, "city.city_type")?;
         offset += 1;
 
-        let width_grid =
-            u16::from_le_bytes(instruction_data[offset..offset + 2].try_into().unwrap());
+        let width_grid = read_u16(instruction_data, offset, "city.width_grid")?;
         offset += 2;
 
-        let height_grid =
-            u16::from_le_bytes(instruction_data[offset..offset + 2].try_into().unwrap());
+        let height_grid = read_u16(instruction_data, offset, "city.height_grid")?;
         offset += 2;
 
         if width_grid == 0 || height_grid == 0 {
             return Err(GameError::InvalidParameter.into());
         }
 
-        let water_level_delta = instruction_data[offset] as i8;
+        let water_level_delta = read_u8(instruction_data, offset, "city.water_level_delta")? as i8;
         offset += 1;
-        let temp_bias = instruction_data[offset] as i8;
+        let temp_bias = read_u8(instruction_data, offset, "city.temp_bias")? as i8;
         offset += 1;
-        let moisture_bias = instruction_data[offset] as i8;
+        let moisture_bias = read_u8(instruction_data, offset, "city.moisture_bias")? as i8;
         offset += 1;
-        let coast = instruction_data[offset];
+        let coast = read_u8(instruction_data, offset, "city.coast")?;
         offset += 1;
-        let landmass_seed = instruction_data[offset];
+        let landmass_seed = read_u8(instruction_data, offset, "city.landmass_seed")?;
         offset += 1;
 
         // coast bearing is 0..=8 (0 = no coast). Reject out-of-range so a
@@ -208,8 +194,8 @@ pub fn process(
         city_data.game_engine = *game_engine_account.address();
         city_data.city_id = city_id;
 
-        // Copy name
-        let copy_len = name_len.min(32);
+        // Copy name (read_len_prefixed + the >32 cap already bound name_bytes to <= 32).
+        let copy_len = name_bytes.len();
         city_data.name[..copy_len].copy_from_slice(&name_bytes[..copy_len]);
 
         city_data.latitude = latitude;

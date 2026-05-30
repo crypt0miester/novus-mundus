@@ -22,6 +22,7 @@ pub const SCOPE_RALLY: u8 = 1;
 pub const SCOPE_CASTLE: u8 = 2;
 pub const SCOPE_ENCOUNTER: u8 = 3;
 pub const SCOPE_DM: u8 = 4;
+pub const SCOPE_PUBLIC: u8 = 5;
 
 /// Verify that `sender_player` may post to `thread` under `scope`.
 ///
@@ -49,6 +50,7 @@ pub fn require_in_scope(
         }
         SCOPE_ENCOUNTER => encounter_predicate(thread, sender_player, program_id),
         SCOPE_DM => dm_predicate(thread, sender_wallet, gate, program_id),
+        SCOPE_PUBLIC => public_predicate(thread, sender_player, program_id),
         _ => Err(GameError::WtBadScope.into()),
     }
 }
@@ -191,6 +193,21 @@ fn encounter_predicate(
     };
     // Anyone in the same kingdom as the encounter may coordinate around it.
     if !sender_player.is_in_kingdom(&encounter.game_engine) {
+        return Err(GameError::WtNotInScope.into());
+    }
+    Ok(())
+}
+
+fn public_predicate(
+    thread: &AccountView,
+    sender_player: &PlayerAccount,
+    program_id: &Address,
+) -> ProgramResult {
+    require_owner(thread, program_id)?;
+    // The public channel thread IS the kingdom's GameEngine PDA, so any valid
+    // player of that kingdom may post (no membership account). The thread must be
+    // program-owned and equal the sender's stored game_engine.
+    if !sender_player.is_in_kingdom(thread.address()) {
         return Err(GameError::WtNotInScope.into());
     }
     Ok(())
