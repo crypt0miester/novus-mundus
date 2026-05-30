@@ -20,6 +20,7 @@
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { animate, utils } from "animejs";
 import type { PublicKey } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { MessageSquare, LoaderCircle, Pin, X } from "lucide-react";
@@ -28,7 +29,8 @@ import { useWarTable } from "@/lib/hooks/useWarTable";
 import { ZERO_ID, type WtMessage } from "@/lib/store/war-table";
 import { useWtReadStore } from "@/lib/store/wt-read";
 import { notify } from "@/lib/notify";
-import { cn } from "@/lib/utils";
+import { cn, prefersReducedMotion } from "@/lib/utils";
+import { SETTLE } from "@/lib/motion/tokens";
 import {
   MessageBubble,
   placeholderFor,
@@ -287,6 +289,10 @@ export function ThreadRenderer({
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The previous highlightId, so the homing ring fires once on the EDGE of a new
+  // jump (not on every render while the ring class is applied), and re-fires when
+  // a second jump retargets the same id (cleared to null between).
+  const prevHighlightId = useRef<string | null>(null);
   // Top-of-list sentinel for scroll-up load-older, plus the distance-from-bottom
   // captured before a load-older so the layout effect can restore the viewport.
   const topSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -317,6 +323,53 @@ export function ThreadRenderer({
     };
   }, []);
 
+  // Jump-to-parent homing ring: on the EDGE of a new highlight the .jump-halo
+  // span pinned over the target bubble collapses onto it and rings down in two
+  // diminishing sonar waves. composition:"blend" so a rapid re-jump ADDS to the
+  // in-flight ring instead of snapping it. Plain [from,to] scale arrays only
+  // under blend (no multi-stop keyframes / color). Lives inside the ~1200ms
+  // highlight window so the ring and the ring-2 class fade together.
+  useEffect(() => {
+    const prev = prevHighlightId.current;
+    prevHighlightId.current = highlightId;
+    // Only act on a fresh non-null highlight, not when it clears or re-renders.
+    if (!highlightId || highlightId === prev) return;
+    if (prefersReducedMotion()) return;
+    const halo = scrollRef.current?.querySelector(
+      `[data-msg-id="${highlightId}"] .jump-halo`,
+    );
+    if (!(halo instanceof HTMLElement)) return;
+
+    // Collapse the wide halo onto the bubble: it eases from oversized + faint to
+    // bubble-sized while fading up, reading as the ring homing in on its target.
+    utils.set(halo, { scale: 1.45, opacity: 0 });
+    animate(halo, {
+      scale: [1.45, 1],
+      opacity: [0, 0.5],
+      duration: 260,
+      ease: SETTLE,
+      composition: "blend",
+    });
+    // Two diminishing sonar waves ringing back outward, the second smaller and
+    // later, so the homing reads as a settling pulse rather than a single ping.
+    animate(halo, {
+      scale: [1, 1.32],
+      opacity: [0.5, 0],
+      duration: 520,
+      delay: 240,
+      ease: "outQuad",
+      composition: "blend",
+    });
+    animate(halo, {
+      scale: [1, 1.18],
+      opacity: [0.32, 0],
+      duration: 460,
+      delay: 620,
+      ease: "outQuad",
+      composition: "blend",
+    });
+  }, [highlightId]);
+
   // Index by id so a reply can quote a snippet of its parent.
   const byId = useMemo(() => {
     const m = new Map<string, WtMessage>();
@@ -328,6 +381,38 @@ export function ThreadRenderer({
     () => buildRenderItems(messages, connectedWallet),
     [messages, connectedWallet],
   );
+
+  // Sent-confirmation seal edge detection, owned here rather than in the bubble:
+  // the optimistic echo carries a temp id that is swapped for the real id on
+  // confirm, so the confirmed bubble REMOUNTS and a per-bubble wasPending ref
+  // would always re-seed to false. We instead diff renders here. A message is
+  // "just delivered" when it is mine, now delivered, its id was absent last
+  // render (a freshly-arrived confirmed record), and last render carried at
+  // least one of my pending echoes (so this is a reconcile, not history paging
+  // in). prevIds + prevHadMyPending are updated in a layout effect after paint.
+  const prevIds = useRef<Set<string>>(new Set());
+  const prevHadMyPending = useRef(false);
+  const justDeliveredIds = useMemo(() => {
+    const out = new Set<string>();
+    if (!prevHadMyPending.current || connectedWallet === null) return out;
+    for (const m of messages) {
+      const mine = m.senderWallet === connectedWallet;
+      if (mine && m.pending !== true && !prevIds.current.has(m.id)) out.add(m.id);
+    }
+    return out;
+  }, [messages, connectedWallet]);
+  useLayoutEffect(() => {
+    const ids = new Set<string>();
+    let hadMyPending = false;
+    for (const m of messages) {
+      ids.add(m.id);
+      if (m.pending === true && connectedWallet !== null && m.senderWallet === connectedWallet) {
+        hadMyPending = true;
+      }
+    }
+    prevIds.current = ids;
+    prevHadMyPending.current = hadMyPending;
+  }, [messages, connectedWallet]);
 
   // The currently pinned message, resolved from the thread pin id. Null when
   // there is no pin or the pinned message is not loaded / was tombstoned.
@@ -641,10 +726,21 @@ export function ThreadRenderer({
                 key={item.key}
                 data-msg-id={msgId}
                 className={cn(
+                  "relative",
                   startsGroup && "mt-3",
                   highlightId === msgId && "rounded-2xl ring-2 ring-accent",
                 )}
               >
+                {/* Homing-ring overlay for the jump-to-parent recoil. Rests at
+                    opacity 0 and never intercepts taps; the highlight-edge effect
+                    above collapses it onto the bubble and rings it down. Only
+                    mounted while this bubble is the active highlight target. */}
+                {highlightId === msgId ? (
+                  <span
+                    aria-hidden
+                    className="jump-halo pointer-events-none absolute inset-0 rounded-2xl border-2 border-accent opacity-0"
+                  />
+                ) : null}
                 <MessageBubble
                   msg={item.msg}
                   parent={parent}
@@ -654,6 +750,7 @@ export function ThreadRenderer({
                   menuScope={menuScope}
                   avatarSize={avatarSize}
                   connectedWallet={connectedWallet}
+                  justDelivered={justDeliveredIds.has(msgId)}
                   pinnedId={pinnedId}
                   canPin={canPinFor(item.msg)}
                   onReact={(emoji) => onToggleReaction(msgId, emoji, false)}

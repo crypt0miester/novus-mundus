@@ -55,6 +55,17 @@ import { loadJump, saveJump, clearJump, type PersistedJump } from "./persist";
  * persist.ts); `resume` replays only the steps the journal hasn't recorded.
  */
 
+/** One atomic transaction inside a batched step. Journalled on its own id so a
+ *  partial run resumes past the chunks that already confirmed. */
+interface BatchTx {
+  id: string;
+  instructions: TransactionInstruction[];
+  computeUnits: number;
+  /** Ephemeral co-signers (the hero-mint keypairs) that partial-sign before
+   *  the wallet signs as fee payer. */
+  signers?: Keypair[];
+}
+
 type PlannedStep =
   | {
       kind: "fixed";
@@ -70,7 +81,16 @@ type PlannedStep =
        *  runs — derived from the plan rather than re-encoding step order. */
       spendsSol?: boolean;
     }
-  | { kind: "build"; id: string; label: string; buildingType: BuildingType };
+  | { kind: "build"; id: string; label: string; buildingType: BuildingType }
+  | {
+      // One displayed line that runs as several atomic transactions (hero
+      // mints, chunked under the packet limit). See the recruit step below.
+      kind: "batch";
+      id: string;
+      label: string;
+      txs: BatchTx[];
+      spendsSol?: boolean;
+    };
 
 interface JumpContext {
   owner: PublicKey;
@@ -90,6 +110,10 @@ const PROBE_CHUNK = 6;
  *  halts with BuildingSlotFull. */
 const INITIAL_BUILDING_SLOTS = 4;
 const SLOTS_PER_PLOT = 4;
+/** Hero mints packed per transaction. Three keeps even the 5-hero veteran tier
+ *  (two chunks) under the 1232-byte packet limit with margin; one tx of five
+ *  overflows. */
+const HEROES_PER_TX = 3;
 
 /** `build + N×speedup + complete` for one building — the calibrated build tx. */
 function buildSpeedupIxs(
@@ -164,24 +188,44 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     });
   }
 
-  // 3. Recruit heroes. One minted NFT per template, each its own atomic tx with
-  //    an ephemeral mint keypair as a co-signer. SOL to the treasury. Run after
-  //    the subscription so its XP has cleared each hero's level gate.
-  for (const h of recipe.heroes) {
-    const heroMint = Keypair.generate();
-    steps.push({
-      kind: "fixed",
-      id: `hero-${h.templateId}`,
-      label: `Recruit ${getTemplateMeta(h.templateId)?.name ?? `Hero ${h.templateId}`}`,
-      computeUnits: 90_000,
-      signers: [heroMint],
-      spendsSol: true,
-      instructions: [
-        createMintHeroInstruction(
+  // 3. Recruit heroes. Shown as a single step (not one line per hero), minted
+  //    in size-bounded chunks so even the largest tier stays under the
+  //    1232-byte packet limit: five mints in one tx overflows, so HEROES_PER_TX
+  //    chunks it (settled/established fit one tx, veteran takes two). Each chunk
+  //    is one atomic tx with its mints' ephemeral keypairs as co-signers, and is
+  //    journalled on its own id so a partial run resumes past confirmed chunks.
+  //    SOL to the treasury; run after the subscription so its XP has cleared
+  //    each hero's level gate.
+  if (recipe.heroes.length > 0) {
+    const txs: BatchTx[] = [];
+    for (let i = 0; i < recipe.heroes.length; i += HEROES_PER_TX) {
+      const chunk = recipe.heroes.slice(i, i + HEROES_PER_TX);
+      const signers: Keypair[] = [];
+      const instructions = chunk.map((h) => {
+        const heroMint = Keypair.generate();
+        signers.push(heroMint);
+        return createMintHeroInstruction(
           { minter: owner, gameEngine, heroMint: heroMint.publicKey, treasury },
           { templateId: h.templateId },
-        ),
-      ],
+        );
+      });
+      txs.push({
+        id: `heroes-${i / HEROES_PER_TX}`,
+        instructions,
+        computeUnits: 90_000 * chunk.length,
+        signers,
+      });
+    }
+    const first = recipe.heroes[0];
+    steps.push({
+      kind: "batch",
+      id: "heroes",
+      label:
+        recipe.heroes.length === 1
+          ? `Recruit ${getTemplateMeta(first.templateId)?.name ?? `Hero ${first.templateId}`}`
+          : `Recruit ${recipe.heroes.length} heroes`,
+      spendsSol: true,
+      txs,
     });
   }
 
@@ -484,6 +528,45 @@ export function useJumpAhead() {
       try {
         for (const step of toRun) {
           activeStepId = step.id;
+
+          // Batched step (hero mints): one displayed line, one wallet prompt per
+          // size-bounded chunk. Each chunk is journalled the instant it confirms,
+          // so a partial run resumes past the chunks already done and never
+          // re-mints them. Detail tracks "k/n" chunks across the run.
+          if (step.kind === "batch") {
+            const total = step.txs.length;
+            let completed = step.txs.filter((t) => journal.done.includes(t.id)).length;
+            if (completed === total) {
+              setStepStatus(step.id, "done", "done");
+              continue;
+            }
+            setStepStatus(step.id, "active", `${completed}/${total}`);
+            for (const unit of step.txs) {
+              if (journal.done.includes(unit.id)) continue;
+              const utx = await client.buildVersionedTransaction(unit.instructions, publicKey, {
+                computeUnits: unit.computeUnits,
+              });
+              if (unit.signers?.length) utx.sign(unit.signers);
+              const usigned = await signTransaction(utx);
+              const usig = await client.connection.sendRawTransaction(usigned.serialize(), {
+                skipPreflight: false,
+              });
+              appendLog(`${step.label} — sent ${usig.slice(0, 8)}…`);
+              await confirm(usig);
+              journal.done.push(unit.id);
+              saveJump(journal);
+              completed += 1;
+              const allDone = completed === total;
+              setStepStatus(
+                step.id,
+                allDone ? "done" : "active",
+                allDone ? "done" : `${completed}/${total}`,
+              );
+            }
+            appendLog(`${step.label} — confirmed.`);
+            continue;
+          }
+
           setStepStatus(step.id, "active");
 
           // Build the transaction — calibrated for build steps. The tx is
@@ -603,7 +686,9 @@ export function useJumpAhead() {
         // packs) is still pending, verify the balance covers the full tier price
         // (fixed packs/heroes + the live subscription). The step is read off the
         // plan via its `spendsSol` flag, so the gate can't drift from step order.
-        const firstSolStep = planned.find((p) => p.kind === "fixed" && p.spendsSol);
+        const firstSolStep = planned.find(
+          (p) => (p.kind === "fixed" || p.kind === "batch") && p.spendsSol,
+        );
         if (firstSolStep && !journal.done.includes(firstSolStep.id)) {
           let balance: number | null = null;
           try {
@@ -630,11 +715,28 @@ export function useJumpAhead() {
         const skipCount = planned.filter((p) => journal.done.includes(p.id)).length;
         setState({
           steps: planned.map((p) => {
+            // A batch's id is never journalled (its chunks are), so read its
+            // initial status from how many chunks are already done.
+            if (p.kind === "batch") {
+              const total = p.txs.length;
+              const doneCount = p.txs.filter((t) => journal.done.includes(t.id)).length;
+              const allDone = doneCount === total;
+              return {
+                id: p.id,
+                label: p.label,
+                status: (allDone ? "done" : "pending") as JumpStep["status"],
+                detail: allDone
+                  ? "already done"
+                  : doneCount > 0
+                    ? `${doneCount}/${total}`
+                    : undefined,
+              };
+            }
             const done = journal.done.includes(p.id);
             return {
               id: p.id,
               label: p.label,
-              status: done ? "done" : "pending",
+              status: (done ? "done" : "pending") as JumpStep["status"],
               detail: done ? "already done" : undefined,
             };
           }),

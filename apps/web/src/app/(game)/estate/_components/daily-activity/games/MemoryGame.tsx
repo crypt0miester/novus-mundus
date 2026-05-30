@@ -1,8 +1,12 @@
 "use client";
 
+import { animate, stagger, waapi } from "animejs";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
-import { GameHeader, GameTimer, ResultBadge, tierFromMemoryMoves } from "./_shell";
+import { BLOOM, DUR, PRESS, SETTLE, STAGGER } from "@/lib/motion/tokens";
+import { prefersReducedMotion } from "@/lib/utils";
+import { GameHeader, GameTimer, ResultBadge, celebrate, tierFromMemoryMoves } from "./_shell";
 
 /** Client-safe Memory presentation (server `memory` archetype). */
 export interface MemoryPresentation {
@@ -60,9 +64,25 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
   const [faceUp, setFaceUp] = useState<number | null>(null);
   const [moves, setMoves] = useState(0);
   const [pulseIdx, setPulseIdx] = useState<number[] | null>(null);
+  const [mismatchIdx, setMismatchIdx] = useState<number[] | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [summary, setSummary] = useState<{ moves: number; pairs: number } | null>(null);
+
+  // Motion refs. gridRef roots the deal-in scope; flipRefs hold each tile's
+  // inner 3D flip element so flips are driven imperatively on the state edge
+  // (not as a CSS transition that fights anime). summaryCardRef / summaryNumRef
+  // feed the shared celebrate() slot-roll.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const flipRefs = useRef<(HTMLDivElement | null)[]>([]);
+  const summaryCardRef = useRef<HTMLDivElement>(null);
+  const summaryNumRef = useRef<HTMLSpanElement>(null);
+  // Edge state for the flip choreography: which tiles were face-up / recoiling /
+  // pulsing on the previous render, so each one-shot fires on the transition.
+  const prevShownRef = useRef<Set<number>>(new Set());
+  const prevMismatchRef = useRef<Set<number>>(new Set());
+  const prevPulseRef = useRef<Set<number>>(new Set());
+
   // Track every pending setTimeout so we can clear them on unmount — without
   // this, a player navigating away mid-game can fire setState on an unmounted
   // component (silent in React 18 but defensive) and, worse, the 1.8s summary
@@ -84,6 +104,7 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
   }, []);
 
   const matchedPairs = matched.size / 2;
+  const cols = tiles <= 12 ? 4 : 6;
 
   const flip = useCallback(
     async (i: number) => {
@@ -118,12 +139,16 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
           // stays locked (busy) until they turn back down, so a fast tap can't
           // race the timeout that clears `faceUp`.
           const pair = r.pair ?? [r.flipped];
+          // Mark the pair so the tiles recoil (outElastic) while both faces are
+          // up; cleared on the flip-back below.
+          setMismatchIdx(pair);
           trackedTimeout(() => {
             setRevealed((prev) => {
               const next = { ...prev };
               for (const t of pair) delete next[t];
               return next;
             });
+            setMismatchIdx(null);
             setFaceUp(null);
             setBusy(false);
           }, 900);
@@ -136,7 +161,110 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
     [busy, submitting, matched, faceUp, revealed, sendMove, onComplete, pairs, trackedTimeout],
   );
 
-  const cols = tiles <= 12 ? 4 : 6;
+  // Deal-in: tiles ripple out from the grid center, then a cheap waapi
+  // scale/opacity breathe loops on the facedown faces. Both are entrance /
+  // ambient and own the CSS resting state, so the default scope.revert() teardown
+  // is correct. Under reduced motion the builder sets the final state and bails
+  // before the breathe (an instant-but-looping breathe is wasted compositor work).
+  useAnimeScope({ root: gridRef, deps: [tiles, cols] }, ({ reduce }) => {
+    const cells = gridRef.current?.querySelectorAll<HTMLElement>("[data-tile]");
+    if (!cells || cells.length === 0) return;
+    if (reduce) {
+      for (const el of cells) {
+        el.style.opacity = "1";
+        el.style.transform = "none";
+      }
+      return;
+    }
+    animate(cells, {
+      opacity: [0, 1],
+      scale: [0.6, 1],
+      ease: SETTLE,
+      delay: stagger(STAGGER.tight, { grid: [cols, Math.ceil(tiles / cols)], from: "center" }),
+    });
+    // Ambient idle breathe on facedown faces (transform + opacity only, so the
+    // compositor carries it through busy main-thread work / submits).
+    const faces = gridRef.current?.querySelectorAll<HTMLElement>("[data-facedown]");
+    if (faces && faces.length > 0) {
+      waapi.animate(faces, {
+        scale: [1, 1.04],
+        opacity: [0.85, 1],
+        duration: 2200,
+        ease: "inOutSine",
+        loop: true,
+        alternate: true,
+        delay: stagger(90),
+      });
+    }
+  });
+
+  // Flip / match / mismatch choreography, edge-detected so each one-shot fires
+  // on the transition (not every render / poll). rotateY swings the two-face
+  // tile; match springs (BLOOM), mismatch recoils (outElastic). FLIP-style
+  // settle-to-identity, so cancel rather than revert is implicit (these are
+  // imperative animate() calls cleaned by overwrite on the next edge).
+  useEffect(() => {
+    if (prefersReducedMotion()) {
+      // Snap each face to its resting rotation; no swing.
+      for (let i = 0; i < tiles; i++) {
+        const el = flipRefs.current[i];
+        if (!el) continue;
+        const up = matched.has(i) || revealed[i] !== undefined;
+        el.style.transform = `rotateY(${up ? 180 : 0}deg)`;
+      }
+      return;
+    }
+    const shownNow = new Set<number>();
+    for (let i = 0; i < tiles; i++) {
+      if (matched.has(i) || revealed[i] !== undefined) shownNow.add(i);
+    }
+    // Flip edges: newly face-up -> 180, newly face-down -> 0.
+    for (let i = 0; i < tiles; i++) {
+      const el = flipRefs.current[i];
+      if (!el) continue;
+      const isUp = shownNow.has(i);
+      const wasUp = prevShownRef.current.has(i);
+      if (isUp !== wasUp) {
+        animate(el, { rotateY: isUp ? 180 : 0, ease: PRESS, duration: DUR.fast });
+      }
+    }
+    prevShownRef.current = shownNow;
+
+    // Match pulse: spring the matched pair (scale punch).
+    const pulseNow = new Set(pulseIdx ?? []);
+    for (const i of pulseNow) {
+      if (prevPulseRef.current.has(i)) continue;
+      const el = flipRefs.current[i];
+      if (el) animate(el, { scale: [1, 1.16, 1], ease: BLOOM });
+    }
+    prevPulseRef.current = pulseNow;
+
+    // Mismatch recoil: outElastic shake on the rejected pair.
+    const mismatchNow = new Set(mismatchIdx ?? []);
+    for (const i of mismatchNow) {
+      if (prevMismatchRef.current.has(i)) continue;
+      const el = flipRefs.current[i];
+      if (el)
+        animate(el, { x: [0, -6, 5, -3, 0], ease: "outElastic(1, 0.45)", duration: DUR.base });
+    }
+    prevMismatchRef.current = mismatchNow;
+  }, [tiles, matched, revealed, pulseIdx, mismatchIdx]);
+
+  // Summary slot-roll via the shared celebration helper.
+  useEffect(() => {
+    if (!summary) return;
+    const card = summaryCardRef.current;
+    const number = summaryNumRef.current;
+    if (!card || !number) return;
+    return celebrate({
+      card,
+      number,
+      score: summary.moves,
+      format: (v) => `${v} flips`,
+      onTick: () => {},
+    });
+  }, [summary]);
+
   const summaryTier = summary ? tierFromMemoryMoves(summary.moves, summary.pairs) : null;
 
   return (
@@ -152,6 +280,7 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
       <GameTimer totalMs={MS_PER_PAIR * pairs} paused={submitting || !!summary} />
 
       <div
+        ref={gridRef}
         className="grid gap-2"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}
       >
@@ -159,37 +288,67 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
           const isMatched = matched.has(i);
           const face = revealed[i];
           const shown = face !== undefined;
-          const isPulsing = pulseIdx?.includes(i) ?? false;
           return (
             <button
               key={i}
+              type="button"
+              data-tile
               disabled={busy || submitting || isMatched || shown || !!summary}
               onClick={() => flip(i)}
-              className={`flex aspect-square items-center justify-center rounded-lg border text-2xl font-bold transition-all ${
-                isMatched
-                  ? `border-border-gold/50 bg-accent/30 ${isPulsing ? "scale-110 shadow-[0_0_18px_-2px_rgba(220,180,90,0.7)]" : "opacity-60"}`
-                  : shown
-                    ? "border-border-gold bg-accent/20"
-                    : "border-border-default bg-surface-raised hover:border-border-gold/50"
-              }`}
+              className="relative aspect-square select-none rounded-lg text-2xl font-bold"
+              // Start hidden so the deal-in ripple (which runs on mount) brings
+              // each tile up; the scope sets opacity 1 on both the animated and
+              // reduced-motion paths, so the board is never left invisible.
+              style={{ perspective: "600px", opacity: 0 }}
             >
-              {shown ? (
-                <span className={SYMBOL_COLORS[face % SYMBOL_COLORS.length]}>
-                  {SYMBOLS[face % SYMBOLS.length]}
-                </span>
-              ) : (
-                <span className="text-text-muted/50">◇</span>
-              )}
+              {/* The flip body. rotateY is driven imperatively on the state edge;
+                  preserve-3d keeps both faces in 3D space so the swing reads. */}
+              <div
+                ref={(el) => {
+                  flipRefs.current[i] = el;
+                }}
+                className="absolute inset-0"
+                style={{ transformStyle: "preserve-3d" }}
+              >
+                {/* Facedown face at rotateY(0). */}
+                <div
+                  data-facedown
+                  className="absolute inset-0 flex items-center justify-center rounded-lg border border-border-default bg-surface-raised text-text-muted/50"
+                  style={{ backfaceVisibility: "hidden" }}
+                >
+                  ◇
+                </div>
+                {/* Revealed face at rotateY(180). Gold-framed when matched. */}
+                <div
+                  className={`absolute inset-0 flex items-center justify-center rounded-lg border ${
+                    isMatched
+                      ? "border-border-gold/50 bg-accent/30"
+                      : "border-border-gold bg-accent/20"
+                  }`}
+                  style={{
+                    backfaceVisibility: "hidden",
+                    transform: "rotateY(180deg)",
+                  }}
+                >
+                  {shown && (
+                    <span className={SYMBOL_COLORS[face % SYMBOL_COLORS.length]}>
+                      {SYMBOLS[face % SYMBOLS.length]}
+                    </span>
+                  )}
+                </div>
+              </div>
             </button>
           );
         })}
       </div>
 
       {summary && summaryTier ? (
-        <div className="card accent-border animate-in fade-in zoom-in-95 text-center duration-300">
+        <div ref={summaryCardRef} className="card accent-border text-center">
           <div className="text-xs uppercase tracking-wider text-text-muted">Ledger reconciled</div>
           <div className="mt-2 font-display text-3xl font-bold tabular-nums text-text-gold">
-            {summary.moves} flips
+            <span ref={summaryNumRef} className="inline-block">
+              0 flips
+            </span>
           </div>
           <div className="mt-2 flex justify-center">
             <ResultBadge tier={summaryTier} />

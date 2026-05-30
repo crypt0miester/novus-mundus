@@ -2,7 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
-import { PublicKey } from "@solana/web3.js";
+import { PublicKey, PACKET_DATA_SIZE } from "@solana/web3.js";
 import type { TransactionInstruction } from "@solana/web3.js";
 import type { Keypair, VersionedTransaction, AddressLookupTableAccount } from "@solana/web3.js";
 import { useNovusMundusClient } from "@/lib/solana/provider";
@@ -68,7 +68,6 @@ function waitForTxViaLogSub(signature: string, timeoutMs: number): Promise<strin
 // never fail because of a presence ping). lastPresencePingAt is module-scoped and
 // ephemeral by design — it resets on reload, which only means one extra ping.
 const PRESENCE_PING_THROTTLE_MS = 60_000;
-const PACKET_DATA_SIZE = 1232;
 let lastPresencePingAt = 0;
 
 // Serialized byte length of a (possibly unsigned) versioned tx; treats an

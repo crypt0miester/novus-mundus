@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { animate, createDraggable, type Draggable } from "animejs";
+import { PRESS } from "@/lib/motion/tokens";
 import { CairnOrb } from "./CairnOrb";
 import { CairnReport } from "./CairnReport";
 import { useAct } from "@/lib/hooks/useAct";
@@ -118,6 +119,10 @@ export function CairnFloating() {
         },
       },
       y: true,
+      // Name the release spring so the edge-snap drag-settle and the tap
+      // squeeze-pulse below share one material (PRESS), instead of each
+      // inventing its own bounce.
+      releaseEase: PRESS,
       dragThreshold: 6, // travel under this stays a tap, not a drag
       onGrab: closePopover, // any grab — drag or tap — dismisses the popover
       onSettle: (self) => {
@@ -208,12 +213,14 @@ export function CairnFloating() {
     const d = dragRef.current;
     setPopPos(d ? { x: d.x, y: d.y } : null);
     if (!reducedMotion() && btnRef.current) {
+      // One PRESS spring recoil, shared with the Draggable releaseEase so a tap
+      // and a drag-settle feel like the same stone. composition:"blend" layers
+      // the squeeze over whatever transform Draggable holds (plain [from,to]
+      // array only under blend), so the tap never fights the drag position.
       animate(btnRef.current, {
-        scale: [
-          { to: 0.85, duration: 100 },
-          { to: 1, duration: 300 },
-        ],
-        ease: "outBack",
+        scale: [0.85, 1],
+        ease: PRESS,
+        composition: "blend",
       });
     }
     setMounted(true);

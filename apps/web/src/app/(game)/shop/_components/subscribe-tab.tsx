@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState, type ReactNode } from "react";
+import { useMemo, useRef, useState, type ReactNode } from "react";
+import { animate, createTimeline, stagger, utils } from "animejs";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useSubscriptionStatus } from "@/lib/hooks/useDerived";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -11,6 +12,8 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { formatNumber } from "@/lib/utils";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
+import { SETTLE } from "@/lib/motion/tokens";
 import {
   PaymentMethodSelector,
   formatPaymentPrice,
@@ -58,7 +61,6 @@ const theme = tierPalette;
 const NO_CHARTER_THEME = {
   accent: "#3f3f46", // zinc-700
   bright: "#a1a1aa", // zinc-400
-  glow: "rgba(82, 82, 91, 0)",
 } as const;
 
 /** BN | number | undefined to number */
@@ -206,8 +208,66 @@ export function SubscribeTab() {
   const daysLeft = sub.active && sub.expiresAt > 0 ? (sub.expiresAt - nowSec) / 86_400 : null;
   const expiringSoon = daysLeft != null && daysLeft < 3;
 
+  // The whole tab (current charter + ladder). The expiry pulse lives in the
+  // current-charter card; the deal-in + float live in the grid. Both scope off
+  // refs within this subtree.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+
+  // Deal the cards in left-to-right (spring rise), cascade each card's perk list
+  // as it lands, and float the recommended tier higher on an outElastic spring
+  // (replacing the static md:-translate-y-3 lift). Keyed on the tier count + the
+  // recommended index so it replays only when the ladder shape changes, not on
+  // the per-second nowSec tick.
+  useAnimeScope({ root: gridRef, deps: [tiers.length, recommendedTier] }, ({ reduce }) => {
+    const cards = gridRef.current?.querySelectorAll<HTMLElement>("[data-tier-card]");
+    const floatEl = gridRef.current?.querySelector<HTMLElement>("[data-recommended-float]");
+
+    if (reduce) {
+      // Set the final resting state directly, skip the choreography.
+      if (cards) for (const c of cards) utils.set(c, { opacity: 1, translateY: 0 });
+      if (floatEl) utils.set(floatEl, { translateY: -12 });
+      return;
+    }
+
+    const tl = createTimeline({ defaults: { ease: SETTLE } });
+
+    // Cards rise into place, dealt left-to-right. Perk lists cascade down just
+    // behind the cards so each list reads as landing with its card.
+    if (cards && cards.length > 0) {
+      tl.add(cards, { opacity: [0, 1], translateY: [22, 0], duration: 520, delay: stagger(90) }, 0);
+      tl.add(
+        "[data-perks] > li",
+        { opacity: [0, 1], translateY: [8, 0], duration: 360, delay: stagger(45) },
+        120,
+      );
+    }
+
+    // The recommended tier floats higher on a springy outElastic settle so the
+    // lift reads as physics rather than a static class offset.
+    if (floatEl) {
+      tl.add(floatEl, { translateY: [0, -12], ease: "outElastic(1, .6)", duration: 900 }, 240);
+    }
+  });
+
+  // Conditional expiry pulse, keyed on the real subscription_end via
+  // expiringSoon. A looping breathe (scale/opacity) on the lapse readout that
+  // early-returns under reduced motion and only runs while actually lapsing soon.
+  useAnimeScope({ root: rootRef, deps: [expiringSoon] }, ({ reduce }) => {
+    if (reduce || !expiringSoon) return;
+    const pulseEl = rootRef.current?.querySelector<HTMLElement>("[data-expiry-pulse]");
+    if (!pulseEl) return;
+    animate(pulseEl, {
+      scale: [1, 1.04, 1],
+      opacity: [0.85, 1, 0.85],
+      duration: 1400,
+      ease: "inOutQuad",
+      loop: true,
+    });
+  });
+
   return (
-    <div className="space-y-6">
+    <div ref={rootRef} className="space-y-6">
       <div>
         <h2 className="font-display text-lg font-semibold text-text-primary">
           A Patron&apos;s Charter
@@ -237,7 +297,7 @@ export function SubscribeTab() {
             </div>
           </div>
           {sub.active && sub.expiresAt > 0 && (
-            <div className="text-right">
+            <div data-expiry-pulse className="text-right">
               <div
                 className={`flex items-center justify-end gap-1 text-[10px] uppercase tracking-wider ${
                   expiringSoon ? "text-danger" : "text-text-muted"
@@ -289,7 +349,7 @@ export function SubscribeTab() {
       <PaymentMethodSelector product="usd" value={paymentMethod} onChange={setPaymentMethod} />
 
       {/* ─── Tier ladder (paid charters) ─── */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div ref={gridRef} className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {tiers.map((t) => {
           const idx = t.tierIndex ?? tiers.indexOf(t);
           const th = theme(idx);
@@ -343,23 +403,28 @@ export function SubscribeTab() {
           return (
             <div
               key={idx}
-              className={`relative flex flex-col rounded-xl border bg-surface-raised p-5 transition-transform ${
-                isRecommended ? "md:-translate-y-3" : ""
-              } ${isLocked ? "opacity-60" : ""}`}
+              data-tier-card
+              {...(isRecommended ? { "data-recommended-float": "" } : {})}
+              className={`relative flex flex-col rounded-xl border bg-surface-raised p-5 ${
+                isLocked ? "opacity-60" : ""
+              }`}
               style={{
                 borderColor: th.accent,
-                boxShadow: isRecommended || isCurrent ? `0 8px 36px ${th.glow}` : undefined,
               }}
             >
-              {isRecommended && (
-                <div
-                  className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-black"
-                  style={{ background: th.bright }}
-                >
-                  <Sparkles className="h-3 w-3" />
-                  {effectiveTier === 0 ? "Most Popular" : "Your Next Step"}
-                </div>
-              )}
+              {/* Always rendered (opacity-toggled, not display-toggled) so the
+                  badge never flashes in on the float beat. */}
+              <div
+                className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-black"
+                style={{
+                  background: th.bright,
+                  opacity: isRecommended ? 1 : 0,
+                  pointerEvents: isRecommended ? undefined : "none",
+                }}
+              >
+                <Sparkles className="h-3 w-3" />
+                {effectiveTier === 0 ? "Most Popular" : "Your Next Step"}
+              </div>
               {isCurrent && (
                 <div
                   className="absolute -top-3 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full px-3 py-1 text-[10px] font-bold uppercase tracking-wider"
@@ -416,7 +481,7 @@ export function SubscribeTab() {
               </div>
 
               {/* Perks */}
-              <ul className="mt-4 flex-1 space-y-2">
+              <ul data-perks className="mt-4 flex-1 space-y-2">
                 <PerkRow icon={Database} color={th.bright} strong>
                   Vault holds{" "}
                   <span className="font-semibold text-text-gold">{formatNumber(cap)} NOVI</span>{" "}

@@ -19,6 +19,8 @@
  * (e.g. "deselect city") doesn't fire.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { prefersReducedMotion } from "@/lib/utils";
+import { createCameraRig, type CameraRig, type CameraState } from "@/components/world/cameraRig";
 
 interface Options {
   vbWidth: number;
@@ -35,9 +37,65 @@ interface State {
 
 const IDENTITY: State = { scale: 1, tx: 0, ty: 0 };
 
+// Seed the rig's channels from a React State before easing, so an eased motion
+// starts from exactly where the map currently sits.
+const IDENTITY_CAM = (s: State): CameraState => ({ panX: s.tx, panY: s.ty, zoom: s.scale });
+
 export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Options) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [state, setState] = useState<State>(IDENTITY);
+
+  // Inertial layer (feature 4.3). The shared camera rig eases smooth zoom and a
+  // velocity-seeded fling, streaming each frame back into React state so
+  // `zoom.transform` / `zoom.scale` stay the single source of truth and every
+  // counter-scale layer keeps reading the same value (no separate render
+  // model, no desync). Built lazily on first use; if it ever fails the gesture
+  // path is untouched and the map stays fully interactive.
+  const stateRef = useRef<State>(state);
+  stateRef.current = state;
+  const rigRef = useRef<CameraRig | null>(null);
+  const ensureRig = useCallback((): CameraRig | null => {
+    if (rigRef.current) return rigRef.current;
+    try {
+      const cur = stateRef.current;
+      rigRef.current = createCameraRig({
+        initial: { panX: cur.tx, panY: cur.ty, zoom: cur.scale },
+        getBounds: () => ({ vbWidth, vbHeight, minScale, maxScale }),
+        onFrame: (_t, s) => setState({ scale: s.zoom, tx: s.panX, ty: s.panY }),
+      });
+    } catch {
+      rigRef.current = null;
+    }
+    return rigRef.current;
+  }, [vbWidth, vbHeight, minScale, maxScale]);
+
+  // Pan velocity (viewBox units/sec) sampled across the last move, seeded into
+  // the rig's spring fling on release so the map glides to a stop. Tracked in
+  // refs so it never triggers a render mid-drag.
+  const velRef = useRef<{ vx: number; vy: number; t: number }>({ vx: 0, vy: 0, t: 0 });
+  const trackVelocity = useCallback((vbdx: number, vbdy: number) => {
+    const now = performance.now();
+    const dt = now - velRef.current.t;
+    if (dt > 0 && dt < 120) {
+      // Blend toward the instantaneous velocity so a flick at release wins.
+      const inst = { vx: (vbdx / dt) * 1000, vy: (vbdy / dt) * 1000 };
+      velRef.current = { vx: inst.vx * 0.7 + velRef.current.vx * 0.3, vy: inst.vy * 0.7 + velRef.current.vy * 0.3, t: now };
+    } else {
+      velRef.current = { vx: 0, vy: 0, t: now };
+    }
+  }, []);
+  // Hand the sampled release velocity to the rig as a fling (skipped under
+  // reduced motion or when the gesture ended slow).
+  const flingFromVelocity = useCallback(() => {
+    const { vx, vy } = velRef.current;
+    velRef.current = { vx: 0, vy: 0, t: 0 };
+    if (prefersReducedMotion()) return;
+    if (Math.hypot(vx, vy) < 60) return;
+    const rig = ensureRig();
+    if (!rig) return;
+    rig.set(IDENTITY_CAM(stateRef.current));
+    rig.fling(vx, vy);
+  }, [ensureRig]);
 
   // Mutable gesture refs — written from event handlers, no re-render churn.
   const lastTouch = useRef<{ x: number; y: number } | null>(null);
@@ -67,22 +125,43 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
     [vbWidth, vbHeight, minScale, maxScale],
   );
 
-  const reset = useCallback(() => setState(IDENTITY), []);
+  const reset = useCallback(() => {
+    // Stop any fling so the rig doesn't keep streaming frames over the reset.
+    rigRef.current?.stop();
+    const rig = ensureRig();
+    if (rig && !prefersReducedMotion()) {
+      rig.set(IDENTITY_CAM(stateRef.current));
+      rig.flyTo({ panX: 0, panY: 0, zoom: 1 }, { duration: 420, ease: "outExpo" });
+      return;
+    }
+    setState(IDENTITY);
+  }, [ensureRig]);
 
   // Zoom around a point in viewBox coords, keeping that point under the cursor.
+  // `smooth` eases the dolly via the rig (wheel/double-click); pinch passes
+  // raw so the gesture tracks the fingers 1:1.
   const zoomAt = useCallback(
-    (vbX: number, vbY: number, factor: number) => {
-      setState((prev) => {
-        const newScale = Math.max(minScale, Math.min(maxScale, prev.scale * factor));
-        const f = newScale / prev.scale;
-        return clamp({
-          scale: newScale,
-          tx: vbX - (vbX - prev.tx) * f,
-          ty: vbY - (vbY - prev.ty) * f,
-        });
+    (vbX: number, vbY: number, factor: number, smooth = false) => {
+      const prev = stateRef.current;
+      const newScale = Math.max(minScale, Math.min(maxScale, prev.scale * factor));
+      const f = newScale / prev.scale;
+      const next = clamp({
+        scale: newScale,
+        tx: vbX - (vbX - prev.tx) * f,
+        ty: vbY - (vbY - prev.ty) * f,
       });
+      if (smooth) {
+        const rig = ensureRig();
+        if (rig && !prefersReducedMotion()) {
+          rig.set(IDENTITY_CAM(prev));
+          rig.flyTo({ panX: next.tx, panY: next.ty, zoom: next.scale }, { duration: 260, ease: "outExpo" });
+          return;
+        }
+      }
+      rigRef.current?.stop();
+      setState(next);
     },
-    [clamp, minScale, maxScale],
+    [clamp, minScale, maxScale, ensureRig],
   );
 
   useEffect(() => {
@@ -105,7 +184,8 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
       // huge, so dampen them so each notch isn't an extreme zoom step.
       const delta = e.ctrlKey ? e.deltaY * 0.35 : e.deltaY;
       const factor = delta < 0 ? 1.12 : 1 / 1.12;
-      zoomAt(x, y, factor);
+      // Eased dolly so the wheel zoom settles instead of hard-cutting.
+      zoomAt(x, y, factor, true);
     };
 
     // ── Mouse ──────────────────────────────────────────────────────────────
@@ -114,9 +194,12 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
 
     const onMouseDown = (e: MouseEvent) => {
       if (e.button !== 0) return;
+      // A fresh grab interrupts any in-flight fling/zoom and reseats truth.
+      rigRef.current?.stop();
       mouseDragStart.current = { x: e.clientX, y: e.clientY };
       mouseLast.current = { x: e.clientX, y: e.clientY };
       mouseDidPan.current = false;
+      velRef.current = { vx: 0, vy: 0, t: performance.now() };
     };
 
     const onMouseMove = (e: MouseEvent) => {
@@ -135,11 +218,15 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
       const vbdx = (dx / r.width) * vbWidth;
       const vbdy = (dy / r.height) * vbHeight;
       setState((prev) => clamp({ scale: prev.scale, tx: prev.tx + vbdx, ty: prev.ty + vbdy }));
+      trackVelocity(vbdx, vbdy);
       mouseLast.current = { x: e.clientX, y: e.clientY };
     };
 
     const onMouseUp = () => {
-      if (mouseDidPan.current) suppressClick.current = true;
+      if (mouseDidPan.current) {
+        suppressClick.current = true;
+        flingFromVelocity();
+      }
       mouseDragStart.current = null;
       mouseLast.current = null;
       mouseDidPan.current = false;
@@ -165,10 +252,13 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
 
     const onTouchStart = (e: TouchEvent) => {
       const ts = e.touches;
+      // Any new touch interrupts an in-flight fling/zoom.
+      rigRef.current?.stop();
       if (ts.length === 1) {
         // Track for pan but don't start until threshold is crossed.
         lastTouch.current = { x: ts[0]!.clientX, y: ts[0]!.clientY };
         panning.current = false;
+        velRef.current = { vx: 0, vy: 0, t: performance.now() };
         // Double-tap to reset.
         const now = Date.now();
         if (now - tapAt.current < 300) {
@@ -201,6 +291,7 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
           const vbdx = (dx / r.width) * vbWidth;
           const vbdy = (dy / r.height) * vbHeight;
           setState((prev) => clamp({ scale: prev.scale, tx: prev.tx + vbdx, ty: prev.ty + vbdy }));
+          trackVelocity(vbdx, vbdy);
           lastTouch.current = { x: ts[0]!.clientX, y: ts[0]!.clientY };
         }
       } else if (ts.length === 2 && pinchDist.current != null) {
@@ -224,6 +315,7 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
         // click that mobile browsers sometimes still emit.
         if (panning.current) {
           suppressClick.current = true;
+          flingFromVelocity();
           // Self-clear after a tick — some browsers never emit the click.
           window.setTimeout(() => {
             suppressClick.current = false;
@@ -257,7 +349,16 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
       el.removeEventListener("touchend", onTouchEnd);
       el.removeEventListener("touchcancel", onTouchEnd);
     };
-  }, [clamp, zoomAt, reset, vbWidth, vbHeight]);
+  }, [clamp, zoomAt, reset, vbWidth, vbHeight, trackVelocity, flingFromVelocity]);
+
+  // Tear the rig down on unmount so the createAnimatable channels are reverted
+  // and the fling rAF can never outlive the component.
+  useEffect(() => {
+    return () => {
+      rigRef.current?.revert();
+      rigRef.current = null;
+    };
+  }, []);
 
   return {
     containerRef,

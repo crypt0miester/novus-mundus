@@ -1,7 +1,9 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { animate, stagger } from "animejs";
+import { animate, stagger, utils } from "animejs";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
+import { DUR, STAGGER, EASE } from "@/lib/motion/tokens";
 import { BootRing } from "./BootRing";
 
 interface LoadingStep {
@@ -31,15 +33,14 @@ export function LoadingSequence({
   }, [screen]);
 
   const containerRef = useRef<HTMLDivElement>(null);
-  const stepsRef = useRef<(HTMLDivElement | null)[]>([]);
   const dataDone = steps.every((s) => completedKeys.has(s.key));
 
   // Hold the boot scene for a minimum interval even when queries resolve
-  // instantly from cache — without this, `LoadingSequence` unmounts inside
-  // the same React commit and `BootRing`'s Three.js renderer never gets a
-  // frame to paint. The ritual reads as a flash of nothing; the ring is
-  // wasted. 900ms is short enough to not annoy on warm caches, long enough
-  // for the rings to draw two full breathing cycles.
+  // instantly from cache. Without this, `LoadingSequence` unmounts inside the
+  // same React commit and `BootRing`'s Three.js renderer never gets a frame to
+  // paint. The ritual reads as a flash of nothing; the ring is wasted. 900ms is
+  // short enough to not annoy on warm caches, long enough for the rings to draw
+  // two full breathing cycles.
   const [minHeld, setMinHeld] = useState(false);
   useEffect(() => {
     const id = setTimeout(() => setMinHeld(true), 900);
@@ -47,47 +48,87 @@ export function LoadingSequence({
   }, []);
   const allDone = dataDone && minHeld;
 
-  // Stagger step entrances
-  useEffect(() => {
-    animate(stepsRef.current.filter(Boolean), {
-      x: [-20, 0],
-      opacity: [0, 1],
-      delay: stagger(120),
-      duration: 400,
-      ease: "outQuad",
-    });
-  }, []);
+  // One scoped reveal-and-stamp lifecycle. The scope roots every tween at the
+  // boot container so cleanup is a single scope teardown on unmount (the old
+  // forEach spawned uncleaned animations). It re-runs on the data signature
+  // below so newly-completed steps stamp on their edge; the entrance only ever
+  // plays once because already-mounted rows are skipped via `data-entered`, and
+  // each `.check` is stamped at most once via `data-stamped`.
+  const entryDoneKey = steps.map((s) => s.key).join("|");
+  const stampSig = steps.map((s) => (completedKeys.has(s.key) ? "1" : "0")).join("");
+  useAnimeScope(
+    // Re-runs on the data signature so newly-completed steps stamp on their
+    // edge, but cleanup must NOT revert: this lifecycle settles rows and checks
+    // to their final inline state, and reverting between generations would strip
+    // those committed styles and flash already-entered rows back to opacity 0.
+    // Cancel-only teardown leaves the settled state and just kills in-flight
+    // tweens, which is also correct for the final unmount (the node is gone).
+    { root: containerRef, deps: [entryDoneKey, stampSig, allDone], revertOnCleanup: false },
+    ({ reduce }) => {
+      const root = containerRef.current;
+      if (!root) return;
 
-  // Mark steps as complete with checkmark animation
-  useEffect(() => {
-    stepsRef.current.forEach((el, i) => {
-      if (!el) return;
-      const step = steps[i];
-      if (completedKeys.has(step.key)) {
-        const check = el.querySelector(".check");
-        if (check) {
-          animate(check, {
+      // Step rows that have not yet entered. utils.set pins their pre-entrance
+      // state on the same frame they mount so there is no flash before the
+      // staggered slide-in (the rows ship with `opacity-0`, but the x offset is
+      // not expressed in CSS).
+      const fresh = Array.from(
+        root.querySelectorAll<HTMLDivElement>("[data-step]:not([data-entered])"),
+      );
+      for (const el of fresh) el.dataset.entered = "1";
+
+      if (fresh.length > 0) {
+        if (reduce) {
+          // Set the final resting state directly, skip the choreography.
+          utils.set(fresh, { x: 0, opacity: 1 });
+        } else {
+          utils.set(fresh, { x: -20, opacity: 0 });
+          animate(fresh, {
+            x: [-20, 0],
+            opacity: [0, 1],
+            delay: stagger(STAGGER.loose),
+            duration: DUR.base,
+            ease: EASE.inOut,
+          });
+        }
+      }
+
+      // Checkmarks for steps that just reached `done`. Stamp each once on its
+      // edge (a step completing adds a `.check` element) via `data-stamped`.
+      const checks = Array.from(
+        root.querySelectorAll<HTMLSpanElement>(".check:not([data-stamped])"),
+      );
+      for (const el of checks) el.dataset.stamped = "1";
+
+      if (checks.length > 0) {
+        if (reduce) {
+          utils.set(checks, { scale: 1, rotate: "0deg" });
+        } else {
+          animate(checks, {
             scale: [0, 1],
             rotate: ["-45deg", "0deg"],
-            duration: 300,
+            delay: stagger(STAGGER.tight),
+            duration: DUR.fast,
             ease: "outBack",
           });
         }
       }
-    });
-  }, [completedKeys, steps]);
 
-  // Reveal content when all done
-  useEffect(() => {
-    if (allDone && containerRef.current) {
-      animate(containerRef.current, {
-        opacity: [1, 0],
-        y: [0, -20],
-        duration: 400,
-        ease: "inQuad",
-      });
-    }
-  }, [allDone]);
+      // Reveal: lift and fade the boot scene out once everything has settled.
+      if (allDone) {
+        if (reduce) {
+          utils.set(root, { opacity: 0, y: -20 });
+        } else {
+          animate(root, {
+            opacity: [1, 0],
+            y: [0, -20],
+            duration: DUR.base,
+            ease: EASE.inOut,
+          });
+        }
+      }
+    },
+  );
 
   if (allDone) return <>{children}</>;
 
@@ -101,14 +142,12 @@ export function LoadingSequence({
         NOVUS MUNDUS
       </h2>
       <div className="relative z-10 flex w-80 flex-col gap-3">
-        {steps.map((step, i) => {
+        {steps.map((step) => {
           const done = completedKeys.has(step.key);
           return (
             <div
               key={step.key}
-              ref={(el) => {
-                stepsRef.current[i] = el;
-              }}
+              data-step={step.key}
               className="flex items-center gap-3 opacity-0"
             >
               {done ? (

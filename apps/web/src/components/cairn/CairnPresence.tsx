@@ -2,7 +2,8 @@
 
 import { Fragment, useCallback, useEffect, useRef, useState } from "react";
 import { ChevronRight } from "lucide-react";
-import { animate, createSpring, createTimeline, stagger } from "animejs";
+import { animate, spring, createTimeline, stagger } from "animejs";
+import { PRESS } from "@/lib/motion/tokens";
 import { CairnOrb } from "./CairnOrb";
 import { useAct } from "@/lib/hooks/useAct";
 import { useCairnNudge } from "@/lib/hooks/useCairnNudge";
@@ -168,7 +169,7 @@ export function CairnPresence() {
     if (pressRef.current) {
       animate(pressRef.current, {
         scale: 1.09,
-        ease: createSpring({ stiffness: 130, damping: 11 }),
+        ease: spring({ stiffness: 130, damping: 11 }),
       });
     }
     if (glowRef.current) {
@@ -189,7 +190,7 @@ export function CairnPresence() {
     if (pressRef.current) {
       animate(pressRef.current, {
         scale: 1,
-        ease: createSpring({ stiffness: 130, damping: 14 }),
+        ease: spring({ stiffness: 130, damping: 14 }),
       });
     }
     if (glowRef.current) {
@@ -205,15 +206,18 @@ export function CairnPresence() {
     }
   };
 
-  // (3) Click — a press bounce, then the Chronicle opens in the RightPanel.
+  // (3) Click — a single spring recoil, then the Chronicle opens in the
+  // RightPanel. The recoil rides composition:"blend" on pressRef while the idle
+  // breathe loops on breathRef, so the two never fight: blend layers the squeeze
+  // over the resting scale instead of snapping it. Under blend we use a plain
+  // [from,to] array (no keyframes), and one PRESS spring replaces the old
+  // two-step duration tween so drag-settle and this squeeze share one material.
   const onClick = () => {
     if (!reducedMotion() && pressRef.current) {
       animate(pressRef.current, {
-        scale: [
-          { to: 0.86, duration: 90 },
-          { to: hovering.current ? 1.09 : 1, duration: 340 },
-        ],
-        ease: "outBack",
+        scale: [0.86, hovering.current ? 1.09 : 1],
+        ease: PRESS,
+        composition: "blend",
       });
     }
     show("The Chronicle", "chronicle");

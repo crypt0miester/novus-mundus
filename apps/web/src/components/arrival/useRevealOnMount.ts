@@ -16,7 +16,7 @@ interface RevealOptions {
 }
 
 /**
- * Staggers the `[data-reveal]` descendants of `ref` into view on mount —
+ * Staggers the `[data-reveal]` descendants of `ref` into view on mount,
  * the Arrival beats' entrance. The markup paints those elements at
  * `opacity-0`; this fades and lifts them to rest.
  *
@@ -41,12 +41,20 @@ export function useRevealOnMount(
       return;
     }
 
-    animate(targets, {
+    const a = animate(targets, {
       opacity: [0, 1],
       y: [translateY, 0],
       delay: stagger(staggerStep, { start: staggerStart }),
       duration,
       ease: "outQuad",
     });
+    // Cancel the in-flight reveal if the beat unmounts before it settles, so a
+    // rapid back/forward swap never leaks a running animation. cancel() (not
+    // revert) leaves the committed opacity/y where the swap takes over. Wrap the
+    // call in a block so the cleanup returns void, not the JSAnimation cancel()
+    // hands back (which would not satisfy React's Destructor type).
+    return () => {
+      a.cancel();
+    };
   }, [ref, staggerStep, staggerStart, translateY, duration]);
 }

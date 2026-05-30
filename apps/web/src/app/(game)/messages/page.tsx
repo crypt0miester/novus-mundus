@@ -27,6 +27,16 @@ import { useDomainNames } from "@/lib/hooks/useDomainNames";
 import { usePresence } from "@/lib/hooks/usePresence";
 import type { DmConvo } from "@/lib/store/war-table";
 
+// A stable per-peer number so each row's presence breathe jitters out of phase
+// with the rest of the roster instead of pulsing in lockstep.
+function seedFromPda(pda: string): number {
+  let h = 0;
+  for (let i = 0; i < pda.length; i++) {
+    h = (h * 31 + pda.charCodeAt(i)) | 0;
+  }
+  return Math.abs(h);
+}
+
 function ConversationRow({ convo, online }: { convo: DmConvo; online: boolean }) {
   return (
     <Link
@@ -38,6 +48,7 @@ function ConversationRow({ convo, online }: { convo: DmConvo; online: boolean })
         <PresenceDot
           online={online}
           hideOffline
+          seed={seedFromPda(convo.peerPlayerPda)}
           className="absolute bottom-0 right-0"
         />
       </div>

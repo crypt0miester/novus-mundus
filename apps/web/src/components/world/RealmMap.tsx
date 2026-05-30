@@ -2,7 +2,18 @@
 
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { ChevronRight, Map as MapIcon, X } from "lucide-react";
-import { createDraggable, type Draggable } from "animejs";
+import {
+  animate,
+  createDraggable,
+  createTimeline,
+  stagger,
+  svg,
+  utils,
+  type Draggable,
+} from "animejs";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
+import { STAGGER } from "@/lib/motion/tokens";
+import { prefersReducedMotion } from "@/lib/utils";
 import { BottomSheet } from "@/components/shared/BottomSheet";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
@@ -166,6 +177,52 @@ function project(cities: { account: { latitude: number; longitude: number } }[])
   const latR = Math.max(...lats) - lat0 || 1;
   const lonR = Math.max(...lons) - lon0 || 1;
   return { lat0, lon0, latR, lonR };
+}
+
+// Resample a closed polygon to exactly `count` evenly-spaced points along its
+// perimeter, returned as an SVG path string. svg.morphTo needs matched point
+// counts between source and target; resampling guarantees that no matter how
+// the underlying hull's vertex count changes between chain ticks.
+function resampleClosedPolygon(poly: Pt[], count: number): string {
+  if (poly.length < 2) return "";
+  // Per-segment lengths around the loop (last vertex back to first).
+  const segs: { a: Pt; b: Pt; len: number }[] = [];
+  let total = 0;
+  for (let i = 0; i < poly.length; i++) {
+    const a = poly[i]!;
+    const b = poly[(i + 1) % poly.length]!;
+    const len = Math.hypot(b.x - a.x, b.y - a.y);
+    segs.push({ a, b, len });
+    total += len;
+  }
+  if (total === 0) return "";
+  const out: Pt[] = [];
+  const stepLen = total / count;
+  let segIdx = 0;
+  let segPos = 0;
+  for (let i = 0; i < count; i++) {
+    const targetDist = i * stepLen;
+    // Walk segments until the cumulative length reaches the target.
+    let walked = 0;
+    for (let s = 0; s < segs.length; s++) {
+      if (walked + segs[s]!.len >= targetDist || s === segs.length - 1) {
+        segIdx = s;
+        segPos = segs[s]!.len === 0 ? 0 : (targetDist - walked) / segs[s]!.len;
+        break;
+      }
+      walked += segs[s]!.len;
+    }
+    const seg = segs[segIdx]!;
+    out.push({
+      x: seg.a.x + (seg.b.x - seg.a.x) * segPos,
+      y: seg.a.y + (seg.b.y - seg.a.y) * segPos,
+    });
+  }
+  const head = out[0]!;
+  return `M ${head.x.toFixed(2)} ${head.y.toFixed(2)} ${out
+    .slice(1)
+    .map((p) => `L ${p.x.toFixed(2)} ${p.y.toFixed(2)}`)
+    .join(" ")} Z`;
 }
 
 export interface RealmMapProps {
@@ -390,6 +447,43 @@ export function RealmMap({
     return { kingdomHull: fat, kingdomPath: smoothClosedPath(fat, 0.55) };
   }, [nodes]);
 
+  // Roads — quiet ink spokes from the King's seat (the Capital) out to every
+  // other city, the geography the panel hint already promises. Each is a gentle
+  // quadratic arc so the network reads as drawn-by-hand rather than a starburst
+  // of straight lines. The reveal (feature 4.3) self-draws these center-out.
+  const roads = useMemo(() => {
+    if (nodes.length < 2) return [] as { key: string; d: string }[];
+    const capital = nodes.find((n) => typeIdx(n.city.cityType) === 0) ?? nodes[0]!;
+    return nodes
+      .filter((n) => n !== capital)
+      .map((n) => {
+        const mx = (capital.x + n.x) / 2;
+        const my = (capital.y + n.y) / 2;
+        // Bow the control point perpendicular to the chord so roads curve.
+        const dx = n.x - capital.x;
+        const dy = n.y - capital.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const bow = Math.min(26, len * 0.12);
+        const cx = mx + (-dy / len) * bow;
+        const cy = my + (dx / len) * bow;
+        return {
+          key: n.key,
+          d: `M ${capital.x} ${capital.y} Q ${cx.toFixed(1)} ${cy.toFixed(1)} ${n.x} ${n.y}`,
+        };
+      });
+  }, [nodes]);
+
+  // Living territory border (feature 4.6). The realm's controlled extent is the
+  // chain-derived kingdom hull; we resample it to a FIXED point count so
+  // svg.morphTo always has matched node counts when control shifts (a city
+  // added / lost / players moved re-shapes the hull). The "d" here is just the
+  // initial render; the morph effect below drives transitions imperatively.
+  const BORDER_POINTS = 48;
+  const borderPath = useMemo(() => {
+    if (kingdomHull.length < 3) return "";
+    return resampleClosedPolygon(kingdomHull, BORDER_POINTS);
+  }, [kingdomHull]);
+
   /* Day/night overlay — a continuous horizontal wash matching the game's
      on-chain time-of-day. The clock is LONGITUDE-ONLY, so this is a strictly
      horizontal gradient (x-only): every stop is a vertical isochrone meridian,
@@ -478,6 +572,33 @@ export function RealmMap({
     };
   }, [cities, chainNow]);
 
+  // Travel geometry (feature 3c). The straight chord becomes a quadratic arc:
+  // a control point pushed perpendicular to the chord so the route reads like a
+  // campaign map. The marker rides this exact curve via svg.createMotionPath,
+  // bound to chain pct. Computed once per geometry change so the scope effect
+  // can depend on stable numbers.
+  const travelGeo = useMemo(() => {
+    if (!travel) return null;
+    const from = nodes.find((n) => n.city.cityId === travel.fromCityId);
+    const to = nodes.find((n) => n.city.cityId === travel.toCityId);
+    if (!from || !to || from === to) return null;
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    const len = Math.hypot(dx, dy) || 1;
+    // Bow proportional to chord length, capped so long routes don't balloon.
+    const bow = Math.min(70, len * 0.18);
+    const mx = (from.x + to.x) / 2;
+    const my = (from.y + to.y) / 2;
+    const ctrlX = mx + (-dy / len) * bow;
+    const ctrlY = my + (dx / len) * bow;
+    return {
+      from,
+      to,
+      d: `M ${from.x} ${from.y} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x} ${to.y}`,
+      markerCarriesFlag: travel.fromCityId === homeCity,
+    };
+  }, [travel, nodes, homeCity]);
+
   const selected = nodes.find((n) => n.city.cityId === selectedId) ?? null;
 
   const sheetOverride = selected && renderSheetOverride ? renderSheetOverride(selected) : null;
@@ -486,6 +607,15 @@ export function RealmMap({
   const overrideActive = sheetOverride != null;
 
   const backBtnRef = useRef<HTMLButtonElement | null>(null);
+
+  // anime.js handles for the map's motion surfaces.
+  const svgRef = useRef<SVGSVGElement | null>(null);
+  // The progress-bound travel march (feature 3c): driven by chain pct, not time.
+  const markerRef = useRef<SVGGElement | null>(null);
+  // The control border path + its last-rendered "d" so we morph on the edge of
+  // a control shift, not every render (feature 4.6).
+  const borderRef = useRef<SVGPathElement | null>(null);
+  const prevBorderRef = useRef<string>("");
 
   useEffect(() => {
     if (!overrideActive) return;
@@ -625,6 +755,162 @@ export function RealmMap({
     };
   }, [desktopPanelShown]);
 
+  // Feature 4.3 — inked road reveal. Roads self-draw center-out instead of a
+  // flat opacity fade. createDrawable commandeers stroke-dasharray, which
+  // collides with the dashed `.road` look, so after the draw completes we
+  // commitStyles and restore the dashed class. Under reduced motion we skip the
+  // draw and the CSS resting state (opacity 0.55, dashed) shows immediately.
+  useAnimeScope(
+    { root: svgRef, deps: [roads.length, sheetOverride != null] },
+    ({ reduce }) => {
+      if (roads.length === 0 || sheetOverride != null) return;
+      const targets = svg.createDrawable(".realm-road");
+      if (targets.length === 0) return;
+      if (reduce) {
+        for (const el of targets) {
+          (el as unknown as SVGElement).classList.add(styles.roadDrawn);
+        }
+        return;
+      }
+      animate(targets, {
+        // Center-out per road: the drawn segment grows from a zero-length point
+        // at the path midpoint (0.5 0.5) out to the full span (0 1). The
+        // `draw` value is a "start end" fraction pair.
+        draw: ["0.5 0.5", "0 1"],
+        // The road set itself reveals center-out across the network.
+        delay: stagger(STAGGER.tight, { from: "center" }),
+        duration: 900,
+        ease: "inOutQuad",
+        onComplete: () => {
+          // Commit the drawn geometry, then hand the dash back to CSS (the
+          // 1.4/0.9 road dash) by tagging the element so the dashed class wins.
+          for (const el of targets) {
+            const node = el as unknown as SVGElement;
+            utils.set(node, { opacity: 0.55 });
+            node.classList.add(styles.roadDrawn);
+          }
+        },
+      });
+    },
+  );
+
+  // Feature 4.3 — ceremonial city selection. The mount-only CSS ringDraw is
+  // replaced by a replay-on-every-re-pick timeline: outer ring scribes, inner
+  // follows, the dot springs, and a shockwave ripples outward driven by the `r`
+  // attribute (NOT transform scale, so the counter-scale group can't fight it).
+  // Keyed imperatively off selectedId so re-picking the same flow replays.
+  useAnimeScope(
+    { root: svgRef, deps: [selectedId], revertOnCleanup: false },
+    ({ reduce }) => {
+      if (selectedId == null) return;
+      const rings = svg.createDrawable(".realm-sel-ring");
+      if (reduce) {
+        for (const el of rings) utils.set(el as unknown as SVGElement, { opacity: 1 });
+        return;
+      }
+      const tl = createTimeline({ defaults: { ease: "outQuart" } });
+      if (rings[0]) tl.add(rings[0] as unknown as SVGElement, { draw: ["0 0", "0 1"], opacity: [0, 0.95], duration: 420 }, 0);
+      if (rings[1]) tl.add(rings[1] as unknown as SVGElement, { draw: ["0 0", "0 1"], opacity: [0, 0.75], duration: 480 }, 80);
+      // Shockwave: grow the radius + fade. The ripple circle starts collapsed.
+      // Driven by `r` (not transform scale) so the counter-scale can't fight it.
+      tl.add(
+        ".realm-sel-ripple",
+        { r: [2, 26], opacity: [0.5, 0], duration: 620, ease: "outExpo" },
+        40,
+      );
+    },
+  );
+
+  // Feature 3c — path-true travel march. The invisible curved route etches
+  // itself in on dispatch; the heading-locked marker is then positioned by
+  // sampling that path at chain pct in the effect below (never off time).
+  useAnimeScope(
+    { root: svgRef, deps: [travelGeo?.d ?? null] },
+    ({ reduce }) => {
+      if (!travelGeo || !markerRef.current) return;
+      const route = svg.createDrawable("#travel-route");
+      if (!reduce && route[0]) {
+        animate(route[0] as unknown as SVGElement, {
+          draw: ["0 0", "0 1"],
+          duration: 520,
+          ease: "inOutQuad",
+        });
+      } else if (route[0]) {
+        utils.set(route[0] as unknown as SVGElement, { opacity: 1 });
+      }
+      // The marker is positioned by sampling the route path directly (see the
+      // effect below). createMotionPath threw inside anime refresh() on this SVG
+      // group; getPointAtLength is deterministic and binds straight to chain pct.
+    },
+  );
+
+  // Bind the marker to chain ground-truth whenever pct changes. Sampling the
+  // path each time keeps it correct after pan/zoom re-renders, and position is
+  // a pure bind off pct (no time) so it stays truthful under engine slow-mo.
+  useEffect(() => {
+    const marker = markerRef.current;
+    const route = svgRef.current?.querySelector<SVGPathElement>("#travel-route");
+    if (!marker || !route) return;
+    const len = route.getTotalLength();
+    if (!len) return;
+    // Sample the curved route at chain progress (0..1) and face the heading.
+    const t = utils.clamp((travel?.pct ?? 0) / 100, 0, 1);
+    const at = route.getPointAtLength(len * t);
+    const ahead = route.getPointAtLength(Math.min(len, len * t + 1));
+    const angle = (Math.atan2(ahead.y - at.y, ahead.x - at.x) * 180) / Math.PI;
+    marker.setAttribute("transform", `translate(${at.x} ${at.y}) rotate(${angle + 90})`);
+  }, [travel?.pct, travelGeo?.d]);
+
+  // Feature 4.6 — living territory borders. When the chain-derived control hull
+  // changes silhouette, morph the border polygon to the new shape (matched
+  // point counts via resampleClosedPolygon) and re-draw the stroke. Edge-gated
+  // on the actual path string so it only fires when control truly shifts.
+  useEffect(() => {
+    const el = borderRef.current;
+    if (!el || !borderPath) return;
+    const prev = prevBorderRef.current;
+    prevBorderRef.current = borderPath;
+    // First render or reduced motion: snap to the shape, no morph.
+    if (!prev || prev === borderPath || prefersReducedMotion()) {
+      el.setAttribute("d", borderPath);
+      return;
+    }
+    // Morph from the prior silhouette to the new one. morphTo needs a target
+    // ELEMENT (not a path string and not a selector that may not resolve at
+    // build time), so keep a hidden sibling path, point it at the new shape, and
+    // hand the element itself to morphTo. Any morph failure falls back to a hard
+    // set so this cosmetic border can never crash the map.
+    const parent = el.parentNode as Element | null;
+    let target = parent?.querySelector<SVGPathElement>("#territory-hull-target") ?? null;
+    if (!target && parent) {
+      target = document.createElementNS("http://www.w3.org/2000/svg", "path");
+      target.setAttribute("id", "territory-hull-target");
+      target.setAttribute("fill", "none");
+      target.setAttribute("stroke", "none");
+      parent.appendChild(target);
+    }
+    if (!target) {
+      el.setAttribute("d", borderPath);
+      return;
+    }
+    target.setAttribute("d", borderPath);
+    el.setAttribute("d", prev);
+    let a: ReturnType<typeof animate> | null = null;
+    try {
+      a = animate(el, {
+        d: svg.morphTo(target),
+        duration: 720,
+        ease: "inOutQuad",
+      });
+    } catch {
+      el.setAttribute("d", borderPath);
+    }
+    return () => {
+      a?.cancel();
+      el.setAttribute("d", borderPath);
+    };
+  }, [borderPath]);
+
   if (citiesLoading) {
     return (
       <div className={styles.root} data-fullscreen={fullscreen ? "true" : undefined}>
@@ -675,6 +961,7 @@ export function RealmMap({
           )}
 
           <svg
+            ref={svgRef}
             className={`${styles.svg} ${sheetOverride ? styles.svgHidden : ""}`}
             viewBox={`0 0 ${VB_W} ${VB_H}`}
             preserveAspectRatio="xMidYMid meet"
@@ -685,6 +972,35 @@ export function RealmMap({
               {/* Kingdom shape + roads stay in world space — they're the
                   geography, they should grow with zoom. */}
               {kingdomPath && <path className={styles.kingdomShape} d={kingdomPath} />}
+
+              {/* Living territory border — the chain-derived control extent.
+                  Initial "d" comes from React; the morph effect drives shifts
+                  imperatively so a control change reshapes the outline. */}
+              {borderPath && (
+                <path
+                  ref={borderRef}
+                  className={styles.controlBorder}
+                  d={borderPath}
+                  vectorEffect="non-scaling-stroke"
+                  aria-hidden
+                />
+              )}
+
+              {/* Roads — quiet ink spokes from the King's seat. Self-draw
+                  center-out on mount (feature 4.3). vector-effect keeps the
+                  dash widths constant under zoom. */}
+              {roads.length > 0 && (
+                <g className={styles.roadLayer} aria-hidden>
+                  {roads.map((r) => (
+                    <path
+                      key={r.key}
+                      className={`realm-road ${styles.road}`}
+                      d={r.d}
+                      vectorEffect="non-scaling-stroke"
+                    />
+                  ))}
+                </g>
+              )}
 
               {/* Day/night — a continuous horizontal wash matching the game's
                   on-chain time-of-day (longitude-only, latitude-independent: a
@@ -779,47 +1095,35 @@ export function RealmMap({
                   `vector-effect: non-scaling-stroke` (via the CSS class) keeps
                   the dash widths constant regardless of zoom; the marker uses
                   a counter-scale group for the same reason. */}
-              {travel &&
-                (() => {
-                  const from = nodes.find((n) => n.city.cityId === travel.fromCityId);
-                  const to = nodes.find((n) => n.city.cityId === travel.toCityId);
-                  if (!from || !to || from === to) return null;
-                  const t = Math.min(1, Math.max(0, travel.pct / 100));
-                  const mx = from.x + (to.x - from.x) * t;
-                  const my = from.y + (to.y - from.y) * t;
-                  // While intercity-flying, the player's "home" is in motion —
-                  // detach the home flag from the origin city (handled in the
-                  // city-dot loop below) and pin it to the travel marker so the
-                  // visual matches "I have left this city".
-                  const markerCarriesFlag = travel.fromCityId === homeCity;
-                  return (
-                    <g className={styles.travelGroup} aria-hidden>
-                      <line
-                        className={styles.travelLine}
-                        x1={from.x}
-                        y1={from.y}
-                        x2={to.x}
-                        y2={to.y}
-                        // Belt-and-suspenders: the CSS class also sets
-                        // vector-effect, but some browsers honour the attribute
-                        // form more reliably under heavy SVG transforms.
-                        vectorEffect="non-scaling-stroke"
-                      />
-                      <g
-                        transform={`translate(${mx} ${my}) scale(${labelMultiplier / zoom.scale})`}
-                      >
-                        <circle className={styles.travelMarkerHalo} cx={0} cy={0} r={7} />
-                        <circle className={styles.travelMarker} cx={0} cy={0} r={3.5} />
-                        {markerCarriesFlag && (
-                          // Same flag shape as the city-side homeFlag, offset
-                          // above the marker. Offsets are tuned to the marker's
-                          // r=3.5 rather than a city's variable n.size.
-                          <polygon className={styles.homeFlag} points="-1,-7 -1,-19 7,-15 -1,-11" />
-                        )}
-                      </g>
+              {travelGeo && (
+                <g className={styles.travelGroup} aria-hidden>
+                  {/* Invisible curved route the marker rides; also the etch
+                      target (its stroke draws in on dispatch). The marker is
+                      placed by svg.createMotionPath relative to its OWN box, so
+                      the marker group is anchored at the origin (0,0) and the
+                      generated translateX/translateY put it onto this path in
+                      world space. The inner group counter-scales so the token
+                      stays screen-sized like every other map mark. */}
+                  <path
+                    id="travel-route"
+                    className={styles.travelLine}
+                    d={travelGeo.d}
+                    vectorEffect="non-scaling-stroke"
+                  />
+                  <g ref={markerRef}>
+                    <g transform={`scale(${labelMultiplier / zoom.scale})`}>
+                      <circle className={styles.travelMarkerHalo} cx={0} cy={0} r={7} />
+                      <circle className={styles.travelMarker} cx={0} cy={0} r={3.5} />
+                      {travelGeo.markerCarriesFlag && (
+                        // Same flag shape as the city-side homeFlag, offset
+                        // above the marker. Offsets are tuned to the marker's
+                        // r=3.5 rather than a city's variable n.size.
+                        <polygon className={styles.homeFlag} points="-1,-7 -1,-19 7,-15 -1,-11" />
+                      )}
                     </g>
-                  );
-                })()}
+                  </g>
+                </g>
+              )}
 
               <g>
                 {renderOrder.map((n) => {
@@ -863,8 +1167,27 @@ export function RealmMap({
                     >
                       {isSel && (
                         <>
-                          <circle className={styles.selectedOuter} cx={0} cy={0} r={n.size + 9} />
-                          <circle className={styles.selectedInner} cx={0} cy={0} r={n.size + 4} />
+                          {/* Shockwave ripple — driven by the `r` attribute in
+                              the selection timeline, not transform scale, so the
+                              counter-scale group can't fight it. */}
+                          <circle
+                            className={`realm-sel-ripple ${styles.selectedRipple}`}
+                            cx={0}
+                            cy={0}
+                            r={2}
+                          />
+                          <circle
+                            className={`realm-sel-ring ${styles.selectedOuter}`}
+                            cx={0}
+                            cy={0}
+                            r={n.size + 9}
+                          />
+                          <circle
+                            className={`realm-sel-ring ${styles.selectedInner}`}
+                            cx={0}
+                            cy={0}
+                            r={n.size + 4}
+                          />
                         </>
                       )}
 
@@ -882,7 +1205,12 @@ export function RealmMap({
                           touch users have a generous target. */}
                       <circle cx={0} cy={0} r={hitR} fill="transparent" />
 
-                      <circle className={styles.cityDot} cx={0} cy={0} r={n.size} />
+                      <circle
+                        className={`${styles.cityDot} ${isSel ? "realm-sel-dot" : ""}`}
+                        cx={0}
+                        cy={0}
+                        r={n.size}
+                      />
 
                       <text
                         className={styles.cityGlyph}

@@ -161,23 +161,9 @@ fn enforce_key_version(
             }
             require_encrypted(flags)
         }
-        SCOPE_ENCOUNTER => {
-            // Encounter is plaintext only: key_version == 0, flags bit0 == 0,
-            // and the body nonce must be all-zero (§1 step 8).
-            if key_version != 0 {
-                return Err(GameError::WtKeyVersionMismatch.into());
-            }
-            if flags & FLAG_ENCRYPTED != 0 {
-                return Err(GameError::WtKeyVersionMismatch.into());
-            }
-            if envelope[WT_BODY_NONCE_RANGE] != [0u8; 24] {
-                return Err(GameError::WtKeyVersionMismatch.into());
-            }
-            Ok(())
-        }
-        SCOPE_PUBLIC => {
-            // Public is plaintext only: key_version == 0, flags bit0 == 0,
-            // and the body nonce must be all-zero (§1 step 8).
+        SCOPE_ENCOUNTER | SCOPE_PUBLIC => {
+            // Encounter and Public are plaintext only: key_version == 0, flags
+            // bit0 == 0, and the body nonce must be all-zero (§1 step 8).
             if key_version != 0 {
                 return Err(GameError::WtKeyVersionMismatch.into());
             }

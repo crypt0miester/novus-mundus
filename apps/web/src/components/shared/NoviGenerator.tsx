@@ -1,8 +1,10 @@
 "use client";
 
 import { useRef, useEffect, useState } from "react";
-import { animate, spring } from "animejs";
+import { animate } from "animejs";
 import { cn, formatNumber } from "@/lib/utils";
+import { BLOOM, PRESS, DUR } from "@/lib/motion/tokens";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import { GameIcon } from "@/components/shared/GameIcon";
 import { ProgressRing } from "@/components/shared/ProgressRing";
 import { useNoviGenerator, INTERVAL_SECONDS } from "@/lib/hooks/useNoviGenerator";
@@ -32,6 +34,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
   const { publicKey } = useWallet();
   const transact = useTransact();
 
+  const rootRef = useRef<HTMLDivElement>(null);
   const pendingRef = useRef<HTMLSpanElement>(null);
   const gemRef = useRef<HTMLDivElement>(null);
   // Detect upward crossings of pendingNovi so the beat only fires on growth.
@@ -51,25 +54,24 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
     ready,
   } = gen;
 
-  // Fires on upward crossings of pendingNovi only. Respects reduced-motion.
-  useEffect(() => {
+  // Gem scale+rotate and pending-count pop, fired on upward crossings of
+  // pendingNovi only. Scoped for cleanup and keyed on pendingNovi; the edge
+  // detection lives in the builder via prevPendingRef so the beat plays on the
+  // growth edge, not on every re-run. Reduced motion early-returns (the prev
+  // ref still advances so a later resume re-arms cleanly). Springs come from the
+  // shared tokens: BLOOM for the gem bloom, PRESS for the count snap.
+  useAnimeScope({ root: rootRef, deps: [pendingNovi] }, ({ reduce }) => {
     const prev = prevPendingRef.current;
     prevPendingRef.current = pendingNovi;
     if (pendingNovi <= prev) return;
-    if (
-      typeof window !== "undefined" &&
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      return;
-    }
+    if (reduce) return;
 
     const gem = gemRef.current;
     if (gem) {
       animate(gem, {
         scale: [1, 1.45, 1],
         rotate: [0, 180, 360],
-        duration: 800,
-        ease: spring({ stiffness: 180, damping: 14 }),
+        ease: BLOOM,
       });
     }
 
@@ -79,11 +81,11 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
         opacity: [0.3, 1],
         scale: [1.35, 1],
         translateY: [-6, 0],
-        duration: 420,
-        ease: "outBack",
+        duration: DUR.base,
+        ease: PRESS,
       });
     }
-  }, [pendingNovi]);
+  });
 
   // Live "next drop" countdown — kept local to this card so the shared
   // useNoviGenerator hook need not re-render every consumer each second.
@@ -125,7 +127,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
 
   if (compact) {
     return (
-      <div className={cn("card relative flex items-center gap-3", className)}>
+      <div ref={rootRef} className={cn("card relative flex items-center gap-3", className)}>
         <ProgressRing percent={fillPct} size={48} strokeWidth={5}>
           <span className="text-[10px] font-bold text-text-gold">{Math.floor(fillPct)}%</span>
         </ProgressRing>
@@ -165,7 +167,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
   }
 
   return (
-    <div className={cn("card @container relative overflow-hidden", className)}>
+    <div ref={rootRef} className={cn("card @container relative overflow-hidden", className)}>
       <div className="mb-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <div
@@ -221,7 +223,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
             )}
           >
             {isFull
-              ? "CLAIM — GENERATOR FULL!"
+              ? "GENERATOR FULL"
               : `CLAIM ${formatNumber(pendingNovi, "compact")} NOVI`}
           </TxButton>
         ) : isFull ? (

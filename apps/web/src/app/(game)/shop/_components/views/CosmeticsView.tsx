@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useShopConfig, useShopItems, usePlayerPurchase } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -37,7 +38,12 @@ import { CosmeticBadge } from "@/components/cosmetics/CosmeticBadge";
 import { CosmeticBadgeChip } from "@/components/cosmetics/CosmeticBadgeChip";
 import { CosmeticTitleChip } from "@/components/cosmetics/CosmeticTitleChip";
 import { CosmeticFrame } from "@/components/cosmetics/CosmeticFrame";
-import { lamportsToSol, buildIdLookup } from "./shared";
+import {
+  lamportsToSol,
+  buildIdLookup,
+  selectShopTile,
+  useShopTileRipple,
+} from "./shared";
 import { useIsDesktop } from "./useIsDesktop";
 
 export function CosmeticsView() {
@@ -63,6 +69,11 @@ export function CosmeticsView() {
   );
 
   const isDesktop = useIsDesktop();
+  const reduce = useReducedMotion();
+  // Tile-ripple grid root. The wash-in re-runs whenever the visible tile set
+  // changes (sub-filter switch), so each newly-rendered grid gets its diagonal
+  // rarity reveal. grid-cols-2 md:grid-cols-3 -> read the live breakpoint.
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
 
@@ -190,6 +201,13 @@ export function CosmeticsView() {
   }, [effectiveItem, cosmeticItems, itemPurchase, nowSec, player, handlePurchaseItem]);
   useMorphActions(morphActions);
 
+  // Rarity-aware tile ripple. utils.set pins the pre-entrance state on mount to
+  // avoid a first-frame flash, then the grid washes in on a 2D diagonal stagger
+  // whose bloom blur encodes each tile's rarity. Keyed on the visible item ids
+  // so a sub-filter switch replays the reveal for the new grid.
+  const rippleSig = filteredCosmetics.map((i) => i.itemId).join(",");
+  useShopTileRipple(gridRef, [rippleSig], { base: 2, md: 3 });
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2 space-y-3">
@@ -220,7 +238,7 @@ export function CosmeticsView() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-3 grid-cols-2 md:grid-cols-3">
+          <div ref={gridRef} className="grid gap-3 grid-cols-2 md:grid-cols-3">
             {filteredCosmetics.map((item) => {
               const a = item.account;
               const isSelected = effectiveItem === item.itemId;
@@ -254,15 +272,19 @@ export function CosmeticsView() {
               return (
                 <button
                   key={item.itemId}
-                  onClick={() => setSelectedItem(item.itemId)}
-                  className={`rounded-lg border p-3 text-left transition-all ${
+                  data-shop-tile
+                  data-rest-opacity={owned ? 0.55 : 1}
+                  onClick={(e) => {
+                    selectShopTile(e.currentTarget, reduce);
+                    setSelectedItem(item.itemId);
+                  }}
+                  className={`rounded-lg border p-3 text-left opacity-0 transition-colors ${
                     isSelected
                       ? "border-border-gold bg-accent/20 ring-1 ring-border-gold/30"
                       : "border-zinc-800 hover:border-zinc-700"
                   }`}
                   style={{
                     borderColor: isSelected ? undefined : RARITY_BORDER[rarity],
-                    opacity: owned ? 0.55 : 1,
                   }}
                 >
                   <div className="flex items-center gap-2">

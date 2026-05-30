@@ -272,7 +272,7 @@ async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       body,
       signTx,
     );
-    const kindLabel = ['Text', 'Status', 'System', 'Reply', 'Tombstone', 'Reaction', 'Pin'][body.kind] ?? 'Text';
+    const kindLabel = KIND_NAMES[body.kind] ?? 'Text';
     log.info(`Posted ${SCOPE_LABEL[scope]} ${kindLabel} to thread ${thread.toBase58()}`);
     log.info(`  from ${sender.toBase58().slice(0, 8)} | sig ${res.signature}`);
     if (res.congested) {

@@ -326,7 +326,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
           label: !enoughForMarch
             ? "March (missing participants)"
             : !gatherDone
-              ? "March (after gather)"
+              ? "March"
               : "March Rally",
           variant: "primary" as const,
           disabled: !canMarch,
@@ -426,15 +426,15 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             <div className="px-3 pb-3">
               <ol className="space-y-1.5">
                 <li className={gatherDone ? "text-zinc-600 line-through" : "text-text-secondary"}>
-                  1. Gather — members commit troops
+                  1. Gather {">"} members commit troops
                   {gatherDone ? "" : " (in progress)"}
                 </li>
                 <li className="text-text-secondary">
-                  2. March — the leader sends the rally at the target
+                  2. March {">"} the leader sends the rally at the target
                   {marchDuration > 0 ? ` (~${formatTime(marchDuration, "compact")})` : ""}
                 </li>
                 <li className="text-text-secondary">
-                  3. Combat — the rally attacks once it arrives
+                  3. Combat {">"} the rally attacks once it arrives
                 </li>
               </ol>
             </div>
@@ -512,22 +512,17 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       {/* Gathering — the leader marches or cancels */}
       {isGathering && isCreator && (
         <div className="space-y-3">
-          <div className="rounded-lg border border-border-gold/40 bg-accent/10 p-3 text-xs text-text-muted">
-            This is your rally — you committed troops when you raised it. Marching sends the
-            gathered force at the target.
-          </div>
-
           {traveling && (
             <p className="text-xs text-danger">
-              You are traveling — rally actions may be restricted.
+              You are traveling. rally actions may be restricted.
             </p>
           )}
 
           <TxButton onClick={handleMarch} disabled={!canMarch} className="hidden lg:block">
             {!enoughForMarch
-              ? "March Rally (missing participants)"
+              ? "Missing participants"
               : !gatherDone
-                ? "March (after gather window)"
+                ? "March"
                 : "March Rally"}
           </TxButton>
           <TxButton onClick={handleCancel} variant="danger" className="hidden lg:block">
@@ -626,7 +621,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             scope={WarTableScope.Rally}
             gateAccounts={participantGate}
             canPost={isParticipant}
-            placeholder="Coordinate the rally..."
+            placeholder="coordinate..."
           />
         </div>
       )}

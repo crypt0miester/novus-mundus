@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useRef } from "react";
+import { createTimeline, spring } from "animejs";
 import { CATEGORY_COLORS, type BuildingFeatureConfig } from "@/lib/config/building-features";
-import { formatTime } from "@/lib/utils";
+import { formatTime, prefersReducedMotion } from "@/lib/utils";
 import { hasCenterView } from "./feature-view";
 import type { BuildingPhase } from "@/lib/narrative";
 
@@ -27,9 +29,55 @@ interface BuildingCardProps {
   onClick: () => void;
 }
 
+// Completion bloom spring for the "Ready!" text pop. Built once at module scope
+// so the simulation is not re-run per render (see motion tokens convention).
+const READY_POP = spring({ stiffness: 220, damping: 14 });
+
+// One timeline sweeps a single --phase var that BOTH the border color and the
+// --glow box-shadow read, so color and bloom can never desync. Fires exactly
+// once on the constructing -> ready EDGE (tracked with a per-card ref), never on
+// the 1s construction tick or on a card that mounts already-ready (reload
+// mid-construction). The grid's FLIP reflow owns all translate motion, so this
+// only ever touches --phase / scale and never fights it.
+function useReadyBloom(ready: boolean, cardRef: React.RefObject<HTMLElement | null>) {
+  const wasReady = useRef(ready);
+  useEffect(() => {
+    const prev = wasReady.current;
+    wasReady.current = ready;
+    // Only the false -> true edge blooms. A card that is ready on first effect
+    // run (prev === ready === true) is a reload, not a fresh completion.
+    if (!ready || prev === ready) return;
+    const el = cardRef.current;
+    if (!el) return;
+    if (prefersReducedMotion()) {
+      // Snap to the final lit state, no choreography.
+      el.style.setProperty("--phase", "1");
+      return;
+    }
+    const tl = createTimeline({ defaults: { ease: "outQuad" } })
+      .add(el, { "--phase": [0, 1], duration: 620 }, 0)
+      .add(
+        el.querySelectorAll("[data-ready-text]"),
+        { scale: [0.6, 1], opacity: [0, 1], ease: READY_POP },
+        "<<+=80",
+      );
+    return () => {
+      tl.cancel();
+    };
+  }, [ready, cardRef]);
+}
+
 export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   const { config, phase, status, level, constructing, remainingSec, ready, lockReason } = data;
+  // One ref across every card shape (div for constructing/locked, button for
+  // active/unbuilt). HTMLElement covers both for the bloom's style + query reads.
+  const cardRef = useRef<HTMLElement>(null);
   const categoryColor = CATEGORY_COLORS[config.category];
+  // FLIP-tracking handle for the grid (keyed by building id, NOT DOM index).
+  const bcard = config.id;
+
+  useReadyBloom(ready, cardRef);
+
   const eyebrow = (
     <span
       className={`shrink-0 text-[9px] font-medium uppercase tracking-[0.18em] ${categoryColor} opacity-70`}
@@ -54,7 +102,11 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   // Locked state
   if (status === "locked") {
     return (
-      <div className="rounded-lg border border-zinc-800/50 p-3 opacity-40">
+      <div
+        ref={cardRef as React.Ref<HTMLDivElement>}
+        data-bcard={bcard}
+        className="rounded-lg border border-zinc-800/50 p-3 opacity-40"
+      >
         <div className="flex items-center justify-between">
           <span className="text-sm font-semibold text-zinc-600">{config.name}</span>
           <span className="text-[10px] text-zinc-700">T{config.tier}</span>
@@ -67,10 +119,25 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
     );
   }
 
-  // Constructing state
+  // Constructing state. When the card flips to ready, --phase sweeps 0 -> 1 and
+  // drives both the border color and the --glow box-shadow off the same var, so
+  // the bloom can never desync. Resting state (--phase: 0) reads the plain gold
+  // border; the bloom only lifts it for ready cards.
   if (constructing) {
     return (
       <div
+        ref={cardRef as React.Ref<HTMLDivElement>}
+        data-bcard={bcard}
+        style={
+          {
+            "--phase": ready ? 1 : 0,
+            "--glow": "0 0 calc(var(--phase) * 18px) rgba(214, 178, 102, calc(var(--phase) * 0.55))",
+            borderColor: ready
+              ? "color-mix(in srgb, var(--color-border-gold) calc(60% + var(--phase) * 40%), transparent)"
+              : undefined,
+            boxShadow: "var(--glow)",
+          } as React.CSSProperties
+        }
         className={`relative overflow-hidden rounded-lg border ${
           selected ? "border-border-gold bg-accent/20" : "border-border-gold/60"
         } bg-surface-raised p-3 cursor-pointer`}
@@ -86,7 +153,13 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
             </span>
           </div>
           <div className="text-xs text-text-gold font-mono tabular-nums mt-1">
-            {ready ? "Ready!" : `${timeStr} remaining (${pct}%)`}
+            {ready ? (
+              <span data-ready-text className="inline-block">
+                Ready!
+              </span>
+            ) : (
+              `${timeStr} remaining (${pct}%)`
+            )}
           </div>
           {(phase === "improving" || phase === "improved") && hasCenterView(config.id) && (
             <div className="mt-0.5 text-[10px] text-text-muted">
@@ -108,6 +181,8 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   if (status === "active") {
     return (
       <button
+        ref={cardRef as React.Ref<HTMLButtonElement>}
+        data-bcard={bcard}
         onClick={onClick}
         className={`rounded-lg border p-3 text-left transition-colors ${
           selected
@@ -141,6 +216,8 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   // Unbuilt state
   return (
     <button
+      ref={cardRef as React.Ref<HTMLButtonElement>}
+      data-bcard={bcard}
       onClick={onClick}
       className={`rounded-lg border border-dashed p-3 text-left transition-colors ${
         selected

@@ -336,6 +336,20 @@
   stroke-width: 0.6;
 }
 
+/* Living territory border — the chain-derived control extent. A quiet sealed
+ * outline that morphs to the new silhouette when control shifts (feature 4.6,
+ * svg.morphTo, matched point counts). Reads as the realm's frontier, a touch
+ * stronger than the soft kingdom wash so the strategic payload is legible. */
+.controlBorder {
+  fill: none;
+  stroke: var(--seal);
+  stroke-width: 1;
+  stroke-linejoin: round;
+  opacity: 0.4;
+  pointer-events: none;
+  filter: drop-shadow(0 0 3px var(--seal-glow));
+}
+
 /* Day/night terminator — atmospheric layer. The wash darkens the night side
  * of the sheet; the band is a separate gradient strip rendered just inside
  * the day side of the terminator to soften the boundary. Pointer-events off
@@ -454,13 +468,24 @@
   opacity: 0.55;
 }
 
+/* Roads — quiet ink spokes from the King's seat. They self-draw center-out via
+ * svg.createDrawable (feature 4.3), which commandeers stroke-dasharray while
+ * drawing, so the resting dashed look is restored by `.roadDrawn` once the etch
+ * completes (the JS commits opacity + tags the class). The old flat `roadIn`
+ * opacity fade is retired. */
+.roadLayer {
+  pointer-events: none;
+}
 .road {
   stroke: var(--ink-soft);
   stroke-width: 0.32;
-  stroke-dasharray: 1.4 0.9;
   fill: none;
   opacity: 0;
-  animation: roadIn 1.4s ease forwards;
+}
+/* Post-draw resting state: hand the dash back to CSS and settle the opacity. */
+.roadDrawn {
+  stroke-dasharray: 1.4 0.9;
+  opacity: 0.55;
 }
 
 /* Intercity travel — the player's journey from origin to destination.
@@ -471,6 +496,10 @@
 .travelGroup {
   pointer-events: none;
 }
+/* The curved route the marker rides. Its stroke is etched in by
+ * svg.createDrawable on dispatch (feature 3c), so the dasharray is owned by
+ * anime.js while drawing; the resting look is a dashed seal-orange arc. The
+ * old marching-ant `travelDash` keyframe is retired in favour of the etch. */
 .travelLine {
   fill: none;
   stroke: var(--seal);
@@ -480,32 +509,16 @@
   vector-effect: non-scaling-stroke;
   opacity: 0.85;
   filter: drop-shadow(0 0 4px var(--seal-glow));
-  animation: travelDash 1.2s linear infinite;
 }
 .travelMarker {
   fill: var(--seal);
 }
+/* The marker's soft halo. The old CSS pulse (`travelMarkerPulse`) is retired:
+ * the marker now rides the path heading-locked, which carries the sense of
+ * motion, so a separate breathe would just be noise. */
 .travelMarkerHalo {
   fill: var(--seal);
   opacity: 0.35;
-  animation: travelMarkerPulse 1.6s ease-in-out infinite;
-}
-
-@keyframes travelDash {
-  to {
-    stroke-dashoffset: -10;
-  }
-}
-@keyframes travelMarkerPulse {
-  0%,
-  100% {
-    opacity: 0.2;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.55;
-    transform: scale(1.35);
-  }
 }
 
 .cityDot {
@@ -596,24 +609,32 @@
   }
 }
 
-/* selected city — double ring drawn on */
+/* Selected city — double ring scribed on by svg.createDrawable (feature 4.3),
+ * replayed on every re-pick via the selection timeline. The dasharray is owned
+ * by anime.js while drawing, so it's NOT set here; the rings start hidden and
+ * the timeline fades + draws them in. The old mount-only `ringDraw` keyframe is
+ * retired. Under reduced motion the JS sets opacity directly. */
 .selectedOuter {
   fill: none;
   stroke: var(--seal);
   stroke-width: 0.55;
-  opacity: 0.95;
-  stroke-dasharray: 60;
-  stroke-dashoffset: 60;
-  animation: ringDraw 0.45s ease-out forwards;
+  opacity: 0;
 }
 .selectedInner {
   fill: none;
   stroke: var(--seal);
   stroke-width: 0.28;
-  opacity: 0.75;
-  stroke-dasharray: 60;
-  stroke-dashoffset: 60;
-  animation: ringDraw 0.55s 0.08s ease-out forwards;
+  opacity: 0;
+}
+/* Shockwave ripple — radius is animated by the selection timeline (the `r`
+ * attribute, never transform scale, so the counter-scale group can't fight it).
+ * Starts collapsed + invisible. */
+.selectedRipple {
+  fill: none;
+  stroke: var(--seal);
+  stroke-width: 0.6;
+  opacity: 0;
+  pointer-events: none;
 }
 
 /* The parchment is meant to read as already-inked — no entrance animation.
@@ -626,16 +647,10 @@
   transform: scale(1.18);
 }
 
-@keyframes ringDraw {
-  to {
-    stroke-dashoffset: 0;
-  }
-}
-@keyframes roadIn {
-  to {
-    opacity: 0.55;
-  }
-}
+/* `ringDraw` (mount-only selection scribe) and `roadIn` (flat road fade) are
+ * retired: svg.createDrawable now drives both, replayed/center-out, with the
+ * resting state restored imperatively. `travelDash` / `travelMarkerPulse` are
+ * likewise gone (the path-true marker carries the motion). */
 
 /* compass rose container — placed absolutely in the corner */
 .compass {
@@ -954,13 +969,23 @@
   color: var(--ink-soft);
 }
 
+/* Reduced-motion resting state. The JS scopes already set the final state and
+ * skip the draw-ins, but this guarantees a sane look even before hydration: the
+ * rings are visible, roads carry their dashed resting style, and the ripple
+ * stays hidden (it's pure choreography). */
 @media (prefers-reduced-motion: reduce) {
-  .road,
-  .selectedOuter,
+  .selectedOuter {
+    opacity: 0.95;
+  }
   .selectedInner {
-    animation: none;
-    opacity: 1;
-    stroke-dashoffset: 0;
+    opacity: 0.75;
+  }
+  .road {
+    stroke-dasharray: 1.4 0.9;
+    opacity: 0.55;
+  }
+  .selectedRipple {
+    opacity: 0;
   }
 }
 

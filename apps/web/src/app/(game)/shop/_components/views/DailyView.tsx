@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useShopItems, useDailyDeals } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -24,6 +25,8 @@ import {
   RARITY_COLORS,
   lamportsToSol,
   buildIdLookup,
+  selectShopTile,
+  useShopTileRipple,
 } from "./shared";
 import { useIsDesktop } from "./useIsDesktop";
 
@@ -41,6 +44,9 @@ export function DailyView() {
   const [selectedDeal, setSelectedDeal] = useState<number | null>(null);
 
   const isDesktop = useIsDesktop();
+  const reduce = useReducedMotion();
+  // Tile-ripple grid root. grid-cols-2 md:grid-cols-3 -> read live breakpoint.
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
 
@@ -119,6 +125,11 @@ export function DailyView() {
   }, [effectiveDeal, activeDailyDeals, handlePurchaseDailyDeal]);
   useMorphActions(morphActions);
 
+  // Rarity-aware tile ripple. Keyed on the visible deal slots so the diagonal
+  // wash-in replays whenever the day's deals change.
+  const rippleSig = activeDailyDeals.map((d) => d.slot).join(",");
+  useShopTileRipple(gridRef, [rippleSig], { base: 2, md: 3 });
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2">
@@ -133,7 +144,7 @@ export function DailyView() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
+          <div ref={gridRef} className="grid gap-2 grid-cols-2 md:grid-cols-3">
             {activeDailyDeals.map((deal) => {
               const a = deal.item.account;
               const isSelected = effectiveDeal === deal.slot;
@@ -143,8 +154,12 @@ export function DailyView() {
               return (
                 <button
                   key={deal.slot}
-                  onClick={() => setSelectedDeal(deal.slot)}
-                  className={`rounded-lg border p-3 text-left transition-all ${
+                  data-shop-tile
+                  onClick={(e) => {
+                    selectShopTile(e.currentTarget, reduce);
+                    setSelectedDeal(deal.slot);
+                  }}
+                  className={`rounded-lg border p-3 text-left opacity-0 transition-colors ${
                     isSelected
                       ? "border-border-gold bg-accent/20 ring-1 ring-border-gold/30"
                       : "border-border-gold/40 hover:border-border-gold/60"

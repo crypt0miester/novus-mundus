@@ -3,6 +3,7 @@
 import { type ComponentType, useCallback, useEffect, useRef, useState } from "react";
 import { useDailyActivity, type Archetype, type StartResponse } from "@/lib/hooks/useDailyActivity";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
+import { registerCountdown } from "@/lib/motion/countdownClock";
 import { formatTime } from "@/lib/utils";
 import { McqGame } from "./games/McqGame";
 import { MemoryGame } from "./games/MemoryGame";
@@ -144,22 +145,25 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
 }
 
 /**
- * An isolated countdown leaf — owns its own 1s tick so the per-second update
- * writes to a ref instead of re-rendering the game subtree. The server
- * enforces the real deadline; this is a soft display.
+ * An isolated countdown leaf — drives a ref text node off the shared countdown
+ * clock (one createTimer fans out to every live countdown) instead of a private
+ * setInterval, so this deadline is frame-synced with the in-game GameTimer and
+ * pauses together. The clock reads wall-clock time, so the display stays
+ * truthful regardless of engine.speed. The server enforces the real deadline;
+ * this is a soft display.
  */
 function Deadline({ deadlineMs }: { deadlineMs: number }) {
   const ref = useRef<HTMLSpanElement>(null);
 
   useEffect(() => {
-    const update = () => {
-      if (!ref.current) return;
-      const s = Math.max(0, Math.floor((deadlineMs - Date.now()) / 1000));
-      ref.current.textContent = `⏱ ${formatTime(s, "compact")}`;
-    };
-    update();
-    const t = setInterval(update, 1000);
-    return () => clearInterval(t);
+    return registerCountdown({
+      endTs: deadlineMs,
+      onTick: (remainingMs) => {
+        if (!ref.current) return;
+        const s = Math.max(0, Math.floor(remainingMs / 1000));
+        ref.current.textContent = `⏱ ${formatTime(s, "compact")}`;
+      },
+    });
   }, [deadlineMs]);
 
   return <span ref={ref} className="font-mono tabular-nums" />;

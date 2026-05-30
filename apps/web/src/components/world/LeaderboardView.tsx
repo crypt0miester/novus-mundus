@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useLayoutEffect, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { animate, utils } from "animejs";
 import {
   useWorldPlayers,
   useWorldCities,
@@ -9,9 +10,11 @@ import {
   useCitizenStatus,
 } from "@/lib/hooks/world";
 import { GoldNumber } from "@/components/shared/GoldNumber";
-import { cn, shortenAddress } from "@/lib/utils";
+import { cn, shortenAddress, prefersReducedMotion } from "@/lib/utils";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useDomainNames } from "@/lib/hooks/useDomainNames";
 import { playerScore } from "@/lib/players";
+import { REORDER, DUR } from "@/lib/motion/tokens";
 
 const TABS = [
   { key: "networth", label: "Networth" },
@@ -26,6 +29,20 @@ type SortKey = (typeof TABS)[number]["key"];
 
 const PAGE_SIZE = 50;
 
+// Medal glow per podium rank: a one-shot box-shadow pulse when a row crosses the
+// edge INTO the top 3. Box-shadow is main-thread paint, so this stays a short
+// settling pulse (not an ambient loop) per the motion perf rules.
+const MEDAL_GLOW: Record<number, string> = {
+  1: "0 0 0px rgba(251,191,36,0)",
+  2: "0 0 0px rgba(212,212,216,0)",
+  3: "0 0 0px rgba(180,83,9,0)",
+};
+const MEDAL_GLOW_PEAK: Record<number, string> = {
+  1: "0 0 18px rgba(251,191,36,0.55)",
+  2: "0 0 16px rgba(212,212,216,0.45)",
+  3: "0 0 16px rgba(180,83,9,0.45)",
+};
+
 export function LeaderboardView() {
   const { data: players, isLoading } = useWorldPlayers();
   const { data: cities } = useWorldCities();
@@ -33,6 +50,7 @@ export function LeaderboardView() {
   const citizen = useCitizenStatus();
   const [activeTab, setActiveTab] = useState<SortKey>("networth");
   const [page, setPage] = useState(0);
+  const reduce = useReducedMotion();
 
   const cityMap = useMemo(() => {
     if (!cities) return new Map<number, string>();
@@ -67,6 +85,184 @@ export function LeaderboardView() {
 
   const pageOwners = useMemo(() => pageData.map((p) => p.account.owner), [pageData]);
   const domainNames = useDomainNames(pageOwners);
+
+  // Per-row identity keyed by on-chain pubkey, so the FLIP and count-up follow
+  // the same player across a metric switch rather than tracking DOM index.
+  const rowRefs = useRef(new Map<string, HTMLDivElement>());
+  const setRowRef = useCallback((key: string, el: HTMLDivElement | null) => {
+    if (el) rowRefs.current.set(key, el);
+    else rowRefs.current.delete(key);
+  }, []);
+
+  // First rects from the PREVIOUS committed layout. Compared against the freshly
+  // committed Last rects to invert and play back to identity.
+  const prevRects = useRef(new Map<string, DOMRect>());
+  // In-flight FLIP tweens, cancelled (never reverted) on the next reflow / unmount.
+  const flipAnims = useRef<Array<{ cancel?: () => void }>>([]);
+
+  // Target scores for the currently visible rows, keyed by pubkey.
+  const targetScores = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of pageData) {
+      map.set(p.pubkey.toBase58(), playerScore(p.account, activeTab));
+    }
+    return map;
+    // pageData identity changes with players / activeTab / page, which is exactly
+    // when the visible scores can change.
+  }, [pageData, activeTab]);
+
+  // Displayed (possibly mid-count-up) scores fed to GoldNumber as a controlled
+  // value. Seeded to the first target set so the initial paint is truthful.
+  const [displayScores, setDisplayScores] = useState<Map<string, number>>(targetScores);
+  const displayRef = useRef(displayScores);
+  displayRef.current = displayScores;
+  const countAnim = useRef<{ cancel?: () => void } | null>(null);
+
+  // A layout signature that flips only when the visible ordering / paging can
+  // actually move a row. Re-renders from a background data poll that leave the
+  // order intact will not retrigger the FLIP.
+  const orderSig = pageData.map((p) => p.pubkey.toBase58()).join(",");
+
+  // FLIP: runs after commit (rows already reordered) but before paint, so we can
+  // invert each visible row to its old slot and play the delta to zero. Capturing
+  // the "First" rects relies on useLayoutEffect ordering: prevRects holds the
+  // pre-reorder layout recorded at the end of the last run.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: keyed on the order signature; rect maps + reduce are read imperatively and intentionally untracked.
+  useLayoutEffect(() => {
+    const rows = rowRefs.current;
+    // Reduced motion: snap. Record Last rects for a truthful next diff, no invert.
+    if (prefersReducedMotion()) {
+      const next = new Map<string, DOMRect>();
+      for (const [key, el] of rows) next.set(key, el.getBoundingClientRect());
+      prevRects.current = next;
+      return;
+    }
+
+    // Retarget cleanly if a previous reflow is still settling.
+    for (const a of flipAnims.current) a.cancel?.();
+    flipAnims.current = [];
+
+    // Batch all reads first (avoid layout thrash), then all writes.
+    const next = new Map<string, DOMRect>();
+    const deltas: Array<[HTMLDivElement, number]> = [];
+    for (const [key, el] of rows) {
+      const last = el.getBoundingClientRect();
+      next.set(key, last);
+      const first = prevRects.current.get(key);
+      // No prior rect means the row is paging in/out: guard dy and skip the
+      // invert so it does not fly in from an arbitrary off-screen origin.
+      if (!first) continue;
+      const dy = first.top - last.top;
+      if (dy) deltas.push([el, dy]);
+    }
+    prevRects.current = next;
+
+    for (const [el, dy] of deltas) {
+      // Invert to the old position, play back to identity. composition "replace"
+      // so an overlapping reflow retargets without snapping back; cancel() (never
+      // revert) handles interruption and leaves the settled transform alone.
+      const a = animate(el, {
+        translateY: [dy, 0],
+        ease: REORDER,
+        composition: "replace",
+      });
+      flipAnims.current.push(a);
+    }
+  }, [orderSig]);
+
+  // Synchronized count-up: tween every visible row's displayed score from its old
+  // value to the new target on the same beat as the FLIP. Plain-object tween, one
+  // shared clock, writing whole rows of numbers per frame (GoldNumber renders the
+  // controlled value as a static span, so this stays cheap). The previous displayed
+  // values are read off a ref to seed the tween, so they stay out of the deps.
+  useEffect(() => {
+    countAnim.current?.cancel?.();
+    const from = displayRef.current;
+
+    // Reduced motion: set final values directly, skip the count-up.
+    if (reduce) {
+      setDisplayScores(targetScores);
+      return;
+    }
+
+    // Nothing to roll if every visible score already matches (e.g. a benign
+    // re-render). Still commit the target map so newly-visible rows are exact.
+    let changed = false;
+    for (const [key, target] of targetScores) {
+      if (from.get(key) !== target) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed && from.size === targetScores.size) {
+      return;
+    }
+
+    const proxy = { t: 0 };
+    const start = new Map(from);
+    const a = animate(proxy, {
+      t: [0, 1],
+      duration: DUR.base,
+      ease: "outQuart",
+      onUpdate: () => {
+        const frame = new Map<string, number>();
+        for (const [key, target] of targetScores) {
+          const begin = start.get(key) ?? target;
+          frame.set(key, utils.round(begin + (target - begin) * proxy.t, 0));
+        }
+        setDisplayScores(frame);
+      },
+      onComplete: () => {
+        setDisplayScores(new Map(targetScores));
+      },
+    });
+    countAnim.current = a;
+    return () => {
+      a.cancel?.();
+    };
+  }, [targetScores, reduce]);
+
+  // Medal glow: edge-detect rows entering the top 3 (Set-diff of podium pubkeys
+  // across reorders) and fire a one-shot rank-colored glow pulse. Fires on the
+  // EDGE only, not every render or background poll.
+  const prevPodium = useRef(new Set<string>());
+  // biome-ignore lint/correctness/useExhaustiveDependencies: edge-detected against the order signature; the podium set is read/written imperatively.
+  useLayoutEffect(() => {
+    const onFirstPage = page === 0;
+    const nextPodium = new Set<string>();
+    if (onFirstPage) {
+      for (let i = 0; i < Math.min(3, pageData.length); i++) {
+        nextPodium.add(pageData[i].pubkey.toBase58());
+      }
+    }
+
+    if (!prefersReducedMotion()) {
+      for (const key of nextPodium) {
+        if (prevPodium.current.has(key)) continue;
+        const el = rowRefs.current.get(key);
+        if (!el) continue;
+        const rank = pageData.findIndex((p) => p.pubkey.toBase58() === key) + 1;
+        const base = MEDAL_GLOW[rank];
+        const peak = MEDAL_GLOW_PEAK[rank];
+        if (!base || !peak) continue;
+        animate(el, {
+          boxShadow: [base, peak, base],
+          duration: DUR.slow,
+          ease: "outQuad",
+        });
+      }
+    }
+    prevPodium.current = nextPodium;
+  }, [orderSig, page]);
+
+  // Cancel any in-flight FLIP / count-up on unmount without reverting (FLIP
+  // settles to identity on its own; reverting would wipe the committed transform).
+  useEffect(() => {
+    return () => {
+      for (const a of flipAnims.current) a.cancel?.();
+      countAnim.current?.cancel?.();
+    };
+  }, []);
 
   if (isLoading) {
     return (
@@ -129,14 +325,19 @@ export function LeaderboardView() {
           </div>
           {pageData.map((p, i) => {
             const rank = page * PAGE_SIZE + i + 1;
+            const key = p.pubkey.toBase58();
             const isSelf =
               citizen.isCitizen &&
               citizen.player &&
               p.account.owner.toBase58() === citizen.player.owner.toBase58();
+            const target = targetScores.get(key) ?? playerScore(p.account, activeTab);
+            const display = displayScores.get(key);
 
             return (
               <div
-                key={p.pubkey.toBase58()}
+                key={key}
+                ref={(el) => setRowRef(key, el)}
+                style={{ willChange: "transform" }}
                 className={cn(
                   "flex items-center gap-4 rounded-lg px-2 py-2",
                   rank <= 3 && "bg-accent/10",
@@ -190,7 +391,8 @@ export function LeaderboardView() {
                 </span>
                 <span className="w-24 text-right">
                   <GoldNumber
-                    value={playerScore(p.account, activeTab)}
+                    value={target}
+                    controlledValue={display}
                     size="sm"
                     glow={rank <= 3}
                   />

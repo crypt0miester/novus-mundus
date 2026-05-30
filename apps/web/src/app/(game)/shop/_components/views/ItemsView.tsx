@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useShopConfig, useShopItems, usePlayerPurchase } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -32,6 +33,8 @@ import {
   RARITY_COLORS,
   lamportsToSol,
   buildIdLookup,
+  selectShopTile,
+  useShopTileRipple,
 } from "./shared";
 import { useIsDesktop } from "./useIsDesktop";
 
@@ -61,6 +64,9 @@ export function ItemsView() {
   const [itemQuantities, setItemQuantities] = useState<Record<number, number>>({});
 
   const isDesktop = useIsDesktop();
+  const reduce = useReducedMotion();
+  // Tile-ripple grid root. grid-cols-2 md:grid-cols-3 -> read live breakpoint.
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
 
@@ -135,6 +141,11 @@ export function ItemsView() {
   }, [effectiveItem, activeItems, itemQuantities, handlePurchaseItem]);
   useMorphActions(morphActions);
 
+  // Rarity-aware tile ripple. Keyed on the visible ware ids so the diagonal
+  // wash-in replays whenever the catalog set changes.
+  const rippleSig = nonCosmeticItems.map((i) => i.itemId).join(",");
+  useShopTileRipple(gridRef, [rippleSig], { base: 2, md: 3 });
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2">
@@ -149,15 +160,19 @@ export function ItemsView() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-2 grid-cols-2 md:grid-cols-3">
+          <div ref={gridRef} className="grid gap-2 grid-cols-2 md:grid-cols-3">
             {nonCosmeticItems.map((item) => {
               const a = item.account;
               const isSelected = effectiveItem === item.itemId;
               return (
                 <button
                   key={item.itemId}
-                  onClick={() => setSelectedItem(item.itemId)}
-                  className={`rounded-lg border p-3 text-left transition-all ${
+                  data-shop-tile
+                  onClick={(e) => {
+                    selectShopTile(e.currentTarget, reduce);
+                    setSelectedItem(item.itemId);
+                  }}
+                  className={`rounded-lg border p-3 text-left opacity-0 transition-colors ${
                     isSelected
                       ? "border-border-gold bg-accent/20 ring-1 ring-border-gold/30"
                       : a.isFeatured

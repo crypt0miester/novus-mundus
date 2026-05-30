@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useRef } from "react";
-import { animate, spring } from "animejs";
+import { type RefObject, useMemo, useRef } from "react";
+import { createTimeline, irregular, stagger, utils } from "animejs";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
+import { BLOOM, DUR, STAGGER } from "@/lib/motion/tokens";
 import { TxButton } from "@/components/shared/TxButton";
 import { formatNoviAmount } from "novus-mundus-sdk";
 
@@ -179,49 +181,44 @@ function buildView(
   return { tone, heading, sub, rows, hint, hpAnim, canAttackAgain };
 }
 
-/**
- * Diminishing HP bar — starts at pre-hit HP and animates down to the post-hit
- * value via animejs. Width is normalised against the encounter's max HP so the
- * bar reads "how much of the enemy is left" rather than "how much this hit took".
- */
-function HpDiminishBar({ from, to, max }: HpAnim) {
-  const fillRef = useRef<HTMLDivElement | null>(null);
-  const numRef = useRef<HTMLSpanElement | null>(null);
+// Post-hit HP severity drives both the bar fill colour and the critical tone the
+// HP number cross-fades toward as it settles. Animated to a literal hex so the
+// colour tween is clamp-safe under blend-free composition (not a baked class).
+const CRIT_GREEN = "#10b981"; // emerald-500
+const CRIT_AMBER = "#f59e0b"; // gold-500
+const CRIT_RED = "#ef4444"; // red-500
+function critTone(toPct: number): string {
+  return toPct > 50 ? CRIT_GREEN : toPct > 25 ? CRIT_AMBER : CRIT_RED;
+}
 
-  const fromPct = Math.max(0, Math.min(100, (from / max) * 100));
-  const toPct = Math.max(0, Math.min(100, (to / max) * 100));
+interface HpBarRefs {
+  fillRef: RefObject<HTMLDivElement | null>;
+  numRef: RefObject<HTMLSpanElement | null>;
+}
+
+/**
+ * Diminishing HP bar — purely presentational. The drain, count-down and the
+ * number's pop + colour crossfade are owned by the modal's single cinematic
+ * timeline (it also rumbles the card on the same beat), so this just renders the
+ * fill/number at their pre-hit start state and hands their refs up. Width is
+ * normalised against the encounter's max HP so the bar reads "how much of the
+ * enemy is left" rather than "how much this hit took".
+ */
+function HpDiminishBar({
+  from,
+  max,
+  fromPct,
+  toPct,
+  fillRef,
+  numRef,
+}: HpBarRefs & {
+  from: number;
+  max: number;
+  fromPct: number;
+  toPct: number;
+}) {
   // Ramp colour to match the post-hit HP — red when critical, amber low, green healthy.
   const fillColor = toPct > 50 ? "bg-emerald-500" : toPct > 25 ? "bg-gold-500" : "bg-red-500";
-
-  useEffect(() => {
-    if (!fillRef.current) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      fillRef.current.style.width = `${toPct}%`;
-      if (numRef.current) numRef.current.textContent = Math.round(to).toLocaleString();
-      return;
-    }
-
-    fillRef.current.style.width = `${fromPct}%`;
-    animate(fillRef.current, {
-      width: [`${fromPct}%`, `${toPct}%`],
-      duration: 900,
-      delay: 220,
-      ease: "outQuart",
-    });
-
-    const counter = { v: from };
-    animate(counter, {
-      v: to,
-      duration: 900,
-      delay: 220,
-      ease: "outQuart",
-      onUpdate: () => {
-        if (numRef.current) {
-          numRef.current.textContent = Math.round(counter.v).toLocaleString();
-        }
-      },
-    });
-  }, [from, to, fromPct, toPct]);
 
   return (
     <div className="space-y-1.5">
@@ -266,27 +263,129 @@ export function CombatOutcomeModal() {
 
   const backdropRef = useRef<HTMLDivElement | null>(null);
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const fillRef = useRef<HTMLDivElement | null>(null);
+  const numRef = useRef<HTMLSpanElement | null>(null);
 
   const view = useMemo(
     () => (events ? buildView(events, context.maxHealth) : null),
     [events, context.maxHealth],
   );
 
-  // Pop the card in with a spring; fade the backdrop.
-  useEffect(() => {
-    if (!view) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
-    if (backdropRef.current) {
-      animate(backdropRef.current, { opacity: [0, 1], duration: 160, ease: "outQuad" });
-    }
-    if (cardRef.current) {
-      animate(cardRef.current, {
-        opacity: [0, 1],
-        scale: [0.86, 1],
-        ease: spring({ stiffness: 190, damping: 19 }),
-      });
-    }
-  }, [view]);
+  // The card springs in, then the load-bearing beat lands: the HP bar drains in
+  // one decisive outQuart sweep while the card does a sub-6px irregular() rumble
+  // timed exactly to the drain starting (heavier on defeat), the HP number counts
+  // down in lockstep and pops outElastic, cross-fading its colour to the crit
+  // tone, and the breakdown rows deal in on a stagger trailing the HP beat.
+  //
+  // Reference integration for the scope + mediaQueries.reduce + teardown pattern:
+  // under reduce we set the final HP width + number directly, skip choreography,
+  // and bail. Re-keyed on the rendered view's identity so a fresh outcome replays.
+  const hp = view?.hpAnim;
+  const fromPct = hp ? Math.max(0, Math.min(100, (hp.from / hp.max) * 100)) : 0;
+  const toPct = hp ? Math.max(0, Math.min(100, (hp.to / hp.max) * 100)) : 0;
+  const heavy = view?.tone === "defeat";
+
+  useAnimeScope(
+    {
+      root: cardRef,
+      mediaQueries: { reduce: "(prefers-reduced-motion: reduce)" },
+      deps: [view],
+    },
+    ({ reduce }) => {
+      if (!view) return;
+
+      // Reduced motion: snap card + backdrop visible, settle HP final state, bail.
+      if (reduce) {
+        if (cardRef.current) {
+          cardRef.current.style.opacity = "1";
+          cardRef.current.style.transform = "none";
+        }
+        if (backdropRef.current) backdropRef.current.style.opacity = "1";
+        if (hp) {
+          if (fillRef.current) fillRef.current.style.width = `${toPct}%`;
+          if (numRef.current) numRef.current.textContent = Math.round(hp.to).toLocaleString();
+        }
+        return;
+      }
+
+      // Pin initial state before the timeline plays so nothing flashes its final
+      // frame for a tick (the rows render visible by default for SSR / reduce).
+      if (view.rows.length > 0) utils.set(".outcome-row", { opacity: 0 });
+
+      const tl = createTimeline({ defaults: { ease: "outQuart" } });
+
+      // 1. Card springs in.
+      tl.add(cardRef.current as HTMLElement, { scale: [0.86, 1], opacity: [0, 1], ease: BLOOM }, 0);
+
+      if (backdropRef.current) {
+        tl.add(backdropRef.current, { opacity: [0, 1], duration: 160, ease: "outQuad" }, 0);
+      }
+
+      if (hp && fillRef.current && numRef.current) {
+        const drainMs = 820;
+
+        // 2. Decisive HP drain (outQuart), trailing the card spring.
+        tl.add(
+          fillRef.current,
+          { width: [`${fromPct}%`, `${toPct}%`], duration: drainMs },
+          "+=120",
+        );
+
+        // 3. Sub-6px irregular() impact rumble, the SAME instant the drain starts.
+        //    Amplitude stays under 6px or it reads as a glitch; defeat hits harder.
+        tl.add(
+          cardRef.current as HTMLElement,
+          {
+            x: [0, heavy ? 5 : 4, 0],
+            y: [0, heavy ? -4 : -3, 0],
+            duration: heavy ? 380 : 280,
+            ease: irregular(10, heavy ? 2.4 : 1.4),
+          },
+          "<<",
+        );
+
+        // 4. HP number counts down in lockstep (plain-object target, utils.round).
+        const counter = { v: hp.from };
+        tl.add(
+          counter,
+          {
+            v: [hp.from, hp.to],
+            duration: drainMs,
+            modifier: utils.round(0),
+            onUpdate: () => {
+              if (numRef.current) {
+                numRef.current.textContent = Math.round(counter.v).toLocaleString();
+              }
+            },
+          },
+          "<<",
+        );
+
+        // 5. As it settles, the number pops outElastic and cross-fades its colour
+        //    to the critical tone (animated, not baked at render). Positioned so
+        //    the ring lands as the drain finishes, reading as "the blow settles".
+        tl.add(
+          numRef.current,
+          { scale: [1, 1.25, 1], color: critTone(toPct), ease: "outElastic", duration: 620 },
+          `<<+=${Math.round(drainMs * 0.55)}`,
+        );
+      }
+
+      // 6. Breakdown rows deal in on a stagger trailing the HP beat.
+      if (view.rows.length > 0) {
+        tl.add(
+          ".outcome-row",
+          {
+            opacity: [0, 1],
+            y: [10, 0],
+            duration: DUR.fast,
+            delay: stagger(STAGGER.base),
+          },
+          hp ? "<<+=120" : "+=80",
+        );
+      }
+    },
+  );
 
   // Contain focus inside the card while the modal is up, move focus in on open,
   // restore it on close, and close on Escape. Only Escape closes — Enter must
@@ -323,7 +422,14 @@ export function CombatOutcomeModal() {
 
         {view.hpAnim && (
           <div className="mt-5">
-            <HpDiminishBar {...view.hpAnim} />
+            <HpDiminishBar
+              from={view.hpAnim.from}
+              max={view.hpAnim.max}
+              fromPct={fromPct}
+              toPct={toPct}
+              fillRef={fillRef}
+              numRef={numRef}
+            />
           </div>
         )}
 
@@ -332,7 +438,7 @@ export function CombatOutcomeModal() {
             {view.rows.map((row, i) => (
               <div
                 key={i}
-                className={`flex items-baseline justify-between rounded-md px-3 py-1.5 text-sm ${
+                className={`outcome-row flex items-baseline justify-between rounded-md px-3 py-1.5 text-sm ${
                   row.highlight ? "bg-gold-500/10" : "bg-surface/60"
                 }`}
               >

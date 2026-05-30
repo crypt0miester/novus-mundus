@@ -1,6 +1,17 @@
 "use client";
 
+import {
+  type AnimatableObject,
+  type Timeline,
+  createAnimatable,
+  createTimeline,
+  steps,
+  utils,
+} from "animejs";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { registerCountdown } from "@/lib/motion/countdownClock";
+import { DUR, EASE, SETTLE } from "@/lib/motion/tokens";
+import { prefersReducedMotion } from "@/lib/utils";
 
 // Mini-games are co-signed by the game_authority: the cosigner is the
 // authoritative arbiter of reward. Client-side tier display is the human
@@ -39,6 +50,66 @@ export function useFireOnce(fn: () => void): () => void {
     firedRef.current = true;
     fnRef.current();
   }, []);
+}
+
+// Pick a slot-roll step count tuned to the score range so the count-up reads as
+// a ledger ticking over rather than a smooth lerp. Wider scores get more steps.
+function rollSteps(score: number): number {
+  if (score <= 0) return 1;
+  if (score <= 20) return Math.max(6, score);
+  if (score <= 100) return 24;
+  return 30;
+}
+
+/**
+ * The shared score-reveal celebration so ActivityResult / MemoryGame / the
+ * single-shot games inherit one cadence: the card springs in, the score rolls
+ * up on a `steps()` slot cadence (fits an economy game), and the final number
+ * pops on `outElastic`. `onTick` writes the rolling value to the DOM each frame
+ * (drive the number node directly, do not re-render per frame). Returns a cancel
+ * fn; under reduced motion it sets the final value once and skips choreography.
+ */
+export function celebrate(opts: {
+  card: HTMLElement;
+  number: HTMLElement;
+  score: number;
+  format?: (v: number) => string;
+  onTick: (v: number) => void;
+}): () => void {
+  const { card, number, score, format, onTick } = opts;
+  const render = format ?? ((v: number) => Math.round(v).toLocaleString());
+
+  if (prefersReducedMotion()) {
+    onTick(score);
+    number.textContent = render(score);
+    return () => {};
+  }
+
+  const counter = { v: 0 };
+  const tl: Timeline = createTimeline({ defaults: { ease: EASE.drama } });
+  tl.add(card, { scale: [0.86, 1], opacity: [0, 1], ease: SETTLE, duration: DUR.base }, 0)
+    .add(
+      counter,
+      {
+        v: [0, score],
+        duration: DUR.slow,
+        ease: steps(rollSteps(score)),
+        onUpdate: () => {
+          const v = Math.round(counter.v);
+          number.textContent = render(v);
+          onTick(v);
+        },
+      },
+      "+=80",
+    )
+    // Final number lands and rings out on outElastic, the earned-stamp beat.
+    .add(
+      number,
+      { scale: [1, 1.25, 1], ease: "outElastic(1, 0.5)", duration: DUR.base },
+      "<<+=520",
+    );
+
+  return () => tl.cancel();
 }
 
 // Tier ramp — single source of truth shared with ReflexGame's reactionTag /
@@ -146,17 +217,28 @@ export function ResultBadge({ tier, label }: { tier: ScoreTier; label?: string }
   );
 }
 
-// Re-render the bar only when remaining ms crosses a 100ms quantum.
-// 60Hz raf × no quantization = ~60 React renders/sec of the whole game tree;
-// 10Hz is plenty for a draining bar and reduces render cost ~6×.
-const REMAINING_QUANTUM_MS = 100;
+// Re-render the bar band only when the urgency tier crosses a boundary.
+// Width / seconds / urgency var / heartbeat are all driven from the shared
+// countdown clock's onTick straight onto the DOM, so the React tree only
+// re-renders on the three color-band transitions, not every frame.
+type UrgencyBand = "calm" | "warning" | "danger";
+
+function bandFor(frac: number): UrgencyBand {
+  if (frac <= 0.2) return "danger";
+  if (frac <= 0.5) return "warning";
+  return "calm";
+}
 
 /**
- * Draining countdown bar. Color-shifts gold → amber → red and pulses red in
- * the danger band. `onExpire` fires once when the bar hits zero. Pause is a
- * single-trip in practice (paused={submitting}); resetting on pause is the
- * right semantics — the session deadline in MinigameSession handles longer
- * suspensions.
+ * Single accelerating-urgency countdown bar on the shared countdown clock (one
+ * createTimer fans out to every live countdown, frame-synced and paused
+ * together). The bar fill and seconds text are driven straight from onTick; a
+ * `--urgency` var smoothly cross-fades the bar color across the whole drain via
+ * one reused createAnimatable; and the danger heartbeat *accelerates* (cadence
+ * shrinks as ms drop) rather than a fixed blink. The `firedRef` onExpire guard
+ * fires once at zero. Pause is a single trip in practice (paused={submitting});
+ * resetting on pause is the right semantics — the session deadline in
+ * MinigameSession handles longer suspensions.
  */
 export function GameTimer({
   totalMs,
@@ -167,47 +249,137 @@ export function GameTimer({
   paused?: boolean;
   onExpire?: () => void;
 }) {
-  const [remaining, setRemaining] = useState(totalMs);
+  const [band, setBand] = useState<UrgencyBand>("calm");
   const firedRef = useRef(false);
   const onExpireRef = useRef(onExpire);
   onExpireRef.current = onExpire;
 
+  const rootRef = useRef<HTMLDivElement>(null);
+  const fillRef = useRef<HTMLDivElement>(null);
+  const secondsRef = useRef<HTMLSpanElement>(null);
+  // One reused animatable carries the per-frame --urgency channel (never an
+  // animate() per frame). The danger heartbeat is a separate pulse animatable.
+  const urgencyRef = useRef<AnimatableObject | null>(null);
+  const beatRef = useRef<AnimatableObject | null>(null);
+  // Edge state so the band React-render and the heartbeat each fire on the edge,
+  // not every tick.
+  const bandRef = useRef<UrgencyBand>("calm");
+  const lastBeatRef = useRef(0);
+
   useEffect(() => {
-    if (paused) return;
-    const start = performance.now();
-    let raf = 0;
-    const loop = () => {
-      const elapsed = performance.now() - start;
-      const r = Math.max(0, totalMs - elapsed);
-      const quantized = Math.floor(r / REMAINING_QUANTUM_MS) * REMAINING_QUANTUM_MS;
-      setRemaining(quantized);
-      if (r <= 0 && !firedRef.current) {
-        firedRef.current = true;
-        onExpireRef.current?.();
-        return;
+    const root = rootRef.current;
+    const fill = fillRef.current;
+    if (!root || !fill) return;
+    // Reset the one-shot guard whenever the timer is (re)armed.
+    firedRef.current = false;
+    bandRef.current = "calm";
+    lastBeatRef.current = 0;
+    setBand("calm");
+
+    const reduce = prefersReducedMotion();
+    // The --urgency channel rides on the root as a real CSS custom property
+    // (anime.js writes any "--"-prefixed key via setProperty); CSS color-mixes
+    // the bar color from it. One reused animatable, never an animate() per frame.
+    const urgency = createAnimatable(root, { "--urgency": 0, duration: reduce ? 0 : 220 });
+    urgencyRef.current = urgency;
+    // The danger heartbeat dims and restores the fill (opacity is compositor
+    // cheap); on a 6px bar an opacity throb reads far better than a scale pulse.
+    const beat = createAnimatable(fill, { opacity: 1, duration: 120, ease: EASE.out });
+    beatRef.current = beat;
+
+    const paint = (remainingMs: number, frac: number) => {
+      // Drain via scaleX (transform-origin: left) rather than width, so the
+      // per-frame DOM write rides the compositor and React's static width:100%
+      // never clobbers it on a band re-render. Seconds text goes straight to DOM.
+      fill.style.transform = `scaleX(${utils.clamp(frac, 0, 1)})`;
+      const s = secondsRef.current;
+      if (s) s.textContent = `${(remainingMs / 1000).toFixed(1)}s`;
+
+      // --urgency cross-fades 0 -> 1 across the whole drain (CSS mixes the band
+      // color from it). mapRange so it tracks elapsed, not just the danger band.
+      urgency["--urgency"](utils.mapRange(utils.clamp(frac, 0, 1), 1, 0, 0, 1));
+
+      const next = bandFor(frac);
+      if (next !== bandRef.current) {
+        bandRef.current = next;
+        setBand(next);
       }
-      raf = requestAnimationFrame(loop);
+
+      // Accelerating danger heartbeat: the cadence shrinks from ~520ms toward
+      // ~140ms as the last fifth burns down, so the pulse visibly quickens.
+      if (next === "danger" && remainingMs > 0 && !reduce) {
+        const cadence = utils.mapRange(utils.clamp(frac, 0, 0.2), 0.2, 0, 520, 140);
+        const now = Date.now();
+        if (now - lastBeatRef.current >= cadence) {
+          lastBeatRef.current = now;
+          // Dim sharply then restore: one throb per accelerating cadence window.
+          beat.opacity(0.45);
+          beat.opacity(1, 140);
+        }
+      }
     };
-    raf = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(raf);
+
+    if (paused || totalMs <= 0) {
+      // Paused / armed-empty: paint a full bar and idle, no live countdown.
+      paint(totalMs, totalMs > 0 ? 1 : 0);
+      return () => {
+        urgency.revert();
+        beat.revert();
+        urgencyRef.current = null;
+        beatRef.current = null;
+      };
+    }
+
+    const startTs = Date.now();
+    const unregister = registerCountdown({
+      startTs,
+      endTs: startTs + totalMs,
+      onTick: (remainingMs, fraction) => {
+        // fraction is elapsed progress 0..1; the bar shows remaining.
+        const remFrac = 1 - fraction;
+        paint(remainingMs, remFrac);
+        if (remainingMs <= 0 && !firedRef.current) {
+          firedRef.current = true;
+          onExpireRef.current?.();
+        }
+      },
+    });
+
+    return () => {
+      unregister();
+      urgency.revert();
+      beat.revert();
+      urgencyRef.current = null;
+      beatRef.current = null;
+    };
   }, [paused, totalMs]);
 
-  // Guard totalMs=0 — frac would be NaN and the bar would silently vanish.
-  const frac = totalMs > 0 ? remaining / totalMs : 0;
-  const danger = frac <= 0.2;
-  const warning = !danger && frac <= 0.5;
-  const barColor = danger ? "bg-red-500" : warning ? "bg-amber-400" : "bg-gold-400";
+  // The --urgency channel (0 calm -> 1 expired) cross-fades the fill color
+  // continuously through amber via color-mix, so the bar shifts gold -> red over
+  // the whole drain instead of snapping at the band edges. The discrete `band`
+  // state is reserved for the reduced-motion danger pulse, where the live
+  // heartbeat is suppressed.
+  const danger = band === "danger";
 
   return (
-    <div className="space-y-0.5">
+    <div
+      ref={rootRef}
+      className="space-y-0.5"
+      style={{ ["--urgency" as string]: 0 } as React.CSSProperties}
+    >
       <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-900">
         <div
-          className={`h-full ${barColor} ${danger ? "animate-pulse" : ""}`}
-          style={{ width: `${frac * 100}%` }}
+          ref={fillRef}
+          className={`h-full w-full origin-left ${danger ? "motion-reduce:animate-pulse" : ""}`}
+          style={{
+            transform: `scaleX(${totalMs > 0 ? 1 : 0})`,
+            backgroundColor:
+              "color-mix(in oklab, var(--color-gold-400) calc((1 - var(--urgency)) * 100%), #ef4444)",
+          }}
         />
       </div>
       <div className="flex justify-end font-mono text-[10px] tabular-nums text-text-muted">
-        {(remaining / 1000).toFixed(1)}s
+        <span ref={secondsRef}>{(totalMs / 1000).toFixed(1)}s</span>
       </div>
     </div>
   );

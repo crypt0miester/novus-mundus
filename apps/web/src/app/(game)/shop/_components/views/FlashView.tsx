@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useShopItems, useFlashSales } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -23,7 +24,12 @@ import {
   isFlashSaleActive,
   getItemTypeInfo,
 } from "novus-mundus-sdk";
-import { findItemType, buildIdLookup } from "./shared";
+import {
+  findItemType,
+  buildIdLookup,
+  selectShopTile,
+  useShopTileRipple,
+} from "./shared";
 import { useIsDesktop } from "./useIsDesktop";
 
 export function FlashView() {
@@ -40,6 +46,9 @@ export function FlashView() {
   const [selectedSale, setSelectedSale] = useState<number | null>(null);
 
   const isDesktop = useIsDesktop();
+  const reduce = useReducedMotion();
+  // Tile-ripple grid root. Flash sales sit in a fixed grid-cols-2 grid.
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
   const saleIdMap = useMemo(() => buildIdLookup(ge, deriveFlashSalePda, 100), [ge]);
@@ -119,6 +128,11 @@ export function FlashView() {
   }, [effectiveSale, activeFlashSales, handlePurchaseFlashSale, ge]);
   useMorphActions(morphActions);
 
+  // Rarity-aware tile ripple, ranking each tile's flare by discount depth.
+  // Keyed on the visible sale ids so the wash-in replays as offers come and go.
+  const rippleSig = activeFlashSales.map((s) => s.saleId).join(",");
+  useShopTileRipple(gridRef, [rippleSig], { base: 2 });
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
       <div className="lg:col-span-2">
@@ -133,7 +147,7 @@ export function FlashView() {
             </p>
           </div>
         ) : (
-          <div className="grid gap-2 grid-cols-2">
+          <div ref={gridRef} className="grid gap-2 grid-cols-2">
             {activeFlashSales.map((sale) => {
               const s = sale.account;
               const discountPct = (s.discountBps / 100).toFixed(0);
@@ -147,8 +161,12 @@ export function FlashView() {
               return (
                 <button
                   key={sale.saleId}
-                  onClick={() => setSelectedSale(sale.saleId)}
-                  className={`rounded-lg border p-3 text-left transition-all ${
+                  data-shop-tile
+                  onClick={(e) => {
+                    selectShopTile(e.currentTarget, reduce);
+                    setSelectedSale(sale.saleId);
+                  }}
+                  className={`rounded-lg border p-3 text-left opacity-0 transition-colors ${
                     isSelected
                       ? "border-red-600 bg-red-900/20 ring-1 ring-red-600/30"
                       : "border-zinc-800 hover:border-zinc-700"

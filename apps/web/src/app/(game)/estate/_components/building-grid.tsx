@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useEffect, useState, useCallback } from "react";
+import { useMemo, useEffect, useState, useCallback, useLayoutEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
+import { animate, stagger, utils } from "animejs";
 import { useEstate } from "@/lib/hooks/useEstate";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { BUILDING_FEATURES } from "@/lib/config/building-features";
 import { findBuilding } from "novus-mundus-sdk";
 import { buildingPhase } from "@/lib/narrative";
-import { formatTime } from "@/lib/utils";
+import { formatTime, prefersReducedMotion } from "@/lib/utils";
+import { REORDER } from "@/lib/motion/tokens";
 import {
   BuildingCard,
   type BuildingCardData,
@@ -112,6 +115,160 @@ export function BuildingGrid({
   // Construction alerts (compact banner)
   const constructingBuildings = buildingInfo.filter((b) => b.constructing);
 
+  // FLIP reflow root. Spans every plot grid + the ground-to-break grid so a
+  // building that moves between sections (e.g. a parcel completes and the grid
+  // re-sorts) slides across the whole board, not just within one container.
+  const gridRootRef = useRef<HTMLDivElement>(null);
+  const prevRects = useRef(new Map<number, DOMRect>());
+
+  // Live breakpoint for the grid stagger origin. The plot grids are
+  // grid-cols-2 lg:grid-cols-4, so the center-out ripple direction depends on
+  // whether we are at the lg (1024px) breakpoint. Reading the wrong column
+  // count points the ripple the wrong way on resize.
+  const isLg = useMediaQuery("(min-width: 1024px)");
+  const gridCols = isLg ? 4 : 2;
+
+  // The order of settled building ids (the thing that actually moves a card to a
+  // new slot) plus plots owned. Gating the FLIP measure on this signature keeps
+  // useLayoutEffect from reading getBoundingClientRect on every 1s construction
+  // tick; it only measures when the layout could have genuinely reflowed.
+  const layoutSig = useMemo(() => {
+    const settledIds = [...buildingInfo]
+      .filter((b) => b.phase !== "unbuilt")
+      .sort((a, b) => a.config.id - b.config.id)
+      .map((b) => b.config.id)
+      .join(",");
+    const unbuiltIds = [...buildingInfo]
+      .filter((b) => b.phase === "unbuilt")
+      .map((b) => b.config.id)
+      .join(",");
+    return `${settledIds}|${unbuiltIds}|${plotsOwned}`;
+  }, [buildingInfo, plotsOwned]);
+
+  // FLIP: First/Last/Invert/Play keyed by building id (NOT DOM index, since the
+  // grid re-sorts cards across plots by id). Measure the new committed layout, invert
+  // each card to its old position, then play the delta back to identity on the
+  // REORDER spring. Stagger ripples out from the keep (grid center). We
+  // cancel() rather than revert() so an overlapping reflow retargets cleanly and
+  // the committed transform is never wiped (the FLIP teardown rule).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measure is gated on the layout signature; gridCols re-keys the ripple on breakpoint change.
+  useLayoutEffect(() => {
+    const root = gridRootRef.current;
+    if (!root) return;
+    const cards = Array.from(root.querySelectorAll<HTMLElement>("[data-bcard]"));
+    if (cards.length === 0) return;
+
+    if (prefersReducedMotion()) {
+      // Snap: record the new rects, never invert.
+      for (const el of cards) {
+        prevRects.current.set(Number(el.dataset.bcard), el.getBoundingClientRect());
+      }
+      return;
+    }
+
+    // Batch all reads before any writes to avoid layout thrash.
+    const deltas: Array<{ el: HTMLElement; dx: number; dy: number }> = [];
+    for (const el of cards) {
+      const id = Number(el.dataset.bcard);
+      const next = el.getBoundingClientRect();
+      const prev = prevRects.current.get(id);
+      if (prev) {
+        const dx = prev.left - next.left;
+        const dy = prev.top - next.top;
+        if (dx || dy) deltas.push({ el, dx, dy });
+      }
+      prevRects.current.set(id, next);
+    }
+
+    if (deltas.length === 0) return;
+
+    const animations = deltas.map(({ el, dx, dy }) =>
+      // Invert to the old slot, play back to identity. composition:"replace" so a
+      // second reflow mid-flight retargets instead of snapping back.
+      animate(el, {
+        translateX: [dx, 0],
+        translateY: [dy, 0],
+        ease: REORDER,
+        composition: "replace",
+        delay: stagger(28, { from: "center", grid: [gridCols, Math.ceil(cards.length / gridCols)] }),
+      }),
+    );
+
+    // Do NOT revert a FLIP; it settles to identity on its own. cancel() only,
+    // to stop in-flight tweens without wiping the committed transform.
+    return () => {
+      for (const a of animations) a.cancel();
+    };
+  }, [layoutSig, gridCols]);
+
+  // Construction-alert muster: the "{N} rising" count rolls up on a spring via a
+  // plain-object tween (utils.round for an integer ticker) instead of snapping
+  // to the new value. Fires on the EDGE where the count changes.
+  const musterRef = useRef<HTMLSpanElement>(null);
+  const risingCount = constructingBuildings.length;
+  const prevRising = useRef(risingCount);
+  useEffect(() => {
+    const el = musterRef.current;
+    const from = prevRising.current;
+    prevRising.current = risingCount;
+    if (!el) return;
+    if (from === risingCount) return;
+    if (prefersReducedMotion()) {
+      el.textContent = `${risingCount} rising`;
+      return;
+    }
+    const counter = { v: from };
+    const a = animate(counter, {
+      v: risingCount,
+      ease: REORDER,
+      modifier: utils.round(0),
+      onUpdate: () => {
+        el.textContent = `${Math.round(counter.v)} rising`;
+      },
+    });
+    return () => {
+      a.cancel();
+    };
+  }, [risingCount]);
+
+  // Newest chip leads. When the set of rising buildings GAINS an id, deal the
+  // chips in with a from:"last" stagger so the most recent groundbreaking
+  // animates first. Edge-detected on a Set-diff so it fires on the change, not
+  // on every 1s tick (which only mutates the remaining-time text).
+  const risingIds = useMemo(
+    () => constructingBuildings.map((b) => b.config.id).join(","),
+    [constructingBuildings],
+  );
+  const prevRisingIds = useRef<Set<number>>(new Set());
+  // biome-ignore lint/correctness/useExhaustiveDependencies: fires on the rising-id Set edge (risingIds); constructingBuildings is re-derived each 1s tick but the Set-diff gates the actual animation, so re-running per tick would defeat the edge detection.
+  useEffect(() => {
+    const root = gridRootRef.current;
+    const next = new Set(constructingBuildings.map((b) => b.config.id));
+    const prev = prevRisingIds.current;
+    prevRisingIds.current = next;
+    if (!root) return;
+    // Only a newly added id triggers the deal-in (a chip leaving never musters).
+    let gained = false;
+    for (const id of next) {
+      if (!prev.has(id)) {
+        gained = true;
+        break;
+      }
+    }
+    if (!gained || prefersReducedMotion()) return;
+    const chips = root.querySelectorAll<HTMLElement>("[data-muster-chip]");
+    if (chips.length === 0) return;
+    const a = animate(chips, {
+      opacity: [0, 1],
+      translateY: [6, 0],
+      ease: REORDER,
+      delay: stagger(45, { from: "last" }),
+    });
+    return () => {
+      a.cancel();
+    };
+  }, [risingIds]);
+
   const handleCardClick = useCallback(
     (data: BuildingCardData) => {
       const id = data.config.id;
@@ -138,22 +295,25 @@ export function BuildingGrid({
   );
 
   return (
-    <div className="space-y-6">
-      {/* Construction alerts banner */}
+    <div ref={gridRootRef} className="space-y-6">
+      {/* Construction alerts banner as a live muster. The count rolls up on a
+          spring (musterRef), and the rising chips deal in newest-first via a
+          from:"last" stagger so the most recent groundbreaking leads the wave. */}
       {constructingBuildings.length > 0 && (
         <div className="rounded-lg border border-border-gold/60 bg-accent/10 px-4 py-2">
           <div className="flex items-center gap-2 text-xs">
-            <span className="font-semibold text-text-gold">
-              {constructingBuildings.length} rising
+            <span ref={musterRef} className="font-semibold text-text-gold">
+              {risingCount} rising
             </span>
-            <span className="text-text-muted">
-              {constructingBuildings
-                .map((b) =>
-                  b.ready
+            <span className="flex flex-wrap gap-x-1.5 text-text-muted">
+              {constructingBuildings.map((b, i) => (
+                <span key={b.config.id} data-muster-chip>
+                  {b.ready
                     ? `${b.config.name} (ready)`
-                    : `${b.config.name} (${formatTime(b.remainingSec, "compact")})`,
-                )
-                .join(", ")}
+                    : `${b.config.name} (${formatTime(b.remainingSec, "compact")})`}
+                  {i < constructingBuildings.length - 1 ? "," : ""}
+                </span>
+              ))}
             </span>
           </div>
         </div>

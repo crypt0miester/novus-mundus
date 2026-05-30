@@ -1,7 +1,10 @@
 "use client";
 
+import { type AnimatableObject, animate, createAnimatable, utils } from "animejs";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BLOOM, DUR, EASE } from "@/lib/motion/tokens";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
+import { prefersReducedMotion } from "@/lib/utils";
 
 /** Client-safe Reflex presentation (server `reflex` archetype). */
 export interface ReflexPresentation {
@@ -335,6 +338,16 @@ function ReactArena({
   );
 }
 
+// Distance from the marker to the optimal band, normalized 0 (dead center) to 1
+// (furthest possible). Inside the band the distance is 0.
+function distanceToBand(pos: number, from: number, to: number): number {
+  if (pos >= from && pos <= to) return 0;
+  const gap = pos < from ? from - pos : pos - to;
+  // The worst case is the marker at an edge with the band at the far end.
+  const worst = Math.max(from, 1 - to, 0.0001);
+  return utils.clamp(gap / worst, 0, 1);
+}
+
 function PrecisionArena({
   phase,
   round,
@@ -355,6 +368,94 @@ function PrecisionArena({
   const displayPos = phase === "result" ? (result?.markerPos ?? markerPos) : markerPos;
   const inBand = !!sweep && markerPos >= sweep.bandFrom && markerPos <= sweep.bandTo;
   const tag = precisionTag(result?.fraction ?? 0);
+  // The gauge (heat element + marker) only mounts during the sweep / result.
+  const gaugeShown = phase === "sweeping" || phase === "result";
+
+  const heatRef = useRef<HTMLDivElement>(null);
+  const markerRef = useRef<HTMLDivElement>(null);
+  const bandRef = useRef<HTMLDivElement>(null);
+  // ONE reused animatable carries the live --heat channel (gauge glow) plus the
+  // marker glow; never an animate() per RAF frame.
+  const heatAnimRef = useRef<AnimatableObject | null>(null);
+  const markerAnimRef = useRef<AnimatableObject | null>(null);
+  const bandAnimRef = useRef<AnimatableObject | null>(null);
+  // Edge state so the band spring-in and the on-band release ring fire once.
+  const sweepingRef = useRef(false);
+  const ringedRef = useRef(false);
+
+  // Build the per-frame animatables when the gauge mounts. One reused animatable
+  // per channel, reverted when the gauge unmounts (round teardown).
+  useEffect(() => {
+    if (!gaugeShown) return;
+    const heat = heatRef.current;
+    const marker = markerRef.current;
+    if (!heat || !marker) return;
+    // --heat is a real CSS custom property (anime writes "--"-prefixed keys via
+    // setProperty); the gauge reads it for its glow intensity.
+    heatAnimRef.current = createAnimatable(heat, { "--heat": 0, duration: 140, ease: EASE.out });
+    markerAnimRef.current = createAnimatable(marker, { scale: 1, duration: 140, ease: EASE.out });
+    return () => {
+      heatAnimRef.current?.revert();
+      markerAnimRef.current?.revert();
+      heatAnimRef.current = null;
+      markerAnimRef.current = null;
+    };
+  }, [gaugeShown]);
+
+  // Build the band animatable lazily. The band element only mounts once `sweep`
+  // exists and remounts each new sweep, so we re-run on `sweep` to re-bind the
+  // animatable to the fresh node (the dep gates the DOM identity, not a read).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: sweep gates the band element's mount/remount, which bandRef tracks.
+  useEffect(() => {
+    const band = bandRef.current;
+    if (!band) return;
+    bandAnimRef.current = createAnimatable(band, { scale: 1, duration: 160, ease: EASE.out });
+    return () => {
+      bandAnimRef.current?.revert();
+      bandAnimRef.current = null;
+    };
+  }, [sweep]);
+
+  // Live heat readout + magnetic pull during the sweep. Runs each render where
+  // markerPos changes; all per-frame writes go through the reused animatables,
+  // never animate(). On result/done the ring owns the marker, so this idles.
+  useEffect(() => {
+    if (prefersReducedMotion() || !sweep || phase !== "sweeping") return;
+    const dist = distanceToBand(markerPos, sweep.bandFrom, sweep.bandTo);
+    // Heat is the inverse of distance: dim orange far out, bright gold on-band.
+    const heat = 1 - dist;
+    heatAnimRef.current?.["--heat"](heat);
+    // The marker glow swells as the furnace nears optimal heat.
+    markerAnimRef.current?.scale(utils.mapRange(heat, 0, 1, 1, 1.35));
+    // Magnetic pull: the band breathes wider the closer the marker gets, so it
+    // visibly tugs at the strike zone.
+    bandAnimRef.current?.scale(utils.mapRange(heat, 0, 1, 1, 1.12));
+  }, [markerPos, sweep, phase]);
+
+  // Band spring-in on the sweeping edge; on-band release ring on the result edge.
+  useEffect(() => {
+    if (prefersReducedMotion()) return;
+    if (phase === "sweeping" && !sweepingRef.current) {
+      sweepingRef.current = true;
+      ringedRef.current = false;
+      // Entrance is opacity-only so it never fights the magnetic-pull animatable,
+      // which owns the band's scale channel continuously.
+      if (bandRef.current) animate(bandRef.current, { opacity: [0, 1], ease: BLOOM });
+    }
+    if (phase !== "sweeping") sweepingRef.current = false;
+
+    // The on-band release rings outElastic the marker when the strike lands true.
+    const landedInBand =
+      phase === "result" && result?.kind === "release" && (result.fraction ?? 0) >= 0.95;
+    if (landedInBand && !ringedRef.current && markerRef.current) {
+      ringedRef.current = true;
+      animate(markerRef.current, {
+        scale: [1, 1.8, 1],
+        ease: "outElastic(1, 0.4)",
+        duration: DUR.slow,
+      });
+    }
+  }, [phase, result]);
 
   return (
     <div className="space-y-3">
@@ -366,7 +467,19 @@ function PrecisionArena({
         )}
         {(phase === "sweeping" || phase === "result") && (
           <>
-            <div className="relative h-20 w-full overflow-hidden rounded-xl bg-zinc-900">
+            <div
+              ref={heatRef}
+              className="relative h-20 w-full overflow-hidden rounded-xl bg-zinc-900"
+              // The gauge glow tracks the live --heat channel: dim far from the
+              // band, bright gold on-band. color-mix keeps it on one paint layer.
+              style={
+                {
+                  ["--heat" as string]: 0,
+                  boxShadow:
+                    "inset 0 0 calc(8px + var(--heat) * 26px) calc(var(--heat) * 4px) color-mix(in oklab, #fbbf24 calc(var(--heat) * 100%), transparent)",
+                } as React.CSSProperties
+              }
+            >
               {/* heat fill up to the marker */}
               <div
                 className="absolute inset-y-0 left-0 bg-gradient-to-r from-orange-900 via-orange-600 to-gold-300"
@@ -375,6 +488,7 @@ function PrecisionArena({
               {/* optimal-heat band */}
               {sweep && (
                 <div
+                  ref={bandRef}
                   className="absolute inset-y-0 border-x-2 border-gold-200/80 bg-gold-200/15"
                   style={{
                     left: `${sweep.bandFrom * 100}%`,
@@ -382,11 +496,19 @@ function PrecisionArena({
                   }}
                 />
               )}
-              {/* marker at the heat edge */}
+              {/* marker at the heat edge. The outer node owns positioning
+                  (left + the -50% centering); the inner node is the only thing
+                  the animatable scales, so anime's transform writes never fight
+                  the Tailwind centering transform. */}
               <div
-                className="absolute inset-y-0 w-1 -translate-x-1/2 bg-white shadow-[0_0_14px_3px_rgba(255,220,150,0.9)]"
+                className="absolute inset-y-0 w-1 -translate-x-1/2"
                 style={{ left: `${displayPos * 100}%` }}
-              />
+              >
+                <div
+                  ref={markerRef}
+                  className="h-full w-full origin-center bg-white shadow-[0_0_14px_3px_rgba(255,220,150,0.9)]"
+                />
+              </div>
             </div>
             {phase === "result" && (
               <p className={`mt-3 text-center text-sm font-semibold ${tag.tone}`}>{tag.label}</p>

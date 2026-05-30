@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import type { PublicKey } from "@solana/web3.js";
 import { formatLamportsAsSol } from "novus-mundus-sdk";
 import { useAllowedTokens, type AllowedToken } from "@/lib/hooks/useAllowedTokens";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
+import { selectShopTile } from "./views/shared";
 
 /**
  * What the user chose to pay with. Maps directly onto the on-chain payment
@@ -107,6 +109,7 @@ export function PaymentMethodSelector({
   className,
 }: PaymentMethodSelectorProps) {
   const { data: tokens } = useAllowedTokens();
+  const reduce = useReducedMotion();
 
   // Only show tokens the chain will actually accept for this product type.
   const validTokens = useMemo<AllowedToken[]>(() => {
@@ -157,8 +160,12 @@ export function PaymentMethodSelector({
               key={opt.label}
               type="button"
               role="tab"
+              data-shop-tile
               aria-selected={active}
-              onClick={() => onChange(opt.method)}
+              onClick={(e) => {
+                selectShopTile(e.currentTarget, reduce);
+                onChange(opt.method);
+              }}
               className={`min-w-[68px] rounded-md px-3 py-1.5 text-center text-xs transition-colors ${
                 active
                   ? "bg-surface-raised text-text-primary shadow-inner"

@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { animate, spring, stagger } from "animejs";
+import { animate, createTimeline, stagger } from "animejs";
 import { Plus, X, ChevronLeft } from "lucide-react";
 import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 
@@ -15,6 +15,8 @@ import { useSheetStore } from "@/lib/store/sheet";
 import { useMorphComposeStore } from "@/lib/store/morph-compose";
 import { useKeyboardInset } from "@/lib/hooks/useKeyboardInset";
 import { useIsPhone } from "@/lib/hooks/useMediaQuery";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
+import { SETTLE } from "@/lib/motion/tokens";
 import { cn } from "@/lib/utils";
 import { TxButton } from "@/components/shared/TxButton";
 import { PRIMARY, SECONDARY, computePageLocks } from "./nav-config";
@@ -39,7 +41,8 @@ const ICON_BY_LABEL: Record<string, GameIconId> = {
   Subscription: "nav-subscription",
 };
 
-const SPRING_OPEN = spring({ stiffness: 220, damping: 22 });
+// The shared SETTLE spring (tokens.ts) drives the whole morph: width, the layer
+// cross-fade, and the staggered children all ride one reversible timeline.
 const EXIT_MS = 140;
 const ENTER_MS = 260;
 
@@ -64,11 +67,6 @@ type Mode = "nav" | "actions";
 // `actions` is the narrow centred pill (1-2 plain actions); `wide` is the
 // nav-group-width bar (3+ actions, or a dismiss ✕).
 type Shape = "nav" | "actions" | "wide" | "compose";
-
-function prefersReducedMotion(): boolean {
-  if (typeof window === "undefined") return false;
-  return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-}
 
 /**
  * The mobile bottom bar — one pill that morphs between three shapes:
@@ -110,6 +108,10 @@ export function MorphTabBar() {
   const composeActive = COMPOSE_IN_BAR && isPhone && composeTop !== undefined;
   const composeDismiss = composeTop?.dismiss ?? null;
   const kbInset = useKeyboardInset();
+  // One reactive reduced-motion source for every animation in this component:
+  // the morph timeline, the `+`/`×` icon rotate, and the overflow popover all
+  // key off it, so a live OS toggle is honoured without per-effect matchMedia.
+  const reduce = useReducedMotion();
 
   // While a bottom sheet is open the bar always carries a ✕ that closes it,
   // appended as a `kind: "dismiss"` action so it renders as the standalone
@@ -235,11 +237,12 @@ export function MorphTabBar() {
 
   // Width-morph bookkeeping. The pill animates its width between shapes —
   // CSS can't transition a content-driven `auto` width — so anime.js drives
-  // it. `restWidth` is the pill's settled width (tracked by the ResizeObserver
-  // below); `widthAnimating` gates that tracking off while our animation owns
-  // the width.
-  const widthAnim = useRef<ReturnType<typeof animate> | null>(null);
-  const widthAnimating = useRef(false);
+  // it on the morph timeline. `restWidth` is the pill's settled width (tracked
+  // by the ResizeObserver below). The live timeline doubles as the "morph in
+  // flight" signal: while it exists and hasn't completed/cancelled, the
+  // observer skips recording the transient widths the morph is writing, so the
+  // dedicated `widthAnimating` boolean gate is no longer needed.
+  const morphTl = useRef<ReturnType<typeof createTimeline> | null>(null);
   const restWidth = useRef(0);
 
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -269,19 +272,28 @@ export function MorphTabBar() {
     return () => document.removeEventListener("pointerdown", onDown);
   }, [overflowOpen]);
 
-  // Animate the `+` ↔ `×` rotation and the popover entrance/exit. Keeping the
+  // Animate the `+` to `×` rotation and the popover entrance/exit. Keeping the
   // popover always mounted lets the spring back-out feel like one continuous
-  // motion instead of a re-mount flash.
+  // motion instead of a re-mount flash. Under reduced motion both snap to their
+  // resting state with no choreography (these used to ignore the preference).
   useEffect(() => {
     const icon = plusIconRef.current;
+    const pop = overflowRef.current;
+    if (reduce) {
+      if (icon) icon.style.transform = overflowOpen ? "rotate(45deg)" : "rotate(0deg)";
+      if (pop) {
+        pop.style.opacity = overflowOpen ? "1" : "0";
+        pop.style.transform = "none";
+      }
+      return;
+    }
     if (icon) {
       animate(icon, {
         rotate: overflowOpen ? 45 : 0,
         duration: 280,
-        ease: SPRING_OPEN,
+        ease: SETTLE,
       });
     }
-    const pop = overflowRef.current;
     if (pop) {
       if (overflowOpen) {
         animate(pop, {
@@ -289,7 +301,7 @@ export function MorphTabBar() {
           translateY: [10, 0],
           scale: [0.92, 1],
           duration: 240,
-          ease: SPRING_OPEN,
+          ease: SETTLE,
         });
       } else {
         animate(pop, {
@@ -301,17 +313,19 @@ export function MorphTabBar() {
         });
       }
     }
-  }, [overflowOpen]);
+  }, [overflowOpen, reduce]);
 
   // Track the pill's settled width so a width-morph can animate *from* it.
   // The ResizeObserver catches every frame of a CSS width change (e.g. a
-  // TxButton phase swap resizing the action layer), but not while our own
-  // anime.js width animation is the thing doing the resizing.
+  // TxButton phase swap resizing the action layer), but not while the morph
+  // timeline is the thing doing the resizing — a live, not-yet-completed
+  // timeline is the "morph in flight" signal, replacing the old boolean gate.
   useEffect(() => {
     const pill = pillRef.current;
     if (!pill) return;
     const sync = () => {
-      if (widthAnimating.current) return;
+      const tl = morphTl.current;
+      if (tl && !tl.completed && !tl.cancelled) return;
       const w = pill.offsetWidth;
       if (w !== restWidth.current) restWidth.current = w;
     };
@@ -335,127 +349,179 @@ export function MorphTabBar() {
 
   // Morph whenever the shape flips. The pill is one persistent element in
   // every shape, so its buttons stay put — only what's *inside* transforms.
-  // Three things move:
+  // Three things move, and they now ride ONE reversible `createTimeline`
+  // instead of five overlapping `animate()` calls plus a standalone width
+  // tween:
   //   - the pill's width — animated between the shapes' resting widths, since
   //     CSS can't transition a content-driven `auto` width;
   //   - the nav/action layers stacked inside — cross-fade + translateY + scale;
-  //   - the incoming layer's children — a staggered "speed dial".
+  //   - the incoming layer's children — a staggered "speed dial", placed on the
+  //     timeline with a position arg so it overlaps the layer enter.
   // Non-wide shapes are handed back to `width: auto` once the morph settles
   // (so a later TxButton phase swap can resize the pill); the wide shape keeps
-  // its pinned width, since its buttons are fixed flex segments.
+  // its pinned width, since its buttons are fixed flex segments. Teardown uses
+  // `tl.cancel()` (freezes the committed inline styles), NOT `scope.revert()`
+  // (which would wipe the pinned width back to origin and flash `auto`).
   useLayoutEffect(() => {
     const from = prevShape.current;
     const to = shape;
     prevShape.current = to;
 
-    const reduce = prefersReducedMotion();
-
-    // Width morph. Evaluated even when the shape is unchanged, so a wide to wide
-    // width change — a dismiss ✕ appearing or leaving — still animates; only
-    // the cross-fade further down is gated on a real shape change.
     const pill = pillRef.current;
-    if (pill) {
-      const fromW = widthAnimating.current ? pill.offsetWidth : restWidth.current;
-      // Where the pill rests after the morph: a pinned width for wide, or
-      // back to content-driven `auto` for nav / 1-2 actions.
-      const settle = () => {
-        pill.style.width =
-          to === "wide"
-            ? `${wideBarWidth}px`
-            : to === "compose"
-              ? `${composeWidth}px`
-              : "auto";
-      };
-      let toW: number;
-      if (to === "wide") {
-        toW = wideBarWidth;
-      } else if (to === "compose") {
-        toW = composeWidth;
-      } else {
-        pill.style.width = "auto";
-        toW = pill.offsetWidth;
-      }
-      if (reduce || fromW <= 0 || fromW === toW) {
-        settle();
-      } else {
-        widthAnim.current?.pause();
-        widthAnimating.current = true;
-        pill.style.width = `${fromW}px`;
-        widthAnim.current = animate(pill, {
-          width: [fromW, toW],
-          ease: SPRING_OPEN,
-          onComplete: () => {
-            widthAnimating.current = false;
-            settle();
-          },
-        });
-      }
-    }
+    if (!pill) return;
 
-    if (from === to) return;
+    // A previous morph that never reached its rest is "interrupted" — whether
+    // it's still running or React's cleanup already cancelled it (cleanup runs
+    // before this body). In both cases `completed` is false, so the live pill
+    // width, not the stale `restWidth` (the observer was gated off mid-morph),
+    // is the honest start width for the new morph. A naturally completed
+    // timeline leaves `completed` true, so `restWidth` is current and wins.
+    const prevTl = morphTl.current;
+    const interrupted = !!prevTl && !prevTl.completed;
+    prevTl?.cancel();
+    morphTl.current = null;
+
+    // Where the pill rests after the morph: a pinned width for wide / compose,
+    // or back to content-driven `auto` for nav / 1-2 actions.
+    const settle = () => {
+      pill.style.width =
+        to === "wide" ? `${wideBarWidth}px` : to === "compose" ? `${composeWidth}px` : "auto";
+    };
+
+    const fromW = interrupted ? pill.offsetWidth : restWidth.current;
+    let toW: number;
+    if (to === "wide") {
+      toW = wideBarWidth;
+    } else if (to === "compose") {
+      toW = composeWidth;
+    } else {
+      pill.style.width = "auto";
+      toW = pill.offsetWidth;
+    }
 
     const outgoing = layerFor(from);
     const incoming = layerFor(to);
-    if (!outgoing || !incoming) return;
+    // A real shape change with two distinct layers cross-fades; actions to wide
+    // (and back) is a shape change that stays on the SAME action layer, so it
+    // only re-deals that layer's children as the pill resizes; an unchanged
+    // shape animates width only.
+    const layerChange = from !== to && !!outgoing && !!incoming;
+    const crossfade = layerChange && incoming !== outgoing;
+    const sameLayerRedeal = layerChange && incoming === outgoing;
 
     if (reduce) {
-      // Set every layer's opacity explicitly so none is left visible.
-      for (const s of ["nav", "actions", "wide", "compose"] as const) {
-        const el = layerFor(s);
-        if (el) el.style.opacity = el === incoming ? "1" : "0";
+      // Set the final state directly — no choreography. Width snaps to its
+      // resting value and every layer's opacity is pinned so none is left
+      // visible (the cross-fade target wins, all others go dark).
+      settle();
+      if (crossfade) {
+        for (const s of ["nav", "actions", "wide", "compose"] as const) {
+          const el = layerFor(s);
+          if (el) el.style.opacity = el === incoming ? "1" : "0";
+        }
       }
       return;
     }
 
-    const incomingChildren = Array.from(
-      incoming.querySelectorAll<HTMLElement>("[data-morph-item]"),
-    );
+    const tl = createTimeline({
+      defaults: { ease: SETTLE },
+      // Hand non-pinned shapes back to `auto` so a later width change can flow.
+      onComplete: settle,
+    });
 
-    // actions ↔ wide stay on the *same* action layer — there's no second
-    // layer to cross-fade, so the buttons just re-deal as the pill resizes.
-    // compose enters via the exit/enter path below; it has no [data-morph-item]
-    // children, so the per-child stagger is a no-op and the plain layer
-    // fade + rise carries it.
-    if (incoming === outgoing) {
-      animate(incomingChildren, {
-        translateY: [10, 0],
-        opacity: [0.4, 1],
-        scale: [0.94, 1],
-        duration: ENTER_MS,
-        delay: stagger(28),
-        ease: SPRING_OPEN,
-      });
+    // Width tween at position 0. Added even when the shape is unchanged, so a
+    // wide to wide change — a dismiss ✕ appearing or leaving — still animates.
+    const animateWidth = fromW > 0 && fromW !== toW;
+    if (animateWidth) {
+      pill.style.width = `${fromW}px`;
+      tl.add(pill, { width: [fromW, toW], duration: ENTER_MS }, 0);
+    }
+
+    if (crossfade && outgoing && incoming) {
+      const incomingChildren = Array.from(
+        incoming.querySelectorAll<HTMLElement>("[data-morph-item]"),
+      );
+
+      // Exit — fade + drop + slight shrink, at the head of the timeline.
+      tl.add(
+        outgoing,
+        {
+          opacity: [1, 0],
+          translateY: [0, 8],
+          scale: [1, 0.94],
+          duration: EXIT_MS,
+          ease: "out(3)",
+        },
+        0,
+      );
+
+      // Enter — fade + rise + a tiny scale-up overshoot from the spring,
+      // positioned to begin just before the exit finishes.
+      incoming.style.opacity = "0";
+      const enterAt = EXIT_MS - 40;
+      tl.add(
+        incoming,
+        {
+          opacity: [0, 1],
+          translateY: [8, 0],
+          scale: [0.94, 1],
+          duration: ENTER_MS,
+        },
+        enterAt,
+      );
+
+      // Children "speed dial" — a per-child stagger, placed at the same
+      // position as the layer enter via the timeline position arg (compose has
+      // no [data-morph-item] children, so this is a no-op there).
+      if (incomingChildren.length > 0) {
+        tl.add(
+          incomingChildren,
+          {
+            translateY: [14, 0],
+            opacity: [0, 1],
+            scale: [0.85, 1],
+            duration: ENTER_MS,
+            delay: stagger(36),
+          },
+          enterAt,
+        );
+      }
+    } else if (sameLayerRedeal && incoming) {
+      // actions to wide (or back) stay on the *same* action layer — there's no
+      // second layer to cross-fade, so the buttons just re-deal as the pill
+      // resizes, staggered on the same timeline.
+      const sameLayerChildren = Array.from(
+        incoming.querySelectorAll<HTMLElement>("[data-morph-item]"),
+      );
+      if (sameLayerChildren.length > 0) {
+        tl.add(
+          sameLayerChildren,
+          {
+            translateY: [10, 0],
+            opacity: [0.4, 1],
+            scale: [0.94, 1],
+            duration: ENTER_MS,
+            delay: stagger(28),
+          },
+          0,
+        );
+      }
+    }
+
+    // Nothing was scheduled (e.g. a same-shape render with no width change and
+    // no children): settle now and drop the empty timeline so the observer
+    // doesn't see it as a morph in flight.
+    if (!tl.duration) {
+      settle();
       return;
     }
 
-    // Exit — fade + drop + slight shrink
-    animate(outgoing, {
-      opacity: [1, 0],
-      translateY: [0, 8],
-      scale: [1, 0.94],
-      duration: EXIT_MS,
-      ease: "out(3)",
-    });
-
-    // Enter — fade + rise + a tiny scale-up overshoot from the spring
-    incoming.style.opacity = "0";
-    animate(incoming, {
-      opacity: [0, 1],
-      translateY: [8, 0],
-      scale: [0.94, 1],
-      duration: ENTER_MS,
-      delay: EXIT_MS - 40,
-      ease: SPRING_OPEN,
-    });
-    animate(incomingChildren, {
-      translateY: [14, 0],
-      opacity: [0, 1],
-      scale: [0.85, 1],
-      duration: ENTER_MS,
-      delay: stagger(36, { start: EXIT_MS - 40 }),
-      ease: SPRING_OPEN,
-    });
-  }, [shape, wideBarWidth, composeWidth]);
+    morphTl.current = tl;
+    return () => {
+      // Freeze the committed inline styles in place; never revert to origin.
+      tl.cancel();
+    };
+  }, [shape, wideBarWidth, composeWidth, reduce]);
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 

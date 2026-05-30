@@ -11,12 +11,14 @@
 // the PDA, so useSenderIdentity derives it here (the same derivation PlayerAvatar
 // does) and is exported for ThreadRenderer to reuse.
 
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { animate, svg, utils } from "animejs";
 import { PublicKey } from "@solana/web3.js";
-import { Check, CornerDownRight, Lock, LoaderCircle, MoreHorizontal } from "lucide-react";
+import { CornerDownRight, Lock, LoaderCircle, MoreHorizontal } from "lucide-react";
 import { WtKind } from "novus-mundus-sdk";
 import { derivePlayerPda } from "novus-mundus-sdk";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import { PRESS } from "@/lib/motion/tokens";
 import { PlayerName } from "@/components/war-table/PlayerName";
 import { PlayerAvatar } from "@/components/war-table/PlayerAvatar";
 import { PresenceDot } from "@/components/presence/PresenceDot";
@@ -25,7 +27,7 @@ import { PlayerActionsMenu } from "@/components/war-table/PlayerActionsMenu";
 import { MessageActionsMenu } from "@/components/war-table/MessageActionsMenu";
 import { ReactionRow } from "@/components/war-table/ReactionRow";
 import type { WtMessage } from "@/lib/store/war-table";
-import { cn } from "@/lib/utils";
+import { cn, prefersReducedMotion } from "@/lib/utils";
 
 // Long-press window (ms) before a touch opens the actions menu on mobile.
 const LONG_PRESS_MS = 450;
@@ -82,6 +84,12 @@ interface MessageBubbleProps {
   // base58 connected wallet, or null; used to mark which reaction chips are mine
   // (the store is wallet-agnostic, so mine is derived here).
   connectedWallet: string | null;
+  // true on the single render where this own message reconciled from pending to
+  // delivered. The pending->delivered edge is detected upstream (in
+  // ThreadRenderer) because the optimistic echo's temp id is swapped for the
+  // real id on confirm, which remounts this bubble and defeats a local ref.
+  // Drives the sent-confirmation seal; false on plain mounts of history.
+  justDelivered: boolean;
   // current thread pin target hex; flips the menu's Pin/Unpin.
   pinnedId: string;
   // true when the connected viewer may pin/unpin this message (officer-or-own).
@@ -117,6 +125,96 @@ function cornerClass(mine: boolean, pos: GroupPos): string {
   return "rounded-2xl rounded-tl-md";
 }
 
+// The delivered tick for an own message, plus the sent-confirmation seal. The
+// Check is an inline ref-able <svg> (not the lucide component) so it and the ring
+// can be animated; the viewBox is 24x24 to match lucide and the path is lucide's
+// own Check geometry. When `justDelivered` is true (the pending->delivered edge,
+// detected by the parent's wasPending ref) the Check pops on a spring while a
+// thin ring sweeps once around it (svg.createDrawable) then dissolves, a
+// stroke-traced "settled on chain" mark. On a plain mount of an already-delivered
+// message justDelivered is false, so the tick just renders at rest.
+function DeliverySeal({ justDelivered }: { justDelivered: boolean }) {
+  const checkRef = useRef<SVGSVGElement | null>(null);
+  const ringRef = useRef<SVGCircleElement | null>(null);
+
+  useEffect(() => {
+    if (!justDelivered || prefersReducedMotion()) return;
+    const checkEl = checkRef.current;
+    const ringEl = ringRef.current;
+    if (!checkEl || !ringEl) return;
+    let cancelled = false;
+
+    // Pop the Check on a spring overshoot.
+    utils.set(checkEl, { scale: 0, opacity: 0 });
+    const popAnim = animate(checkEl, {
+      scale: [0, 1],
+      opacity: [0, 1],
+      ease: PRESS,
+      duration: 420,
+    });
+
+    // A thin ring sweeps once around the tick then dissolves. createDrawable
+    // commandeers stroke-dasharray; draw "0 0" -> "0 1" traces it on, then the
+    // opacity fade dissolves the settled seal.
+    const [drawable] = svg.createDrawable(ringEl);
+    utils.set(ringEl, { opacity: 1 });
+    const sweepAnim = animate(drawable, { draw: ["0 0", "0 1"], duration: 480, ease: "outQuad" });
+    const fadeAnim = animate(ringEl, {
+      opacity: [1, 0],
+      duration: 300,
+      delay: 360,
+      ease: "outQuad",
+    });
+
+    return () => {
+      if (cancelled) return;
+      cancelled = true;
+      popAnim.cancel();
+      sweepAnim.cancel();
+      fadeAnim.cancel();
+      // Leave the Check at its resting visible state if the seal was interrupted.
+      utils.set(checkEl, { scale: 1, opacity: 1 });
+      utils.set(ringEl, { opacity: 0 });
+    };
+  }, [justDelivered]);
+
+  return (
+    <span className="relative inline-flex h-3 w-3 items-center justify-center" aria-label="Delivered">
+      <svg
+        ref={checkRef}
+        viewBox="0 0 24 24"
+        className="h-3 w-3 text-text-muted"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden
+      >
+        <path d="M20 6 9 17l-5 5" />
+      </svg>
+      <svg
+        viewBox="0 0 24 24"
+        className="pointer-events-none absolute inset-0 h-3 w-3 text-accent"
+        fill="none"
+        aria-hidden
+      >
+        {/* Rests invisible; the seal effect sweeps it on then dissolves it. The
+            opacity lives on the circle (not the svg) so utils.set can drive it. */}
+        <circle
+          ref={ringRef}
+          cx="12"
+          cy="12"
+          r="10"
+          stroke="currentColor"
+          strokeWidth={2}
+          opacity={0}
+        />
+      </svg>
+    </span>
+  );
+}
+
 export function MessageBubble({
   msg,
   parent,
@@ -126,6 +224,7 @@ export function MessageBubble({
   menuScope,
   avatarSize,
   connectedWallet,
+  justDelivered,
   pinnedId,
   canPin,
   onReact,
@@ -384,7 +483,7 @@ export function MessageBubble({
                   aria-label="Sending"
                 />
               ) : (
-                <Check className="h-3 w-3 text-text-muted" aria-label="Delivered" />
+                <DeliverySeal justDelivered={justDelivered} />
               )
             ) : null}
           </div>

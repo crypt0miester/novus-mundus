@@ -25,6 +25,14 @@ interface GoldNumberProps {
    * NumberFlow never animates on mount.
    */
   animate?: boolean;
+  /**
+   * Optional externally-driven display value. When provided, GoldNumber renders
+   * this number as static formatted text instead of deferring to NumberFlow,
+   * letting a caller drive a count-up frame-by-frame (e.g. the leaderboard FLIP
+   * synchronises a plain-object anime.js tween with the row reorder so the score
+   * counts up in lockstep with the physical rank movement). `value` still drives
+   * formatting/finite-ness; existing callers that omit this keep NumberFlow. */
+  controlledValue?: number;
   className?: string;
 }
 
@@ -82,12 +90,27 @@ export function GoldNumber({
   prefix,
   suffix,
   animate = true,
+  controlledValue,
   className,
 }: GoldNumberProps) {
   const storeFormat = useSettings((s) => s.numberFormat);
   const animationsEnabled = useSettings((s) => s.animationsEnabled);
   const fmt: Format = format ?? storeFormat;
   const wrapperClass = cn("font-mono tabular-nums text-text-gold", SIZE_CLASSES[size], className);
+
+  // Caller-driven count-up: render the supplied frame value as static text and
+  // step out of NumberFlow's internal clock so the digits stay synchronised with
+  // whatever choreography the caller is running. We still gate on finite `value`
+  // so a non-numeric semantic value never paints a stray controlled frame.
+  if (controlledValue !== undefined && Number.isFinite(controlledValue)) {
+    return (
+      <span className={wrapperClass}>
+        {prefix}
+        {formatNumber(controlledValue, fmt)}
+        {suffix}
+      </span>
+    );
+  }
 
   const shouldAnimate = animate && animationsEnabled && Number.isFinite(value);
   if (!shouldAnimate) {

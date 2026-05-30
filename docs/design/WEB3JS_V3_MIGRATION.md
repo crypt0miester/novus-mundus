@@ -60,15 +60,15 @@ The transaction flow is centralized, so this is small despite the import counts:
 
 Shed third-party deps that v3 or the @solana ecosystem replaces, but only where it does not mean rewriting spec-locked crypto. Verdict per dep, from actual usage:
 
-**Drop:**
-- `bn.js` (49 import sites) to native `bigint`. The main win; already planned. v3 returns `bigint`; `bnToSafeNumber` collapses to a bigint clamp.
-- `bs58` to the `@solana` base58 codec (`getBase58Encoder`/`getBase58Decoder`). Threaded through `getProgramAccounts` memcmp filters (`client.ts`, `apps/web/.../useCastleRosters.ts`) and keypair-from-base58 (`apps/web/.../game-authority.ts`). Do it alongside the `client.ts` pass; verify v3's memcmp filter expects the same byte/base58 encoding.
+**Drop (required — both `bn.js` and `bs58` must go; this is NOT an optional cleanup):** v3 deleted `BN` and stopped depending on `bs58`, so the SDK cannot sit on a split toolchain. The type seam the app codes against flips wholesale from `BN` to `bigint`; a half-migrated SDK that still exposes `BN` while consuming v3's `bigint` internals turns every numeric boundary into a BN↔bigint conversion minefield. Removing them is also the *point* of the migration (bundle size + the supply-chain surface the Dec 2024 web3.js compromise hit), not a side benefit.
+- `bn.js` (49 SDK files / 1,166 sites + 12 app files) to native `bigint`. The largest single change, and load-bearing: v3 returns `bigint` and ships no `BN`, so the SDK's public numeric types become `bigint` end-to-end and `bnToSafeNumber` collapses to a bigint clamp. Must be done in full — a partial pass leaves the SDK↔app boundary incoherent.
+- `bs58` to the `@solana` base58 codec (`getBase58Encoder`/`getBase58Decoder`). Threaded through `getProgramAccounts` memcmp filters (`client.ts`, `apps/web/.../useCastleRosters.ts`) and keypair-from-base58 (`apps/web/.../game-authority.ts`). Do it alongside the `client.ts` pass; verify v3's memcmp filter expects the same byte/base58 encoding. Smaller than `bn.js` but equally non-optional — leaving it ships a redundant base58 impl next to v3's, defeating the consolidation.
 
 **Keep (no safe / worthwhile replacement):**
 - `@noble/ciphers` — `xchacha20poly1305` (War Table AEAD, `crypto/wartable.ts`, 24-byte nonce, envelope validated byte-for-byte by `post.rs`). Checked all native paths (2026-05-30): **no runtime exposes XChaCha20-Poly1305.** Node `crypto`/OpenSSL has only IETF `chacha20-poly1305` (96-bit nonce; `getCiphers()` shows `chacha20`, `chacha20-poly1305`, no xchacha — XChaCha never landed in OpenSSL). WebCrypto `crypto.subtle` has no ChaCha at all in browsers (WICG "Modern Algorithms" draft + Chrome Intent-to-Prototype only, not shipped, not a standard), and the proposal is for IETF ChaCha, not the X variant. XChaCha is a libsodium construction. So going native would require re-speccing the envelope to a 12-byte nonce across chain+SDK+web in lockstep (a nonce-safety downgrade), and the browser (where the envelope is built) would still need a JS lib until the WebCrypto proposal ships. Not a migration freebie. Keep.
 - `@noble/hashes` — `hmac` + `sha256` (War Table HKDF in `crypto/wartable.ts`, TLD reverse-lookup hash in `external/tld-house.ts`, PDA `sha256` in `pda.ts`). NOTE: SHA-256 *is* available natively — `@solana/addresses` derives PDAs via `await crypto.subtle.digest('SHA-256', ...)` (confirmed in `node_modules/@solana/addresses/src/program-derived-address.ts`), so `pda.ts` could drop the @noble import and go async (see open Q1). But removing `@noble/hashes` removes nothing from the tree: it is a transitive dep of `@solana/web3.js`, of `@noble/curves`, and of the Solana wallet-standard stack you keep (`@solana/wallet-standard-util` etc.) — so it stays installed regardless. Dropping our direct import would just force an async rewrite of working, byte-exact security crypto (wartable HKDF + TLD hash) for zero dependency reduction. `pda.ts` does drop its direct `sha256` (PDA is now async/native), but the package remains. Net zero benefit. Keep.
 
-Net: the crypto libs stay (unless War Table encryption is deliberately re-spec'd to AES-GCM). Real consolidation is `bn.js` (big) and `bs58` (minor).
+Net: the crypto libs stay (unless War Table encryption is deliberately re-spec'd to AES-GCM). `bn.js` (large) and `bs58` (small) both come out as part of the migration — neither is deferrable; v3 removes the toolchain they belonged to, so they go when web3.js does.
 
 ## Open questions to verify against v3 rc.1
 
@@ -80,5 +80,5 @@ Net: the crypto libs stay (unless War Table encryption is deliberately re-spec'd
 ## Final cleanup
 
 - Delete `sdks/novus-mundus-ts-kit`.
-- Drop `@solana/web3.js@1` and `bn.js` from `novus-mundus-ts` and `apps/web`.
+- Drop `@solana/web3.js@1`, `bn.js`, and `bs58` from `novus-mundus-ts` and `apps/web` — all three are removed by the migration, not deferred.
 - Flip `@solana/web3.js` from the `rc` tag to GA before launch.

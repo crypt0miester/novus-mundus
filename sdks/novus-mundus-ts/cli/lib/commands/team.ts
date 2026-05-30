@@ -96,6 +96,11 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
   const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
 
+  // The join instruction reads the leader's PlayerAccount to size team
+  // capacity from the leader's subscription tier. team.leader already
+  // stores that PlayerAccount PDA, so pass it straight through.
+  const leaderPlayer = team.leader;
+
   log.info(
     `\nTeam "${team.name || '(unnamed)'}" — ${team.memberCount}/${team.maxMembers} members` +
       (cityFilter !== undefined ? ` (joining city ${cityFilter} only)` : ''),
@@ -166,6 +171,7 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
         team: teamPda,
         teamId,
         slotIndex: slot,
+        leaderPlayer,
       });
       await sendWithRetry(ctx, ix, [kp]);
       log.info(`  + ${file} → slot ${slot}  (${kp.publicKey.toBase58().slice(0, 8)}..)`);

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef } from "react";
+import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -23,7 +25,12 @@ import {
   getEffectiveTier,
 } from "novus-mundus-sdk";
 import { formatNumber } from "@/lib/utils";
-import { lamportsToSol } from "./shared";
+import {
+  lamportsToSol,
+  selectShopTile,
+  floatNoviTiles,
+  useShopTileRipple,
+} from "./shared";
 import { ReservedNoviNote } from "./ReservedNoviNote";
 import { useIsDesktop } from "./useIsDesktop";
 
@@ -44,6 +51,9 @@ export function NoviView() {
 
   const isDesktop = useIsDesktop();
   const effectivePackage = selectedPackage ?? (isDesktop ? 0 : null);
+  const reduce = useReducedMotion();
+  // Tile-ripple grid root. grid-cols-3 md:grid-cols-5 -> read live breakpoint.
+  const gridRef = useRef<HTMLDivElement>(null);
 
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -118,6 +128,24 @@ export function NoviView() {
   }, [selectedPackage, dailyAllowance, handlePurchaseNovi]);
   useMorphActions(morphActions);
 
+  // Rarity-aware tile ripple over the NOVI package grid. Each package climbs the
+  // bloom ladder by its bulk tier index, so larger packs flare brighter. Keyed
+  // on the package count so the wash-in replays once the config loads.
+  const packageCount = gameEngine?.noviPurchaseConfig.noviPurchaseAmounts.length ?? 0;
+  useShopTileRipple(gridRef, [packageCount], { base: 3, md: 5 });
+
+  // Selected package floats higher on an outElastic physics lift (replacing the
+  // old hard md:-translate-y-3 jump). revertOnCleanup:false so cancelling an
+  // in-flight float on re-select does not wipe the committed translateY.
+  useAnimeScope(
+    { root: gridRef, deps: [effectivePackage, packageCount], revertOnCleanup: false },
+    ({ reduce: r }) => {
+      const root = gridRef.current;
+      if (!root) return;
+      floatNoviTiles(root, effectivePackage ?? -1, r);
+    },
+  );
+
   return (
     <div className="space-y-4">
       {/* Streak & Allowance Banner */}
@@ -163,7 +191,7 @@ export function NoviView() {
       ) : (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <div className="lg:col-span-2">
-            <div className="grid gap-2 grid-cols-3 md:grid-cols-5">
+            <div ref={gridRef} className="grid gap-2 grid-cols-3 md:grid-cols-5">
               {gameEngine.noviPurchaseConfig.noviPurchaseAmounts.map((amount, idx) => {
                 const tierInfo = NOVI_PACKAGE_TIERS[idx];
                 const noviAmount = amount.toNumber() / 10;
@@ -172,8 +200,12 @@ export function NoviView() {
                 return (
                   <button
                     key={amount.toString()}
-                    onClick={() => setSelectedPackage(idx)}
-                    className={`rounded-lg border p-3 text-center transition-all ${
+                    data-shop-tile
+                    onClick={(e) => {
+                      selectShopTile(e.currentTarget, reduce);
+                      setSelectedPackage(idx);
+                    }}
+                    className={`rounded-lg border p-3 text-center opacity-0 transition-colors ${
                       isSelected
                         ? "border-border-gold bg-accent/20 ring-1 ring-border-gold/30"
                         : "border-zinc-800 hover:border-zinc-700"
