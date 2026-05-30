@@ -44,6 +44,7 @@ import { handleSnapshot } from './lib/commands/snapshot';
 import { handleNuke } from './lib/commands/nuke';
 import { handleTeam } from './lib/commands/team';
 import { handleWartable } from './lib/commands/wartable';
+import { handleRally } from './lib/commands/rally';
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -122,6 +123,9 @@ async function main(): Promise<void> {
       break;
     case 'wartable':
       await handleWartable(ctx, args);
+      break;
+    case 'rally':
+      await handleRally(ctx, args);
       break;
     default:
       log.error(`Unknown command: ${args.command}`);
@@ -207,6 +211,8 @@ Commands:
                             Deposit wallet NOVI → reserved (5% fee burned)
   player sweep <kp> --kind <user|player>
                             Self-recover untracked NOVI surplus from your PDA-owned ATA
+  player buy-gems <kp> --count N
+                            Buy gem packs (shop item 1) to fund speedups
   snapshot save <name>      Save validator ledger state
   snapshot load <name>      Restore from snapshot
   snapshot list             List saved snapshots
@@ -214,6 +220,24 @@ Commands:
   team join                 Have test players join a public team
                             --team-id <id> --count <n>
                             [--start-slot <s>]  (default: 0)
+  rally list                List active rallies (creator, target, window)
+  rally create <keypair>    Create a team rally
+                            --target <pubkey> --target-type <encounter|player|castle>
+                            --target-city <id> [--gather <seconds>]
+                            [--units a,b,c] [--weapons m,r,s] [--rally-id <n>]
+  rally join <keypair>      Join a rally (commits full stock by default)
+                            [--rally <pubkey> | --creator <pk> --id <n>]
+                            [--units a,b,c] [--weapons m,r,s]
+  rally prep [--team <id>]  Read-only readiness check for the encounter-rally flow
+                            (members, keys, gems, units, target, next commands)
+  rally speedup <keypair>   Spend gems to collapse travel so members arrive in time
+                            [--creator <pk> --id <n>] --phase <gather|march|return>
+                            --tier <1|2> [--participant <wallet>] [--repeat <n>]
+  rally march               Execute combat once the gather window closes
+                            [--rally <pubkey> | --creator <pk> --id <n>]
+  rally process-return      Collect loot + surviving units after combat
+                            [--rally <pubkey> | --creator <pk> --id <n>]
+                            [--owner <pubkey> | --all]
   wartable read <thread>     Decode + decrypt a war-table thread
                             --scope <team|rally|castle|encounter|dm>
                             --limit <n> --master-secret <hex>

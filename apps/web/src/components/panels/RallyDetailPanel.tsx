@@ -6,6 +6,7 @@ import { PublicKey } from "@solana/web3.js";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import {
   parseRally,
+  parseRallyParticipant,
   derivePlayerPda,
   deriveEstatePda,
   createRallyJoinInstruction,
@@ -13,6 +14,8 @@ import {
   createRallyCancelInstruction,
   createRallyProcessReturnInstruction,
   createRallyCloseInstruction,
+  createRallySpeedupInstruction,
+  RallySpeedupType,
   canCloseRally,
   deriveRallyParticipantPda,
   RallyStatus,
@@ -22,6 +25,7 @@ import {
 } from "novus-mundus-sdk";
 import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useEncounters } from "@/lib/hooks/useEncounters";
 import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
@@ -30,6 +34,7 @@ import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { GoldNumber } from "@/components/shared/GoldNumber";
+import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
@@ -42,6 +47,7 @@ import {
 } from "@/components/shared/TripleCountInput";
 import { formatTime, bnToSafeNumber } from "@/lib/utils";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
+import { useChainNow } from "@/lib/hooks/useChainTime";
 import { useIsMountedRef } from "@/lib/hooks/useIsMountedRef";
 
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
@@ -64,6 +70,8 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   const transact = useTransact();
   const { data: playerData } = usePlayer();
   const player = playerData?.account;
+  const { data: geData } = useGameEngine();
+  const ge = geData?.account;
   const close = useRightPanelStore((s) => s.close);
   const isMounted = useIsMountedRef();
 
@@ -111,11 +119,11 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   // War-table post access: the viewer may post only if their RallyParticipant
   // account exists. The participant PDA is keyed on the WALLET, not the player
   // PDA (rally.rs gate), so derive it from publicKey and probe for existence.
-  const { data: isParticipant = false } = useQuery({
+  const { data: myParticipant = null } = useQuery({
     queryKey: ["rally", "participant", rallyPubkey, publicKey?.toBase58() ?? ""],
     enabled: !!publicKey && !!rally,
     queryFn: async () => {
-      if (!publicKey || !rally) return false;
+      if (!publicKey || !rally) return null;
       const [participantPda] = deriveRallyParticipantPda(
         client.gameEngine,
         rally.creator,
@@ -123,10 +131,11 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         publicKey,
       );
       const info = await connection.getAccountInfo(participantPda);
-      return info !== null;
+      return info ? parseRallyParticipant(info) : null;
     },
     staleTime: 10_000,
   });
+  const isParticipant = !!myParticipant;
 
   // The post-time gate account the chain's rally_predicate requires: the
   // caller's RallyParticipant PDA (keyed on the wallet). Passed to the war-table
@@ -288,13 +297,48 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       });
   };
 
+  // Speed up a rally leg with gems. Three legs (all permissionless per chain):
+  // Gather = your travel to the rally point, March = the army's march to target,
+  // Return = your journey home. We always speed up the VIEWER's own participant.
+  const makeSpeedup =
+    (speedupType: RallySpeedupType, label: string) =>
+    async (tier: number, reportPhase: (p: TxPhase) => void) => {
+      if (!publicKey || !rally) throw new Error("Not ready");
+      const ix = createRallySpeedupInstruction(
+        {
+          owner: publicKey,
+          gameEngine: client.gameEngine,
+          rally: rallyKey,
+          rallyCreator: rally.creator,
+          rallyId: rally.id.toNumber(),
+          participant: publicKey,
+        },
+        { speedupType, speedupTier: tier as 1 | 2 },
+      );
+      return transact
+        .mutateAsync({
+          instructions: [ix],
+          invalidateKeys: [["player"], ["rally"]],
+          successMessage: `${label} sped up!`,
+          onPhase: reportPhase,
+        })
+        .then((r) => r.signature);
+    };
+  const handleGatherSpeedup = makeSpeedup(RallySpeedupType.Gather, "Arrival");
+  const handleMarchSpeedup = makeSpeedup(RallySpeedupType.March, "March");
+  const handleReturnSpeedup = makeSpeedup(RallySpeedupType.Return, "Return");
+
   // Derive lifecycle + morph-bar actions ABOVE any early return.
   // React's hook order must be stable across renders; useMorphActions used
   // to live after `if (isLoading) return …`, which would crash when the
   // query resolved (hook count delta between "loading" and "loaded"
   // renders). The derivations below tolerate rally === null so we can run
   // them unconditionally.
-  const nowSec = Math.floor(Date.now() / 1000);
+  // Chain-anchored clock (1s tick). The gather/return gates must match what the
+  // program sees via Clock::unix_timestamp — a local validator's clock drifts
+  // from wall-clock, so a Date.now() gate read "ready" while the chain still
+  // rejected Process Return with ReturnNotComplete (7181).
+  const nowSec = useChainNow(1000);
   const gatherAt = rally?.gatherAt?.toNumber?.() ?? 0;
   const createdAt = rally?.createdAt?.toNumber?.() ?? 0;
   const gatherDone = gatherAt > 0 && nowSec >= gatherAt;
@@ -314,8 +358,30 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   const isCancelled = status === RallyStatus.Cancelled;
   const inFlight = status === RallyStatus.Marching || status === RallyStatus.Combat;
 
-  const canMarch = isGathering && gatherDone && enoughForMarch && !traveling;
+  // Your arrival at the rally point. The rally gathers at the city CENTER, not
+  // where you stand — even the leader walks to it. Marching before you arrive is
+  // what orphans troops, so the leader can't march until they've arrived; while
+  // en route, a Gather speedup gets you there sooner.
+  const myArrivesAt = myParticipant?.arrivesAtRally?.toNumber?.() ?? 0;
+  const myArrived =
+    !!myParticipant && (myParticipant.arrivedAtRally || (myArrivesAt > 0 && nowSec >= myArrivesAt));
+  const myArrivalRemaining = Math.max(0, myArrivesAt - nowSec);
+  const canMarch = isGathering && gatherDone && enoughForMarch && !traveling && myArrived;
+  // The army's march-to-target timer, for the March speedup while in flight.
+  const arriveAt = rally?.arriveAt?.toNumber?.() ?? 0;
+  const marchRemaining = Math.max(0, arriveAt - nowSec);
   const closeable = rally ? canCloseRally(rally) : false;
+
+  // Viewer's own return journey. The chain rejects Process Return with
+  // ReturnNotComplete (7181) until return_started_at + return_duration elapses,
+  // so gate the action on the timer (and offer a gem speedup to skip the wait)
+  // rather than letting the raw error surface.
+  const myReturnStartedAt = myParticipant?.returnStartedAt?.toNumber?.() ?? 0;
+  const myReturnCompletesAt =
+    myReturnStartedAt > 0 ? myReturnStartedAt + (myParticipant?.returnDuration ?? 0) : 0;
+  const myReturnRemaining = Math.max(0, myReturnCompletesAt - nowSec);
+  const myReturnInFlight = myReturnStartedAt > 0 && nowSec < myReturnCompletesAt;
+  const alreadyReturned = myParticipant?.returned ?? false;
 
   const morphActions = (() => {
     if (!rally) return null;
@@ -324,10 +390,12 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         {
           id: "march-rally",
           label: !enoughForMarch
-            ? "March (missing participants)"
+            ? "Missing participants"
             : !gatherDone
               ? "March"
-              : "March Rally",
+              : !myArrived
+                ? "Reaching rally point…"
+                : "March Rally",
           variant: "primary" as const,
           disabled: !canMarch,
           onClick: handleMarch,
@@ -341,15 +409,35 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
       ];
     }
     if (isReturning || isCompleted || isCancelled) {
+      // Permissionless close once everyone is home — no return needed.
+      if (closeable) {
+        return [
+          {
+            id: "close-rally",
+            label: "Close Rally",
+            variant: "primary" as const,
+            onClick: handleResolve,
+          },
+        ];
+      }
+      // Viewer already processed their own return, or isn't a participant —
+      // nothing to do here but wait for the rest of the rally.
+      if (!myParticipant || alreadyReturned) return null;
+      // Process Return is the two-step: the FIRST call starts the return
+      // journey (return_started_at == 0 -> now), then a later call collects once
+      // it lands. So only DISABLE while a return is actively in flight; allow the
+      // click when it hasn't started yet (to start it) or has completed (to
+      // collect). The body shows the countdown + gem speedup while in flight.
       return [
         {
-          id: "resolve-rally",
-          label: closeable
-            ? "Close Rally"
+          id: "process-return",
+          label: myReturnInFlight
+            ? "Returning home…"
             : (rally.returnedCount ?? 0) + 1 >= joinedCount
               ? "Return & Close"
               : "Process Return",
           variant: "primary" as const,
+          disabled: myReturnInFlight,
           onClick: handleResolve,
         },
       ];
@@ -375,6 +463,26 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         : status === RallyStatus.Combat
           ? { text: "The rally is in combat.", tone: "text-text-gold" }
           : { text: "The rally is marching to its target.", tone: "text-text-gold" };
+
+  // Combat result — read off the rally + your participant once it has resolved.
+  // Chain state, so it persists even if someone else executed the rally.
+  const resolved = !!myParticipant && (isReturning || isCompleted);
+  const marched = !!myParticipant?.includedInMarch;
+  const rallyWon = rally.attackerWon;
+  const myCommitted = myParticipant
+    ? bnToSafeNumber(myParticipant.unitsCommitted1) +
+      bnToSafeNumber(myParticipant.unitsCommitted2) +
+      bnToSafeNumber(myParticipant.unitsCommitted3)
+    : 0;
+  const myLost = myParticipant
+    ? bnToSafeNumber(myParticipant.casualties1) +
+      bnToSafeNumber(myParticipant.casualties2) +
+      bnToSafeNumber(myParticipant.casualties3)
+    : 0;
+  const mySurvived = Math.max(0, myCommitted - myLost);
+  const myLootCash = myParticipant ? bnToSafeNumber(myParticipant.lootCash) : 0;
+  const myLootNovi = myParticipant ? bnToSafeNumber(myParticipant.lootLockedNovi) : 0;
+  const myLootGems = myParticipant ? bnToSafeNumber(myParticipant.lootGems) : 0;
 
   return (
     <div className="space-y-4">
@@ -410,6 +518,88 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
           <div className={`text-sm font-semibold ${statusBanner.tone}`}>{statusBanner.text}</div>
         )}
       </div>
+
+      {/* Your arrival at the rally point — it gathers at the city CENTER, so even
+          the leader marches to it. En route, Gather-speed to arrive before the
+          march or you get left behind. */}
+      {myParticipant && (isGathering || inFlight) && !myArrived && (
+        <div className="space-y-3 rounded-lg border border-zinc-800 bg-surface/60 p-3">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="text-text-gold">Marching to the rally point...</span>
+            <GoldCountdown endsAt={myArrivesAt} format="compact" size="sm" />
+          </div>
+          {isGathering && (
+            <SpeedupPanel
+              visible={myArrivalRemaining > 0}
+              remainingSeconds={myArrivalRemaining}
+              onSpeedup={(tier, rp) => handleGatherSpeedup(tier, rp)}
+              gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
+              gemBalance={player?.gems?.toNumber?.()}
+            />
+          )}
+        </div>
+      )}
+      {myParticipant && isGathering && myArrived && (
+        <div className="rounded-lg border border-zinc-800 bg-surface/60 p-3 text-xs font-semibold text-green-400">
+          You're at the rally point.
+        </div>
+      )}
+
+      {/* Combat result — win/lose + your own losses and loot, shown once the
+          rally has fought. Answers "did we win, did I lose troops". */}
+      {resolved && (
+        <div
+          className={`rounded-lg border p-3 ${
+            rallyWon ? "border-green-700/50 bg-green-950/15" : "border-red-800/50 bg-red-950/15"
+          }`}
+        >
+          <div className="mb-2 flex items-center justify-between">
+            <span className={`text-sm font-bold ${rallyWon ? "text-green-400" : "text-red-400"}`}>
+              {rallyWon ? "Victory" : "Defeat"}
+            </span>
+            <span className="text-[10px] uppercase tracking-wider text-text-muted">Your forces</span>
+          </div>
+          <div className="grid grid-cols-3 gap-3 text-center">
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-text-muted">Committed</div>
+              <div className="text-sm font-semibold tabular-nums text-text-primary">
+                {myCommitted.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-text-muted">Lost</div>
+              <div className="text-sm font-semibold tabular-nums text-red-400">
+                {myLost.toLocaleString()}
+              </div>
+            </div>
+            <div>
+              <div className="text-[10px] uppercase tracking-wider text-text-muted">Survived</div>
+              <div className="text-sm font-semibold tabular-nums text-green-400">
+                {mySurvived.toLocaleString()}
+              </div>
+            </div>
+          </div>
+          {rallyWon && (myLootCash > 0 || myLootNovi > 0 || myLootGems > 0) && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-text-muted">
+              <span className="text-[10px] uppercase tracking-wider">Loot</span>
+              {myLootCash > 0 && <span>{myLootCash.toLocaleString()} cash</span>}
+              {myLootNovi > 0 && <span>{myLootNovi.toLocaleString()} NOVI</span>}
+              {myLootGems > 0 && <span>{myLootGems.toLocaleString()} gems</span>}
+            </div>
+          )}
+          {!marched && (
+            <p className="mt-2 text-[11px] text-text-muted">
+              Your troops didn't make the march in time.
+            </p>
+          )}
+          {marched && mySurvived > 0 && !alreadyReturned && (
+            <p className="mt-2 text-[11px] text-text-muted">
+              Surviving troops are marching home — process the return to collect them
+              {rallyWon ? " and your loot." : "."}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* What happens next — only meaningful while gathering */}
       {isGathering && (
@@ -518,12 +708,21 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             </p>
           )}
 
+          {gatherDone && !myArrived && (
+            <p className="text-xs text-danger">
+              You haven't reached the rally point yet — wait until you arrive (or Gather-speed
+              above), or your committed troops get left behind.
+            </p>
+          )}
+
           <TxButton onClick={handleMarch} disabled={!canMarch} className="hidden lg:block">
             {!enoughForMarch
               ? "Missing participants"
               : !gatherDone
                 ? "March"
-                : "March Rally"}
+                : !myArrived
+                  ? "Reaching rally point…"
+                  : "March Rally"}
           </TxButton>
           <TxButton onClick={handleCancel} variant="danger" className="hidden lg:block">
             Cancel Rally
@@ -531,10 +730,27 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
         </div>
       )}
 
-      {/* In flight — nothing to do here until it returns home */}
+      {/* In flight — speed the army to its target, else wait for the return. */}
       {inFlight && (
-        <div className="rounded-lg border border-border-gold/40 bg-accent/10 p-3 text-xs text-text-muted">
-          The rally is underway. Return and close unlock once it comes home.
+        <div className="space-y-3">
+          <div className="rounded-lg border border-border-gold/40 bg-accent/10 p-3 text-xs text-text-muted">
+            The rally is underway. Return and close unlock once it comes home.
+          </div>
+          {status === RallyStatus.Marching && marchRemaining > 0 && (
+            <div className="space-y-3 rounded-lg border border-zinc-800 bg-surface/60 p-3">
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <span className="text-text-gold">Marching to target...</span>
+                <GoldCountdown endsAt={arriveAt} format="compact" size="sm" />
+              </div>
+              <SpeedupPanel
+                visible={marchRemaining > 0}
+                remainingSeconds={marchRemaining}
+                onSpeedup={(tier, rp) => handleMarchSpeedup(tier, rp)}
+                gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
+                gemBalance={player?.gems?.toNumber?.()}
+              />
+            </div>
+          )}
         </div>
       )}
 
@@ -547,13 +763,50 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
               is home the rally closes in the same step.
             </div>
           )}
-          <TxButton onClick={handleResolve} className="hidden lg:block">
-            {closeable
-              ? "Close Rally"
-              : (rally.returnedCount ?? 0) + 1 >= joinedCount
-                ? "Process Return & Close"
-                : "Process Return"}
-          </TxButton>
+
+          {/* Your troops are still marching home — Process Return is gated until
+              the return lands. Wait out the countdown, or spend gems to speed it
+              up (the chain rejects an early Process Return with code 7181). */}
+          {!closeable && myReturnInFlight && (
+            <div className="space-y-3 rounded-lg border border-zinc-800 bg-surface/60 p-3">
+              <GoldCountdown
+                endsAt={myReturnCompletesAt}
+                startedAt={myReturnStartedAt}
+                label="Returning home"
+                showProgress
+                format="compact"
+              />
+              <SpeedupPanel
+                visible={myReturnRemaining > 0}
+                remainingSeconds={myReturnRemaining}
+                onSpeedup={(tier, rp) => handleReturnSpeedup(tier, rp)}
+                gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
+                gemBalance={player?.gems?.toNumber?.()}
+              />
+            </div>
+          )}
+
+          {(closeable || (!!myParticipant && !alreadyReturned)) && (
+            <TxButton
+              onClick={handleResolve}
+              disabled={!closeable && myReturnInFlight}
+              className="hidden lg:block"
+            >
+              {closeable
+                ? "Close Rally"
+                : myReturnInFlight
+                  ? "Returning home…"
+                  : (rally.returnedCount ?? 0) + 1 >= joinedCount
+                    ? "Process Return & Close"
+                    : "Process Return"}
+            </TxButton>
+          )}
+
+          {!closeable && !!myParticipant && alreadyReturned && (
+            <p className="text-xs text-text-muted">
+              You're home. Waiting for the rest of the rally to return.
+            </p>
+          )}
         </div>
       )}
 

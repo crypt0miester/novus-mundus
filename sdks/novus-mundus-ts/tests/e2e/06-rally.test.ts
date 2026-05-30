@@ -968,6 +968,149 @@ describe('Rally System', () => {
       rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).toBeNull();
     });
+
+    // Regression: a non-leader participant whose return hasn't started
+    // (return_started_at == 0, included_in_march == false) must be able to
+    // process their return. The old code set return_started_at then returned
+    // Err(ReturnNotComplete), which rolled the write back and deadlocked the
+    // participant forever (the exact bug that orphaned committed troops).
+    it('lets a non-leader participant of a cancelled rally recover their troops', async () => {
+      const { creator, participants, target } = await createRallyReadyPlayersWithDelay(2);
+      const { teamId } = await createTeamWithMembers(creator, participants);
+      const participant = participants[0]!;
+
+      const rallyIndex = 0;
+      const creatorAccount = await fetchPlayer(ctx.svm, creator.playerPda);
+      const creatorCityId = creatorAccount!.currentCity;
+      const targetAccount = await fetchPlayer(ctx.svm, target.playerPda);
+      const targetCityId = targetAccount!.currentCity;
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createRallyCreateInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: creator.publicKey,
+              rallyId: rallyIndex,
+              target: target.playerPda,
+              teamId,
+              rallyCityId: creatorCityId,
+            },
+            {
+              targetType: RallyTargetType.Player,
+              gatherDuration: new BN(3600),
+              targetCityId,
+              defensiveUnit1: new BN(100),
+              defensiveUnit2: new BN(0),
+              defensiveUnit3: new BN(0),
+              meleeWeapons: new BN(0),
+              rangedWeapons: new BN(0),
+              siegeWeapons: new BN(0),
+            }
+          )
+        ),
+        [creator.keypair]
+      );
+      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, rallyIndex);
+
+      const partAccount = await fetchPlayer(ctx.svm, participant.playerPda);
+      const partCityId = partAccount!.currentCity;
+      const unitsBefore = partAccount!.defensiveUnit1.toNumber();
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createRallyJoinInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: participant.publicKey,
+              rally: rallyPda,
+              rallyCreator: creator.publicKey,
+              rallyId: rallyIndex,
+              teamId,
+              rallyCityId: creatorCityId,
+            },
+            {
+              defensiveUnit1: new BN(50),
+              defensiveUnit2: new BN(0),
+              defensiveUnit3: new BN(0),
+              meleeWeapons: new BN(0),
+              rangedWeapons: new BN(0),
+              siegeWeapons: new BN(0),
+            }
+          )
+        ),
+        [participant.keypair]
+      );
+
+      // Cancel: cancel.rs starts the LEADER's return but not the participant's,
+      // so the participant is left in the deadlock-prone state.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createRallyCancelInstruction({
+            gameEngine: ctx.gameEngine,
+            owner: creator.publicKey,
+            rally: rallyPda,
+            rallyId: rallyIndex,
+            rallyCityId: creatorCityId,
+          })
+        ),
+        [creator.keypair]
+      );
+
+      // First process_return STARTS the return (must persist — the bug rolled
+      // this back). With the fix this tx succeeds instead of 7181-reverting.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          createRallyProcessReturnInstruction({
+            gameEngine: ctx.gameEngine,
+            rally: rallyPda,
+            rallyCreator: creator.publicKey,
+            rallyId: rallyIndex,
+            participantOwner: participant.publicKey,
+            rallyCityId: creatorCityId,
+            homeCityId: partCityId,
+          })
+        ),
+        [participant.keypair]
+      );
+
+      // Either the return finished immediately (already home), or it is now
+      // genuinely in progress (return_started_at persisted, not rolled back).
+      let rp = await fetchRallyParticipant(
+        ctx.svm, ctx.gameEngine, creator.publicKey, rallyIndex, participant.publicKey
+      );
+      if (rp !== null) {
+        expect(rp.returnStartedAt.toNumber()).toBeGreaterThan(0);
+        await advanceTime(ctx.svm, rp.returnDuration + 5);
+        await sendTransaction(
+          ctx.svm,
+          new Transaction().add(
+            createRallyProcessReturnInstruction({
+              gameEngine: ctx.gameEngine,
+              rally: rallyPda,
+              rallyCreator: creator.publicKey,
+              rallyId: rallyIndex,
+              participantOwner: participant.publicKey,
+              rallyCityId: creatorCityId,
+              homeCityId: partCityId,
+            })
+          ),
+          [participant.keypair]
+        );
+        rp = await fetchRallyParticipant(
+          ctx.svm, ctx.gameEngine, creator.publicKey, rallyIndex, participant.publicKey
+        );
+      }
+
+      // Recovered: participant account closed and all 50 committed units back.
+      expect(rp).toBeNull();
+      const unitsAfter = (await fetchPlayer(ctx.svm, participant.playerPda))!.defensiveUnit1.toNumber();
+      expect(unitsAfter).toBe(unitsBefore);
+    });
   });
 
   // Rally State Tests

@@ -42,7 +42,7 @@ export async function handleShow(ctx: CLIContext, args: ParsedArgs): Promise<voi
       break;
     case 'team':
       if (args.extra) {
-        await showTeam(client, ctx, args.extra);
+        await showTeam(client, ctx, args.extra, args.flags);
       } else {
         await showAllTeams(client, ctx);
       }

@@ -30,6 +30,7 @@ import { formatTime } from "@/lib/utils";
 import {
   derivePlayerPda,
   deriveRallyPda,
+  deriveRallyParticipantPda,
   deriveCastlePda,
   deriveEstatePda,
   parseRally,
@@ -75,10 +76,13 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   // Joining a rally opens its detail panel on /map — the rally lives in the
   // world, and the entity it targets is on the map. Pre-opens via the
   // map-tab deep-link entry (?openPanel=rally-detail&rallyPubkey=…).
-  const openRallyOnMap = (rallyPubkey: string) => {
+  const openRallyOnMap = (rallyPubkey: string, cityId?: number | null) => {
     const params = new URLSearchParams();
     params.set("openPanel", "rally-detail");
     params.set("rallyPubkey", rallyPubkey);
+    // Drill the map into the rally's city so opening the detail also shows
+    // where it is, rather than leaving the viewer on their home disc.
+    if (cityId != null) params.set("city", String(cityId));
     router.push(`/map?${params.toString()}`);
   };
   const { data: geData } = useGameEngine();
@@ -135,30 +139,83 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const teamPubkey = player?.team && !isNullPubkey(player.team) ? player.team : null;
   const { data: teamData } = useTeam(teamPubkey);
   const teamId = teamData?.account?.id;
-  const [joinableRallies, setJoinableRallies] = useState<
+  // Every one of the team's rallies, ACROSS ALL STATUSES. `activeOnly` is
+  // intentionally omitted: a rally I'm in has to stay visible the whole way
+  // through Marching/Combat/Returning and into Completed/Cancelled (which still
+  // need Process-Return/Close) until its account is closed on-chain — not just
+  // while it is Gathering. The previous `status === 0` filter hid every rally
+  // the moment it left the gather phase, so an in-flight rally showed nowhere.
+  const [teamRallies, setTeamRallies] = useState<
     { pubkey: PublicKey; account: RallyAccount }[]
   >([]);
+  // base58 PDAs of the rallies the local player is actually in — created, or
+  // joined (holds a RallyParticipant account).
+  const [myRallyPdas, setMyRallyPdas] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (!teamPubkey) {
-      setJoinableRallies([]);
+      setTeamRallies([]);
+      setMyRallyPdas(new Set());
       return;
     }
     let cancelled = false;
-    client
-      .fetchActiveRallies({ team: teamPubkey, activeOnly: true })
-      .then((results) => {
+    (async () => {
+      const results = await client.fetchActiveRallies({ team: teamPubkey });
+      if (cancelled) return;
+      setTeamRallies(results);
+      // Resolve which rallies are mine: I created it, or I hold its
+      // RallyParticipant account. The participant PDA is keyed on the WALLET
+      // (rally.rs gate), so probe one per rally I didn't create, batched.
+      const mine = new Set<string>();
+      const probes: { pda: PublicKey; rally: string }[] = [];
+      for (const r of results) {
+        if (publicKey && r.account.creator.equals(publicKey)) {
+          mine.add(r.pubkey.toBase58());
+        } else if (publicKey) {
+          const [pda] = deriveRallyParticipantPda(
+            client.gameEngine,
+            r.account.creator,
+            r.account.id.toNumber(),
+            publicKey,
+          );
+          probes.push({ pda, rally: r.pubkey.toBase58() });
+        }
+      }
+      if (probes.length > 0) {
+        const infos = await connection.getMultipleAccountsInfo(probes.map((p) => p.pda));
         if (cancelled) return;
-        // Only gathering-phase rallies can be joined.
-        setJoinableRallies(results.filter((r) => r.account.status === 0));
-      })
-      .catch(() => {
-        if (!cancelled) setJoinableRallies([]);
-      });
+        infos.forEach((info, i) => {
+          if (info) mine.add(probes[i]!.rally);
+        });
+      }
+      if (!cancelled) setMyRallyPdas(mine);
+    })().catch(() => {
+      if (!cancelled) {
+        setTeamRallies([]);
+        setMyRallyPdas(new Set());
+      }
+    });
     return () => {
       cancelled = true;
     };
-  }, [teamPubkey?.toBase58(), client, transact.isPending]);
+  }, [teamPubkey?.toBase58(), client, connection, publicKey?.toBase58(), transact.isPending]);
+
+  // My rallies across every status, newest first.
+  const myRallies = useMemo(
+    () =>
+      teamRallies
+        .filter((r) => myRallyPdas.has(r.pubkey.toBase58()))
+        .sort(
+          (a, b) =>
+            (b.account.createdAt?.toNumber?.() ?? 0) - (a.account.createdAt?.toNumber?.() ?? 0),
+        ),
+    [teamRallies, myRallyPdas],
+  );
+  // Teammates' gathering rallies I'm not already in — the ones I can still join.
+  const joinableRallies = useMemo(
+    () => teamRallies.filter((r) => r.account.status === 0 && !myRallyPdas.has(r.pubkey.toBase58())),
+    [teamRallies, myRallyPdas],
+  );
 
   const handleCreate = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Wallet not connected");
@@ -406,7 +463,81 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
         </div>
       )}
 
-      {/* Active Rally */}
+      {/* Your Rallies — every rally you're in, across ALL statuses. Rallies that
+          have left the gather phase (Marching / Combat / Returning) or ended but
+          still need resolving (Completed / Cancelled) live here; the Joinable
+          list below is only teammates' gathering rallies. Click opens the detail
+          + actions on the map. */}
+      {myRallies.length > 0 && (
+        <div className="card">
+          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Your Rallies
+          </h3>
+          <div className="space-y-2">
+            {myRallies.map((r) => {
+              const st = r.account.status ?? 0;
+              const gatherAt = r.account.gatherAt?.toNumber?.() ?? 0;
+              const arriveAt = r.account.arriveAt?.toNumber?.() ?? 0;
+              const joined = r.account.participantCount ?? 0;
+              const max = r.account.maxParticipants ?? 0;
+              const isLeader = publicKey ? r.account.creator.equals(publicKey) : false;
+              const cityId = r.account.rallyCity ?? r.account.targetCity ?? null;
+              return (
+                <button
+                  key={r.pubkey.toBase58()}
+                  onClick={() => openRallyOnMap(r.pubkey.toBase58(), cityId)}
+                  className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-2 text-left transition-colors hover:border-zinc-700 hover:bg-surface-raised/50"
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-text-primary">
+                        {RALLY_STATUS[st] ?? "Rally"}
+                      </span>
+                      <span className="text-xs text-text-muted">
+                        {TARGET_TYPE[r.account.targetType ?? 0]}
+                      </span>
+                      {isLeader && (
+                        <span className="rounded bg-accent/30 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-text-gold">
+                          Leader
+                        </span>
+                      )}
+                    </div>
+                    <div className="mt-0.5 flex items-center gap-2 text-xs text-text-muted">
+                      <span>
+                        {joined}/{max} joined
+                      </span>
+                      {st === 0 && gatherAt > 0 && (
+                        <>
+                          <span className="text-zinc-700">·</span>
+                          <span>
+                            Gathers <InlineCountdown to={gatherAt} />
+                          </span>
+                        </>
+                      )}
+                      {(st === 1 || st === 2) && arriveAt > 0 && (
+                        <>
+                          <span className="text-zinc-700">·</span>
+                          <span>
+                            Arrives <InlineCountdown to={arriveAt} />
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <span className="shrink-0 rounded-md border border-zinc-700 px-3 py-1 text-xs font-medium text-text-secondary">
+                    {st >= 3 ? "Resolve" : "Manage"}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Active Rally — LEGACY/INERT: driven by a disabled query (rallyId = 0,
+          enabled:false), so it never renders. Superseded by "Your Rallies" above
+          (list) + RallyDetailPanel (actions). Slated for removal in the Forces
+          HUD pass (useActivity) once its handlers move into the shared hook. */}
       {rally && (
         <div className="card accent-border">
           <div className="flex items-center justify-between">
@@ -499,7 +630,12 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
               return (
                 <button
                   key={r.pubkey.toBase58()}
-                  onClick={() => openRallyOnMap(r.pubkey.toBase58())}
+                  onClick={() =>
+                    openRallyOnMap(
+                      r.pubkey.toBase58(),
+                      r.account.rallyCity ?? r.account.targetCity ?? null,
+                    )
+                  }
                   className="flex w-full items-center justify-between gap-3 rounded-lg border border-zinc-800 px-3 py-2 text-left transition-colors hover:border-zinc-700 hover:bg-surface-raised/50"
                 >
                   <div className="min-w-0">

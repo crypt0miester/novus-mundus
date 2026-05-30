@@ -17,6 +17,7 @@ import { CITIES } from '../../data/cities';
 import {
   createMintForPrizeInstruction,
   MintPurpose,
+  createPurchaseItemInstruction,
   createReservedToLockedInstruction,
   createIntercityTeleportInstruction,
   createDepositNoviInstruction,
@@ -48,10 +49,59 @@ export async function handlePlayer(ctx: CLIContext, args: ParsedArgs): Promise<v
     case 'sweep':
       await handleSweep(ctx, args);
       break;
+    case 'buy-gems':
+      await handleBuyGems(ctx, args);
+      break;
     default:
       log.error(`Unknown subcommand: ${args.target || '(none)'}`);
-      log.info('  Usage: novus player <fund|travel|deposit|sweep> <pubkey|keypair-path> [options]');
+      log.info('  Usage: novus player <fund|travel|deposit|sweep|buy-gems> <pubkey|keypair-path> [options]');
   }
+}
+
+// buy-gems — purchase the gem pack (shop item 1, item_type 50). Gems pay for
+// rally/travel/building speedups. There is no dedicated buy-gems instruction;
+// the gem pack is a normal shop item bought with SOL. Each purchase grants the
+// item's quantity_per_purchase (100 gems on the seeded item); --count sets how
+// many packs to buy. Requires the player to have EXT_INVENTORY (any prior shop
+// purchase or team join unlocks it).
+
+const GEMS_ITEM_ID = 1;
+
+async function handleBuyGems(ctx: CLIContext, args: ParsedArgs): Promise<void> {
+  const keypairPath = args.extra;
+  if (!keypairPath) {
+    log.error('Specify the buyer keypair path as third argument (purchase requires the buyer signature)');
+    log.info('  novus player buy-gems <keypair> [--count <n>]');
+    return;
+  }
+  const buyer = loadKeypair(keypairPath);
+
+  const countFlag = getFlag(args.flags, '--count');
+  const count = countFlag ? parseInt(countFlag, 10) : 1;
+  if (isNaN(count) || count <= 0) {
+    log.error('Invalid --count (number of gem packs to buy)');
+    return;
+  }
+
+  const [playerPda] = derivePlayerPda(ctx.gameEngine, buyer.publicKey);
+  if (!await accountExists(ctx.connection, playerPda)) {
+    log.error(`Player account not found for ${buyer.publicKey.toBase58()}`);
+    return;
+  }
+
+  const ix = createPurchaseItemInstruction(
+    {
+      buyer: buyer.publicKey,
+      gameEngine: ctx.gameEngine,
+      itemId: GEMS_ITEM_ID,
+      treasury: ctx.treasury.publicKey,
+    },
+    { quantity: count },
+  );
+
+  await sendWithRetry(ctx, ix, [buyer], { computeUnits: 60_000 });
+  log.info(`  Bought ${count} gem pack(s) (item ${GEMS_ITEM_ID}) for ${buyer.publicKey.toBase58()}`);
+  log.info(`  Check the new balance with: novus show player ${buyer.publicKey.toBase58()}`);
 }
 
 // fund

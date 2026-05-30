@@ -176,8 +176,13 @@ pub fn process(
             rp_data.arrived_at_rally = true;
         }
 
-        // Only include participants who arrived
+        // Only include participants who arrived.
         if !rp_data.arrived_at_rally {
+            if rp_data.return_started_at == 0 {
+                let time_spent = (now - rp_data.travel_started_at).max(0) as i32;
+                rp_data.return_started_at = now;
+                rp_data.return_duration = time_spent;
+            }
             continue;
         }
 
@@ -201,6 +206,14 @@ pub fn process(
             .saturating_add(rp_data.siege_weapons_committed);
         rp_data.contribution_power = contribution;
         contributions[i] = contribution;
+    }
+
+    // Require enough participants to have actually REACHED the rally point, not
+    // just joined. Without this a rally can execute with whoever happens to be
+    // present (possibly nobody -> a zero-power "win"), orphaning everyone else's
+    // committed troops. Mirrors the join-count gate above, applied to arrivals.
+    if marched_count < MIN_RALLY_PARTICIPANTS {
+        return Err(GameError::RallyNotReadyToExecute.into());
     }
 
     let total_weapons = total_melee

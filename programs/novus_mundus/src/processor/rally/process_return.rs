@@ -246,9 +246,13 @@ pub fn process(
         participant.return_started_at = now;
         participant.return_duration = return_duration;
 
-        // If return takes time, they need to wait and call again
+        // The return has now STARTED. Return Ok so this write COMMITS — the
+        // participant calls process_return again once the journey completes to
+        // collect their troops. Returning Err here would roll the whole tx back,
+        // leaving return_started_at == 0 and deadlocking the participant (they
+        // could never start their return, so it could never finish).
         if return_duration > 0 {
-            return Err(GameError::ReturnNotComplete.into());
+            return Ok(());
         }
         // If return_duration == 0 (exactly at home), continue processing
     }

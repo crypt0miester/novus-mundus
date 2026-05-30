@@ -3,6 +3,7 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
+import * as fs from 'fs';
 import type { NovusMundusClient } from '../../../src/client';
 import type { CLIContext } from '../context';
 import { log } from '../helpers';
@@ -63,7 +64,7 @@ export async function showAllTeams(client: NovusMundusClient, ctx: CLIContext): 
   log.info(table(cols, rows));
 }
 
-export async function showTeam(client: NovusMundusClient, ctx: CLIContext, teamIdStr: string): Promise<void> {
+export async function showTeam(client: NovusMundusClient, ctx: CLIContext, teamIdStr: string, flags: string[] = []): Promise<void> {
   const teamId = parseInt(teamIdStr, 10);
   if (isNaN(teamId)) {
     log.error(`Invalid team ID: ${teamIdStr}`);
@@ -78,6 +79,38 @@ export async function showTeam(client: NovusMundusClient, ctx: CLIContext, teamI
 
   const t = result.account;
   const [teamPda] = deriveTeamPda(client.gameEngine, teamId);
+
+  // --json: machine-readable dump with FULL member player PDAs.
+  // The table view abbreviates pubkeys; scripting the rally flow needs the
+  // full member player PDAs (members are player PDAs, not owner wallets).
+  // --out <path> writes the JSON to a file (avoids any stdout post-filtering).
+  if (flags.includes('--json')) {
+    const members = await client.fetchTeamMembers(teamPda);
+    const payload = JSON.stringify(
+      {
+        id: t.id.toString(),
+        name: t.name,
+        pda: teamPda.toBase58(),
+        leader: t.leader.toBase58(),
+        memberCount: t.memberCount,
+        maxMembers: t.maxMembers,
+        members: members
+          .sort((a, b) => a.account.slotIndex - b.account.slotIndex)
+          .map((m) => ({ slot: m.account.slotIndex, player: m.account.player.toBase58(), rank: m.account.rank })),
+      },
+      null,
+      2,
+    );
+    const outIdx = flags.indexOf('--out');
+    const outPath = outIdx >= 0 ? flags[outIdx + 1] : undefined;
+    if (outPath) {
+      fs.writeFileSync(outPath, payload);
+      log.info(`Wrote team ${teamId} JSON to ${outPath}`);
+    } else {
+      console.log(payload);
+    }
+    return;
+  }
 
   log.info(`\nTeam: ${t.name || dim('(unnamed)')}  (ID ${t.id.toString()})`);
   log.info(`PDA: ${addr(teamPda)}`);
