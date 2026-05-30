@@ -7,6 +7,7 @@ import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import {
   parseRally,
   parseRallyParticipant,
+  parseAssetV1,
   derivePlayerPda,
   deriveEstatePda,
   createRallyJoinInstruction,
@@ -55,6 +56,11 @@ const ENCOUNTER_RARITY = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "Wo
 
 interface RallyDetailPanelProps {
   rallyPubkey: string;
+  // Optional dismiss override. Defaults to the global RightPanel closer so
+  // the combat/team tab usage is unchanged; the in-map floating-panel host
+  // passes its own closer (() => setDetail(null)) so success dismisses the
+  // in-panel detail instead of a sidebar that isn't open.
+  onClose?: () => void;
 }
 
 /**
@@ -63,7 +69,7 @@ interface RallyDetailPanelProps {
  * the march/combat timeline, the target encounter, and a self-contained join
  * (troop commitment + hero).
  */
-export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
+export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps) {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   const client = useNovusMundusClient();
@@ -72,7 +78,8 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
   const player = playerData?.account;
   const { data: geData } = useGameEngine();
   const ge = geData?.account;
-  const close = useRightPanelStore((s) => s.close);
+  const storeClose = useRightPanelStore((s) => s.close);
+  const close = onClose ?? storeClose;
   const isMounted = useIsMountedRef();
 
   const rallyKey = useMemo(() => new PublicKey(rallyPubkey), [rallyPubkey]);
@@ -136,6 +143,29 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
     staleTime: 10_000,
   });
   const isParticipant = !!myParticipant;
+
+  // A committed hero rides home on process_return, which must pass the hero NFT
+  // accounts to restore it. Resolve the mint's template id from its asset
+  // metadata (same source as useLockedHeroes). Without this, process_return
+  // reaches the hero-restore step and fails with NotEnoughAccountKeys.
+  const committedHero =
+    myParticipant && !isNullPubkey(myParticipant.hero) ? myParticipant.hero : null;
+  const { data: heroInfo = null } = useQuery({
+    queryKey: ["rally", "committed-hero", committedHero?.toBase58() ?? ""],
+    enabled: !!committedHero,
+    queryFn: async () => {
+      if (!committedHero) return null;
+      const info = await connection.getAccountInfo(committedHero);
+      const asset = info?.data ? parseAssetV1(info.data) : null;
+      if (!asset) return null;
+      return { mint: committedHero, templateId: parseInt(asset.attributes.Template ?? "0", 10) };
+    },
+    staleTime: 60_000,
+  });
+  // All three hero slots full means process_return transfers the hero to the
+  // wallet instead of a slot (needs hero_collection + system_program).
+  const heroNeedsTransfer =
+    !!player && (player.activeHeroes as PublicKey[]).filter((h) => !isNullPubkey(h)).length >= 3;
 
   // The post-time gate account the chain's rally_predicate requires: the
   // caller's RallyParticipant PDA (keyed on the wallet). Passed to the war-table
@@ -259,6 +289,12 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
 
     const instructions = [];
     if (!closeable) {
+      // A committed hero must be resolved before we can build the return (it
+      // needs the hero NFT accounts); fail clearly instead of hitting the
+      // chain's NotEnoughAccountKeys at the hero-restore step.
+      if (committedHero && !heroInfo) {
+        throw new Error("Loading your committed hero, try again in a moment.");
+      }
       instructions.push(
         createRallyProcessReturnInstruction({
           gameEngine: client.gameEngine,
@@ -268,6 +304,9 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
           participantOwner: publicKey,
           rallyCityId: rally.rallyCity ?? 0,
           homeCityId: player?.currentCity ?? 0,
+          ...(heroInfo
+            ? { heroMint: heroInfo.mint, heroTemplateId: heroInfo.templateId, heroNeedsTransfer }
+            : {}),
         }),
       );
     }
@@ -675,7 +714,7 @@ export function RallyDetailPanel({ rallyPubkey }: RallyDetailPanelProps) {
             </div>
           ) : (
             <p className="text-xs text-text-muted">
-              Encounter details unavailable — it may be in another city or already cleared.
+              Encounter details unavailable.
             </p>
           )}
         </div>

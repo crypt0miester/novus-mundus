@@ -13,7 +13,7 @@ import { PublicKey } from "@solana/web3.js";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
-import { SpeedupPanel } from "@/components/shared/SpeedupPanel";
+import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
@@ -250,23 +250,26 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
     row: ReinforcementRow,
     tier: number,
     reportPhase: (p: TxPhase) => void,
+    count: number = 1,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!row.destinationWallet) throw new Error("Destination wallet unresolved");
     const geKey = client.gameEngine;
-    const ix = createReinforcementSpeedupInstruction(
-      {
-        sender: publicKey,
-        gameEngine: geKey,
-        destinationOwner: row.destinationWallet,
-      },
-      { speedupTier: tier as 1 | 2 },
+    const destinationOwner = row.destinationWallet;
+    // Hold-to-charge packs `count` speedups into one tx; each reads the live
+    // timer on-chain, so the leg (outbound or return) collapses step by step.
+    const n = Math.max(1, Math.floor(count));
+    const instructions = Array.from({ length: n }, () =>
+      createReinforcementSpeedupInstruction(
+        { sender: publicKey, gameEngine: geKey, destinationOwner },
+        { speedupTier: tier as 1 | 2 },
+      ),
     );
     return transact
       .mutateAsync({
-        instructions: [ix],
+        instructions,
         invalidateKeys: [["player"]],
-        successMessage: "Reinforcement travel sped up!",
+        successMessage: n > 1 ? `Reinforcement sped up ×${n}!` : "Reinforcement travel sped up!",
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
@@ -464,8 +467,50 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
               const counterparty =
                 row.direction === "sent" ? row.account.destination : row.account.sender;
               const arrivesAt = row.account.arrivesAt?.toNumber?.() ?? 0;
+              const returnAt =
+                (row.account.returnStartedAt?.toNumber?.() ?? 0) +
+                (row.account.returnDuration ?? 0);
               const gemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
-              const remaining = Math.max(0, arrivesAt - Math.floor(Date.now() / 1000));
+              // Seconds left on the leg in flight: outbound while Traveling,
+              // return while Returning. The on-chain speedup handles both via
+              // one instruction, so the sender can hurry either trip.
+              const nowSec = Math.floor(Date.now() / 1000);
+              const remaining =
+                status === 0
+                  ? Math.max(0, arrivesAt - nowSec)
+                  : status === 2
+                    ? Math.max(0, returnAt - nowSec)
+                    : 0;
+              // Hold-to-charge caps for the two speedup tiers: T1 leaves 50% of
+              // time / 1x cost, T2 leaves 25% / 2x — the same formula the
+              // reinforcement processor prices against, so the cap matches chain.
+              const gemBalance = player?.gems?.toNumber?.() ?? 0;
+              const speedupTiers = [
+                {
+                  tier: 1,
+                  label: "Hasten",
+                  description: "50% time reduction",
+                  maxCount: maxSpeedupCount({
+                    remainingSeconds: remaining,
+                    timeMultiplier: 0.5,
+                    costMultiplier: 1,
+                    gemsPerMinute,
+                    gemBalance,
+                  }),
+                },
+                {
+                  tier: 2,
+                  label: "Rush",
+                  description: "75% time reduction",
+                  maxCount: maxSpeedupCount({
+                    remainingSeconds: remaining,
+                    timeMultiplier: 0.25,
+                    costMultiplier: 2,
+                    gemsPerMinute,
+                    gemBalance,
+                  }),
+                },
+              ];
               const directionChip = (
                 <span
                   className={`rounded px-1.5 py-0.5 text-[10px] font-semibold uppercase ${
@@ -533,6 +578,14 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
                         label="Arrives"
                       />
                     )}
+                    {status === 2 && returnAt > 0 && (
+                      <GoldCountdown
+                        endsAt={returnAt}
+                        format="compact"
+                        size="sm"
+                        label="Returns"
+                      />
+                    )}
                     {/* Process arrival is permissionless once travel completes */}
                     {status === 0 && (
                       <TxButton onClick={(rp) => handleProcessArrival(row, rp)} variant="secondary">
@@ -552,14 +605,18 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
                       </TxButton>
                     )}
                   </div>
-                  {/* Speedup — sender speeds up an in-flight reinforcement */}
-                  {row.direction === "sent" && status === 0 && remaining > 0 && (
+                  {/* Speedup — sender hurries an in-flight reinforcement; works on
+                      the outbound trip and the return leg (post-relief/recall) */}
+                  {row.direction === "sent" && (status === 0 || status === 2) && remaining > 0 && (
                     <SpeedupPanel
                       visible={remaining > 0}
                       remainingSeconds={remaining}
-                      onSpeedup={(tier, rp) => handleReinforcementSpeedup(row, tier, rp)}
+                      tiers={speedupTiers}
+                      onSpeedup={(tier, rp, count) =>
+                        handleReinforcementSpeedup(row, tier, rp, count)
+                      }
                       gemsPerMinute={gemsPerMinute}
-                      gemBalance={player?.gems?.toNumber?.()}
+                      gemBalance={gemBalance}
                       className="mt-3"
                     />
                   )}

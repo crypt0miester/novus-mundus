@@ -228,7 +228,7 @@ export function RallyComposerPanel({
 
       {traveling && (
         <div className="rounded-lg border border-border-gold bg-accent/20 px-3 py-2 text-xs text-danger">
-          You are currently traveling — rally creation may be restricted.
+          You are currently traveling.
         </div>
       )}
 

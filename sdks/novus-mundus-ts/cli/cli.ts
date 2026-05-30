@@ -45,6 +45,7 @@ import { handleNuke } from './lib/commands/nuke';
 import { handleTeam } from './lib/commands/team';
 import { handleWartable } from './lib/commands/wartable';
 import { handleRally } from './lib/commands/rally';
+import { handleReinforcement } from './lib/commands/reinforcement';
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -126,6 +127,10 @@ async function main(): Promise<void> {
       break;
     case 'rally':
       await handleRally(ctx, args);
+      break;
+    case 'reinforcement':
+    case 'reinf':
+      await handleReinforcement(ctx, args);
       break;
     default:
       log.error(`Unknown command: ${args.command}`);
@@ -238,6 +243,14 @@ Commands:
   rally process-return      Collect loot + surviving units after combat
                             [--rally <pubkey> | --creator <pk> --id <n>]
                             [--owner <pubkey> | --all]
+  reinforcement list <pk>   Show sent + received reinforcements for a player
+  reinforcement send <kp>   Send defensive troops to a teammate
+                            --to <receiverWallet> --units a,b,c [--weapons m,r,s]
+  reinforcement arrive      Process arrival (crank) --sender <pk> --to <pk>
+  reinforcement recall <kp> Send your troops home --to <receiverWallet>
+  reinforcement relieve <kp> Receiver sends troops back --sender <senderWallet>
+  reinforcement return      Process return (crank) --sender <pk> --to <pk>
+  reinforcement speedup <kp> Collapse travel with gems --to <pk> [--tier 1|2] [--repeat n]
   wartable read <thread>     Decode + decrypt a war-table thread
                             --scope <team|rally|castle|encounter|dm>
                             --limit <n> --master-secret <hex>

@@ -31,7 +31,14 @@ export function EventsList({ filter }: { filter: EventStatusFilter }) {
   }
 
   return (
-    <div className="space-y-4">
+    // Gallery grid rather than a single full-width stack: narrow viewports keep
+    // the cards one-per-row, but desktop (xl+) fans them out to 2, and 3 on very
+    // wide screens, so a content-dense card never stretches across the whole
+    // pane. The 2-col break waits for xl so the card's inner prize grid stays
+    // roomy after the left sidebar claims its width. `items-start` keeps each
+    // card at its natural height — leaderboards vary in length, so equal-height
+    // stretching would leave tall empty cards.
+    <div className="grid grid-cols-1 gap-4 xl:grid-cols-2 2xl:grid-cols-3 items-start">
       {events.map(({ pubkey, account }) => (
         <EventCard
           key={pubkey}

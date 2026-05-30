@@ -1,11 +1,16 @@
 /**
- * team command — Manage team membership for test players
+ * team command — Create teams and manage membership for test players
  *
  * Usage:
- *   novus team join --team-id <id> --count <n> [--start-slot <s>] [--city <id>]
+ *   novus team create <keypair> --name <s> [--tag <t>] [--team-id <n>] [--public] [--min-level <n>]
+ *   novus team invite <leaderKeypair> --team-id <id> --invitee <wallet|keypair> [--slot <inviterSlot>]
+ *   novus team accept <inviteeKeypair> --team-id <id> --slot <n> --inviter <leaderWallet>
+ *   novus team join   --team-id <id> --count <n> [--start-slot <s>] [--city <id>]
  *
  * `--city <id>` only joins candidate players whose current city matches — handy
  * for seeding a team with same-city members. Open-join needs a PUBLIC team.
+ * create/invite/accept target a SPECIFIC player (deterministic), which is what
+ * the rally flow needs (a Citadel-owner leader + a chosen same-city joiner).
  */
 
 import { Keypair, PublicKey } from '@solana/web3.js';
@@ -13,10 +18,14 @@ import * as fs from 'fs';
 import * as path from 'path';
 
 import type { CLIContext, ParsedArgs } from '../context';
-import { sendWithRetry, log } from '../helpers';
+import { loadKeypair } from '../context';
+import { sendWithRetry, accountExists, log } from '../helpers';
 
 import {
   NovusMundusClient,
+  createTeamCreateInstruction,
+  createTeamInviteInstruction,
+  createTeamAcceptInviteInstruction,
   createTeamJoinInstruction,
   createPurchaseItemInstruction,
   deriveTeamPda,
@@ -41,12 +50,207 @@ function getFlag(flags: string[], name: string): string | undefined {
 
 export async function handleTeam(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   switch (args.target) {
+    case 'create':
+      await handleCreate(ctx, args);
+      break;
+    case 'invite':
+      await handleInvite(ctx, args);
+      break;
+    case 'accept':
+      await handleAccept(ctx, args);
+      break;
     case 'join':
       await handleJoin(ctx, args);
       break;
     default:
       log.error(`Unknown subcommand: ${args.target || '(none)'}`);
-      log.info('  Usage: novus team join --team-id <id> --count <n> [--start-slot <s>] [--city <id>]');
+      log.info('  Usage: novus team <create|invite|accept|join> [options]');
+  }
+}
+
+// create — the signer becomes the leader (slot 0). Requires EXT_TEAM +
+// EXT_INVENTORY on the creator (the team extension research chain). Pass
+// --public so members can open-join; invite/accept work regardless.
+
+async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
+  const kp = loadKeypairArg(args.extra);
+  if (!kp) {
+    log.error('Specify the leader keypair path as the third argument');
+    log.info('  novus team create <keypair> --name <s> [--tag <t>] [--team-id <n>] [--public] [--min-level <n>]');
+    return;
+  }
+
+  const name = getFlag(args.flags, '--name');
+  if (!name) {
+    log.error('Specify --name <team name>');
+    return;
+  }
+  const tag = getFlag(args.flags, '--tag') || '';
+  const minLevel = parseInt(getFlag(args.flags, '--min-level') || '1', 10);
+  const isPublic = args.flags.includes('--public');
+  const settings = isPublic ? TeamSettings.PUBLIC : 0;
+
+  // Pick a fresh team id unless one is supplied. Team ids are global, so scan
+  // for the first unused id starting from a high base to avoid the populated
+  // low ids.
+  const teamIdFlag = getFlag(args.flags, '--team-id');
+  let teamId: number;
+  if (teamIdFlag !== undefined) {
+    teamId = parseInt(teamIdFlag, 10);
+  } else {
+    teamId = 990000;
+    for (; teamId < 990500; teamId++) {
+      const [pda] = deriveTeamPda(ctx.gameEngine, teamId);
+      if (!(await accountExists(ctx.connection, pda))) break;
+    }
+  }
+
+  const [playerPda] = derivePlayerPda(ctx.gameEngine, kp.publicKey);
+  const info = await ctx.connection.getAccountInfo(playerPda);
+  if (!info) {
+    log.error(`No player account for ${kp.publicKey.toBase58()}`);
+    return;
+  }
+  const player = deserializePlayer(info.data);
+  if (player.team.toBase58() !== NULL_PUBKEY) {
+    log.error('Leader is already on a team — leave it first (a player can only lead/join one team)');
+    return;
+  }
+
+  const ix = createTeamCreateInstruction(
+    { owner: kp.publicKey, gameEngine: ctx.gameEngine, teamId },
+    { name, tag, minLevelToJoin: minLevel, settings },
+  );
+
+  await sendWithRetry(ctx, ix, [kp], { computeUnits: 30_000 });
+  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  log.create(`Team "${name}" (#${teamId}) ${teamPda.toBase58()}`);
+  log.info(`  Leader: ${kp.publicKey.toBase58()} (slot 0)    Public: ${isPublic}`);
+  log.info(`  Invite a member: novus team invite ${args.extra} --team-id ${teamId} --invitee <wallet|keypair>`);
+}
+
+// invite — leader (or any member with INVITE permission) creates an invite for a
+// specific player. The invitee PDA is derived from their wallet.
+
+async function handleInvite(ctx: CLIContext, args: ParsedArgs): Promise<void> {
+  const inviter = loadKeypairArg(args.extra);
+  if (!inviter) {
+    log.error('Specify the inviter (leader) keypair path as the third argument');
+    log.info('  novus team invite <leaderKeypair> --team-id <id> --invitee <wallet|keypair> [--slot <inviterSlot>]');
+    return;
+  }
+
+  const teamIdFlag = getFlag(args.flags, '--team-id');
+  if (teamIdFlag === undefined) {
+    log.error('Specify --team-id <id>');
+    return;
+  }
+  const teamId = parseInt(teamIdFlag, 10);
+
+  const inviteeFlag = getFlag(args.flags, '--invitee');
+  if (!inviteeFlag) {
+    log.error('Specify --invitee <wallet pubkey or keypair path>');
+    return;
+  }
+  const inviteeWallet = resolveWallet(inviteeFlag);
+  if (!inviteeWallet) {
+    log.error(`Could not resolve --invitee: ${inviteeFlag}`);
+    return;
+  }
+
+  const inviterSlot = parseInt(getFlag(args.flags, '--slot') || '0', 10);
+  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  const [inviteePlayer] = derivePlayerPda(ctx.gameEngine, inviteeWallet);
+  const [leaderPlayer] = derivePlayerPda(ctx.gameEngine, inviter.publicKey);
+
+  const ix = createTeamInviteInstruction({
+    gameEngine: ctx.gameEngine,
+    inviter: inviter.publicKey,
+    team: teamPda,
+    inviteePlayer,
+    teamId,
+    inviterSlotIndex: inviterSlot,
+    leaderPlayer,
+  });
+
+  await sendWithRetry(ctx, ix, [inviter], { computeUnits: 30_000 });
+  log.create(`Invited ${inviteeWallet.toBase58()} to team #${teamId}`);
+  log.info(`  They accept with: novus team accept <inviteeKeypair> --team-id ${teamId} --slot 1 --inviter ${inviter.publicKey.toBase58()}`);
+}
+
+// accept — the invitee signs to occupy a slot. Auto-unlocks EXT_INVENTORY if
+// eligible. --inviter is the wallet that paid for the invite (gets the rent
+// refund); for a fresh team that's the leader.
+
+async function handleAccept(ctx: CLIContext, args: ParsedArgs): Promise<void> {
+  const kp = loadKeypairArg(args.extra);
+  if (!kp) {
+    log.error('Specify the invitee keypair path as the third argument');
+    log.info('  novus team accept <inviteeKeypair> --team-id <id> --slot <n> --inviter <leaderWallet>');
+    return;
+  }
+
+  const teamIdFlag = getFlag(args.flags, '--team-id');
+  if (teamIdFlag === undefined) {
+    log.error('Specify --team-id <id>');
+    return;
+  }
+  const teamId = parseInt(teamIdFlag, 10);
+
+  const slotFlag = getFlag(args.flags, '--slot');
+  if (slotFlag === undefined) {
+    log.error('Specify --slot <index> (first free slot after the leader is 1)');
+    return;
+  }
+  const slotIndex = parseInt(slotFlag, 10);
+
+  const inviterFlag = getFlag(args.flags, '--inviter');
+  if (!inviterFlag) {
+    log.error('Specify --inviter <leader wallet> (invite-rent refund recipient)');
+    return;
+  }
+  const inviterWallet = resolveWallet(inviterFlag);
+  if (!inviterWallet) {
+    log.error(`Could not resolve --inviter: ${inviterFlag}`);
+    return;
+  }
+  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  const [leaderPlayer] = derivePlayerPda(ctx.gameEngine, inviterWallet);
+
+  const ix = createTeamAcceptInviteInstruction({
+    gameEngine: ctx.gameEngine,
+    owner: kp.publicKey,
+    team: teamPda,
+    slotIndex,
+    teamId,
+    inviteRefund: inviterWallet,
+    leaderPlayer,
+  });
+
+  await sendWithRetry(ctx, ix, [kp], { computeUnits: 40_000 });
+  log.create(`${kp.publicKey.toBase58()} joined team #${teamId} (slot ${slotIndex})`);
+}
+
+// helpers shared by create/invite/accept
+
+function loadKeypairArg(extra: string): Keypair | null {
+  if (!extra) return null;
+  try {
+    return loadKeypair(extra);
+  } catch {
+    return null;
+  }
+}
+
+function resolveWallet(s: string): PublicKey | null {
+  try {
+    return new PublicKey(s);
+  } catch {
+    try {
+      return loadKeypair(s).publicKey;
+    } catch {
+      return null;
+    }
   }
 }
 

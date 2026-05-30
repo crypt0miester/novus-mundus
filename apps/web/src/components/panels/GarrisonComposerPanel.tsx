@@ -160,7 +160,7 @@ export function GarrisonComposerPanel({ cityId, castleId, onClose }: GarrisonCom
 
       {traveling && (
         <div className="rounded-lg border border-border-gold bg-accent/20 px-3 py-2 text-xs text-danger">
-          You are currently traveling — garrison actions may be restricted.
+          You are currently traveling.
         </div>
       )}
 

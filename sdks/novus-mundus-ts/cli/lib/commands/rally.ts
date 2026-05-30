@@ -21,7 +21,7 @@
  * require the acting player's own keypair (passed as the keypair argument).
  */
 
-import { Keypair, PublicKey, SYSVAR_CLOCK_PUBKEY } from '@solana/web3.js';
+import { Keypair, PublicKey, SYSVAR_CLOCK_PUBKEY, Transaction, ComputeBudgetProgram } from '@solana/web3.js';
 import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -871,9 +871,61 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   log.info(`  Has defensive units: ${roster.length - noUnits.length}/${roster.length}` +
     (noUnits.length ? red(`  (cannot commit: ${noUnits.length})`) : green('  OK')));
 
-  // Concrete command sequence.
-  const leaderKp = leaderFile ? `keys/players/${leaderFile}` : '<leader-keypair>';
-  const leaderWallet = leaderPlayer.owner.toBase58();
+  // Creator viability — CREATING a rally needs a Citadel (Estate L12+); JOINING
+  // does not. A keyed member with units may still be unable to create (no estate
+  // → IllegalOwner, or estate-without-citadel → CitadelRequired 0x1e2b). We find
+  // the real creator by simulating rally_create (commits nothing) for each keyed
+  // member with units, stopping at the first that passes. The target encounter
+  // doesn't have to exist for create to simulate (create only stores the pubkey).
+  let viableCreator: { file: string; wallet: PublicKey } | null = null;
+  let lastCreateErr = '';
+  const candidates = roster.filter((r) => r.file && r.owner && r.units[0] + r.units[1] + r.units[2] > 0);
+  let blockhash = '';
+  try {
+    blockhash = (await ctx.connection.getLatestBlockhash()).blockhash;
+  } catch {}
+  for (const r of candidates) {
+    let kp: Keypair;
+    try {
+      kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(path.join(dir, r.file!), 'utf8'))));
+    } catch {
+      continue;
+    }
+    const ix = createRallyCreateInstruction(
+      { owner: kp.publicKey, gameEngine: ctx.gameEngine, rallyId: 0, target: kp.publicKey, teamId, rallyCityId: gatherCity },
+      {
+        targetType: RallyTargetType.Encounter, gatherDuration: 120, targetCityId: gatherCity,
+        defensiveUnit1: 1, defensiveUnit2: 0, defensiveUnit3: 0,
+        meleeWeapons: 0, rangedWeapons: 0, siegeWeapons: 0,
+      },
+    );
+    const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 80_000 }), ix);
+    tx.feePayer = kp.publicKey;
+    if (blockhash) tx.recentBlockhash = blockhash;
+    try {
+      const sim = await ctx.connection.simulateTransaction(tx, [kp]);
+      if (!sim.value.err) {
+        viableCreator = { file: r.file!, wallet: kp.publicKey };
+        break;
+      }
+      lastCreateErr = JSON.stringify(sim.value.err);
+    } catch (e: any) {
+      lastCreateErr = String(e?.message || e).split('\n')[0];
+    }
+  }
+  log.info(
+    `  Viable rally creator (Citadel): ` +
+      (viableCreator
+        ? green(`${viableCreator.file} ${addr(viableCreator.wallet)}`)
+        : red(`NONE of ${candidates.length} keyed members can create — need a Citadel (Estate L12+) owner${lastCreateErr ? ` [${lastCreateErr}]` : ''}`)),
+  );
+
+  // Concrete command sequence. Prefer a proven-viable creator; fall back to the
+  // leader (which may lack a saved keypair).
+  const creatorKp = viableCreator ? `keys/players/${viableCreator.file}` : (leaderFile ? `keys/players/${leaderFile}` : '<creator-keypair-with-Citadel>');
+  const creatorWallet = (viableCreator ? viableCreator.wallet : leaderPlayer.owner).toBase58();
+  const leaderKp = creatorKp;
+  const leaderWallet = creatorWallet;
   log.info(section('Flow (run from sdks/novus-mundus-ts; not executed by prep)'));
   log.info(dim('  # 1. ensure a target encounter exists in the gather city'));
   log.info(`  bun run cli/cli.ts encounters spawn --city ${gatherCity} --rarity common`);

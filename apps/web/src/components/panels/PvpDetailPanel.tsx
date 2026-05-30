@@ -39,7 +39,16 @@ const PVP_RANGE = PVP_ATTACK_RANGE_METERS;
  * player list. Self-derives off the target's pubkey: distance, the target's
  * forces, and the attack / travel actions. The list only has to `show()` it.
  */
-export function PvpDetailPanel({ playerPubkey }: { playerPubkey: string }) {
+export function PvpDetailPanel({
+  playerPubkey,
+}: {
+  playerPubkey: string;
+  // Optional dismiss override accepted for parity with the other detail
+  // panels. This panel hands the post-attack flow to the combat-outcome
+  // store and has no self-dismiss today, so it is unused for now; the in-map
+  // host still passes it so a future explicit dismiss lands in the right place.
+  onClose?: () => void;
+}) {
   const { publicKey } = useWallet();
   const router = useRouter();
   const client = useNovusMundusClient();

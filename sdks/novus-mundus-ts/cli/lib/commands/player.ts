@@ -18,6 +18,7 @@ import {
   createMintForPrizeInstruction,
   MintPurpose,
   createPurchaseItemInstruction,
+  createHireUnitsInstruction,
   createReservedToLockedInstruction,
   createIntercityTeleportInstruction,
   createDepositNoviInstruction,
@@ -52,9 +53,12 @@ export async function handlePlayer(ctx: CLIContext, args: ParsedArgs): Promise<v
     case 'buy-gems':
       await handleBuyGems(ctx, args);
       break;
+    case 'hire':
+      await handleHire(ctx, args);
+      break;
     default:
       log.error(`Unknown subcommand: ${args.target || '(none)'}`);
-      log.info('  Usage: novus player <fund|travel|deposit|sweep|buy-gems> <pubkey|keypair-path> [options]');
+      log.info('  Usage: novus player <fund|travel|deposit|sweep|buy-gems|hire> <pubkey|keypair-path> [options]');
   }
 }
 
@@ -332,6 +336,56 @@ async function handleSweep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   await sendWithRetry(ctx, ix, [wallet]);
   log.info(`  Swept ${kindFlag} PDA surplus → wallet ATA`);
   log.info(`  (ix returns silently if no surplus to recover — check your wallet balance)`);
+}
+
+// hire — buy military units with the player's locked NOVI. Defensive units
+// (unit-type 0/1/2) are what a rally commits; a Citadel-owner whose units are
+// locked in a stuck rally can re-arm this way. Requires a Barracks (capacity)
+// and that the passed cityId matches the player's current city (the chain
+// validates city_id == player.current_city), so we read it from the account.
+
+async function handleHire(ctx: CLIContext, args: ParsedArgs): Promise<void> {
+  const keypairPath = args.extra;
+  if (!keypairPath) {
+    log.error('Specify the player keypair path as third argument (hire requires the owner signature)');
+    log.info('  novus player hire <keypair> --unit-type <0-5> --novi <amount>');
+    return;
+  }
+  const owner = loadKeypair(keypairPath);
+
+  const unitType = parseInt(getFlag(args.flags, '--unit-type') || '0', 10);
+  if (isNaN(unitType) || unitType < 0 || unitType > 5) {
+    log.error('Invalid --unit-type (0-2 = defensive tiers, 3-5 = operative tiers)');
+    return;
+  }
+  const noviFlag = getFlag(args.flags, '--novi');
+  if (!noviFlag) {
+    log.error('Specify --novi <amount of locked NOVI to spend>');
+    return;
+  }
+  const noviAmount = parseInt(noviFlag, 10);
+  if (isNaN(noviAmount) || noviAmount <= 0) {
+    log.error('Invalid --novi amount');
+    return;
+  }
+
+  const [playerPda] = derivePlayerPda(ctx.gameEngine, owner.publicKey);
+  const playerInfo = await ctx.connection.getAccountInfo(playerPda);
+  if (!playerInfo) {
+    log.error(`Player account not found for ${owner.publicKey.toBase58()}`);
+    return;
+  }
+  const player = deserializePlayer(playerInfo.data);
+  const cityId = player.currentCity;
+
+  const ix = createHireUnitsInstruction(
+    { owner: owner.publicKey, gameEngine: ctx.gameEngine },
+    { unitType, noviAmount },
+  );
+
+  await sendWithRetry(ctx, ix, [owner], { computeUnits: 100_000 });
+  log.info(`  Hired unit-type ${unitType} for ${noviAmount.toLocaleString()} NOVI (city ${cityId})`);
+  log.info(`  Check with: novus show player ${owner.publicKey.toBase58()}`);
 }
 
 // helpers

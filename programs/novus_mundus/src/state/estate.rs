@@ -7,37 +7,28 @@ use pinocchio::{error::ProgramError, Address};
 #[repr(u8)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum BuildingType {
-    // Tier 1 (Estate Level 1+)
     Mansion = 0,
     Barracks = 1,
     Workshop = 2,
     Vault = 3,
     Dock = 4, // Fishing expeditions (parallel to Workshop for mining)
 
-    // Tier 2 (Estate Level 10+)
     Forge = 5,
     Market = 6,
     Academy = 7,
     Arena = 8,
 
-    // Tier 3 (Estate Level 25+)
     MeditationChamber = 9,
     Observatory = 10,
     Treasury = 11,
     Citadel = 12,
 
-    // Tier 1 expansion
-    Camp = 13, // Operative unit hiring (split from Barracks)
-    // Tier 2 expansion
-    Mine = 14, // Mining expeditions (split from Workshop)
-    // Tier 3 expansion
-    DungeonEntry = 15, // Dungeon access (split from Arena)
-    // Tier 1 expansion
-    Farm = 16, // Produce collection (new land-based path)
-    // Tier 2 expansion
-    TransportBay = 17, // Travel gating (new)
-    // Tier 3 expansion
-    Infirmary = 18, // Unit recovery in combat (new)
+    Camp = 13, // Operative unit hiring
+    Mine = 14, // Mining expeditions
+    DungeonEntry = 15, // Dungeon access
+    Farm = 16, // Produce collection
+    TransportBay = 17, // Travel gating
+    Infirmary = 18, // Unit recovery in combat
 }
 
 impl BuildingType {

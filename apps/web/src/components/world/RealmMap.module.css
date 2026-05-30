@@ -26,6 +26,12 @@
   --seal: var(--tier-accent-bright, #b45309);
   --seal-glow: var(--tier-accent-glow, rgba(180, 83, 9, 0.25));
 
+  /* Movement-arc inks, keyed by action kind (see .routeLine). Saturated on
+   * cream paper; the dark block lifts them so they read on vellum. */
+  --route-rally: #a3261a;
+  --route-reinf: #2c5a7a;
+  --route-travel: var(--ink-faint);
+
   color: var(--ink);
   font-family: var(--font-cinzel), Cinzel, "Trajan Pro", "Goudy Old Style", serif;
   letter-spacing: 0.04em;
@@ -521,6 +527,36 @@
   opacity: 0.35;
 }
 
+/* Ambient movement arcs (rally marches, others' travel, my reinforcements).
+ * Thinner and quieter than the player's own seal-orange travel line so the
+ * focused journey still reads as primary. Color-keyed by kind; `.routeMine`
+ * lifts opacity + adds a faint glow for the local player's own forces. */
+.routesLayer {
+  pointer-events: none;
+}
+.routeLine {
+  fill: none;
+  stroke-width: 1.5;
+  stroke-dasharray: 4 5;
+  stroke-linecap: round;
+  vector-effect: non-scaling-stroke;
+  opacity: 0.4;
+}
+.routeRally {
+  stroke: var(--route-rally);
+}
+.routeReinforcement {
+  stroke: var(--route-reinf);
+}
+.routeTravel {
+  stroke: var(--route-travel);
+}
+.routeMine {
+  opacity: 0.75;
+  stroke-width: 2;
+  filter: drop-shadow(0 0 3px var(--seal-glow));
+}
+
 .cityDot {
   fill: var(--ink);
   stroke: var(--parchment);
@@ -1003,6 +1039,10 @@
   --ink: #ead6a8;
   --ink-soft: #b8966a;
   --ink-faint: #5e482c;
+
+  --route-rally: #e0654f;
+  --route-reinf: #6fa8cf;
+  --route-travel: var(--ink-soft);
 
   --halo: rgba(28, 19, 10, 0.85);
   --halo-soft: rgba(28, 19, 10, 0.65);

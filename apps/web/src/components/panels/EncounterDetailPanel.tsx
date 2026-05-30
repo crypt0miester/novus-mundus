@@ -41,7 +41,16 @@ const ENCOUNTER_RANGE = ENCOUNTER_ATTACK_RANGE_METERS;
  * encounter list. Self-derives off the encounter pubkey: distance, level band,
  * stamina, and the attack / travel actions. The list only has to `show()` it.
  */
-export function EncounterDetailPanel({ encounterPubkey }: { encounterPubkey: string }) {
+export function EncounterDetailPanel({
+  encounterPubkey,
+}: {
+  encounterPubkey: string;
+  // Optional dismiss override accepted for parity with the other detail
+  // panels. This panel hands the post-attack flow to the combat-outcome
+  // store and has no self-dismiss today, so it is unused for now; the in-map
+  // host still passes it so a future explicit dismiss lands in the right place.
+  onClose?: () => void;
+}) {
   const { publicKey } = useWallet();
   const client = useNovusMundusClient();
   const transact = useTransact();

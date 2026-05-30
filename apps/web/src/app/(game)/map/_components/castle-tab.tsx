@@ -681,46 +681,52 @@ export function CastleTab() {
       {/* Castle Info */}
       {castle ? (
         <>
-          <CastleBanner castle={castle} />
-          <div className="card accent-border">
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <div>
-                <div className="text-xs text-text-muted">Tier</div>
-                <div className="text-sm font-semibold text-text-gold">
-                  {CASTLE_TIER_NAMES[castle.tier ?? 0]}
+          {/* Hero header: on desktop the landmark banner sits beside the stat
+              block instead of ballooning to full content width above it. They
+              stack again on narrow viewports, and items-start keeps the banner
+              at a clean 16:9 rather than stretching to the stat card height. */}
+          <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
+            <CastleBanner castle={castle} />
+            <div className="card accent-border">
+              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                <div>
+                  <div className="text-xs text-text-muted">Tier</div>
+                  <div className="text-sm font-semibold text-text-gold">
+                    {CASTLE_TIER_NAMES[castle.tier ?? 0]}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-text-muted">Status</div>
+                  <div className="text-sm font-semibold text-text-primary">
+                    {CASTLE_STATUS_NAMES[castle.status ?? 0]}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs text-text-muted">Garrison</div>
+                  <GoldNumber value={castle.garrisonCount ?? 0} size="sm" />
+                </div>
+                <div>
+                  <div className="text-xs text-text-muted">Total Rewards</div>
+                  <GoldNumber
+                    value={castle.totalRewardsDistributed?.toNumber?.() ?? 0}
+                    prefix="$ "
+                    size="sm"
+                  />
                 </div>
               </div>
-              <div>
-                <div className="text-xs text-text-muted">Status</div>
-                <div className="text-sm font-semibold text-text-primary">
-                  {CASTLE_STATUS_NAMES[castle.status ?? 0]}
+              <p className="mt-3 text-xs italic text-text-muted">
+                {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
+                  "The condition of the seat is unclear."}
+              </p>
+              {castle.hasKing && (
+                <div className="mt-3 border-t border-zinc-800 pt-3">
+                  <div className="text-xs text-text-muted">King</div>
+                  <div className="text-sm text-text-primary">
+                    <DomainName pubkey={castle.king} chars={6} />
+                  </div>
                 </div>
-              </div>
-              <div>
-                <div className="text-xs text-text-muted">Garrison</div>
-                <GoldNumber value={castle.garrisonCount ?? 0} size="sm" />
-              </div>
-              <div>
-                <div className="text-xs text-text-muted">Total Rewards</div>
-                <GoldNumber
-                  value={castle.totalRewardsDistributed?.toNumber?.() ?? 0}
-                  prefix="$ "
-                  size="sm"
-                />
-              </div>
+              )}
             </div>
-            <p className="mt-3 text-xs italic text-text-muted">
-              {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
-                "The condition of the seat is unclear."}
-            </p>
-            {castle.hasKing && (
-              <div className="mt-3 border-t border-zinc-800 pt-3">
-                <div className="text-xs text-text-muted">King</div>
-                <div className="text-sm text-text-primary">
-                  <DomainName pubkey={castle.king} chars={6} />
-                </div>
-              </div>
-            )}
           </div>
 
           {/* War Council — the castle's encrypted war-table, for the king and

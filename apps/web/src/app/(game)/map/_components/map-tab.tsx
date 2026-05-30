@@ -83,6 +83,14 @@ import {
 import { ReinforceComposerPanel } from "@/components/panels/ReinforceComposerPanel";
 import { RallyComposerPanel } from "@/components/panels/RallyComposerPanel";
 import { GarrisonComposerPanel } from "@/components/panels/GarrisonComposerPanel";
+import { RallyDetailPanel } from "@/components/panels/RallyDetailPanel";
+import { EncounterDetailPanel } from "@/components/panels/EncounterDetailPanel";
+import { PvpDetailPanel } from "@/components/panels/PvpDetailPanel";
+import { ReinforcementDetailPanel } from "@/components/panels/ReinforcementDetailPanel";
+import { GarrisonDetailPanel } from "@/components/panels/GarrisonDetailPanel";
+import { ForcesHud } from "@/components/forces/ForcesHud";
+import type { ActivityItem } from "@/lib/hooks/useActivity";
+import { useMapRoutes } from "@/lib/hooks/useMapRoutes";
 import { ChevronLeft } from "lucide-react";
 import {
   CityTerrainMap,
@@ -158,6 +166,35 @@ const PANEL_RESOLVERS: Record<
   },
 };
 
+/**
+ * URL-driven detail openers. These keys host their panel INSIDE the map's
+ * floating panel (the `detail` state) rather than the global RightPanel, so a
+ * deep link like `?openPanel=rally-detail&rallyPubkey=…` lands in-map. Returns
+ * null when the required pubkey param is missing.
+ */
+const DETAIL_RESOLVERS: Record<string, (sp: URLSearchParams) => DetailSpec | null> = {
+  "rally-detail": (sp) => {
+    const pubkey = sp.get("rallyPubkey");
+    return pubkey ? { kind: "rally", pubkey } : null;
+  },
+  "encounter-detail": (sp) => {
+    const pubkey = sp.get("encounterPubkey");
+    return pubkey ? { kind: "encounter", pubkey } : null;
+  },
+  "pvp-detail": (sp) => {
+    const pubkey = sp.get("playerPubkey");
+    return pubkey ? { kind: "pvp", pubkey } : null;
+  },
+  "reinforcement-detail": (sp) => {
+    const pubkey = sp.get("reinforcementPubkey");
+    return pubkey ? { kind: "reinforcement", pubkey } : null;
+  },
+  "garrison-detail": (sp) => {
+    const pubkey = sp.get("castlePubkey");
+    return pubkey ? { kind: "garrison", pubkey } : null;
+  },
+};
+
 // Shared styling for the travel-gate hints under the realm-map CTAs.
 const TRAVEL_NOTE_STYLE = {
   marginTop: "0.6rem",
@@ -178,6 +215,10 @@ export function MapTab() {
   const travel = useTravelProgress();
   const client = useNovusMundusClient();
   const transact = useTransact();
+  // In-flight movement arcs drawn behind the cities: rally marches (any team),
+  // other players' intercity travel, my reinforcements. The player's own travel
+  // keeps its dedicated animated arc via `realmTravel` below.
+  const routes = useMapRoutes();
 
   const player = playerData?.account;
   const ge = geData?.account;
@@ -189,6 +230,13 @@ export function MapTab() {
    * the composer's own success path, and the back arrow. Type lives at
    * module scope so EntityPanel can reference it via its props. */
   const [composer, setComposer] = useState<ComposerSpec | null>(null);
+  // Detail state runs in PARALLEL to `composer`. When set, the realm map's
+  // floating detail panel swaps to a full rally / encounter / pvp detail (the
+  // same panels the global RightPanel hosts for the combat / team tabs) with a
+  // Back affordance, so a "Join Rally" / inspect lands inside the map region
+  // instead of the global sidebar. Mutually exclusive with `composer` (the
+  // detail block is checked first). Cleared when the inspected selection moves.
+  const [detail, setDetail] = useState<DetailSpec | null>(null);
   /* Default the /map view to the home-city terrain disc once the player's
    * currentCity is known. Tracked with a ref so the user can dismiss the
    * drill-in (bottom-right back button → setDestinationCity(null)) and stay
@@ -300,15 +348,23 @@ export function MapTab() {
       }
     }
 
-    // openPanel — resolve title + props per registered key. Anything not in
-    // PANEL_RESOLVERS is silently ignored (a bad key would just no-op
-    // instead of throwing in the URL effect).
+    // openPanel: detail keys (rally / encounter / pvp) host in-map via the
+    // `detail` state so the deep link lands in the floating panel, not the
+    // global sidebar. Everything else resolves a title + props and opens the
+    // global RightPanel. Anything in neither table is silently ignored (a bad
+    // key would just no-op instead of throwing in the URL effect).
     if (openPanel) {
-      const resolver = PANEL_RESOLVERS[openPanel];
-      if (resolver) {
-        const resolved = resolver(searchParams);
-        if (resolved) {
-          useRightPanelStore.getState().show(resolved.title, openPanel, resolved.props);
+      const detailResolver = DETAIL_RESOLVERS[openPanel];
+      if (detailResolver) {
+        const resolvedDetail = detailResolver(searchParams);
+        if (resolvedDetail) setDetail(resolvedDetail);
+      } else {
+        const resolver = PANEL_RESOLVERS[openPanel];
+        if (resolver) {
+          const resolved = resolver(searchParams);
+          if (resolved) {
+            useRightPanelStore.getState().show(resolved.title, openPanel, resolved.props);
+          }
         }
       }
     }
@@ -326,6 +382,11 @@ export function MapTab() {
       // Panel-prop names — same set the resolvers below read.
       "targetWallet",
       "rallyPubkey",
+      // Detail-panel pubkey params (encounter / pvp / reinforcement / garrison).
+      "encounterPubkey",
+      "playerPubkey",
+      "reinforcementPubkey",
+      "castlePubkey",
       "targetPubkey",
       "targetType",
       "targetCityId",
@@ -374,6 +435,58 @@ export function MapTab() {
   useEffect(() => {
     setComposer(null);
   }, [selectedEntity?.pubkey, destinationCity]);
+
+  // Detail follows the same selection lifecycle as the composer: changing the
+  // inspected entity or the drilled-in city invalidates the open detail.
+  // Unlike the composer (only ever opened from a user click that never moves
+  // the selection in the same commit), the detail can be opened by the
+  // deep-link effect, which sets `destinationCity` in the SAME commit. We
+  // anchor on the selection the detail was opened against and clear only when
+  // it actually moves, so the deep-link open isn't immediately wiped.
+  const detailAnchorRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!detail) {
+      detailAnchorRef.current = null;
+      return;
+    }
+    const anchor = `${selectedEntity?.pubkey ?? ""}:${destinationCity ?? ""}`;
+    if (detailAnchorRef.current == null) {
+      // First render after the detail opened: record where it was anchored.
+      detailAnchorRef.current = anchor;
+      return;
+    }
+    if (detailAnchorRef.current !== anchor) {
+      setDetail(null);
+    }
+  }, [detail, selectedEntity?.pubkey, destinationCity]);
+
+  /* Forces HUD row click. Spatial rows (rally / reinforcement / travel /
+   * garrison) focus the map on the row's city so the disc drills into it; a
+   * rally additionally opens its full detail in the floating panel (the only
+   * activity kind with an in-map detail host). Non-spatial rows (the active
+   * expedition) deep-link to the estate where their resolve action lives. */
+  const handleForceSelect = useCallback(
+    (item: ActivityItem) => {
+      if (item.spatial) {
+        if (item.targetCityId != null) {
+          setDestinationCity(item.targetCityId);
+          setDestCell(null);
+          setSelectedEntity(null);
+        }
+        if (item.detail?.kind === "rally-detail") {
+          setDetail({ kind: "rally", pubkey: item.detail.pubkey });
+        } else if (item.detail?.kind === "reinforcement") {
+          setDetail({ kind: "reinforcement", pubkey: item.detail.pubkey });
+        } else if (item.detail?.kind === "castle") {
+          // Garrison rows point at the castle pubkey.
+          setDetail({ kind: "garrison", pubkey: item.detail.pubkey });
+        }
+        return;
+      }
+      if (item.kind === "expedition") router.push("/estate");
+    },
+    [router],
+  );
 
   /* Local team affiliation — base58 of `player.team` if the local
    * player has joined a team, else null. Drives the same-team dot
@@ -1442,6 +1555,39 @@ export function MapTab() {
     const isCurrent = node.city.cityId === player?.currentCity;
     const inFlight = travel.traveling;
 
+    // Detail takes over the panel when set: the full rally / encounter / pvp
+    // detail, hosted in-map instead of the global RightPanel. Checked before
+    // the composer so the two stay mutually exclusive. Each panel gets
+    // onClose=() => setDetail(null) so its success path dismisses the in-panel
+    // detail rather than a sidebar that isn't open here.
+    if (detail) {
+      return (
+        <ComposerFrame title={detailTitle(detail)} onBack={() => setDetail(null)}>
+          {detail.kind === "rally" && (
+            <RallyDetailPanel rallyPubkey={detail.pubkey} onClose={() => setDetail(null)} />
+          )}
+          {detail.kind === "encounter" && (
+            <EncounterDetailPanel
+              encounterPubkey={detail.pubkey}
+              onClose={() => setDetail(null)}
+            />
+          )}
+          {detail.kind === "pvp" && (
+            <PvpDetailPanel playerPubkey={detail.pubkey} onClose={() => setDetail(null)} />
+          )}
+          {detail.kind === "reinforcement" && (
+            <ReinforcementDetailPanel
+              reinforcementPubkey={detail.pubkey}
+              onClose={() => setDetail(null)}
+            />
+          )}
+          {detail.kind === "garrison" && (
+            <GarrisonDetailPanel castlePubkey={detail.pubkey} onClose={() => setDetail(null)} />
+          )}
+        </ComposerFrame>
+      );
+    }
+
     // Composer takes over the panel when set. Same surface that would
     // otherwise show the entity detail — keeps the player in one
     // visual region rather than launching a separate sidebar/modal.
@@ -2061,9 +2207,11 @@ export function MapTab() {
         setComposer(null);
       }}
       travel={realmTravel}
+      routes={routes}
       renderSelected={renderSelected}
       renderDefault={renderDefault}
       renderSheetOverride={renderSheetOverride}
+      renderHud={() => <ForcesHud onSelectItem={handleForceSelect} />}
       fullscreen
       /* Stable id for whatever the player is acting on right now. The
        * floating detail panel auto-opens on every transition to a new
@@ -2072,26 +2220,30 @@ export function MapTab() {
        * order in `renderSelected` below (entity > travel > cell) so the
        * id transitions in lock-step with what the panel actually shows. */
       actionId={
-        selectedEntity
-          ? `entity:${selectedEntity.pubkey}`
-          : travel.traveling
-            ? "travel"
-            : destCell
-              ? `cell:${destCell.gridLat},${destCell.gridLong}`
-              : null
+        detail
+          ? `detail:${detail.kind}:${detail.pubkey}`
+          : selectedEntity
+            ? `entity:${selectedEntity.pubkey}`
+            : travel.traveling
+              ? "travel"
+              : destCell
+                ? `cell:${destCell.gridLat},${destCell.gridLong}`
+                : null
       }
       scrollHead={
-        selectedEntity
-          ? selectedEntity.occupantType === 2
-            ? "the wild"
-            : selectedEntity.occupantType === 3
-              ? "the castle"
-              : "the player"
-          : travel.traveling
-            ? "the journey"
-            : destinationCity
-              ? "the road"
-              : "the chart"
+        detail
+          ? detailTitle(detail).toLowerCase()
+          : selectedEntity
+            ? selectedEntity.occupantType === 2
+              ? "the wild"
+              : selectedEntity.occupantType === 3
+                ? "the castle"
+                : "the player"
+            : travel.traveling
+              ? "the journey"
+              : destinationCity
+                ? "the road"
+                : "the chart"
       }
     />
   );
@@ -3447,6 +3599,31 @@ function composerTitle(spec: ComposerSpec): string {
       return "Raise Rally";
     case "garrison":
       return "Join Garrison";
+  }
+}
+
+// Detail panels hosted in the map's floating panel, parallel to ComposerSpec.
+// `pubkey` is the rally / encounter / target-player account the panel derives
+// itself from.
+type DetailSpec =
+  | { kind: "rally"; pubkey: string }
+  | { kind: "encounter"; pubkey: string }
+  | { kind: "pvp"; pubkey: string }
+  | { kind: "reinforcement"; pubkey: string }
+  | { kind: "garrison"; pubkey: string };
+
+function detailTitle(spec: DetailSpec): string {
+  switch (spec.kind) {
+    case "rally":
+      return "Rally";
+    case "encounter":
+      return "The Wild";
+    case "pvp":
+      return "The Player";
+    case "reinforcement":
+      return "Reinforcement";
+    case "garrison":
+      return "Garrison";
   }
 }
 

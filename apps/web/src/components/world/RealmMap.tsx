@@ -31,6 +31,7 @@ import { calculateLocalTime } from "novus-mundus-sdk";
 import { PHASES } from "@/lib/hooks/useWorldClock";
 import styles from "./RealmMap.module.css";
 import { getCityLore } from "@/lib/cityLore";
+import type { RealmRoute } from "@/lib/hooks/useMapRoutes";
 
 // localStorage key for the desktop floating panel's dragged offset.
 const PANEL_POS_KEY = "nm-realm-panel-pos";
@@ -258,6 +259,10 @@ export interface RealmMapProps {
    *  destination and a marker at the current progress. Omit (or pass null)
    *  for no line. `pct` is 0–100. */
   travel?: { fromCityId: number; toCityId: number; pct: number } | null;
+  /** In-flight city-to-city movements drawn as static arcs behind the cities:
+   *  rally marches (all teams), other players' intercity travel, and your own
+   *  reinforcements. Your own travel uses the animated `travel` arc above. */
+  routes?: RealmRoute[];
   /** A stable identifier for whatever the player is acting on right now
    *  (picked cell, selected entity, in-flight travel). When fullscreen is
    *  on, every transition to a NEW non-null value auto-opens the floating
@@ -279,6 +284,11 @@ export interface RealmMapProps {
    *  destCell so the player deselects without leaving the city disc.
    *  Omit if no cleanup is needed beyond closing the panel. */
   onCloseRequest?: () => void;
+  /** Optional overlay node mounted as a child of `.shell`, below the
+   *  floating detail panel (z-15 vs z-20) and clear of the right-edge
+   *  sub-tab nav. Used by /map to host the Forces HUD. Rendered only in
+   *  fullscreen so /world and /arrival's inline layout stay untouched. */
+  renderHud?: () => ReactNode;
 }
 
 export function RealmMap({
@@ -291,9 +301,11 @@ export function RealmMap({
   recommendedId,
   hideCartouche,
   travel,
+  routes,
   actionId,
   fullscreen,
   onCloseRequest,
+  renderHud,
 }: RealmMapProps = {}) {
   const { data: cities, isLoading: citiesLoading } = useWorldCities();
   const { data: players } = useWorldPlayers();
@@ -598,6 +610,34 @@ export function RealmMap({
       markerCarriesFlag: travel.fromCityId === homeCity,
     };
   }, [travel, nodes, homeCity]);
+
+  // Static campaign arcs for every other in-flight movement (rally marches, other
+  // players' travel, my reinforcements). Same quadratic-bow geometry as the
+  // animated travel arc, but markerless — just the line, drawn behind the cities.
+  const routeGeos = useMemo(() => {
+    if (!routes || routes.length === 0) return [];
+    return routes
+      .map((r) => {
+        const from = nodes.find((n) => n.city.cityId === r.fromCityId);
+        const to = nodes.find((n) => n.city.cityId === r.toCityId);
+        if (!from || !to || from === to) return null;
+        const dx = to.x - from.x;
+        const dy = to.y - from.y;
+        const len = Math.hypot(dx, dy) || 1;
+        const bow = Math.min(70, len * 0.18);
+        const mx = (from.x + to.x) / 2;
+        const my = (from.y + to.y) / 2;
+        const ctrlX = mx + (-dy / len) * bow;
+        const ctrlY = my + (dx / len) * bow;
+        return {
+          id: r.id,
+          kind: r.kind,
+          mine: r.mine,
+          d: `M ${from.x} ${from.y} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x} ${to.y}`,
+        };
+      })
+      .filter((g): g is NonNullable<typeof g> => g !== null);
+  }, [routes, nodes]);
 
   const selected = nodes.find((n) => n.city.cityId === selectedId) ?? null;
 
@@ -1095,6 +1135,35 @@ export function RealmMap({
                   `vector-effect: non-scaling-stroke` (via the CSS class) keeps
                   the dash widths constant regardless of zoom; the marker uses
                   a counter-scale group for the same reason. */}
+              {/* Static movement arcs for every other in-flight action: rally
+                  marches (any team), other players' intercity travel, and my
+                  reinforcements. Drawn below the player's own animated travel
+                  arc and the city groups, color-keyed by kind, brighter when
+                  the force is mine. Markerless — these read as ambient activity,
+                  not the focused journey. */}
+              {routeGeos.length > 0 && (
+                <g className={styles.routesLayer} aria-hidden>
+                  {routeGeos.map((g) => (
+                    <path
+                      key={g.id}
+                      d={g.d}
+                      vectorEffect="non-scaling-stroke"
+                      className={[
+                        styles.routeLine,
+                        g.kind === "rally"
+                          ? styles.routeRally
+                          : g.kind === "reinforcement"
+                            ? styles.routeReinforcement
+                            : styles.routeTravel,
+                        g.mine ? styles.routeMine : "",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    />
+                  ))}
+                </g>
+              )}
+
               {travelGeo && (
                 <g className={styles.travelGroup} aria-hidden>
                   {/* Invisible curved route the marker rides; also the etch
@@ -1268,6 +1337,13 @@ export function RealmMap({
             </>
           )}
         </div>
+
+        {/* Fullscreen overlay slot: a child of `.shell` (the `position:
+         *  relative` block in fullscreen), painted UNDER the floating panel
+         *  (z-20) and the mobile pill (z-25). The host anchors its content
+         *  top-left so it clears the right-edge sub-tab nav. Gated on
+         *  fullscreen so /world and /arrival's inline layout is untouched. */}
+        {fullscreen && renderHud?.()}
 
         {/* Non-fullscreen: inline `.scroll` aside, same as the page's
          *  always-visible detail panel. Stacks below the sheet at narrow
