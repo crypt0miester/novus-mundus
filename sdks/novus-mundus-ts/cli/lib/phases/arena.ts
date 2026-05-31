@@ -2,7 +2,6 @@
  * Phase 9 — Arena Season
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import { createOrSkip, newStats, accountExists, type PhaseStats } from '../helpers';
 import {
@@ -19,7 +18,7 @@ import {
 export async function initArena(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
-  const [seasonPda] = deriveArenaSeasonPda(ctx.gameEngine, ARENA_SEASON.seasonId);
+  const [seasonPda] = await deriveArenaSeasonPda(ctx.gameEngine, ARENA_SEASON.seasonId);
 
   await createOrSkip(
     ctx,
@@ -32,9 +31,9 @@ export async function initArena(ctx: CLIContext): Promise<PhaseStats> {
         seasonId: ARENA_SEASON.seasonId,
       },
       {
-        masterPrizePool: new BN(ARENA_SEASON.masterPrizePool),
-        dailyPrizePool: new BN(ARENA_SEASON.dailyPrizePool),
-        dailyDistributionCap: new BN(ARENA_SEASON.dailyDistributionCap),
+        masterPrizePool: BigInt(ARENA_SEASON.masterPrizePool),
+        dailyPrizePool: BigInt(ARENA_SEASON.dailyPrizePool),
+        dailyDistributionCap: BigInt(ARENA_SEASON.dailyDistributionCap),
         minLevelRequired: ARENA_SEASON.minLevelRequired,
       }
     ),
@@ -48,7 +47,7 @@ export async function statusArena(ctx: CLIContext): Promise<string> {
   let count = 0;
   let consecutiveMisses = 0;
   for (let id = 0; consecutiveMisses < 5; id++) {
-    const [pda] = deriveArenaSeasonPda(ctx.gameEngine, id);
+    const [pda] = await deriveArenaSeasonPda(ctx.gameEngine, id);
     if (await accountExists(ctx.connection, pda)) {
       count++;
       consecutiveMisses = 0;
@@ -68,7 +67,7 @@ export async function detailArena(ctx: CLIContext): Promise<string> {
   let found = 0;
   let consecutiveMisses = 0;
   for (let id = 0; consecutiveMisses < 5; id++) {
-    const [seasonPda] = deriveArenaSeasonPda(ctx.gameEngine, id);
+    const [seasonPda] = await deriveArenaSeasonPda(ctx.gameEngine, id);
     const info = await ctx.connection.getAccountInfo(seasonPda);
 
     if (!info) {

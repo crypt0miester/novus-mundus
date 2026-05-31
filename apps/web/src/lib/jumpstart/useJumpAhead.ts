@@ -116,21 +116,23 @@ const SLOTS_PER_PLOT = 4;
 const HEROES_PER_TX = 3;
 
 /** `build + N×speedup + complete` for one building — the calibrated build tx. */
-function buildSpeedupIxs(
+async function buildSpeedupIxs(
   accounts: { owner: PublicKey; gameEngine: PublicKey },
   buildingType: BuildingType,
   speedups: number,
-): TransactionInstruction[] {
-  const ix: TransactionInstruction[] = [createBuildBuildingInstruction(accounts, { buildingType })];
+): Promise<TransactionInstruction[]> {
+  const ix: TransactionInstruction[] = [
+    await createBuildBuildingInstruction(accounts, { buildingType }),
+  ];
   for (let i = 0; i < speedups; i++) {
     ix.push(
-      createBuildingSpeedupInstruction(accounts, {
+      await createBuildingSpeedupInstruction(accounts, {
         buildingType,
         speedupTier: 2,
       }),
     );
   }
-  ix.push(createCompleteBuildingInstruction(accounts, { buildingType }));
+  ix.push(await createCompleteBuildingInstruction(accounts, { buildingType }));
   return ix;
 }
 
@@ -140,8 +142,8 @@ function buildSpeedupIxs(
 // built — see the "stock" step below.
 const GEM_PACK_ITEM_IDS = new Set<number>([7, 8]);
 
-/** Recipe to ordered steps. Pure. */
-function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
+/** Recipe to ordered steps. */
+async function buildSteps(recipe: JumpRecipe, ctx: JumpContext): Promise<PlannedStep[]> {
   const { owner, gameEngine, treasury, city } = ctx;
   const accounts = { owner, gameEngine };
   const steps: PlannedStep[] = [];
@@ -156,15 +158,15 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     label: "Stake your claim",
     computeUnits: 600_000,
     instructions: [
-      createInitUserInstruction({ owner, gameEngine }),
-      createInitPlayerInstruction({
+      await createInitUserInstruction({ owner, gameEngine }),
+      await createInitPlayerInstruction({
         owner,
         gameEngine,
         startingCityId: city.cityId,
         cityLatitude: city.spawnLat,
         cityLongitude: city.spawnLong,
       }),
-      createCreateProgressInstruction({ owner, gameEngine }),
+      await createCreateProgressInstruction({ owner, gameEngine }),
     ],
   });
 
@@ -180,7 +182,7 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
       computeUnits: 120_000,
       spendsSol: true,
       instructions: [
-        createPurchaseSubscriptionInstruction(
+        await createPurchaseSubscriptionInstruction(
           { owner, gameEngine, paymentAuthority: owner, treasury },
           { paymentType: 0, tier: recipe.subscriptionTier },
         ),
@@ -201,14 +203,17 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     for (let i = 0; i < recipe.heroes.length; i += HEROES_PER_TX) {
       const chunk = recipe.heroes.slice(i, i + HEROES_PER_TX);
       const signers: Keypair[] = [];
-      const instructions = chunk.map((h) => {
-        const heroMint = Keypair.generate();
+      const instructions: TransactionInstruction[] = [];
+      for (const h of chunk) {
+        const heroMint = await Keypair.generate();
         signers.push(heroMint);
-        return createMintHeroInstruction(
-          { minter: owner, gameEngine, heroMint: heroMint.publicKey, treasury },
-          { templateId: h.templateId },
+        instructions.push(
+          await createMintHeroInstruction(
+            { minter: owner, gameEngine, heroMint: heroMint.publicKey, treasury },
+            { templateId: h.templateId },
+          ),
         );
-      });
+      }
       txs.push({
         id: `heroes-${i / HEROES_PER_TX}`,
         instructions,
@@ -238,13 +243,15 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     computeUnits: 400_000 + 80_000 * gemPurchases.length,
     spendsSol: gemPurchases.length > 0,
     instructions: [
-      createCreateEstateInstruction(accounts, { cityId: city.cityId }),
-      ...gemPurchases.map((p) =>
-        createPurchaseItemInstruction(
-          { buyer: owner, gameEngine, itemId: p.itemId, treasury },
-          { quantity: p.quantity },
+      await createCreateEstateInstruction(accounts, { cityId: city.cityId }),
+      ...(await Promise.all(
+        gemPurchases.map((p) =>
+          createPurchaseItemInstruction(
+            { buyer: owner, gameEngine, itemId: p.itemId, treasury },
+            { quantity: p.quantity },
+          ),
         ),
-      ),
+      )),
     ],
   });
 
@@ -262,7 +269,9 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
       id: "plots",
       label: extraPlots === 1 ? "Expand the estate" : `Expand the estate (${extraPlots} plots)`,
       computeUnits: 200_000 * extraPlots,
-      instructions: Array.from({ length: extraPlots }, () => createBuyPlotInstruction(accounts)),
+      instructions: await Promise.all(
+        Array.from({ length: extraPlots }, () => createBuyPlotInstruction(accounts)),
+      ),
     });
   }
 
@@ -286,10 +295,12 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
       label: "Stock the reserve",
       computeUnits: 100_000 + 80_000 * marketGatedPurchases.length,
       spendsSol: true,
-      instructions: marketGatedPurchases.map((p) =>
-        createPurchaseItemInstruction(
-          { buyer: owner, gameEngine, itemId: p.itemId, treasury },
-          { quantity: p.quantity },
+      instructions: await Promise.all(
+        marketGatedPurchases.map((p) =>
+          createPurchaseItemInstruction(
+            { buyer: owner, gameEngine, itemId: p.itemId, treasury },
+            { quantity: p.quantity },
+          ),
         ),
       ),
     });
@@ -305,12 +316,12 @@ function buildSteps(recipe: JumpRecipe, ctx: JumpContext): PlannedStep[] {
     const instructions: TransactionInstruction[] = [];
     for (let level = 1; level <= r.targetLevel; level++) {
       instructions.push(
-        createStartResearchInstruction({ owner, gameEngine, researchType: r.researchType }),
-        createSpeedUpResearchInstruction(
+        await createStartResearchInstruction({ owner, gameEngine, researchType: r.researchType }),
+        await createSpeedUpResearchInstruction(
           { owner, gameEngine, researchType: r.researchType },
           { speedUpSeconds: 0 },
         ),
-        createCompleteResearchInstruction({
+        await createCompleteResearchInstruction({
           payer: owner,
           playerOwner: owner,
           gameEngine,
@@ -378,8 +389,8 @@ export function useJumpAhead() {
       if (recipe.subscriptionTier === null) return 0;
       const acct = geData?.account;
       const tierCfg = acct?.subscriptionTiers?.[recipe.subscriptionTier];
-      const usdPriceCents = acct?.usdPriceCents?.toNumber?.() ?? 0;
-      const costCents = tierCfg?.costInUsdCents?.toNumber?.() ?? 0;
+      const usdPriceCents = Number(acct?.usdPriceCents ?? 0n);
+      const costCents = Number(tierCfg?.costInUsdCents ?? 0n);
       if (!usdPriceCents || !costCents) return 0;
       return Math.floor((costCents * LAMPORTS_PER_SOL) / usdPriceCents);
     },
@@ -399,7 +410,7 @@ export function useJumpAhead() {
       return;
     }
     try {
-      setWalletSol(await client.connection.getBalance(publicKey));
+      setWalletSol(Number(await client.connection.getBalance(publicKey)));
     } catch {
       /* RPC hiccup — keep the last value rather than flicker null. */
     }
@@ -474,7 +485,7 @@ export function useJumpAhead() {
         const sims = await Promise.all(
           counts.map(async (n) => {
             const tx = await client.buildVersionedTransaction(
-              buildSpeedupIxs(accounts, buildingType, n),
+              await buildSpeedupIxs(accounts, buildingType, n),
               owner,
               { computeUnits: BUILD_CU, recentBlockhash: blockhash },
             );
@@ -589,7 +600,7 @@ export function useJumpAhead() {
             );
             setStepStatus(step.id, "active", `${speedups} speedups`);
             tx = await client.buildVersionedTransaction(
-              buildSpeedupIxs(
+              await buildSpeedupIxs(
                 { owner: publicKey, gameEngine: client.gameEngine },
                 step.buildingType,
                 speedups,
@@ -664,7 +675,7 @@ export function useJumpAhead() {
         recipeRef.current = recipe;
         cityRef.current = city;
 
-        const planned = buildSteps(recipe, {
+        const planned = await buildSteps(recipe, {
           owner: publicKey,
           gameEngine: client.gameEngine,
           treasury,
@@ -692,7 +703,7 @@ export function useJumpAhead() {
         if (firstSolStep && !journal.done.includes(firstSolStep.id)) {
           let balance: number | null = null;
           try {
-            balance = await client.connection.getBalance(publicKey);
+            balance = Number(await client.connection.getBalance(publicKey));
           } catch {
             /* RPC hiccup — skip the courtesy check; the run will surface a
                real failure on its own. */

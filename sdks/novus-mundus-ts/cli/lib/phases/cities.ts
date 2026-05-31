@@ -24,14 +24,14 @@ export async function initCities(ctx: CLIContext): Promise<PhaseStats> {
     const startId = batch[0].id;
 
     // Check if first city in batch exists
-    const [firstCityPda] = deriveCityPda(ctx.gameEngine, startId);
+    const [firstCityPda] = await deriveCityPda(ctx.gameEngine, startId);
     const exists = await accountExists(ctx.connection, firstCityPda);
 
     if (exists) {
       // Check individually
       let allExist = true;
       for (const city of batch) {
-        const [pda] = deriveCityPda(ctx.gameEngine, city.id);
+        const [pda] = await deriveCityPda(ctx.gameEngine, city.id);
         if (!(await accountExists(ctx.connection, pda))) {
           allExist = false;
           break;
@@ -51,7 +51,9 @@ export async function initCities(ctx: CLIContext): Promise<PhaseStats> {
     }
 
     // Build city PDAs for the batch
-    const cityAccounts = batch.map(c => deriveCityPda(ctx.gameEngine, c.id)[0]);
+    const cityAccounts = await Promise.all(
+      batch.map(async (c) => (await deriveCityPda(ctx.gameEngine, c.id))[0]),
+    );
 
     const ix = createBatchCitiesInstruction(
       {
@@ -93,7 +95,7 @@ export async function statusCities(ctx: CLIContext): Promise<string> {
   let count = 0;
   let misses = 0;
   for (let id = 0; misses < 5; id++) {
-    const [pda] = deriveCityPda(ctx.gameEngine, id);
+    const [pda] = await deriveCityPda(ctx.gameEngine, id);
     if (await accountExists(ctx.connection, pda)) {
       count++;
       misses = 0;
@@ -118,7 +120,7 @@ export async function detailCities(ctx: CLIContext): Promise<string> {
   const rows: string[][] = [];
   let misses = 0;
   for (let id = 0; misses < 5; id++) {
-    const [pda] = deriveCityPda(ctx.gameEngine, id);
+    const [pda] = await deriveCityPda(ctx.gameEngine, id);
     const info = await ctx.connection.getAccountInfo(pda);
 
     if (!info) {

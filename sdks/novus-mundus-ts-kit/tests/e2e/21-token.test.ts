@@ -25,7 +25,7 @@ import {
   derivePlayerPda,
   deriveTeamPda,
   deriveNoviMintPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   RESERVED_NOVI_VESTING_PERIOD,
   UnitType,
   CollectionType,
@@ -271,7 +271,7 @@ describe('Token Operations', () => {
 
       // The player's wallet NOVI ATA does not exist yet — withdraw must create it.
       const [noviMint] = await deriveNoviMintPda();
-      const walletAta = await getAssociatedTokenAddressSync(noviMint, player.publicKey);
+      const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
       expect(ctx.svm.getAccount(walletAta).exists).toBe(false);
 
       await sendInstructions(

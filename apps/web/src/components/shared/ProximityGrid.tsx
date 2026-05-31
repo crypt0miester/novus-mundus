@@ -80,11 +80,16 @@ export function ProximityGrid({
   const [occupancy, setOccupancy] = useState<(boolean | null)[]>(() => new Array(9).fill(null));
 
   useEffect(() => {
-    const pdas = cells.map((c) => cellLocationPda(ge, cityId, c.gridLat, c.gridLong));
-    client.connection
-      .getMultipleAccountsInfo(pdas)
-      .then((accounts) => setOccupancy(accounts.map((a) => a !== null)))
+    let cancelled = false;
+    Promise.all(cells.map((c) => cellLocationPda(ge, cityId, c.gridLat, c.gridLong)))
+      .then((pdas) => client.connection.getMultipleAccountsInfo(pdas))
+      .then((accounts) => {
+        if (!cancelled) setOccupancy(accounts.map((a) => a !== null));
+      })
       .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [cells, ge, cityId, client]);
 
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);

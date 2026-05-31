@@ -15,6 +15,22 @@ import {
 } from '@solana/web3.js';
 import { type CLIContext } from './context';
 
+// SDK instruction builders are async (they derive PDAs via web-crypto under the
+// hood), so a "built instruction" may be a value, a promise, an array, or an
+// array of promises (e.g. one builder call per field). Everything that sends a
+// tx normalizes through `resolveIx` so call sites can stay `() => createXxx(...)`.
+type MaybePromise<T> = T | Promise<T>;
+export type IxInput =
+  | MaybePromise<TransactionInstruction>
+  | MaybePromise<TransactionInstruction[]>
+  | Array<MaybePromise<TransactionInstruction>>;
+
+async function resolveIx(ix: IxInput): Promise<TransactionInstruction[]> {
+  const awaited = await ix;
+  const arr = Array.isArray(awaited) ? awaited : [awaited];
+  return Promise.all(arr);
+}
+
 // Account Helpers
 
 export async function accountExists(
@@ -39,7 +55,7 @@ export interface SendOptions {
 
 export async function sendWithRetry(
   ctx: CLIContext,
-  ix: TransactionInstruction | TransactionInstruction[],
+  ix: IxInput,
   signers: Keypair[],
   opts?: number | SendOptions
 ): Promise<string | null> {
@@ -61,7 +77,7 @@ export async function sendWithRetry(
     );
   }
 
-  const ixArray = Array.isArray(ix) ? ix : [ix];
+  const ixArray = await resolveIx(ix);
   instructions.push(...ixArray);
 
   /* Dry-run = simulate, so encoding/validation/CU failures surface without sending. */
@@ -136,7 +152,7 @@ export interface SimulationResult {
  */
 export async function novusSimulateTransaction(
   ctx: CLIContext,
-  ix: TransactionInstruction | TransactionInstruction[],
+  ix: IxInput,
   signers: Keypair[],
   opts?: { computeUnits?: number; computeUnitPrice?: number }
 ): Promise<SimulationResult> {
@@ -149,7 +165,7 @@ export async function novusSimulateTransaction(
     instructions.push(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: opts.computeUnitPrice }));
   }
 
-  const ixArray = Array.isArray(ix) ? ix : [ix];
+  const ixArray = await resolveIx(ix);
   instructions.push(...ixArray);
 
   const { blockhash } = await ctx.connection.getLatestBlockhash();
@@ -166,14 +182,14 @@ export async function novusSimulateTransaction(
 
   return {
     success: sim.value.err === null,
-    unitsConsumed: sim.value.unitsConsumed ?? null,
+    unitsConsumed: Number(sim.value.unitsConsumed) ?? null,
     logs: sim.value.logs ?? [],
     error: sim.value.err ? JSON.stringify(sim.value.err) : null,
   };
 }
 
 export type TxBuilder<T> = (item: T) => {
-  ix: TransactionInstruction | TransactionInstruction[];
+  ix: IxInput;
   signers: Keypair[];
 };
 
@@ -214,7 +230,7 @@ export async function createOrSkip(
   ctx: CLIContext,
   name: string,
   pda: PublicKey,
-  buildIx: () => TransactionInstruction | TransactionInstruction[],
+  buildIx: () => IxInput,
   stats: PhaseStats,
   opts?: SendOptions
 ): Promise<boolean> {
@@ -237,8 +253,8 @@ export async function createOrUpdate(
   ctx: CLIContext,
   name: string,
   pda: PublicKey,
-  buildCreate: () => TransactionInstruction | TransactionInstruction[],
-  buildUpdate: () => TransactionInstruction | TransactionInstruction[],
+  buildCreate: () => IxInput,
+  buildUpdate: () => IxInput,
   stats: PhaseStats
 ): Promise<'created' | 'updated' | 'skipped'> {
   const exists = await accountExists(ctx.connection, pda);
@@ -264,7 +280,7 @@ export async function updateOnly(
   ctx: CLIContext,
   name: string,
   pda: PublicKey,
-  buildUpdate: () => TransactionInstruction | TransactionInstruction[],
+  buildUpdate: () => IxInput,
   stats: PhaseStats
 ): Promise<boolean> {
   const exists = await accountExists(ctx.connection, pda);

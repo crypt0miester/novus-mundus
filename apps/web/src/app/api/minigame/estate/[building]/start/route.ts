@@ -93,7 +93,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ building: stri
     // Mint a fresh session, claiming the lock first — two concurrent /start
     // calls for a clean window race the atomic claim, and only the winner
     // persists a session.
-    const generated = generatePuzzle(building, estatePda(owner).toBase58(), day, window);
+    const generated = generatePuzzle(building, (await estatePda(owner)).toBase58(), day, window);
     const createdAt = Date.now();
     const fresh: MinigameSession = {
       id: newSessionId(),

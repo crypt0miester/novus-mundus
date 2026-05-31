@@ -11,7 +11,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -19,7 +18,7 @@ import {
   derivePlayerPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
+import { getAssociatedTokenAddressAsync, getAssociatedTokenAddressAsyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Reserved to Locked
 
@@ -32,7 +31,7 @@ export interface ReservedToLockedAccounts {
 
 export interface ReservedToLockedParams {
   /** Amount of reserved NOVI to convert to locked */
-  amount: BN | number | bigint;
+  amount: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -58,17 +57,17 @@ export interface ReservedToLockedParams {
  * 7. novi_mint - NOVI token mint
  * 8. token_program - SPL Token program
  */
-export function createReservedToLockedInstruction(
+export async function createReservedToLockedInstruction(
   accounts: ReservedToLockedAccounts,
   params: ReservedToLockedParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
   // Token accounts are owned by PDAs, not the wallet
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
-  const lockedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -105,7 +104,7 @@ export interface WithdrawReservedAccounts {
 
 export interface WithdrawReservedParams {
   /** Amount of reserved NOVI to withdraw */
-  amount: BN | number | bigint;
+  amount: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -131,17 +130,17 @@ export interface WithdrawReservedParams {
  * 8. system_program - System program
  * 9. associated_token_program - Associated Token program
  */
-export function createWithdrawReservedInstruction(
+export async function createWithdrawReservedInstruction(
   accounts: WithdrawReservedAccounts,
   params: WithdrawReservedParams
-): TransactionInstruction {
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
   // Reserved token account is owned by UserAccount PDA
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
   // User wallet token account is owned by user's wallet (standard ATA)
-  const userWalletTokenAccount = getAssociatedTokenAddressSync(noviMint, accounts.owner);
+  const userWalletTokenAccount = await getAssociatedTokenAddressAsync(noviMint, accounts.owner);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },
@@ -177,7 +176,7 @@ export interface DepositNoviAccounts {
 
 export interface DepositNoviParams {
   /** Gross NOVI to deposit. `credited = amount - ⌊amount * DEPOSIT_FEE_BPS / 10000⌋`. */
-  amount: BN | number | bigint;
+  amount: number | bigint;
 }
 
 /** ~6,000 CU */
@@ -202,15 +201,15 @@ export interface DepositNoviParams {
  * 5. novi_mint - NOVI mint
  * 6. token_program - SPL Token program
  */
-export function createDepositNoviInstruction(
+export async function createDepositNoviInstruction(
   accounts: DepositNoviAccounts,
   params: DepositNoviParams
-): TransactionInstruction {
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
-  const sourceTokenAccount = getAssociatedTokenAddressSync(noviMint, accounts.owner);
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const sourceTokenAccount = await getAssociatedTokenAddressAsync(noviMint, accounts.owner);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },
@@ -270,14 +269,14 @@ export interface TreasurySweepUntrackedNoviParams {
  * 5. novi_mint
  * 6. token_program
  */
-export function createTreasurySweepUntrackedNoviInstruction(
+export async function createTreasurySweepUntrackedNoviInstruction(
   accounts: TreasurySweepUntrackedNoviAccounts,
   params: TreasurySweepUntrackedNoviParams & {
     /** Optional: pre-derive the GameEngine for the player path. Required for kind=Player. */
     gameEngine?: PublicKey;
   }
-): TransactionInstruction {
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [noviMint] = await deriveNoviMintPda();
 
   /* Derive the PDA + source ATA from owner + kind so callers don't need
    * to thread them through every call. */
@@ -286,12 +285,12 @@ export function createTreasurySweepUntrackedNoviInstruction(
     if (!params.gameEngine) {
       throw new Error('createTreasurySweepUntrackedNoviInstruction: gameEngine required for kind=Player');
     }
-    [pdaAccount] = derivePlayerPda(params.gameEngine, accounts.owner);
+    [pdaAccount] = await derivePlayerPda(params.gameEngine, accounts.owner);
   } else {
-    [pdaAccount] = deriveUserPda(accounts.owner);
+    [pdaAccount] = await deriveUserPda(accounts.owner);
   }
-  const sourceAta = getAssociatedTokenAddressSyncForPda(noviMint, pdaAccount);
-  const walletAta = getAssociatedTokenAddressSync(noviMint, accounts.owner);
+  const sourceAta = await getAssociatedTokenAddressAsyncForPda(noviMint, pdaAccount);
+  const walletAta = await getAssociatedTokenAddressAsync(noviMint, accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -304,7 +303,7 @@ export function createTreasurySweepUntrackedNoviInstruction(
 
   const data = createInstructionData(
     DISCRIMINATORS.TREASURY_SWEEP_UNTRACKED_NOVI,
-    Buffer.from([params.kind]),
+    new Uint8Array([params.kind]),
   );
 
   return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });

@@ -6,7 +6,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Event Enums
@@ -29,28 +28,28 @@ export enum EventPrizeType {
 
 export interface EventLeaderboardEntry {
   player: PublicKey;
-  score: BN;
+  score: bigint;
 }
 
 // Event Account Interface
 
 export interface EventAccount {
   gameEngine: PublicKey;
-  id: BN;
+  id: bigint;
   name: string;
-  startTime: BN;
-  endTime: BN;
+  startTime: bigint;
+  endTime: bigint;
   status: EventStatus;
   autoActivate: boolean;
   eventType: number;
   minLevel: number;
-  minReputation: BN;
+  minReputation: bigint;
   requiredSubscriptionTier: number;
   leaderboard: EventLeaderboardEntry[];
   leaderboardCount: number;
   prizeType: EventPrizeType;
-  prizeAmount: BN;
-  prizeRemaining: BN;
+  prizeAmount: bigint;
+  prizeRemaining: bigint;
   prizeTokenMint: PublicKey;
   participantCount: number;
   bump: number;
@@ -63,11 +62,11 @@ export const EVENT_ACCOUNT_SIZE = 648;
 
 export interface EventParticipation {
   gameEngine: PublicKey;
-  eventId: BN;
+  eventId: bigint;
   player: PublicKey;
-  score: BN;
-  joinedAt: BN;
-  lastUpdate: BN;
+  score: bigint;
+  joinedAt: bigint;
+  lastUpdate: bigint;
   bump: number;
 }
 
@@ -77,7 +76,7 @@ export const EVENT_PARTICIPATION_SIZE = 112;
 // Deserialization
 
 /** Deserialize EventAccount from raw bytes */
-export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
+export function deserializeEvent(data: Uint8Array): EventAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -151,7 +150,7 @@ export function deserializeEvent(data: Uint8Array | Buffer): EventAccount {
 }
 
 /** Deserialize EventParticipation from raw bytes */
-export function deserializeEventParticipation(data: Uint8Array | Buffer): EventParticipation {
+export function deserializeEventParticipation(data: Uint8Array): EventParticipation {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -179,7 +178,7 @@ export function deserializeEventParticipation(data: Uint8Array | Buffer): EventP
 // Parse Functions
 
 /** Parse EventAccount from account info */
-export function parseEvent(accountInfo: AccountInfo<Buffer>): EventAccount | null {
+export function parseEvent(accountInfo: AccountInfo<Uint8Array>): EventAccount | null {
   if (!accountInfo.data || accountInfo.data.length < EVENT_ACCOUNT_SIZE) {
     return null;
   }
@@ -187,7 +186,7 @@ export function parseEvent(accountInfo: AccountInfo<Buffer>): EventAccount | nul
 }
 
 /** Parse EventParticipation from account info */
-export function parseEventParticipation(accountInfo: AccountInfo<Buffer>): EventParticipation | null {
+export function parseEventParticipation(accountInfo: AccountInfo<Uint8Array>): EventParticipation | null {
   if (!accountInfo.data || accountInfo.data.length < EVENT_PARTICIPATION_SIZE) {
     return null;
   }

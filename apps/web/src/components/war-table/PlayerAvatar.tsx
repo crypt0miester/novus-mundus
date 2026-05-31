@@ -11,7 +11,7 @@
 // unknown or the chain client is not ready yet, we fall through to a
 // deterministic gradient from the raw input string.
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { useShallow } from "zustand/react/shallow";
 import { derivePlayerPda, type PlayerCore } from "novus-mundus-sdk";
@@ -70,34 +70,52 @@ export function PlayerAvatar({ wallet, playerPda, size = 36, title }: PlayerAvat
   // than shimming a default.
   const rawKey = playerPda ?? wallet ?? "";
 
-  const resolved = useMemo<AccountEntry<PlayerCore> | null>(() => {
+  const [resolved, setResolved] = useState<AccountEntry<PlayerCore> | null>(null);
+  useEffect(() => {
     if (playerPda) {
       // PDA path: look it up directly, and match the self slot by PDA.
-      if (myPlayerPda === playerPda && selfPlayer) return selfPlayer;
-      return otherPlayers.get(playerPda) ?? null;
+      if (myPlayerPda === playerPda && selfPlayer) setResolved(selfPlayer);
+      else setResolved(otherPlayers.get(playerPda) ?? null);
+      return;
     }
 
     if (wallet) {
       // Wallet path needs the chain client's gameEngine to derive the PDA.
       // gameEngine not ready yet is a real not-loaded state, not a shim.
-      if (!gameEngine) return null;
+      if (!gameEngine) {
+        setResolved(null);
+        return;
+      }
 
       let pk: PublicKey;
       try {
         pk = new PublicKey(wallet);
       } catch {
         // Malformed wallet string: fall through to the gradient monogram.
-        return null;
+        setResolved(null);
+        return;
       }
 
       // Self match by wallet (the connected player's PlayerCore.owner).
-      if (selfPlayer && selfPlayer.account.owner.equals(pk)) return selfPlayer;
+      if (selfPlayer && selfPlayer.account.owner.equals(pk)) {
+        setResolved(selfPlayer);
+        return;
+      }
 
-      const [pda] = derivePlayerPda(gameEngine, pk);
-      return otherPlayers.get(pda.toBase58()) ?? null;
+      let cancelled = false;
+      derivePlayerPda(gameEngine, pk)
+        .then(([pda]) => {
+          if (!cancelled) setResolved(otherPlayers.get(pda.toBase58()) ?? null);
+        })
+        .catch(() => {
+          if (!cancelled) setResolved(null);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
 
-    return null;
+    setResolved(null);
   }, [wallet, playerPda, gameEngine, otherPlayers, myPlayerPda, selfPlayer]);
 
   // Inner disc fill: name-color hex when the player has one equipped (STATIC,

@@ -11,7 +11,7 @@
 // the PDA, so useSenderIdentity derives it here (the same derivation PlayerAvatar
 // does) and is exported for ThreadRenderer to reuse.
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { animate, svg, utils } from "animejs";
 import { PublicKey } from "@solana/web3.js";
 import { CornerDownRight, Lock, LoaderCircle, MoreHorizontal } from "lucide-react";
@@ -53,18 +53,34 @@ export type GroupPos = "single" | "first" | "middle" | "last";
 export function useSenderIdentity(wallet: string): string | null {
   const client = useNovusMundusClient();
   const gameEngine = client.gameEngine;
+  const [pda, setPda] = useState<string | null>(null);
 
-  return useMemo(() => {
-    if (!gameEngine) return null;
+  useEffect(() => {
+    if (!gameEngine) {
+      setPda(null);
+      return;
+    }
     let pk: PublicKey;
     try {
       pk = new PublicKey(wallet);
     } catch {
-      return null;
+      setPda(null);
+      return;
     }
-    const [pda] = derivePlayerPda(gameEngine, pk);
-    return pda.toBase58();
+    let cancelled = false;
+    derivePlayerPda(gameEngine, pk)
+      .then(([derived]) => {
+        if (!cancelled) setPda(derived.toBase58());
+      })
+      .catch(() => {
+        if (!cancelled) setPda(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [wallet, gameEngine]);
+
+  return pda;
 }
 
 interface MessageBubbleProps {

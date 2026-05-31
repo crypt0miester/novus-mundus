@@ -16,7 +16,7 @@ interface SlotLike {
   buildingType: number;
   status: number;
   level: number;
-  constructionEnds?: { toNumber(): number } | null;
+  constructionEnds?: bigint | null;
 }
 interface EstateLike {
   buildings: SlotLike[];
@@ -37,7 +37,7 @@ interface PlayerLike {
  */
 export function buildingPhase(slot: SlotLike | null | undefined, nowSec: number): BuildingPhase {
   if (!slot || slot.status === BuildingStatus.Empty) return "unbuilt";
-  const ends = slot.constructionEnds?.toNumber?.() ?? 0;
+  const ends = Number(slot.constructionEnds ?? 0n);
   const timerDone = nowSec >= ends;
   if (slot.status === BuildingStatus.Building) return timerDone ? "raised" : "rising";
   if (slot.status === BuildingStatus.Upgrading) return timerDone ? "improved" : "improving";

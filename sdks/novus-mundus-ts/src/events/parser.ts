@@ -6,9 +6,11 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
+import { getBase64Encoder } from '@solana/codecs-strings';
 import { createHash } from 'crypto';
 import type { NovusMundusEvent } from './types';
+
+const base64Encoder = getBase64Encoder();
 
 // Discriminator Computation
 
@@ -231,11 +233,13 @@ export const EVENT_DISCRIMINATORS: Map<string, string> = new Map([
 
 /** Reader for sequential byte reads from a buffer */
 export class EventBufferReader {
-  private buffer: Buffer;
+  private buffer: Uint8Array;
+  private view: DataView;
   private offset = 0;
 
-  constructor(data: Buffer | Uint8Array) {
-    this.buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  constructor(data: Uint8Array) {
+    this.buffer = data;
+    this.view = new DataView(data.buffer, data.byteOffset, data.byteLength);
   }
 
   /** Get current offset */
@@ -250,64 +254,58 @@ export class EventBufferReader {
 
   /** Read u8 */
   readU8(): number {
-    const value = this.buffer.readUInt8(this.offset);
+    const value = this.view.getUint8(this.offset);
     this.offset += 1;
     return value;
   }
 
   /** Read i8 */
   readI8(): number {
-    const value = this.buffer.readInt8(this.offset);
+    const value = this.view.getInt8(this.offset);
     this.offset += 1;
     return value;
   }
 
   /** Read u16 (little-endian) */
   readU16(): number {
-    const value = this.buffer.readUInt16LE(this.offset);
+    const value = this.view.getUint16(this.offset, true);
     this.offset += 2;
     return value;
   }
 
   /** Read i16 (little-endian) */
   readI16(): number {
-    const value = this.buffer.readInt16LE(this.offset);
+    const value = this.view.getInt16(this.offset, true);
     this.offset += 2;
     return value;
   }
 
   /** Read u32 (little-endian) */
   readU32(): number {
-    const value = this.buffer.readUInt32LE(this.offset);
+    const value = this.view.getUint32(this.offset, true);
     this.offset += 4;
     return value;
   }
 
   /** Read i32 (little-endian) */
   readI32(): number {
-    const value = this.buffer.readInt32LE(this.offset);
+    const value = this.view.getInt32(this.offset, true);
     this.offset += 4;
     return value;
   }
 
-  /** Read u64 as BN (little-endian) */
-  readU64(): BN {
-    const bytes = this.buffer.subarray(this.offset, this.offset + 8);
+  /** Read u64 as bigint (little-endian) */
+  readU64(): bigint {
+    const value = this.view.getBigUint64(this.offset, true);
     this.offset += 8;
-    return new BN(bytes, 'le');
+    return value;
   }
 
-  /** Read i64 as BN (little-endian) */
-  readI64(): BN {
-    const bytes = this.buffer.subarray(this.offset, this.offset + 8);
+  /** Read i64 as bigint (little-endian) */
+  readI64(): bigint {
+    const value = this.view.getBigInt64(this.offset, true);
     this.offset += 8;
-    const bn = new BN(bytes, 'le');
-    // Handle negative: if high bit set, subtract 2^64
-    const highByte = this.buffer.readUInt8(this.offset - 1);
-    if (highByte & 0x80) {
-      return bn.sub(new BN(1).shln(64));
-    }
-    return bn;
+    return value;
   }
 
   /** Read bool (1 byte) */
@@ -1759,12 +1757,12 @@ EVENT_PARSERS.set('KingdomCitiesInitialized', (r) => ({
  * @param data - Raw event data (8-byte discriminator + payload)
  * @returns Parsed event or null if unknown discriminator
  */
-export function parseNovusMundusEvent(data: Buffer | Uint8Array): NovusMundusEvent | null {
+export function parseNovusMundusEvent(data: Uint8Array): NovusMundusEvent | null {
   if (data.length < 8) {
     return null;
   }
 
-  const buffer = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const buffer = data;
   const discriminator = buffer.subarray(0, 8);
   const discHex = discriminatorToHex(new Uint8Array(discriminator));
 
@@ -1794,8 +1792,8 @@ export function parseNovusMundusEvent(data: Buffer | Uint8Array): NovusMundusEve
  * @returns Parsed event or null
  */
 export function parseEventFromBase64(base64Data: string): NovusMundusEvent | null {
-  const buffer = Buffer.from(base64Data, 'base64');
-  return parseNovusMundusEvent(buffer);
+  const bytes = base64Encoder.encode(base64Data) as Uint8Array;
+  return parseNovusMundusEvent(bytes);
 }
 
 /**

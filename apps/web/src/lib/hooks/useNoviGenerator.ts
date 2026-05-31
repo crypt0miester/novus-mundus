@@ -75,10 +75,10 @@ export function useNoviGenerator(): NoviGeneratorState {
       const now = Math.floor(Date.now() / 1000) + chainOffset;
       const cfg = ge.subscriptionTiers[getEffectiveTier(player, now)];
       if (!cfg) return;
-      const genRate = cfg.generationMultiplier.toNumber();
-      const maxCap = cfg.maxLockedNovi.toNumber();
-      const currentLocked = player.lockedNovi.toNumber();
-      const elapsed = Math.max(0, now - player.lastUpdatedTokensAt.toNumber());
+      const genRate = Number(cfg.generationMultiplier);
+      const maxCap = Number(cfg.maxLockedNovi);
+      const currentLocked = Number(player.lockedNovi);
+      const elapsed = Math.max(0, now - Number(player.lastUpdatedTokensAt));
       const intervals = Math.floor(elapsed / INTERVAL_SECONDS);
       const pending =
         currentLocked >= maxCap ? 0 : Math.min(intervals * genRate, maxCap - currentLocked);
@@ -110,9 +110,9 @@ export function useNoviGenerator(): NoviGeneratorState {
     // decimals=1). The hook surfaces all NOVI-denominated fields in DISPLAY
     // NOVI so every consumer (status bar, dashboard ring, sidebar, generator
     // card) renders them directly without per-site conversion.
-    const genRateRaw = cfg.generationMultiplier.toNumber();
-    const maxCapRaw = cfg.maxLockedNovi.toNumber();
-    const currentLockedRaw = player.lockedNovi.toNumber();
+    const genRateRaw = Number(cfg.generationMultiplier);
+    const maxCapRaw = Number(cfg.maxLockedNovi);
+    const currentLockedRaw = Number(player.lockedNovi);
     return {
       ready: true,
       displayNovi: deciToNovi(ticker.displayNovi),
@@ -124,7 +124,7 @@ export function useNoviGenerator(): NoviGeneratorState {
       effectiveTier,
       currentLocked: deciToNovi(currentLockedRaw),
       isFull: currentLockedRaw >= maxCapRaw || ticker.fillPct >= 99.9,
-      lastUpdatedAt: player.lastUpdatedTokensAt.toNumber(),
+      lastUpdatedAt: Number(player.lastUpdatedTokensAt),
     };
   }, [player, ge, ticker, chainOffset]);
 }

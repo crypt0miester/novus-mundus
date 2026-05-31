@@ -18,10 +18,10 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 
-function n(v: { toNumber?: () => number } | number | null | undefined): number {
+function n(v: bigint | number | null | undefined): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;
-  return v.toNumber?.() ?? 0;
+  return Number(v);
 }
 const fmt = (x: number) => x.toLocaleString();
 
@@ -41,8 +41,8 @@ export function DungeonClaimPanel() {
     queryKey: ["dungeonRun", publicKey?.toBase58()],
     queryFn: async () => {
       const ge = client.gameEngine;
-      const [playerPda] = derivePlayerPda(ge, publicKey!);
-      const [runPda] = deriveDungeonRunPda(playerPda);
+      const [playerPda] = await derivePlayerPda(ge, publicKey!);
+      const [runPda] = await deriveDungeonRunPda(playerPda);
       const info = await connection.getAccountInfo(runPda);
       if (!info) return { pubkey: runPda, account: null, exists: false };
       return { pubkey: runPda, account: parseDungeonRun(info), exists: true };
@@ -55,7 +55,7 @@ export function DungeonClaimPanel() {
 
   const handleClaim = async (rp: (p: TxPhase) => void) => {
     if (!publicKey || !run) throw new Error("No run");
-    const ix = createClaimDungeonInstruction({
+    const ix = await createClaimDungeonInstruction({
       gameEngine: client.gameEngine,
       owner: publicKey,
       heroMint: run.heroMint,

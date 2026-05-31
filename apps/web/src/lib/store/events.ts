@@ -51,7 +51,7 @@ const IDB_KEY = "novus-events";
 
 /**
  * Serialize event data for IndexedDB storage.
- * Converts BN to string and PublicKey to base58.
+ * Converts bigint to string and PublicKey to base58.
  */
 export function serializeEventData(event: NovusMundusEvent): Record<string, unknown> {
   const data = event.data as unknown as Record<string, unknown>;
@@ -60,15 +60,15 @@ export function serializeEventData(event: NovusMundusEvent): Record<string, unkn
   for (const [key, val] of Object.entries(data)) {
     if (val === null || val === undefined) {
       result[key] = val;
-    } else if (typeof val === "object" && "toNumber" in (val as object)) {
-      // BN to string
-      result[key] = (val as { toString: () => string }).toString();
+    } else if (typeof val === "bigint") {
+      // bigint to string — preserves u64 precision across JSON.
+      result[key] = val.toString();
     } else if (typeof val === "object" && "toBase58" in (val as object)) {
       // PublicKey to base58
       result[key] = (val as { toBase58: () => string }).toBase58();
     } else if (Array.isArray(val)) {
       result[key] = val.map((v) => {
-        if (typeof v === "object" && v !== null && "toNumber" in v) return v.toString();
+        if (typeof v === "bigint") return v.toString();
         if (typeof v === "object" && v !== null && "toBase58" in v) return v.toBase58();
         return v;
       });

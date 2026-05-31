@@ -60,13 +60,13 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
       // Collect every instruction this claim needs. init_user is skipped for
       // an existing user; init_player/create_estate are skipped on resume.
       const userIx = !userData?.exists
-        ? createInitUserInstruction({ owner: publicKey, gameEngine: ge })
+        ? await createInitUserInstruction({ owner: publicKey, gameEngine: ge })
         : null;
 
       let playerIx: TransactionInstruction | null = null;
       if (!playerData?.exists) {
         if (!city) throw new Error("no ground was chosen.");
-        playerIx = createInitPlayerInstruction({
+        playerIx = await createInitPlayerInstruction({
           owner: publicKey,
           gameEngine: ge,
           startingCityId: city.cityId,
@@ -79,7 +79,10 @@ export function ClaimBeat({ hasPlayer, city, onClaimed }: ClaimBeatProps) {
       if (!estateData?.exists) {
         const cityId = city?.cityId ?? playerData?.account?.currentCity;
         if (cityId === undefined) throw new Error("no city chosen for the estate.");
-        estateIx = createCreateEstateInstruction({ owner: publicKey, gameEngine: ge }, { cityId });
+        estateIx = await createCreateEstateInstruction(
+          { owner: publicKey, gameEngine: ge },
+          { cityId },
+        );
       }
 
       const instructions = [userIx, playerIx, estateIx].filter(

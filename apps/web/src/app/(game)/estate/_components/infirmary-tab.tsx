@@ -67,7 +67,8 @@ export function InfirmaryTab() {
       ec.operativeUnit2Cost,
       ec.operativeUnit3Cost,
     ];
-    const baseCost = baseCosts[recoverUnitType]?.toNumber() ?? 0;
+    const baseCostRaw = baseCosts[recoverUnitType];
+    const baseCost = baseCostRaw !== undefined ? Number(baseCostRaw) : 0;
     const infirmaryLevelDiscount = infirmaryLevel * 25;
     const dailyBps = estate?.infirmaryRecoveryDailyBps ?? 0;
     return calculateRecoveryCost(baseCost, infirmaryLevelDiscount, dailyBps, recoverAmount);
@@ -79,7 +80,7 @@ export function InfirmaryTab() {
       throw new Error("Invalid recovery amount");
     }
     const ge = client.gameEngine;
-    const ix = createRecoverTroopsInstruction(
+    const ix = await createRecoverTroopsInstruction(
       { owner: publicKey, gameEngine: ge },
       { unitType: recoverUnitType, amount: recoverAmount },
     );

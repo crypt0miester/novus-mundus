@@ -31,7 +31,6 @@
   "devDependencies": {
     "@switchboard-xyz/common": "^5.8.0",
     "@switchboard-xyz/on-demand": "^3.9.0",
-    "@types/bn.js": "^5.2.0",
     "@types/bun": "latest",
     "@types/yargs": "^17.0.33",
     "litesvm": "0.6.0",
@@ -41,8 +40,7 @@
   "dependencies": {
     "@noble/ciphers": "^2.0.0",
     "@noble/hashes": "^2.0.1",
-    "@solana/web3.js": "^1.98.4",
-    "@google/genai": "^1.0.0",
-    "bn.js": "^5.2.2"
+    "@solana/web3.js": "^3.0.0-rc.1",
+    "@google/genai": "^1.0.0"
   }
 }

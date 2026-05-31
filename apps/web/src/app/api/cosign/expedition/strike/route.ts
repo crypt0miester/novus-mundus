@@ -28,15 +28,15 @@ export async function POST(req: Request) {
 
   const score = rollScore(
     "expedition.strike",
-    expeditionPda(owner).toBase58(),
+    (await expeditionPda(owner)).toBase58(),
     String(expedition.strikes),
   );
 
-  const ix = createExpeditionStrikeInstruction(
+  const ix = await createExpeditionStrikeInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: (await gameAuthorityKeypair()).publicKey,
     },
     { score },
   );

@@ -90,14 +90,14 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const { data: cityEncounters } = useEncounters(player?.currentCity);
   const { data: cityPlayers } = useCityPlayers(player?.currentCity);
   const ownedUnits: [number, number, number] = [
-    player?.defensiveUnit1?.toNumber?.() ?? 0,
-    player?.defensiveUnit2?.toNumber?.() ?? 0,
-    player?.defensiveUnit3?.toNumber?.() ?? 0,
+    Number(player?.defensiveUnit1 ?? 0n),
+    Number(player?.defensiveUnit2 ?? 0n),
+    Number(player?.defensiveUnit3 ?? 0n),
   ];
   const ownedWeapons: [number, number, number] = [
-    player?.meleeWeapons?.toNumber?.() ?? 0,
-    player?.rangedWeapons?.toNumber?.() ?? 0,
-    player?.siegeWeapons?.toNumber?.() ?? 0,
+    Number(player?.meleeWeapons ?? 0n),
+    Number(player?.rangedWeapons ?? 0n),
+    Number(player?.siegeWeapons ?? 0n),
   ];
 
   // Locked heroes (slots 0-2); one may optionally be committed to the rally.
@@ -111,7 +111,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
     queryFn: async () => {
       if (!rallyId || !publicKey) return null;
       const ge = client.gameEngine;
-      const [rallyPda] = deriveRallyPda(ge, publicKey, rallyId);
+      const [rallyPda] = await deriveRallyPda(ge, publicKey, rallyId);
       const info = await connection.getAccountInfo(rallyPda);
       if (!info) return null;
       return { pubkey: rallyPda, account: parseRally(info) };
@@ -133,6 +133,22 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const [rallyWeapons, setRallyWeapons] = useState<[number, number, number]>([0, 0, 0]);
   const [rallyTarget, setRallyTarget] = useState<{ pubkey: PublicKey; label: string } | null>(null);
   const [gatherMinutes, setGatherMinutes] = useState(15);
+
+  // Castle target PDAs for the current city (3 slots). Derived async (v3 PDA
+  // derivation) so the target picker can render them synchronously.
+  const [castleTargetPdas, setCastleTargetPdas] = useState<PublicKey[]>([]);
+  useEffect(() => {
+    let cancelled = false;
+    const cityId = player?.currentCity ?? 0;
+    Promise.all(
+      [0, 1, 2].map(async (castleId) => (await deriveCastlePda(client.gameEngine, cityId, castleId))[0]),
+    ).then((pdas) => {
+      if (!cancelled) setCastleTargetPdas(pdas);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [client.gameEngine, player?.currentCity]);
 
   // Joinable team rallies — fetched via getProgramAccounts filtered on the
   // player's team. Only gathering-phase rallies (status 0) are joinable.
@@ -172,10 +188,10 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
         if (publicKey && r.account.creator.equals(publicKey)) {
           mine.add(r.pubkey.toBase58());
         } else if (publicKey) {
-          const [pda] = deriveRallyParticipantPda(
+          const [pda] = await deriveRallyParticipantPda(
             client.gameEngine,
             r.account.creator,
-            r.account.id.toNumber(),
+            r.account.id,
             publicKey,
           );
           probes.push({ pda, rally: r.pubkey.toBase58() });
@@ -207,7 +223,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
         .filter((r) => myRallyPdas.has(r.pubkey.toBase58()))
         .sort(
           (a, b) =>
-            (b.account.createdAt?.toNumber?.() ?? 0) - (a.account.createdAt?.toNumber?.() ?? 0),
+            (Number(b.account.createdAt ?? 0n)) - (Number(a.account.createdAt ?? 0n)),
         ),
     [teamRallies, myRallyPdas],
   );
@@ -226,13 +242,13 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
     }
     const geKey = client.gameEngine;
     const hero = rallyHeroSlot < 3 ? lockedHeroes[rallyHeroSlot] : null;
-    const ix = createRallyCreateInstruction(
+    const ix = await createRallyCreateInstruction(
       {
         owner: publicKey,
         gameEngine: geKey,
-        rallyId: player.rallyStats.totalRalliesCreated.toNumber(),
+        rallyId: player.rallyStats.totalRalliesCreated,
         target: rallyTarget.pubkey,
-        teamId: teamId.toNumber(),
+        teamId,
         rallyCityId: player.currentCity,
       },
       {
@@ -275,17 +291,19 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
           : RallySpeedupType.Return;
     // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
     const n = Math.max(1, Math.floor(count));
-    const instructions = Array.from({ length: n }, () =>
-      createRallySpeedupInstruction(
-        {
-          owner: publicKey,
-          gameEngine: geKey,
-          rally: rallyData.pubkey,
-          rallyCreator: publicKey,
-          rallyId,
-          participant: publicKey,
-        },
-        { speedupType, speedupTier: tier as 1 | 2 },
+    const instructions = await Promise.all(
+      Array.from({ length: n }, () =>
+        createRallySpeedupInstruction(
+          {
+            owner: publicKey,
+            gameEngine: geKey,
+            rally: rallyData.pubkey,
+            rallyCreator: publicKey,
+            rallyId,
+            participant: publicKey,
+          },
+          { speedupType, speedupTier: tier as 1 | 2 },
+        ),
       ),
     );
     return transact
@@ -299,7 +317,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   };
 
   const rallyRemaining = rally?.arriveAt
-    ? Math.max(0, rally.arriveAt.toNumber() - Math.floor(Date.now() / 1000))
+    ? Math.max(0, Number(rally.arriveAt) - Math.floor(Date.now() / 1000))
     : 0;
 
   // Hold-to-charge caps for the rally speedup tiers — how many speedup
@@ -307,7 +325,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   // Rally: T1 leaves 50% of time / 1x cost, T2 leaves 25% / 2x cost — the same
   // `remaining_minutes * gems_per_minute * tier_cost` formula as travel.
   const rallyGemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
-  const rallyGemBalance = player?.gems?.toNumber?.() ?? 0;
+  const rallyGemBalance = player ? Number(player.gems) : 0;
   const speedupTiers = [
     {
       tier: 1,
@@ -338,11 +356,11 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !rallyData || !rally) throw new Error("No rally");
     const ge = client.gameEngine;
-    const ix = createRallyCancelInstruction({
+    const ix = await createRallyCancelInstruction({
       owner: publicKey,
       gameEngine: ge,
       rally: rallyData.pubkey,
-      rallyId: rally.id.toNumber(),
+      rallyId: rally.id,
       rallyCityId: rally.rallyCity ?? 0,
     });
     return transact
@@ -358,7 +376,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const handleLeave = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !rallyData || !rally) throw new Error("No rally");
     const ge = client.gameEngine;
-    const ix = createRallyLeaveInstruction({
+    const ix = await createRallyLeaveInstruction({
       owner: publicKey,
       gameEngine: ge,
       rally: rallyData.pubkey,
@@ -381,15 +399,15 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
     if (!rallyData || !rally) throw new Error("No rally");
     const ge = client.gameEngine;
     // Execute is permissionless — derive leader estate from creator
-    const [leaderPlayer] = derivePlayerPda(ge, rally.creator);
-    const [leaderEstate] = deriveEstatePda(leaderPlayer);
+    const [leaderPlayer] = await derivePlayerPda(ge, rally.creator);
+    const [leaderEstate] = await deriveEstatePda(leaderPlayer);
     // rally_execute needs every RallyParticipant account (4 fixed + N), so
     // fetch the participant PDAs and pass them, leader first.
     const parts = await client.fetchRallyParticipants(rallyData.pubkey, rally);
     const ordered = [...parts].sort(
       (a, b) => Number(b.account.isLeader) - Number(a.account.isLeader),
     );
-    const ix = createRallyExecuteInstruction({
+    const ix = await createRallyExecuteInstruction({
       gameEngine: ge,
       rally: rallyData.pubkey,
       target: rally.target,
@@ -409,7 +427,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
   const handleProcessReturn = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !rallyData || !rally) throw new Error("No rally");
     const ge = client.gameEngine;
-    const ix = createRallyProcessReturnInstruction({
+    const ix = await createRallyProcessReturnInstruction({
       gameEngine: ge,
       rally: rallyData.pubkey,
       rallyCreator: rally.creator ?? publicKey,
@@ -430,7 +448,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
 
   const handleClose = async (reportPhase: (p: TxPhase) => void) => {
     if (!rallyData || !rally) throw new Error("No rally");
-    const ix = createRallyCloseInstruction({
+    const ix = await createRallyCloseInstruction({
       rally: rallyData.pubkey,
       leaderOwner: rally.creator,
     });
@@ -476,8 +494,8 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
           <div className="space-y-2">
             {myRallies.map((r) => {
               const st = r.account.status ?? 0;
-              const gatherAt = r.account.gatherAt?.toNumber?.() ?? 0;
-              const arriveAt = r.account.arriveAt?.toNumber?.() ?? 0;
+              const gatherAt = Number(r.account.gatherAt ?? 0n);
+              const arriveAt = Number(r.account.arriveAt ?? 0n);
               const joined = r.account.participantCount ?? 0;
               const max = r.account.maxParticipants ?? 0;
               const isLeader = publicKey ? r.account.creator.equals(publicKey) : false;
@@ -559,14 +577,14 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
             </div>
             <div>
               <div className="text-xs text-text-muted">Total Units</div>
-              <GoldNumber value={rally.totalUnits?.toNumber?.() ?? 0} />
+              <GoldNumber value={Number(rally.totalUnits ?? 0n)} />
             </div>
             <div>
               <div className="text-xs text-text-muted">Time</div>
               {rally.marchStartedAt && (
                 <GoldCountdown
-                  endsAt={rally.arriveAt?.toNumber?.() ?? 0}
-                  startedAt={rally.marchStartedAt?.toNumber?.() ?? 0}
+                  endsAt={Number(rally.arriveAt ?? 0n)}
+                  startedAt={Number(rally.marchStartedAt ?? 0n)}
                   format="compact"
                   size="sm"
                 />
@@ -606,7 +624,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
               tiers={speedupTiers}
               onSpeedup={(tier, rp, count) => handleRallySpeedup(tier, rp, count)}
               gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
-              gemBalance={player?.gems?.toNumber?.()}
+              gemBalance={Number(player?.gems ?? 0n)}
               className="mt-4"
             />
           )}
@@ -623,7 +641,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
         ) : (
           <div className="space-y-2">
             {joinableRallies.map((r) => {
-              const gatherAt = r.account.gatherAt?.toNumber?.() ?? 0;
+              const gatherAt = Number(r.account.gatherAt ?? 0n);
               const joined = r.account.participantCount ?? 0;
               const max = r.account.maxParticipants ?? 0;
               const full = joined >= max;
@@ -750,12 +768,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
                   })
                 ))}
               {targetType === 2 &&
-                [0, 1, 2].map((castleId) => {
-                  const pubkey = deriveCastlePda(
-                    client.gameEngine,
-                    player?.currentCity ?? 0,
-                    castleId,
-                  )[0];
+                castleTargetPdas.map((pubkey, castleId) => {
                   const label = `Castle ${castleId}`;
                   const sel = rallyTarget?.pubkey.equals(pubkey) ?? false;
                   return (

@@ -59,7 +59,7 @@ export function PlayerBrowser() {
     const m = new Map<string, { id: number; name: string }>();
     for (const t of teams ?? [])
       m.set(t.pubkey.toBase58(), {
-        id: t.account.id.toNumber(),
+        id: Number(t.account.id),
         name: t.account.name,
       });
     return m;
@@ -147,7 +147,7 @@ export function PlayerBrowser() {
       header: "Networth",
       align: "right",
       className: "w-28",
-      cell: (p) => <GoldNumber value={p.account.networth.toNumber()} size="sm" />,
+      cell: (p) => <GoldNumber value={Number(p.account.networth)} size="sm" />,
     },
   ];
 

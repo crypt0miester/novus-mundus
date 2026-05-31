@@ -2,7 +2,6 @@
  * CLI Formatting Utilities — tables, colors, number formatting
  */
 
-import type BN from 'bn.js';
 import { type PublicKey, LAMPORTS_PER_SOL } from '@solana/web3.js';
 
 // ANSI Colors
@@ -23,13 +22,13 @@ export const magenta = c('35');
 
 // Number Formatting
 
-export function formatSol(lamports: number | BN): string {
-  const n = typeof lamports === 'number' ? lamports : lamports.toNumber();
+export function formatSol(lamports: number | bigint): string {
+  const n = Number(lamports);
   return (n / LAMPORTS_PER_SOL).toFixed(4);
 }
 
-export function formatNum(n: number | BN): string {
-  const v = typeof n === 'number' ? n : n.toNumber();
+export function formatNum(n: number | bigint): string {
+  const v = Number(n);
   return v.toLocaleString('en-US');
 }
 
@@ -46,8 +45,8 @@ export function formatDuration(seconds: number): string {
   return h > 0 ? `${d}d ${h}h` : `${d}d`;
 }
 
-export function formatDate(unixSeconds: number | BN): string {
-  const ts = typeof unixSeconds === 'number' ? unixSeconds : unixSeconds.toNumber();
+export function formatDate(unixSeconds: number | bigint): string {
+  const ts = Number(unixSeconds);
   if (ts === 0) return dim('--');
   return new Date(ts * 1000).toISOString().slice(0, 16).replace('T', ' ');
 }
@@ -150,7 +149,7 @@ export function check(v: boolean): string {
   return v ? green('yes') : dim('no');
 }
 
-export function stockLabel(n: number | BN): string {
-  const v = typeof n === 'number' ? n : n.toNumber();
+export function stockLabel(n: number | bigint): string {
+  const v = Number(n);
   return v === 0 ? dim('unlimited') : formatNum(v);
 }

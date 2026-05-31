@@ -39,7 +39,8 @@ export function useChainTimeOffset(): number {
       try {
         const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY);
         if (cancelled || !info) return;
-        const chainTs = Number(info.data.readBigInt64LE(CLOCK_UNIX_TIMESTAMP_OFFSET));
+        const view = new DataView(info.data.buffer, info.data.byteOffset, info.data.byteLength);
+        const chainTs = Number(view.getBigInt64(CLOCK_UNIX_TIMESTAMP_OFFSET, true));
         const deviceTs = Math.floor(Date.now() / 1000);
         setOffset(chainTs - deviceTs);
       } catch {

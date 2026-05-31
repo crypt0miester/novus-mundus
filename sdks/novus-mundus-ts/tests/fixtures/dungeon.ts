@@ -60,7 +60,7 @@ export function resumeDungeonIx(
 }
 
 /** Send an enter-dungeon tx, co-signed by the player + game_authority. */
-export function enterDungeon(
+export async function enterDungeon(
   ctx: TestContext,
   player: TestPlayer,
   heroMint: PublicKey,
@@ -68,20 +68,20 @@ export function enterDungeon(
 ) {
   return sendTransaction(
     ctx.svm,
-    new Transaction().add(enterDungeonIx(ctx, player.publicKey, heroMint, params)),
+    new Transaction().add(await enterDungeonIx(ctx, player.publicKey, heroMint, params)),
     [player.keypair, ctx.daoAuthority],
   );
 }
 
 /** Send a resume tx, co-signed by the player + game_authority. */
-export function resumeDungeon(
+export async function resumeDungeon(
   ctx: TestContext,
   player: TestPlayer,
   params: ResumeDungeonParams,
 ) {
   return sendTransaction(
     ctx.svm,
-    new Transaction().add(resumeDungeonIx(ctx, player.publicKey, params)),
+    new Transaction().add(await resumeDungeonIx(ctx, player.publicKey, params)),
     [player.keypair, ctx.daoAuthority],
   );
 }

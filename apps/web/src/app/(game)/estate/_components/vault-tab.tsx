@@ -46,10 +46,10 @@ export function VaultTab() {
   const vaultValidation = useMemo(() => {
     if (!player || vaultAmount <= 0) return null;
     if (vaultDirection === "deposit") {
-      const cash = player.cashOnHand.toNumber();
+      const cash = Number(player.cashOnHand);
       if (vaultAmount > cash) return `Insufficient cash on hand (have $${cash.toLocaleString()})`;
     } else {
-      const vault = player.cashInVault.toNumber();
+      const vault = Number(player.cashInVault);
       if (vaultAmount > vault) return `Insufficient vault cash (have $${vault.toLocaleString()})`;
     }
     return null;
@@ -58,7 +58,7 @@ export function VaultTab() {
   const handleVaultTransfer = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createVaultTransferInstruction(
+    const ix = await createVaultTransferInstruction(
       { owner: publicKey, gameEngine: ge },
       { amount: vaultAmount, toVault: vaultDirection === "deposit" },
     );
@@ -75,7 +75,7 @@ export function VaultTab() {
   const handleCollectCash = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createCollectResourcesInstruction(
+    const ix = await createCollectResourcesInstruction(
       { owner: publicKey, gameEngine: ge },
       { noviAmount: noviToDeci(collectNoviAmount), collectionType: CASH_COLLECTION_TYPE },
     );
@@ -98,13 +98,13 @@ export function VaultTab() {
   }
   if (!player) return null;
 
-  const cashOnHand = player.cashOnHand?.toNumber?.() ?? 0;
-  const cashInVault = player.cashInVault?.toNumber?.() ?? 0;
+  const cashOnHand = Number(player.cashOnHand ?? 0n);
+  const cashInVault = Number(player.cashInVault ?? 0n);
   const noviBalance = deciToNovi(player.lockedNovi ?? 0);
   const operativeUnits =
-    (player.operativeUnit1?.toNumber?.() ?? 0) +
-    (player.operativeUnit2?.toNumber?.() ?? 0) +
-    (player.operativeUnit3?.toNumber?.() ?? 0);
+    (Number(player.operativeUnit1 ?? 0n)) +
+    (Number(player.operativeUnit2 ?? 0n)) +
+    (Number(player.operativeUnit3 ?? 0n));
   const hasEnoughForCollect = noviBalance >= collectNoviAmount;
 
   return (
@@ -253,14 +253,21 @@ function SendCashPanel({ player }: { player: any }) {
     );
   }
 
-  const myPlayerPda = publicKey
-    ? derivePlayerPda(client.gameEngine, publicKey)[0].toBase58()
-    : null;
+  const { data: myPlayerPda = null } = useQuery({
+    queryKey: ["myPlayerPda", publicKey?.toBase58()],
+    queryFn: async () => {
+      if (!publicKey) return null;
+      const [pda] = await derivePlayerPda(client.gameEngine, publicKey);
+      return pda.toBase58();
+    },
+    enabled: !!publicKey,
+    staleTime: Infinity,
+  });
   const recipients = (members ?? []).filter(
     (m: any) => m.account.player.toBase58() !== myPlayerPda,
   );
 
-  const cashOnHand = player?.cashOnHand?.toNumber?.() ?? 0;
+  const cashOnHand = Number(player?.cashOnHand ?? 0n);
   const amountError =
     amount > 0 && amount > cashOnHand
       ? `Insufficient cash (have $${cashOnHand.toLocaleString()})`
@@ -270,13 +277,13 @@ function SendCashPanel({ player }: { player: any }) {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!recipient) throw new Error("Select a recipient");
     if (teamId == null) throw new Error("House not loaded");
-    const ix = createTransferCashInstruction(
+    const ix = await createTransferCashInstruction(
       {
         sender: publicKey,
         gameEngine: client.gameEngine,
         receiverPlayer: recipient,
         team: teamPubkey,
-        teamId: teamId.toNumber(),
+        teamId,
       },
       { amount },
     );

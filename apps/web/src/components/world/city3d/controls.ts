@@ -68,6 +68,13 @@ export const MAX_PITCH_3D = 85 * DEG;
 export const INITIAL_DISTANCE_2D = 8;
 export const INITIAL_DISTANCE_3D = 4.5;
 
+/* Two canonical yaw presets the view-angle toggle flips between.
+ * DEFAULT_YAW (0.68 rad ≈ 39°) is the angled framing the camera mounts
+ * at; STRAIGHT_YAW (0) is the north-up / straight-on look. Reset now
+ * PRESERVES whichever the user is on rather than forcing a yaw. */
+export const DEFAULT_YAW = 0.68;
+export const STRAIGHT_YAW = 0;
+
 /* INITIAL_DISTANCE_* is tuned for the largest canonical city
  * (Tokyo, widthGrid ~8782). Smaller cities at the same distance feel
  * "lost in space" — the plot floats inside an over-zoomed canvas.
@@ -81,6 +88,15 @@ export const INITIAL_DISTANCE_3D = 4.5;
 const REF_WIDTH_GRID = 8782;
 export function cityCameraSizeFactor(cityAccount: { widthGrid: number }): number {
   return Math.min(1, Math.max(0.45, cityAccount.widthGrid / REF_WIDTH_GRID));
+}
+
+/* Deepest zoom, expressed as a display-zoom multiple (base / distance).
+ * Locate / focus drives all the way to this, and the user can pinch /
+ * scroll here too. Sits just inside the 0.005 camera near plane in both
+ * modes (iso 4.5/500 = 0.009, top 8/500 = 0.016). */
+export const MAX_ZOOM = 500;
+export function minDistanceForMode(mode: MapMode): number {
+  return (mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) / MAX_ZOOM;
 }
 
 /* Exponential smoothing rate, in 1/sec. 8.0 matches IsometricCamera.js:33
@@ -179,7 +195,7 @@ export class CityCameraController {
   private cfg: ControllerOptions;
 
   /* Desired state (smoothing lerps toward these). */
-  private yaw = 0.68;
+  private yaw = DEFAULT_YAW;
   private pitch: number;
   private distance: number;
   private target: THREE.Vector3;
@@ -378,8 +394,9 @@ export class CityCameraController {
   }
 
   reset(): void {
-    this.yaw = 0.68;
-    this.pitch = this.mode === "iso" ? PITCH_3D : PITCH_2D;
+    // Frame the whole city again WITHOUT spinning: recenter the target
+    // and zoom out to the mode default, but PRESERVE the user's current
+    // yaw + pitch (their chosen view angle).
     this.distance = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     this.target.set(0, this.mode === "iso" ? midpointElevation() : 0, 0);
     this.zoomVelocity = 0;

@@ -51,7 +51,7 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
       try {
         const lamports = await connection.getBalance(publicKey, "confirmed");
         if (!cancelled) {
-          setBalance((lamports / LAMPORTS_PER_SOL).toFixed(4));
+          setBalance((Number(lamports) / Number(LAMPORTS_PER_SOL)).toFixed(4));
         }
       } catch {
         if (!cancelled) setBalance(null);
@@ -61,7 +61,7 @@ export function BaseWalletMultiButton({ children, labels, ...props }: Props) {
     loadBalance();
     const id = connection.onAccountChange(publicKey, (info) => {
       if (!cancelled) {
-        setBalance((info.lamports / LAMPORTS_PER_SOL).toFixed(4));
+        setBalance((Number(info.lamports) / Number(LAMPORTS_PER_SOL)).toFixed(4));
       }
     });
 

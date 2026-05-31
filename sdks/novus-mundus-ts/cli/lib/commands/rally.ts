@@ -22,7 +22,6 @@
  */
 
 import { Keypair, PublicKey, SYSVAR_CLOCK_PUBKEY, Transaction, ComputeBudgetProgram } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -128,7 +127,7 @@ async function handleList(ctx: CLIContext): Promise<void> {
   // Clock::unix_timestamp — so a wall-clock countdown can disagree with the chain.
   const clockInfo = await client.connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY);
   const wallNow = Math.floor(Date.now() / 1000);
-  const chainNow = clockInfo ? Number(clockInfo.data.readBigInt64LE(32)) : wallNow;
+  const chainNow = clockInfo ? Number(Buffer.from(clockInfo.data).readBigInt64LE(32)) : wallNow;
   const drift = chainNow - wallNow;
 
   log.info(section(`Rallies — Kingdom ${ctx.kingdomId} (${rallies.length} total)`));
@@ -179,12 +178,12 @@ async function handleList(ctx: CLIContext): Promise<void> {
     let window: string;
     switch (r.status) {
       case RallyStatus.Gathering: {
-        const left = r.gatherAt.toNumber() - chainNow;
+        const left = Number(r.gatherAt) - chainNow;
         window = left > 0 ? `gather ${formatDuration(left)}` : dim('gather closed');
         break;
       }
       case RallyStatus.Marching: {
-        const left = r.arriveAt.toNumber() - chainNow;
+        const left = Number(r.arriveAt) - chainNow;
         window = left > 0 ? `arrive ${formatDuration(left)}` : yellow('arriving');
         break;
       }
@@ -198,8 +197,8 @@ async function handleList(ctx: CLIContext): Promise<void> {
         let next = '';
         if (parts) {
           const remaining = parts
-            .filter((p) => !p.account.returned && p.account.returnStartedAt.toNumber() > 0)
-            .map((p) => p.account.returnStartedAt.toNumber() + p.account.returnDuration - chainNow);
+            .filter((p) => !p.account.returned && Number(p.account.returnStartedAt) > 0)
+            .map((p) => Number(p.account.returnStartedAt) + p.account.returnDuration - chainNow);
           if (remaining.length > 0) {
             const min = Math.min(...remaining);
             next = min > 0 ? ` · next ${formatDuration(min)}` : ` · ${green('ready')}`;
@@ -235,7 +234,7 @@ async function handleParticipants(ctx: CLIContext): Promise<void> {
   const client = newClient(ctx);
   const clockInfo = await client.connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY);
   const chainNow = clockInfo
-    ? Number(clockInfo.data.readBigInt64LE(32))
+    ? Number(Buffer.from(clockInfo.data).readBigInt64LE(32))
     : Math.floor(Date.now() / 1000);
 
   const rallies = await client.fetchActiveRallies();
@@ -266,7 +265,7 @@ async function handleParticipants(ctx: CLIContext): Promise<void> {
     const rows = parts.map(({ account: p }) => {
       const committed = toNum(p.unitsCommitted1) + toNum(p.unitsCommitted2) + toNum(p.unitsCommitted3);
       const lost = toNum(p.casualties1) + toNum(p.casualties2) + toNum(p.casualties3);
-      const rs = p.returnStartedAt.toNumber();
+      const rs = Number(p.returnStartedAt);
       const ret = p.returned
         ? green('home')
         : rs > 0
@@ -290,7 +289,7 @@ async function handleParticipants(ctx: CLIContext): Promise<void> {
 // create
 
 async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the acting player keypair as the third argument');
     log.info('  novus rally create <keypair> --target <pubkey> --target-type <encounter|player|castle> --target-city <id>');
@@ -329,7 +328,7 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   }
 
   const client = newClient(ctx);
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, kp.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, kp.publicKey);
   const playerInfo = await ctx.connection.getAccountInfo(playerPda);
   if (!playerInfo) {
     log.error(`No player account for ${kp.publicKey.toBase58()}`);
@@ -399,7 +398,7 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
   await sendWithRetry(ctx, ix, [kp], { computeUnits: 60_000 });
 
-  const [rallyPda] = deriveRallyPda(ctx.gameEngine, kp.publicKey, rallyId);
+  const [rallyPda] = await deriveRallyPda(ctx.gameEngine, kp.publicKey, rallyId);
   log.create(`Rally #${rallyId} ${addr(rallyPda)}`);
   log.info(`  Target: ${cityName(targetCityId)} ${addr(target)} (${targetTypeFlag})`);
   log.info(`  Gathers in: ${cityName(rallyCityId)}    Window: ${formatDuration(gatherDuration)}`);
@@ -410,7 +409,7 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // join
 
 async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the joining player keypair as the third argument');
     log.info('  novus rally join <keypair> --creator <pk> --id <n>');
@@ -426,7 +425,7 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.error(`Rally is ${STATUS_NAMES[r.status] ?? r.status}, not Gathering — cannot join`);
     return;
   }
-  if (r.gatherAt.toNumber() <= Math.floor(Date.now() / 1000)) {
+  if (Number(r.gatherAt) <= Math.floor(Date.now() / 1000)) {
     log.error('Gather window has closed — cannot join');
     return;
   }
@@ -435,7 +434,7 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, kp.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, kp.publicKey);
   const playerInfo = await ctx.connection.getAccountInfo(playerPda);
   if (!playerInfo) {
     log.error(`No player account for ${kp.publicKey.toBase58()}`);
@@ -503,7 +502,7 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // also speed up teammates by passing --participant <their wallet>.
 
 async function handleSpeedup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the paying player keypair as the third argument');
     log.info('  novus rally speedup <keypair> [--creator <pk> --id <n> | --rally <pubkey>] --phase <gather|march|return> --tier <1|2> [--participant <wallet>] [--repeat <n>]');
@@ -589,8 +588,8 @@ async function handleMarch(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
   const nowSec = Math.floor(Date.now() / 1000);
-  if (nowSec < r.executeAt.toNumber()) {
-    const wait = r.executeAt.toNumber() - nowSec;
+  if (nowSec < Number(r.executeAt)) {
+    const wait = Number(r.executeAt) - nowSec;
     log.error(`Not ready to march for ${formatDuration(wait)} (execute at ${formatDate(r.executeAt)})`);
     log.info(dim('  Speed up the gather window or wait, then run march again.'));
     return;
@@ -602,8 +601,8 @@ async function handleMarch(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const [creatorPlayer] = derivePlayerPda(ctx.gameEngine, r.creator);
-  const [leaderEstate] = deriveEstatePda(creatorPlayer);
+  const [creatorPlayer] = await derivePlayerPda(ctx.gameEngine, r.creator);
+  const [leaderEstate] = await deriveEstatePda(creatorPlayer);
 
   const ix = createRallyExecuteInstruction({
     gameEngine: ctx.gameEngine,
@@ -620,7 +619,7 @@ async function handleMarch(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
   log.info(`\nMarched rally #${r.id.toString()} against ${cityName(r.targetCity)} ${addr(r.target)}`);
 
-  const after = await client.fetchRally(r.creator, r.id.toNumber());
+  const after = await client.fetchRally(r.creator, Number(r.id));
   if (after.account) {
     const a = after.account;
     log.info(section('Combat'));
@@ -681,7 +680,7 @@ async function handleProcessReturn(ctx: CLIContext, args: ParsedArgs): Promise<v
     // process_return is NOT permissionless: the chain runs require_signer on
     // participant_owner, so the participant must sign their own return. We
     // resolve their saved keypair from keys/players and sign with it.
-    const signer = loadParticipantKeypair(p.participant);
+    const signer = await loadParticipantKeypair(p.participant);
     if (!signer) {
       log.info(dim(`  - Skipped ${addr(p.participant)} (no saved keypair to sign their return)`));
       skipped++;
@@ -730,7 +729,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       log.error('No teams found — pass --team <id>');
       return;
     }
-    teamId = teams[0]!.account.id.toNumber();
+    teamId = Number(teams[0]!.account.id);
     if (teams.length > 1) {
       log.info(dim(`  ${teams.length} teams; defaulting to #${teamId}. Pass --team <id> to pick another.`));
     }
@@ -742,7 +741,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
   const team = teamRes.account;
-  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
   log.info(section(`Rally prep — Team ${team.name || '(unnamed)'} (#${teamId})  ${team.memberCount}/${team.maxMembers}`));
 
@@ -752,7 +751,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   try {
     for (const f of fs.readdirSync(dir).filter((x) => /^player-\d+\.json$/.test(x))) {
       try {
-        const kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))));
+        const kp = await Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))));
         walletToFile.set(kp.publicKey.toBase58(), f);
       } catch {}
     }
@@ -806,7 +805,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       city: p.currentCity,
       gems: toNum(p.gems),
       units: [toNum(p.defensiveUnit1), toNum(p.defensiveUnit2), toNum(p.defensiveUnit3)],
-      sol: sol / 1e9,
+      sol: Number(sol) / 1e9,
     });
   };
 
@@ -840,7 +839,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   try {
     const encs = await client.fetchEncountersInCity(gatherCity);
     const nowSec = Math.floor(Date.now() / 1000);
-    const alive = encs.filter((e) => !e.account.health.isZero() && e.account.despawnAt.toNumber() > nowSec);
+    const alive = encs.filter((e) => !(e.account.health === 0n) && Number(e.account.despawnAt) > nowSec);
     log.info(section(`Encounter targets in ${cityName(gatherCity)}: ${alive.length} alive (${encs.length} total)`));
     if (alive.length > 0) {
       const pick = alive[0]!;
@@ -887,11 +886,11 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   for (const r of candidates) {
     let kp: Keypair;
     try {
-      kp = Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(path.join(dir, r.file!), 'utf8'))));
+      kp = await Keypair.fromSecretKey(Uint8Array.from(JSON.parse(fs.readFileSync(path.join(dir, r.file!), 'utf8'))));
     } catch {
       continue;
     }
-    const ix = createRallyCreateInstruction(
+    const ix = await createRallyCreateInstruction(
       { owner: kp.publicKey, gameEngine: ctx.gameEngine, rallyId: 0, target: kp.publicKey, teamId, rallyCityId: gatherCity },
       {
         targetType: RallyTargetType.Encounter, gatherDuration: 120, targetCityId: gatherCity,
@@ -901,7 +900,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     );
     const tx = new Transaction().add(ComputeBudgetProgram.setComputeUnitLimit({ units: 80_000 }), ix);
     tx.feePayer = kp.publicKey;
-    if (blockhash) tx.recentBlockhash = blockhash;
+    if (blockhash) tx.recentBlockhash = blockhash as typeof tx.recentBlockhash;
     try {
       const sim = await ctx.connection.simulateTransaction(tx, [kp]);
       if (!sim.value.err) {
@@ -1027,23 +1026,23 @@ async function resolveRally(
 async function resolveTeamId(client: NovusMundusClient, teamPda: PublicKey): Promise<number | null> {
   const teams = await client.fetchAllTeams();
   const hit = teams.find((t) => t.pubkey.equals(teamPda));
-  return hit ? hit.account.id.toNumber() : null;
+  return hit ? Number(hit.account.id) : null;
 }
 
 /** Lowest rally id not yet taken by this creator (ids are unique per creator). */
 async function nextRallyId(ctx: CLIContext, creator: PublicKey): Promise<number> {
   for (let id = 0; id < 256; id++) {
-    const [pda] = deriveRallyPda(ctx.gameEngine, creator, id);
+    const [pda] = await deriveRallyPda(ctx.gameEngine, creator, id);
     const info = await ctx.connection.getAccountInfo(pda);
     if (!info) return id;
   }
   return 0;
 }
 
-function resolveKeypair(extra: string) {
+async function resolveKeypair(extra: string) {
   if (!extra || looksLikePubkey(extra)) return null;
   try {
-    return loadKeypair(extra);
+    return await loadKeypair(extra);
   } catch {
     return null;
   }
@@ -1053,7 +1052,7 @@ function resolveKeypair(extra: string) {
 // participant. process_return runs require_signer(participant_owner) on chain,
 // so the DAO authority cannot stand in for the returning player.
 let participantKeyIndex: Map<string, Keypair> | null = null;
-function loadParticipantKeypair(wallet: PublicKey): Keypair | null {
+async function loadParticipantKeypair(wallet: PublicKey): Promise<Keypair | null> {
   if (!participantKeyIndex) {
     participantKeyIndex = new Map();
     const dir = path.join(__dirname, "../../../keys/players");
@@ -1065,7 +1064,7 @@ function loadParticipantKeypair(wallet: PublicKey): Keypair | null {
     }
     for (const f of files) {
       try {
-        const kp = Keypair.fromSecretKey(
+        const kp = await Keypair.fromSecretKey(
           Uint8Array.from(JSON.parse(fs.readFileSync(path.join(dir, f), "utf8"))),
         );
         participantKeyIndex.set(kp.publicKey.toBase58(), kp);
@@ -1095,8 +1094,8 @@ function parseTriple(v: string | undefined): [number, number, number] | null {
   return [Math.max(0, a), Math.max(0, b), Math.max(0, c)];
 }
 
-function toNum(v: BN | number): number {
-  return typeof v === 'number' ? v : v.toNumber();
+function toNum(v: number | bigint): number {
+  return typeof v === 'number' ? v : Number(v);
 }
 
 function getFlag(flags: string[], name: string): string | undefined {

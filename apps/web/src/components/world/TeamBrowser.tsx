@@ -58,13 +58,13 @@ export function TeamBrowser() {
         result.sort((a, b) => b.account.memberCount - a.account.memberCount);
         break;
       case "treasury":
-        result.sort((a, b) => b.account.treasury.toNumber() - a.account.treasury.toNumber());
+        result.sort((a, b) => Number(b.account.treasury) - Number(a.account.treasury));
         break;
       case "name":
         result.sort((a, b) => a.account.name.localeCompare(b.account.name));
         break;
       case "newest":
-        result.sort((a, b) => b.account.createdAt.toNumber() - a.account.createdAt.toNumber());
+        result.sort((a, b) => Number(b.account.createdAt) - Number(a.account.createdAt));
         break;
     }
 
@@ -92,11 +92,11 @@ export function TeamBrowser() {
       }
     }
     if (freeSlot < 0) throw new Error("Team is full");
-    const ix = createTeamJoinInstruction({
+    const ix = await createTeamJoinInstruction({
       owner: publicKey,
       gameEngine: client.gameEngine,
       team: t.pubkey,
-      teamId: t.account.id.toNumber(),
+      teamId: t.account.id,
       slotIndex: freeSlot,
       leaderPlayer: t.account.leader,
     });
@@ -122,10 +122,10 @@ export function TeamBrowser() {
         return (
           <div className="flex items-center gap-2">
             <Link
-              href={`/world/teams/${t.account.id.toNumber()}`}
+              href={`/world/teams/${Number(t.account.id)}`}
               className="font-medium text-text-primary transition-colors hover:text-text-gold"
             >
-              {t.account.name || `Team #${t.account.id.toNumber()}`}
+              {t.account.name || `Team #${Number(t.account.id)}`}
             </Link>
             <Badge variant={isPublic ? "success" : "default"} className="px-1 py-0 text-[10px]">
               {isPublic ? "Public" : "Private"}
@@ -156,7 +156,7 @@ export function TeamBrowser() {
       cell: (t) => (
         <span className="inline-flex items-center justify-end gap-1">
           <GameIcon id="resource-cash" size={14} />
-          <GoldNumber value={t.account.treasury.toNumber()} size="sm" />
+          <GoldNumber value={Number(t.account.treasury)} size="sm" />
         </span>
       ),
     },
@@ -244,7 +244,7 @@ export function TeamBrowser() {
               return (
                 <TeamCard
                   key={t.pubkey.toBase58()}
-                  teamId={t.account.id.toNumber()}
+                  teamId={Number(t.account.id)}
                   team={t.account}
                   lordlyLabels
                   actions={

@@ -56,7 +56,7 @@ export function BuildingGrid({
       const phase = buildingPhase(slot, tick);
       const constructing =
         phase === "rising" || phase === "raised" || phase === "improving" || phase === "improved";
-      const endsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
+      const endsAt = Number(slot?.constructionEnds ?? 0n);
       const remainingSec = constructing ? Math.max(0, endsAt - tick) : 0;
       const ready = phase === "raised" || phase === "improved";
       const status: CardStatus =

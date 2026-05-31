@@ -63,11 +63,9 @@ const NO_CHARTER_THEME = {
   bright: "#a1a1aa", // zinc-400
 } as const;
 
-/** BN | number | undefined to number */
+/** bigint | number | undefined to number */
 function num(v: unknown): number {
-  if (v && typeof (v as { toNumber?: () => number }).toNumber === "function") {
-    return (v as { toNumber: () => number }).toNumber();
-  }
+  if (typeof v === "bigint") return Number(v);
   return Number(v ?? 0);
 }
 
@@ -158,33 +156,32 @@ export function SubscribeTab() {
      * a direct lamport transfer; tokens go through `process_token_payment_flow`
      * which dispatches by `AllowedTokenAccount.pegged_to_usd`.
      */
-    const ix =
-      paymentMethod.kind === "sol"
-        ? createPurchaseSubscriptionInstruction(
-            {
-              owner: publicKey,
-              gameEngine: ge,
-              paymentAuthority: publicKey,
-              treasury: geAccount.treasuryWallet,
+    const ix = await (paymentMethod.kind === "sol"
+      ? createPurchaseSubscriptionInstruction(
+          {
+            owner: publicKey,
+            gameEngine: ge,
+            paymentAuthority: publicKey,
+            treasury: geAccount.treasuryWallet,
+          },
+          { paymentType: 0, tier: tierId },
+        )
+      : createPurchaseSubscriptionInstruction(
+          {
+            owner: publicKey,
+            gameEngine: ge,
+            paymentAuthority: publicKey,
+            treasury: geAccount.treasuryWallet,
+            tokenPayment: {
+              tokenMint: paymentMethod.mint,
+              /*
+               * Pegged → no oracle accounts. Non-pegged token selections
+               * are blocked by the guard above.
+               */
             },
-            { paymentType: 0, tier: tierId },
-          )
-        : createPurchaseSubscriptionInstruction(
-            {
-              owner: publicKey,
-              gameEngine: ge,
-              paymentAuthority: publicKey,
-              treasury: geAccount.treasuryWallet,
-              tokenPayment: {
-                tokenMint: paymentMethod.mint,
-                /*
-                 * Pegged → no oracle accounts. Non-pegged token selections
-                 * are blocked by the guard above.
-                 */
-              },
-            },
-            { paymentType: 2, tier: tierId },
-          );
+          },
+          { paymentType: 2, tier: tierId },
+        ));
 
     return transact
       .mutateAsync({

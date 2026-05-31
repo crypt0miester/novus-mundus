@@ -20,7 +20,7 @@ import {
   deriveEstatePda,
   deriveCraftedEquipmentPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import { CraftableEquipment, QualityTier } from '../types/enums';
 
 // Initialize Crafted Equipment
@@ -104,7 +104,7 @@ export async function createStartCraftInstruction(
   const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
   const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

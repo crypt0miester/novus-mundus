@@ -23,7 +23,7 @@ import { deriveNoviMintPda } from '../../../src/pda';
 
 export async function showMint(_client: unknown, ctx: CLIContext): Promise<void> {
   const conn: Connection = ctx.connection;
-  const [mintPda] = deriveNoviMintPda();
+  const [mintPda] = await deriveNoviMintPda();
 
   const accountInfo = await conn.getAccountInfo(mintPda);
   if (!accountInfo) {
@@ -35,7 +35,7 @@ export async function showMint(_client: unknown, ctx: CLIContext): Promise<void>
     return;
   }
 
-  const buf = accountInfo.data;
+  const buf = Buffer.from(accountInfo.data);
   const supply = buf.readBigUInt64LE(36);
   const decimals = buf.readUInt8(44);
   const isInitialized = buf.readUInt8(45) === 1;

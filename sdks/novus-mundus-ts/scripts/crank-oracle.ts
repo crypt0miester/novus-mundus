@@ -109,17 +109,18 @@ function ixData(discriminant: number, tail: number[] = []): Buffer {
   return buf;
 }
 
-const deriveShopConfig = (gameEngine: PublicKey): PublicKey =>
-  PublicKey.findProgramAddressSync(
-    [SHOP_CONFIG_SEED, gameEngine.toBuffer()],
+// PDA derivation is async under the v3 seam (and PublicKey has .toBytes(), not .toBuffer()).
+const deriveShopConfig = async (gameEngine: PublicKey): Promise<PublicKey> =>
+  (await PublicKey.findProgramAddress(
+    [SHOP_CONFIG_SEED, gameEngine.toBytes()],
     NOVUS_PROGRAM_ID
-  )[0];
+  ))[0];
 
-const deriveOracleQuote = (queue: PublicKey): PublicKey =>
-  PublicKey.findProgramAddressSync(
-    [ORACLE_QUOTE_SEED, queue.toBuffer()],
+const deriveOracleQuote = async (queue: PublicKey): Promise<PublicKey> =>
+  (await PublicKey.findProgramAddress(
+    [ORACLE_QUOTE_SEED, queue.toBytes()],
     NOVUS_PROGRAM_ID
-  )[0];
+  ))[0];
 
 /**
  * Build the `crank_oracle_quote` instruction (ix 302).
@@ -158,8 +159,8 @@ export async function crankOnce(
   simulate: boolean
 ): Promise<void> {
   const { connection, keypair, crossbar, queue } = env;
-  const shopConfig = deriveShopConfig(gameEngine);
-  const oracleQuote = deriveOracleQuote(queue.pubkey);
+  const shopConfig = await deriveShopConfig(gameEngine);
+  const oracleQuote = await deriveOracleQuote(queue.pubkey);
 
   const quoteInfo = await connection.getAccountInfo(oracleQuote);
   if (!quoteInfo) {

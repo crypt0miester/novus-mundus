@@ -15,7 +15,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -46,17 +45,17 @@ export interface SendReinforcementAccounts {
 
 export interface SendReinforcementParams {
   /** Defensive unit tier 1 to send */
-  defensiveUnit1: BN | number | bigint;
+  defensiveUnit1: number | bigint;
   /** Defensive unit tier 2 to send */
-  defensiveUnit2: BN | number | bigint;
+  defensiveUnit2: number | bigint;
   /** Defensive unit tier 3 to send */
-  defensiveUnit3: BN | number | bigint;
+  defensiveUnit3: number | bigint;
   /** Melee weapons to send */
-  meleeWeapons: BN | number | bigint;
+  meleeWeapons: number | bigint;
   /** Ranged weapons to send */
-  rangedWeapons: BN | number | bigint;
+  rangedWeapons: number | bigint;
   /** Siege weapons to send */
-  siegeWeapons: BN | number | bigint;
+  siegeWeapons: number | bigint;
   /** Hero slot to send (0-2), or 255 for no hero */
   heroSlot: number;
 }
@@ -91,16 +90,16 @@ export interface SendReinforcementParams {
  * - hero_slot: u8 (1)
  * - team_id: u64 (8)
  */
-export function createSendReinforcementInstruction(
+export async function createSendReinforcementInstruction(
   accounts: SendReinforcementAccounts,
   params: SendReinforcementParams
-): TransactionInstruction {
-  const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [destinationPlayer] = derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
-  const [senderCity] = deriveCityPda(accounts.gameEngine, accounts.senderCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
-  const [team] = deriveTeamPda(accounts.gameEngine, accounts.teamId);
+): Promise<TransactionInstruction> {
+  const [senderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.sender);
+  const [destinationPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
+  const [senderCity] = await deriveCityPda(accounts.gameEngine, accounts.senderCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+  const [team] = await deriveTeamPda(accounts.gameEngine, accounts.teamId);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: true },
@@ -219,13 +218,13 @@ export interface RecallReinforcementAccounts {
  *
  * On-chain data: None
  */
-export function createRecallReinforcementInstruction(
+export async function createRecallReinforcementInstruction(
   accounts: RecallReinforcementAccounts
-): TransactionInstruction {
-  const [destinationPlayer] = derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
-  const [senderCity] = deriveCityPda(accounts.gameEngine, accounts.senderCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+): Promise<TransactionInstruction> {
+  const [destinationPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
+  const [senderCity] = await deriveCityPda(accounts.gameEngine, accounts.senderCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: false },
@@ -278,13 +277,13 @@ export interface RelieveReinforcementAccounts {
  *
  * On-chain data: None
  */
-export function createRelieveReinforcementInstruction(
+export async function createRelieveReinforcementInstruction(
   accounts: RelieveReinforcementAccounts
-): TransactionInstruction {
-  const [destinationPlayer] = derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.senderOwner, accounts.destinationOwner);
-  const [senderCity] = deriveCityPda(accounts.gameEngine, accounts.senderCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+): Promise<TransactionInstruction> {
+  const [destinationPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.destinationOwner);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.senderOwner, accounts.destinationOwner);
+  const [senderCity] = await deriveCityPda(accounts.gameEngine, accounts.senderCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
 
   const keys = [
     { pubkey: accounts.destinationOwner, isSigner: true, isWritable: false },
@@ -388,12 +387,12 @@ export interface ReinforcementSpeedupParams {
  * On-chain data (1 byte):
  * - speedup_tier: u8
  */
-export function createReinforcementSpeedupInstruction(
+export async function createReinforcementSpeedupInstruction(
   accounts: ReinforcementSpeedupAccounts,
   params: ReinforcementSpeedupParams
-): TransactionInstruction {
-  const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [reinforcement] = deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
+): Promise<TransactionInstruction> {
+  const [senderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.sender);
+  const [reinforcement] = await deriveReinforcementPda(accounts.gameEngine, accounts.sender, accounts.destinationOwner);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: false },

@@ -10,7 +10,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { BuildingType } from '../types/enums';
 
@@ -31,9 +30,9 @@ export interface BuildingSlot {
   level: number;
   masteryLevel: number;
   masteryXp: number;
-  constructionStarted: BN;
-  constructionEnds: BN;
-  totalNoviInvested: BN;
+  constructionStarted: bigint;
+  constructionEnds: bigint;
+  totalNoviInvested: bigint;
 }
 
 // Estate Account Interface
@@ -72,7 +71,7 @@ export interface EstateAccount {
   longestLoginStreak: number;
   permanentBonusBps: number;
   dailyDate: number;
-  dawnTimestamp: BN;
+  dawnTimestamp: bigint;
   windowsCompleted: number;
   dawnBuildings: number;
   middayBuildings: number;
@@ -88,8 +87,8 @@ export interface EstateAccount {
   citadelStance: number;
 
   // Timestamps
-  createdAt: BN;
-  lastActivity: BN;
+  createdAt: bigint;
+  lastActivity: bigint;
 
   // Daily buffs from expansion buildings
   campDiscountBps: number;
@@ -153,7 +152,7 @@ export function deserializeBuildingSlot(reader: BufferReader): BuildingSlot {
 }
 
 /** Deserialize EstateAccount from raw bytes */
-export function deserializeEstate(data: Uint8Array | Buffer): EstateAccount {
+export function deserializeEstate(data: Uint8Array): EstateAccount {
   const reader = new BufferReader(data);
 
   // offset 0: account_key (u8)
@@ -327,7 +326,7 @@ export function deserializeEstate(data: Uint8Array | Buffer): EstateAccount {
 // Parse Functions
 
 /** Parse EstateAccount from account info */
-export function parseEstate(accountInfo: AccountInfo<Buffer>): EstateAccount | null {
+export function parseEstate(accountInfo: AccountInfo<Uint8Array>): EstateAccount | null {
   if (!accountInfo.data || accountInfo.data.length < ESTATE_HEADER_SIZE) {
     return null;
   }
@@ -357,7 +356,7 @@ export function hasBuildingAtLevel(estate: EstateAccount, buildingType: Building
 /** Check if a building slot's construction is complete */
 export function isBuildingConstructionComplete(building: BuildingSlot, nowSeconds: number): boolean {
   return (building.status === BuildingStatus.Building || building.status === BuildingStatus.Upgrading) &&
-    nowSeconds >= building.constructionEnds.toNumber();
+    nowSeconds >= Number(building.constructionEnds);
 }
 
 /** Get the number of empty building slots */

@@ -87,11 +87,12 @@ export function NoviView() {
   const handlePurchaseNovi = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !gameEngine || effectivePackage == null) throw new Error("Not ready");
     const noviConfig = gameEngine.noviPurchaseConfig;
-    const maxLamports = noviConfig.noviBasePriceLamports
-      .muln(noviConfig.noviPurchaseAmounts[effectivePackage].toNumber())
-      .muln(15)
-      .divn(10);
-    const ix = createPurchaseNoviInstruction(
+    const maxLamports =
+      (noviConfig.noviBasePriceLamports *
+        noviConfig.noviPurchaseAmounts[effectivePackage]! *
+        15n) /
+      10n;
+    const ix = await createPurchaseNoviInstruction(
       {
         buyer: publicKey,
         gameEngine: ge,
@@ -100,7 +101,7 @@ export function NoviView() {
       },
       { packageIndex: effectivePackage, maxLamports },
     );
-    const amount = noviConfig.noviPurchaseAmounts[effectivePackage].toNumber() / 10;
+    const amount = Number(noviConfig.noviPurchaseAmounts[effectivePackage]!) / 10;
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -113,7 +114,7 @@ export function NoviView() {
 
   const morphActions = useMemo<PanelAction[] | null>(() => {
     if (selectedPackage != null) {
-      const limitReached = dailyAllowance?.eqn(0) ?? false;
+      const limitReached = dailyAllowance === 0n;
       return [
         {
           id: `buy-novi-${selectedPackage}`,
@@ -169,13 +170,13 @@ export function NoviView() {
               )}
             </div>
           )}
-          {dailyAllowance && (
+          {dailyAllowance !== null && (
             <div className="flex items-center gap-2">
               <span className="text-text-muted">Daily limit:</span>
               <span
-                className={`text-sm font-semibold ${dailyAllowance.eqn(0) ? "text-red-400" : "text-text-gold"}`}
+                className={`text-sm font-semibold ${dailyAllowance === 0n ? "text-red-400" : "text-text-gold"}`}
               >
-                {dailyAllowance.eqn(0)
+                {dailyAllowance === 0n
                   ? "Reached"
                   : `${formatNoviAmount(dailyAllowance)} NOVI left`}
               </span>
@@ -194,7 +195,7 @@ export function NoviView() {
             <div ref={gridRef} className="grid gap-2 grid-cols-3 md:grid-cols-5">
               {gameEngine.noviPurchaseConfig.noviPurchaseAmounts.map((amount, idx) => {
                 const tierInfo = NOVI_PACKAGE_TIERS[idx];
-                const noviAmount = amount.toNumber() / 10;
+                const noviAmount = Number(amount) / 10;
                 const bonusBps = gameEngine.noviPurchaseConfig.noviBulkBonusBps[idx] ?? 0;
                 const isSelected = effectivePackage === idx;
                 return (
@@ -255,7 +256,7 @@ export function NoviView() {
                     {formatNoviAmount(noviPreview.baseAmount)} NOVI
                   </span>
                 </div>
-                {!noviPreview.bulkBonus.eqn(0) && (
+                {noviPreview.bulkBonus !== 0n && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-500">Bulk bonus</span>
                     <span className="text-text-gold">
@@ -263,7 +264,7 @@ export function NoviView() {
                     </span>
                   </div>
                 )}
-                {!noviPreview.subscriptionBonus.eqn(0) && (
+                {noviPreview.subscriptionBonus !== 0n && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-500">Subscription bonus</span>
                     <span className="text-text-gold">
@@ -271,7 +272,7 @@ export function NoviView() {
                     </span>
                   </div>
                 )}
-                {!noviPreview.streakBonus.eqn(0) && (
+                {noviPreview.streakBonus !== 0n && (
                   <div className="flex items-center justify-between text-xs">
                     <span className="text-zinc-500">Streak (Day {streakInfo?.streakDay ?? 1})</span>
                     <span className="text-text-gold">
@@ -308,16 +309,16 @@ export function NoviView() {
             )}
 
             <div className="text-[10px] text-text-muted">
-              Base: {lamportsToSol(gameEngine.noviPurchaseConfig.noviBasePriceLamports.toNumber())}{" "}
+              Base: {lamportsToSol(Number(gameEngine.noviPurchaseConfig.noviBasePriceLamports))}{" "}
               SOL/NOVI
             </div>
 
             <TxButton
               onClick={handlePurchaseNovi}
               className="hidden w-full lg:block"
-              disabled={dailyAllowance?.eqn(0) ?? false}
+              disabled={dailyAllowance === 0n}
             >
-              {dailyAllowance?.eqn(0)
+              {dailyAllowance === 0n
                 ? "Daily limit reached"
                 : `Buy ${noviPreview ? formatNoviAmount(noviPreview.totalNovi) : "NOVI"}`}
             </TxButton>

@@ -6,7 +6,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Research Template Interface
@@ -16,7 +15,7 @@ export interface ResearchTemplateAccount {
   category: number;
   maxLevel: number;
   baseTimeSeconds: number;
-  baseNoviCost: BN;
+  baseNoviCost: bigint;
   buffType: number;
   buffPerLevelBps: number;
   prerequisiteResearch: number;
@@ -34,11 +33,11 @@ export interface ResearchProgressAccount {
   player: PublicKey;
   currentResearch: number;
   currentLevel: number;
-  startedAt: BN;
-  completesAt: BN;
+  startedAt: bigint;
+  completesAt: bigint;
   completedLevels: number[];
-  totalGemsSpent: BN;
-  totalNoviSpent: BN;
+  totalGemsSpent: bigint;
+  totalNoviSpent: bigint;
   buffCacheVersion: number;
 
   // Economy Research Buffs
@@ -71,7 +70,7 @@ export const RESEARCH_PROGRESS_SIZE = 144;
 // Deserialization
 
 /** Deserialize ResearchTemplate from raw bytes */
-export function deserializeResearchTemplate(data: Uint8Array | Buffer): ResearchTemplateAccount {
+export function deserializeResearchTemplate(data: Uint8Array): ResearchTemplateAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -105,7 +104,7 @@ export function deserializeResearchTemplate(data: Uint8Array | Buffer): Research
 }
 
 /** Deserialize ResearchProgress from raw bytes */
-export function deserializeResearchProgress(data: Uint8Array | Buffer): ResearchProgressAccount {
+export function deserializeResearchProgress(data: Uint8Array): ResearchProgressAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -184,7 +183,7 @@ export function deserializeResearchProgress(data: Uint8Array | Buffer): Research
 // Parse Functions
 
 /** Parse ResearchTemplate from account info */
-export function parseResearchTemplate(accountInfo: AccountInfo<Buffer>): ResearchTemplateAccount | null {
+export function parseResearchTemplate(accountInfo: AccountInfo<Uint8Array>): ResearchTemplateAccount | null {
   if (!accountInfo.data || accountInfo.data.length < RESEARCH_TEMPLATE_SIZE) {
     return null;
   }
@@ -192,7 +191,7 @@ export function parseResearchTemplate(accountInfo: AccountInfo<Buffer>): Researc
 }
 
 /** Parse ResearchProgress from account info */
-export function parseResearchProgress(accountInfo: AccountInfo<Buffer>): ResearchProgressAccount | null {
+export function parseResearchProgress(accountInfo: AccountInfo<Uint8Array>): ResearchProgressAccount | null {
   if (!accountInfo.data || accountInfo.data.length < RESEARCH_PROGRESS_SIZE) {
     return null;
   }
@@ -208,7 +207,7 @@ export function isResearching(progress: ResearchProgressAccount): boolean {
 
 /** Check if research is complete and ready to claim */
 export function isResearchComplete(progress: ResearchProgressAccount, nowSeconds: number): boolean {
-  return isResearching(progress) && nowSeconds >= progress.completesAt.toNumber();
+  return isResearching(progress) && nowSeconds >= Number(progress.completesAt);
 }
 
 /** Get level of a specific research node */

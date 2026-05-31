@@ -102,7 +102,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createUpdateLockedNoviInstruction({
+    const ix = await createUpdateLockedNoviInstruction({
       owner: publicKey,
       gameEngine: client.gameEngine,
     });

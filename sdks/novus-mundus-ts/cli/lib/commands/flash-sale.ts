@@ -2,13 +2,11 @@
  * `novus flash-sale <create|close|activate|list>` — flash sale management
  */
 
-import BN from 'bn.js';
 import { type CLIContext, type ParsedArgs } from '../context';
 import { log, sendWithRetry } from '../helpers';
 import {
   createCreateFlashSaleInstruction,
   createCloseSaleInstruction,
-  createActivateSaleInstruction,
   deriveFlashSalePda,
   deriveShopConfigPda,
   parseShopConfig,
@@ -43,7 +41,7 @@ function requireFlag(flags: string[], name: string): string {
 }
 
 async function getNextFlashSaleId(ctx: CLIContext): Promise<number> {
-  const [configPda] = deriveShopConfigPda(ctx.gameEngine);
+  const [configPda] = await deriveShopConfigPda(ctx.gameEngine);
   const configInfo = await ctx.connection.getAccountInfo(configPda);
   if (!configInfo) {
     throw new Error('ShopConfig not found — run `novus init shop` first');
@@ -52,7 +50,7 @@ async function getNextFlashSaleId(ctx: CLIContext): Promise<number> {
   if (!config) {
     throw new Error('Failed to parse ShopConfig');
   }
-  return config.nextFlashSaleId.toNumber();
+  return Number(config.nextFlashSaleId);
 }
 
 async function handleCreate(ctx: CLIContext, flags: string[]): Promise<void> {
@@ -96,9 +94,9 @@ async function handleCreate(ctx: CLIContext, flags: string[]): Promise<void> {
       itemId,
       isBundle,
       discountBps,
-      startsAt: new BN(startsAt),
+      startsAt: BigInt(startsAt),
       durationSecs,
-      maxStock: new BN(maxStock),
+      maxStock: BigInt(maxStock),
     }
   );
 
@@ -116,35 +114,27 @@ async function handleClose(ctx: CLIContext, flags: string[]): Promise<void> {
     return;
   }
 
-  const ix = createCloseSaleInstruction({
-    rentRecipient: ctx.daoAuthority.publicKey,
-    daoAuthority: ctx.daoAuthority.publicKey,
-    gameEngine: ctx.gameEngine,
-    saleId,
-  });
+  // CloseSaleParams is a tagged union; saleType 0 is the flash-sale-by-id case.
+  const ix = createCloseSaleInstruction(
+    {
+      authority: ctx.daoAuthority.publicKey,
+      gameEngine: ctx.gameEngine,
+      rentRecipient: ctx.daoAuthority.publicKey,
+    },
+    { saleType: 0, saleId },
+  );
 
   await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
   log.info(`  + Closed flash sale #${saleId}`);
 }
 
-async function handleActivate(ctx: CLIContext, flags: string[]): Promise<void> {
+async function handleActivate(_ctx: CLIContext, flags: string[]): Promise<void> {
   const saleId = parseInt(requireFlag(flags, '--sale-id'), 10);
-
-  log.info(`Activating flash sale #${saleId}`);
-
-  if (ctx.dryRun) {
-    log.dryRun(`Would activate flash sale #${saleId}`);
-    return;
-  }
-
-  const ix = createActivateSaleInstruction({
-    daoAuthority: ctx.daoAuthority.publicKey,
-    gameEngine: ctx.gameEngine,
-    saleId,
-  });
-
-  await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-  log.info(`  + Activated flash sale #${saleId}`);
+  // Flash sales are created already active (createFlashSale defaults isActive=true),
+  // and the on-chain activate_sale instruction now targets only seasonal /
+  // DAO-promotion sales — there is no longer an activate-by-flash-sale-id path.
+  log.info(`Flash sale #${saleId} is active on creation — no separate activation step.`);
+  log.info('  (activate_sale now applies only to seasonal / DAO-promotion sales.)');
 }
 
 async function handleList(ctx: CLIContext): Promise<void> {
@@ -159,7 +149,7 @@ async function handleList(ctx: CLIContext): Promise<void> {
 
   const rows: string[][] = [];
   for (let id = 0; id < nextId; id++) {
-    const [pda] = deriveFlashSalePda(ctx.gameEngine, id);
+    const [pda] = await deriveFlashSalePda(ctx.gameEngine, id);
     const info = await ctx.connection.getAccountInfo(pda);
 
     if (!info) {
@@ -181,8 +171,8 @@ async function handleList(ctx: CLIContext): Promise<void> {
       statusColored,
       sale.isBundle ? `B#${sale.itemId}` : `I#${sale.itemId}`,
       `${sale.discountBps} bps`,
-      new Date(sale.startsAt.toNumber() * 1000).toISOString().slice(0, 19),
-      new Date(sale.endsAt.toNumber() * 1000).toISOString().slice(0, 19),
+      new Date(Number(sale.startsAt) * 1000).toISOString().slice(0, 19),
+      new Date(Number(sale.endsAt) * 1000).toISOString().slice(0, 19),
       `${formatNum(sale.remainingStock)}/${formatNum(sale.maxStock)}`,
       formatNum(sale.totalClaims),
     ]);

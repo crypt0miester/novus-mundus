@@ -5,9 +5,11 @@
 import {
   ComputeBudgetProgram,
   Keypair,
+  PublicKey,
+  SystemProgram,
   Transaction,
+  TransactionInstruction,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -41,14 +43,39 @@ import {
   deriveEstatePda,
   deriveCityPda,
   deriveNoviMintPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
+  ASSOCIATED_TOKEN_PROGRAM_ID,
+  SPL_TOKEN_PROGRAM_ID,
   biomeKnobsFromCity,
   parseCity,
   pickSpawn,
   type CityForSpawn,
   BuildingType,
 } from '../../../src/index';
-import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
+
+// Idempotent "create ATA" instruction, built inline from the seam's primitives.
+// The v1 `@solana/spl-token` lib is incompatible with the web3.js-v3 seam
+// (its PublicKey has no `.toBuffer()`), and the SDK itself is already
+// spl-token-free — so we mirror the ATA program's CreateIdempotent (data `[1]`).
+function createAtaIdempotentIx(
+  payer: PublicKey,
+  ata: PublicKey,
+  owner: PublicKey,
+  mint: PublicKey,
+): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: ASSOCIATED_TOKEN_PROGRAM_ID,
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: false, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+    ],
+    data: Buffer.from([1]),
+  });
+}
 
 // Gem shop item created by `novus init` (100 gems per purchase)
 const GEMS_ITEM_ID = 1;
@@ -104,15 +131,15 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
     }
 
     const keypairPath = path.join(keysDir, `player-${playerIndex}.json`);
-    const playerKeypair = loadKeypair(keypairPath);
+    const playerKeypair = await loadKeypair(keypairPath);
 
     // Airdrop SOL on localnet
     if (ctx.env === 'localnet') {
       await ensureFunded(ctx.connection, playerKeypair.publicKey).catch(() => {});
     }
 
-    const [playerPda] = derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
-    const [estatePda] = deriveEstatePda(playerPda);
+    const [playerPda] = await derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
+    const [estatePda] = await deriveEstatePda(playerPda);
 
     // Step 1: Init user + player + research progress
     await initPlayer(ctx, playerKeypair, cityForSpawn);
@@ -196,7 +223,7 @@ async function loadCityForSpawn(
   const hit = cache.get(cityId);
   if (hit) return hit;
 
-  const [cityPda] = deriveCityPda(ctx.gameEngine, cityId);
+  const [cityPda] = await deriveCityPda(ctx.gameEngine, cityId);
   const info = await ctx.connection.getAccountInfo(cityPda);
   if (!info) return null;
   const city = parseCity(info);
@@ -221,7 +248,7 @@ async function initPlayer(
   keypair: Keypair,
   city: CityForSpawn,
 ): Promise<void> {
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
 
   if (await accountExists(ctx.connection, playerPda)) {
     log.skip('initPlayer [exists]');
@@ -259,8 +286,8 @@ async function createEstateAndBuyGems(
   keypair: Keypair,
   gemPurchases: number,
 ): Promise<void> {
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
-  const [estatePda] = deriveEstatePda(playerPda);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+  const [estatePda] = await deriveEstatePda(playerPda);
 
   if (await accountExists(ctx.connection, estatePda)) {
     log.skip('estate [exists]');
@@ -466,9 +493,9 @@ async function fundNovi(
   /* External mints land in the wallet ATA, which must exist before the
    * SPL Token MintTo CPI fires. Idempotent so re-funding is safe. */
   if (purposes.some((p) => isExternal(p.purpose))) {
-    const [noviMint] = deriveNoviMintPda();
-    const walletAta = getAssociatedTokenAddressSync(noviMint, keypair.publicKey);
-    const ataPrep = createAssociatedTokenAccountIdempotentInstruction(
+    const [noviMint] = await deriveNoviMintPda();
+    const walletAta = await getAssociatedTokenAddressAsync(noviMint, keypair.publicKey);
+    const ataPrep = createAtaIdempotentIx(
       ctx.daoAuthority.publicKey,
       walletAta,
       keypair.publicKey,
@@ -491,7 +518,7 @@ async function fundNovi(
           gameEngine: ctx.gameEngine,
           recipientOwner: keypair.publicKey,
         },
-        { amount: new BN(thisAmount), purpose }
+        { amount: BigInt(thisAmount), purpose }
       );
       await sendWithRetry(ctx, mintIx, [ctx.daoAuthority]);
 
@@ -505,7 +532,7 @@ async function fundNovi(
         toConvert = thisAmount - fee;
         const depositIx = createDepositNoviInstruction(
           { owner: keypair.publicKey },
-          { amount: new BN(thisAmount) },
+          { amount: BigInt(thisAmount) },
         );
         await sendWithRetry(ctx, depositIx, [keypair]);
       }
@@ -513,7 +540,7 @@ async function fundNovi(
       // Convert reserved -> locked (player signs)
       const convertIx = createReservedToLockedInstruction(
         { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-        { amount: new BN(toConvert) }
+        { amount: BigInt(toConvert) }
       );
       await sendWithRetry(ctx, convertIx, [keypair]);
 
@@ -559,7 +586,7 @@ async function hireUnits(
 ): Promise<void> {
   const ix = createHireUnitsInstruction(
     { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-    { unitType, noviAmount: new BN(noviAmount) }
+    { unitType, noviAmount: BigInt(noviAmount) }
   );
   await sendWithRetry(ctx, ix, [keypair]);
   log.create(`units type=${unitType} (${noviAmount} NOVI)`);
@@ -575,7 +602,7 @@ async function purchaseEquipment(
 ): Promise<void> {
   const ix = createPurchaseEquipmentInstruction(
     { owner: keypair.publicKey, gameEngine: ctx.gameEngine },
-    { equipmentType, quantity: new BN(quantity), payWithCash: false }
+    { equipmentType, quantity: BigInt(quantity), payWithCash: false }
   );
   await sendWithRetry(ctx, ix, [keypair]);
   log.create(`equipment type=${equipmentType} qty=${quantity}`);
@@ -601,7 +628,7 @@ async function doResearch(
       // Speedup to completion (0 = complete all remaining)
       const speedupIx = createSpeedUpResearchInstruction(
         { gameEngine: ctx.gameEngine, owner: keypair.publicKey, researchType: r.type },
-        { speedUpSeconds: new BN(0) }
+        { speedUpSeconds: BigInt(0) }
       );
       await sendWithRetry(ctx, speedupIx, [keypair]);
 

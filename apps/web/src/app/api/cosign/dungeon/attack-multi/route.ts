@@ -38,11 +38,12 @@ export async function POST(req: Request) {
 
   const rolls = rollDungeonAttack(run, template);
 
-  const ix = createAttackMultiInstruction(
+  const gameAuthority = await gameAuthorityKeypair();
+  const ix = await createAttackMultiInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: gameAuthority.publicKey,
     },
     {
       templateId: run.dungeonId,

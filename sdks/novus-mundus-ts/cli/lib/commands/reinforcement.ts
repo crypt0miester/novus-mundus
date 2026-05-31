@@ -19,7 +19,6 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import type { CLIContext, ParsedArgs } from '../context';
 import { loadKeypair } from '../context';
@@ -151,7 +150,7 @@ async function handleList(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // send
 
 async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the sender keypair as the third argument');
     log.info('  novus reinforcement send <senderKeypair> --to <receiverWallet> --units a,b,c [--weapons m,r,s]');
@@ -220,18 +219,18 @@ async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       teamId,
     },
     {
-      defensiveUnit1: new BN(units[0]),
-      defensiveUnit2: new BN(units[1]),
-      defensiveUnit3: new BN(units[2]),
-      meleeWeapons: new BN(weapons[0]),
-      rangedWeapons: new BN(weapons[1]),
-      siegeWeapons: new BN(weapons[2]),
+      defensiveUnit1: BigInt(units[0]),
+      defensiveUnit2: BigInt(units[1]),
+      defensiveUnit3: BigInt(units[2]),
+      meleeWeapons: BigInt(weapons[0]),
+      rangedWeapons: BigInt(weapons[1]),
+      siegeWeapons: BigInt(weapons[2]),
       heroSlot: 255,
     },
   );
 
   await sendWithRetry(ctx, ix, [kp], { computeUnits: 40_000 });
-  const [reinfPda] = deriveReinforcementPda(ctx.gameEngine, kp.publicKey, receiver);
+  const [reinfPda] = await deriveReinforcementPda(ctx.gameEngine, kp.publicKey, receiver);
   const sameCity = sender.currentCity === dest.currentCity;
   log.create(`Reinforcement ${addr(reinfPda)} → ${addr(receiver)} (${cityName(dest.currentCity)})`);
   log.info(`  Committed: ${units.join('/')} units, ${weapons.join('/')} weapons`);
@@ -249,8 +248,8 @@ async function handleArrive(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   if (!pair) return;
   const { sender, receiver } = pair;
 
-  const [reinforcement] = deriveReinforcementPda(ctx.gameEngine, sender, receiver);
-  const [destinationPlayer] = derivePlayerPda(ctx.gameEngine, receiver);
+  const [reinforcement] = await deriveReinforcementPda(ctx.gameEngine, sender, receiver);
+  const [destinationPlayer] = await derivePlayerPda(ctx.gameEngine, receiver);
 
   const ix = createProcessArrivalInstruction({ reinforcement, destinationPlayer });
   await sendWithRetry(ctx, ix, [ctx.daoAuthority], { computeUnits: 20_000 });
@@ -260,7 +259,7 @@ async function handleArrive(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // recall (sender sends their troops home)
 
 async function handleRecall(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the sender keypair as the third argument');
     log.info('  novus reinforcement recall <senderKeypair> --to <receiverWallet>');
@@ -301,7 +300,7 @@ async function handleRecall(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // relieve (receiver sends the troops back)
 
 async function handleRelieve(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the receiver keypair as the third argument');
     log.info('  novus reinforcement relieve <receiverKeypair> --sender <senderWallet>');
@@ -347,9 +346,9 @@ async function handleReturn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   if (!pair) return;
   const { sender, receiver } = pair;
 
-  const [reinforcement] = deriveReinforcementPda(ctx.gameEngine, sender, receiver);
-  const [senderPlayer] = derivePlayerPda(ctx.gameEngine, sender);
-  const [estateAccount] = deriveEstatePda(senderPlayer);
+  const [reinforcement] = await deriveReinforcementPda(ctx.gameEngine, sender, receiver);
+  const [senderPlayer] = await derivePlayerPda(ctx.gameEngine, sender);
+  const [estateAccount] = await deriveEstatePda(senderPlayer);
 
   const ix = createProcessReturnInstruction({
     reinforcement,
@@ -364,7 +363,7 @@ async function handleReturn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // speedup (sender collapses outbound/return travel with gems)
 
 async function handleSpeedup(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = resolveKeypair(args.extra);
+  const kp = await resolveKeypair(args.extra);
   if (!kp) {
     log.error('Specify the sender keypair as the third argument');
     log.info('  novus reinforcement speedup <senderKeypair> --to <receiverWallet> [--tier <1|2>] [--repeat <n>]');
@@ -418,7 +417,7 @@ function newClient(ctx: CLIContext): NovusMundusClient {
 }
 
 async function loadPlayer(ctx: CLIContext, wallet: PublicKey) {
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, wallet);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, wallet);
   const info = await ctx.connection.getAccountInfo(playerPda);
   if (!info) return null;
   try {
@@ -447,13 +446,13 @@ function resolvePair(args: ParsedArgs): { sender: PublicKey; receiver: PublicKey
 async function resolveTeamId(client: NovusMundusClient, teamPda: PublicKey): Promise<number | null> {
   const teams = await client.fetchAllTeams();
   const hit = teams.find((t) => t.pubkey.equals(teamPda));
-  return hit ? hit.account.id.toNumber() : null;
+  return hit ? Number(hit.account.id) : null;
 }
 
-function resolveKeypair(extra: string) {
+async function resolveKeypair(extra: string) {
   if (!extra || looksLikePubkey(extra)) return null;
   try {
-    return loadKeypair(extra);
+    return await loadKeypair(extra);
   } catch {
     return null;
   }

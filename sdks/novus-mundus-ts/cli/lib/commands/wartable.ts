@@ -53,7 +53,7 @@ const KIND_NAMES = ['Text', 'Status', 'System', 'Reply', 'Tombstone', 'Reaction'
  * Resolve `--as` to a signing Keypair: a path (absolute or relative to cwd), or
  * a player name / file under keys/players/ (the create-player output dir).
  */
-function loadKeypairFromArg(asValue: string): Keypair {
+async function loadKeypairFromArg(asValue: string): Promise<Keypair> {
   const playersDir = path.join(__dirname, '../../../keys/players');
   const candidates = [
     asValue,
@@ -64,7 +64,7 @@ function loadKeypairFromArg(asValue: string): Keypair {
     try {
       if (fs.existsSync(p)) {
         const secret = JSON.parse(fs.readFileSync(p, 'utf8'));
-        return Keypair.fromSecretKey(Uint8Array.from(secret));
+        return await Keypair.fromSecretKey(Uint8Array.from(secret));
       }
     } catch {
       // try the next candidate
@@ -74,11 +74,11 @@ function loadKeypairFromArg(asValue: string): Keypair {
 }
 
 /** Resolve `--as` to a wallet pubkey: a base58 pubkey, or a keypair file's pubkey. */
-function loadIdentityPubkey(asValue: string): PublicKey {
+async function loadIdentityPubkey(asValue: string): Promise<PublicKey> {
   try {
     return new PublicKey(asValue);
   } catch {
-    return loadKeypairFromArg(asValue).publicKey;
+    return (await loadKeypairFromArg(asValue)).publicKey;
   }
 }
 
@@ -150,7 +150,7 @@ async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   }
   let kp: Keypair;
   try {
-    kp = loadKeypairFromArg(asFlag);
+    kp = await loadKeypairFromArg(asFlag);
   } catch (e) {
     log.error((e as Error).message);
     return;
@@ -191,7 +191,7 @@ async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   }
 
   const sender = kp.publicKey;
-  const [senderPlayer] = derivePlayerPda(ctx.gameEngine, sender);
+  const [senderPlayer] = await derivePlayerPda(ctx.gameEngine, sender);
 
   // Resolve the target thread + scope + on-chain gate accounts from the flags.
   let scope: WtScope;
@@ -223,8 +223,8 @@ async function handleSend(ctx: CLIContext, args: ParsedArgs): Promise<void> {
       log.error('--to must be a base58 wallet pubkey');
       return;
     }
-    const [peerPlayer] = derivePlayerPda(ctx.gameEngine, peerWallet);
-    [thread] = deriveDmThreadPda(senderPlayer, peerPlayer);
+    const [peerPlayer] = await derivePlayerPda(ctx.gameEngine, peerWallet);
+    [thread] = await deriveDmThreadPda(senderPlayer, peerPlayer);
     scope = WtScope.Dm;
     gateAccounts = [senderPlayer, peerPlayer];
   } else if (encounterFlag) {
@@ -299,12 +299,12 @@ async function handleRead(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     }
     let identity: PublicKey;
     try {
-      identity = loadIdentityPubkey(asFlag);
+      identity = await loadIdentityPubkey(asFlag);
     } catch (e) {
       log.error((e as Error).message);
       return;
     }
-    const [myPlayer] = derivePlayerPda(ctx.gameEngine, identity);
+    const [myPlayer] = await derivePlayerPda(ctx.gameEngine, identity);
     if (teamMode) {
       const info = await ctx.connection.getAccountInfo(myPlayer);
       const player = info ? parsePlayer(info) : null;
@@ -322,8 +322,8 @@ async function handleRead(ctx: CLIContext, args: ParsedArgs): Promise<void> {
         log.error('--to must be a base58 wallet pubkey');
         return;
       }
-      const [peerPlayer] = derivePlayerPda(ctx.gameEngine, peer);
-      [thread] = deriveDmThreadPda(myPlayer, peerPlayer);
+      const [peerPlayer] = await derivePlayerPda(ctx.gameEngine, peer);
+      [thread] = await deriveDmThreadPda(myPlayer, peerPlayer);
       scope = WtScope.Dm;
     }
   } else {
@@ -424,7 +424,7 @@ async function handleDmThreads(ctx: CLIContext, args: ParsedArgs): Promise<void>
     return;
   }
   const wallet = new PublicKey(walletStr);
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, wallet);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, wallet);
 
   const sigs = await ctx.connection.getSignaturesForAddress(playerPda, { limit: 1000 });
   const threads = new Map<string, { lastPreview: string }>();

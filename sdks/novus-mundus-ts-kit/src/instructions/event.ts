@@ -21,7 +21,7 @@ import {
   deriveEventPda,
   deriveEventParticipationPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Create Event (Admin)
 
@@ -295,7 +295,7 @@ export async function createClaimPrizeInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. payer (SIGNER, WRITE) - pays tx fees

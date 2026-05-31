@@ -56,8 +56,7 @@ export function ArenaTab() {
     // midnight even when the player still had 10 fresh battles in the
     // trailing 24h — chain would then reject TooManyBattles.
     const cutoff = Math.floor(Date.now() / 1000) - 86400;
-    return participant.battleTimestamps.filter((ts: any) => (ts?.toNumber?.() ?? ts) >= cutoff)
-      .length;
+    return participant.battleTimestamps.filter((ts) => Number(ts) >= cutoff).length;
   }, [participant]);
   const dailyBattlesRemaining = ARENA_MAX_DAILY_BATTLES - dailyBattlesUsed;
 
@@ -65,7 +64,7 @@ export function ArenaTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!season) throw new Error("Season not loaded yet");
     const ge = client.gameEngine;
-    const ix = createJoinSeasonInstruction({
+    const ix = await createJoinSeasonInstruction({
       owner: publicKey,
       gameEngine: ge,
       seasonAuthority: season.authority,
@@ -85,7 +84,7 @@ export function ArenaTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!season) throw new Error("Season not loaded yet");
     const ge = client.gameEngine;
-    const ix = createClaimArenaDailyRewardInstruction({
+    const ix = await createClaimArenaDailyRewardInstruction({
       playerOwner: publicKey,
       gameEngine: ge,
       seasonAuthority: season.authority,
@@ -105,7 +104,7 @@ export function ArenaTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!season) throw new Error("Season not loaded yet");
     const ge = client.gameEngine;
-    const ix = createClaimMasterRewardInstruction({
+    const ix = await createClaimMasterRewardInstruction({
       playerOwner: publicKey,
       gameEngine: ge,
       seasonAuthority: season.authority,
@@ -165,7 +164,7 @@ export function ArenaTab() {
           {season.endTime && (
             <div className="mt-2">
               <GoldCountdown
-                endsAt={season.endTime?.toNumber?.() ?? 0}
+                endsAt={Number(season.endTime ?? 0n)}
                 format="full"
                 label="Season Ends"
               />
@@ -252,23 +251,23 @@ export function ArenaTab() {
                 items={[
                   {
                     label: "Season Duration",
-                    value: formatTime(ac.seasonDuration.toNumber(), "compact"),
+                    value: formatTime(Number(ac.seasonDuration), "compact"),
                     highlight: true,
                   },
-                  { label: "Melee Power", value: ac.meleeWeaponPower.toNumber().toLocaleString() },
+                  { label: "Melee Power", value: Number(ac.meleeWeaponPower).toLocaleString() },
                   {
                     label: "Ranged Power",
-                    value: ac.rangedWeaponPower.toNumber().toLocaleString(),
+                    value: Number(ac.rangedWeaponPower).toLocaleString(),
                   },
-                  { label: "Siege Power", value: ac.siegeWeaponPower.toNumber().toLocaleString() },
-                  { label: "Armor Power", value: ac.armorPower.toNumber().toLocaleString() },
+                  { label: "Siege Power", value: Number(ac.siegeWeaponPower).toLocaleString() },
+                  { label: "Armor Power", value: Number(ac.armorPower).toLocaleString() },
                   { label: "Starting ELO", value: ac.startingElo.toLocaleString() },
                   { label: "ELO K-Factor", value: ac.eloKFactor.toString() },
-                  { label: "Win Points", value: ac.baseWinPoints.toNumber().toLocaleString() },
-                  { label: "Loss Points", value: ac.baseLossPoints.toNumber().toLocaleString() },
-                  { label: "Draw Points", value: ac.drawPoints.toNumber().toLocaleString() },
+                  { label: "Win Points", value: Number(ac.baseWinPoints).toLocaleString() },
+                  { label: "Loss Points", value: Number(ac.baseLossPoints).toLocaleString() },
+                  { label: "Draw Points", value: Number(ac.drawPoints).toLocaleString() },
                   { label: "Daily Battles", value: ac.maxDailyBattles.toString() },
-                  { label: "Underdog Bonus", value: bpsToPercent(ac.underdogBonusBps.toNumber()) },
+                  { label: "Underdog Bonus", value: bpsToPercent(Number(ac.underdogBonusBps)) },
                 ]}
               />
             </GameInfoPanel>

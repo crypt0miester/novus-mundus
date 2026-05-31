@@ -154,7 +154,7 @@ export function useDmInbox(): UseDmInboxResult {
             // is cached and surfaced.
             let derived: string;
             try {
-              derived = deriveDmThreadPda(myPda, new PublicKey(resolved))[0].toBase58();
+              derived = (await deriveDmThreadPda(myPda, new PublicKey(resolved)))[0].toBase58();
             } catch {
               return null;
             }

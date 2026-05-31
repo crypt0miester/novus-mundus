@@ -2,7 +2,6 @@
  * Phase 4 — Research Templates (30 nodes)
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import {
   accountExists,
@@ -34,7 +33,7 @@ import {
 function templateUpdateParams(t: ResearchTemplateData) {
   return {
     baseTimeSeconds: t.baseTimeSeconds,
-    baseCost: new BN(t.baseNoviCost),
+    baseCost: BigInt(t.baseNoviCost),
     buffPerLevelBps: t.buffPerLevelBps,
     gemCostPerMinute: t.gemCostPerMinute,
     isActive: t.isActive,
@@ -48,7 +47,7 @@ export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const template of RESEARCH_TEMPLATES) {
-    const [templatePda] = deriveResearchTemplatePda(template.researchType);
+    const [templatePda] = await deriveResearchTemplatePda(template.researchType);
 
     await createOrUpdate(
       ctx,
@@ -64,7 +63,7 @@ export async function initResearch(ctx: CLIContext): Promise<PhaseStats> {
           category: template.category,
           maxLevel: template.maxLevel,
           baseTimeSeconds: template.baseTimeSeconds,
-          baseCost: new BN(template.baseNoviCost),
+          baseCost: BigInt(template.baseNoviCost),
           buffType: template.buffType,
           buffPerLevelBps: template.buffPerLevelBps,
           prerequisiteType: template.prerequisiteResearch === 255 ? -1 : template.prerequisiteResearch,
@@ -91,7 +90,7 @@ export async function updateResearch(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const template of RESEARCH_TEMPLATES) {
-    const [templatePda] = deriveResearchTemplatePda(template.researchType);
+    const [templatePda] = await deriveResearchTemplatePda(template.researchType);
 
     await updateOnly(
       ctx,
@@ -115,7 +114,7 @@ export async function updateResearch(ctx: CLIContext): Promise<PhaseStats> {
 export async function statusResearch(ctx: CLIContext): Promise<string> {
   let count = 0;
   for (let id = 0; id < 30; id++) {
-    const [pda] = deriveResearchTemplatePda(id);
+    const [pda] = await deriveResearchTemplatePda(id);
     if (await accountExists(ctx.connection, pda)) count++;
   }
   return `${count} templates`;
@@ -129,7 +128,7 @@ export async function detailResearch(ctx: CLIContext): Promise<string> {
   let consecutiveMisses = 0;
 
   for (let id = 0; id <= 34; id++) {
-    const [pda] = deriveResearchTemplatePda(id);
+    const [pda] = await deriveResearchTemplatePda(id);
     const info = await ctx.connection.getAccountInfo(pda);
 
     if (!info) {

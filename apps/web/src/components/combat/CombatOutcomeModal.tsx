@@ -12,9 +12,6 @@ import { formatNoviAmount } from "novus-mundus-sdk";
 function num(v: unknown): number {
   if (typeof v === "number") return v;
   if (typeof v === "bigint") return Number(v);
-  if (v && typeof (v as { toNumber?: () => number }).toNumber === "function") {
-    return (v as { toNumber: () => number }).toNumber();
-  }
   return Number(v) || 0;
 }
 const fmt = (v: unknown) => num(v).toLocaleString();

@@ -101,7 +101,7 @@ export function EncounterDetailPanel({
   ) => {
     if (!publicKey || !player || !encounter) throw new Error("No target");
     const enc = encounter.account;
-    const ix = buildAttackEncounterIx({
+    const ix = await buildAttackEncounterIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       gameAuthority: geData?.account?.authority,
@@ -109,7 +109,7 @@ export function EncounterDetailPanel({
       encounterPubkey: encounter.pubkey,
       encounter: enc,
     });
-    const maxHealth = enc.maxHealth.toNumber();
+    const maxHealth = Number(enc.maxHealth);
     return transact
       .mutateAsync({
         instructions: [...prepend, ix],
@@ -127,11 +127,11 @@ export function EncounterDetailPanel({
     if (!publicKey || !player || !encounter) throw new Error("No target");
     const ge = client.gameEngine;
     const enc = encounter.account;
-    const staminaIx = createPurchaseStaminaInstruction(
+    const staminaIx = await createPurchaseStaminaInstruction(
       { gameEngine: ge, owner: publicKey },
       { amount: 1 },
     );
-    const attackIx = buildAttackEncounterIx({
+    const attackIx = await buildAttackEncounterIx({
       owner: publicKey,
       gameEngine: ge,
       gameAuthority: geData?.account?.authority,
@@ -139,7 +139,7 @@ export function EncounterDetailPanel({
       encounterPubkey: encounter.pubkey,
       encounter: enc,
     });
-    const maxHealth = enc.maxHealth.toNumber();
+    const maxHealth = Number(enc.maxHealth);
     return transact
       .mutateAsync({
         instructions: [staminaIx, attackIx],
@@ -181,8 +181,8 @@ export function EncounterDetailPanel({
   }
 
   const rarity = encounter.account.rarity ?? 0;
-  const hp = encounter.account.health.toNumber();
-  const maxHp = encounter.account.maxHealth.toNumber();
+  const hp = Number(encounter.account.health);
+  const maxHp = Number(encounter.account.maxHealth);
 
   return (
     <div className="space-y-4">

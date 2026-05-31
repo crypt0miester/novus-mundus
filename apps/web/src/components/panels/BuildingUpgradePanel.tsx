@@ -54,12 +54,12 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
   }, [isConstructing]);
 
   const remainingSec = isConstructing
-    ? Math.max(0, (slot?.constructionEnds?.toNumber?.() ?? 0) - tick)
+    ? Math.max(0, (Number(slot?.constructionEnds ?? 0n)) - tick)
     : 0;
   const ready = phase === "raised" || phase === "improved";
 
-  const noviBalance = playerData?.account?.lockedNovi?.toNumber?.() ?? 0;
-  const gemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
+  const noviBalance = Number(playerData?.account?.lockedNovi ?? 0n);
+  const gemBalance = Number(playerData?.account?.gems ?? 0n);
 
   // Speedup tiers with hold-to-charge caps — how many speedup instructions one
   // tx can usefully hold (timer-collapse ∧ gem affordability). Recomputed each
@@ -168,8 +168,8 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
   if (!config) return null;
 
   if (isConstructing) {
-    const constructionEndsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
-    const constructionStartedAt = slot?.constructionStarted?.toNumber?.() ?? undefined;
+    const constructionEndsAt = Number(slot?.constructionEnds ?? 0n);
+    const constructionStartedAt = Number(slot?.constructionStarted ?? 0n);
     return (
       <div className="flex flex-col gap-4">
         <div

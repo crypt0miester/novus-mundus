@@ -26,7 +26,7 @@ export const SPL_TOKEN_PROGRAM_ID: Address = address(
  * @param programId - Token program ID (defaults to SPL Token)
  * @param associatedTokenProgramId - ATA program ID
  */
-export async function getAssociatedTokenAddressSync(
+export async function getAssociatedTokenAddressAsync(
   mint: Address,
   owner: Address,
   allowOwnerOffCurve = false,
@@ -48,13 +48,13 @@ export async function getAssociatedTokenAddressSync(
 /**
  * Get ATA address for a PDA owner.
  */
-export function getAssociatedTokenAddressSyncForPda(
+export function getAssociatedTokenAddressAsyncForPda(
   mint: Address,
   pdaOwner: Address,
   programId: Address = SPL_TOKEN_PROGRAM_ID,
   associatedTokenProgramId: Address = ASSOCIATED_TOKEN_PROGRAM_ID
 ): Promise<Address> {
-  return getAssociatedTokenAddressSync(
+  return getAssociatedTokenAddressAsync(
     mint,
     pdaOwner,
     true, // Allow off curve for PDAs

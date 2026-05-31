@@ -13,12 +13,11 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from '@solana/web3.js';
-import BN from 'bn.js';
-import bs58 from 'bs58';
+import { getBase58Decoder } from '@solana/codecs-strings';
 import * as fs from 'fs';
 import * as path from 'path';
 
-import { createTestSvm, seedProgramDataPda, type LiteSVM, FailedTransactionMetadata } from './svm';
+import { createTestSvm, seedProgramDataPda, svmKey, type LiteSVM, FailedTransactionMetadata, sendSignedTx } from './svm';
 import { PROGRAM_ID } from '../../src/program';
 
 import {
@@ -168,7 +167,7 @@ export const TEST_GEMS_ITEM = {
   rarity: 0,              // Common
   quantityPerPurchase: 1000, // 1000 gems per purchase
   baseStatsBps: 0,
-  priceSolLamports: new BN(1000), // 0.000001 SOL (basically free)
+  priceSolLamports: 1000, // 0.000001 SOL (basically free)
   isActive: true,
   isFeatured: false,
 } as const;
@@ -184,7 +183,7 @@ export const TEST_FRAGMENTS_ITEM = {
   rarity: 0,              // Common
   quantityPerPurchase: 100, // 100 fragments per purchase
   baseStatsBps: 0,
-  priceSolLamports: new BN(1000), // 0.000001 SOL (basically free)
+  priceSolLamports: 1000, // 0.000001 SOL (basically free)
   isActive: true,
   isFeatured: false,
 } as const;
@@ -200,7 +199,7 @@ export const TEST_MATERIALS_ITEM = {
   rarity: 0,              // Common
   quantityPerPurchase: 100, // 100 common materials per purchase
   baseStatsBps: 0,
-  priceSolLamports: new BN(1000), // 0.000001 SOL (basically free)
+  priceSolLamports: 1000, // 0.000001 SOL (basically free)
   isActive: true,
   isFeatured: false,
 } as const;
@@ -219,7 +218,7 @@ export const HERO_TEMPLATES = [
     name: 'Warrior',
     heroType: 0,  // Common
     category: 0,  // Warrior class
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: LAMPORTS_PER_SOL / 10,
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -237,7 +236,7 @@ export const HERO_TEMPLATES = [
     name: 'Archer',
     heroType: 0,
     category: 1,  // Archer class
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: LAMPORTS_PER_SOL / 10,
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -255,7 +254,7 @@ export const HERO_TEMPLATES = [
     name: 'Mage',
     heroType: 0,
     category: 2,  // Mage class
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: LAMPORTS_PER_SOL / 10,
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -273,7 +272,7 @@ export const HERO_TEMPLATES = [
     name: 'Paladin',
     heroType: 1,  // Uncommon
     category: 0,
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 2),
+    mintCostSol: LAMPORTS_PER_SOL / 2,
     supplyCap: 1000,
     enabled: true,
     eventExclusive: false,
@@ -291,7 +290,7 @@ export const HERO_TEMPLATES = [
     name: 'Assassin',
     heroType: 1,
     category: 1,
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 2),
+    mintCostSol: LAMPORTS_PER_SOL / 2,
     supplyCap: 1000,
     enabled: true,
     eventExclusive: false,
@@ -311,7 +310,7 @@ export const HERO_TEMPLATES = [
     name: 'Tribute',
     heroType: 2,  // Economic
     category: 0,
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: LAMPORTS_PER_SOL / 10,
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -334,7 +333,7 @@ export const RESEARCH_TEMPLATES = [
     category: 0,
     maxLevel: 10,
     baseTimeSeconds: 300,
-    baseCost: new BN(100),
+    baseCost: 100,
     buffType: 0,
     buffPerLevelBps: 200,
     prerequisiteType: -1,
@@ -346,7 +345,7 @@ export const RESEARCH_TEMPLATES = [
     category: 0,
     maxLevel: 10,
     baseTimeSeconds: 600,
-    baseCost: new BN(200),
+    baseCost: 200,
     buffType: 1,
     buffPerLevelBps: 200,
     prerequisiteType: 0,
@@ -358,7 +357,7 @@ export const RESEARCH_TEMPLATES = [
     category: 1,
     maxLevel: 10,
     baseTimeSeconds: 300,
-    baseCost: new BN(100),
+    baseCost: 100,
     buffType: 4,
     buffPerLevelBps: 300,
     prerequisiteType: -1,
@@ -370,7 +369,7 @@ export const RESEARCH_TEMPLATES = [
     category: 1,
     maxLevel: 10,
     baseTimeSeconds: 450,
-    baseCost: new BN(150),
+    baseCost: 150,
     buffType: 5,
     buffPerLevelBps: 500,
     prerequisiteType: 2,
@@ -382,7 +381,7 @@ export const RESEARCH_TEMPLATES = [
     category: 2,
     maxLevel: 10,
     baseTimeSeconds: 600,
-    baseCost: new BN(200),
+    baseCost: 200,
     buffType: 6,
     buffPerLevelBps: 200,
     prerequisiteType: -1,
@@ -395,7 +394,7 @@ export const RESEARCH_TEMPLATES = [
     category: 0,            // Battle category = Academy Lv 1 sufficient
     maxLevel: 10,
     baseTimeSeconds: 60,    // Short for testing
-    baseCost: new BN(100),
+    baseCost: 100,
     buffType: 20,           // DailyRewardsSystem → sets has_daily_rewards on level 1
     buffPerLevelBps: 200,
     prerequisiteType: -1,
@@ -408,7 +407,7 @@ export const RESEARCH_TEMPLATES = [
     category: 0,            // Battle category = Academy Lv 1 sufficient
     maxLevel: 10,
     baseTimeSeconds: 60,    // Short for testing
-    baseCost: new BN(100),
+    baseCost: 100,
     buffType: 21,           // MiningOperations → sets has_mining on level 1
     buffPerLevelBps: 200,
     prerequisiteType: -1,
@@ -420,7 +419,7 @@ export const RESEARCH_TEMPLATES = [
     category: 0,            // Battle category = Academy Lv 1 sufficient
     maxLevel: 10,
     baseTimeSeconds: 60,    // Short for testing
-    baseCost: new BN(100),
+    baseCost: 100,
     buffType: 22,           // FishingIndustry → sets has_fishing on level 1
     buffPerLevelBps: 200,
     prerequisiteType: -1,
@@ -439,7 +438,7 @@ function ensureKeysDir(): void {
   }
 }
 
-function loadOrCreateKeypair(name: string): Keypair {
+async function loadOrCreateKeypair(name: string): Promise<Keypair> {
   ensureKeysDir();
   const filepath = path.join(KEYS_DIR, `${name}.json`);
 
@@ -448,7 +447,7 @@ function loadOrCreateKeypair(name: string): Keypair {
     return Keypair.fromSecretKey(Uint8Array.from(secretKey));
   }
 
-  const keypair = Keypair.generate();
+  const keypair = await Keypair.generate();
   fs.writeFileSync(filepath, JSON.stringify(Array.from(keypair.secretKey)));
   return keypair;
 }
@@ -460,9 +459,9 @@ export async function airdropIfNeeded(
   pubkey: PublicKey,
   minBalance: number = 10 * LAMPORTS_PER_SOL
 ): Promise<void> {
-  const balance = svm.getBalance(pubkey);
+  const balance = svm.getBalance(svmKey(pubkey));
   if (balance === null || balance < BigInt(minBalance)) {
-    svm.airdrop(pubkey, BigInt(minBalance));
+    svm.airdrop(svmKey(pubkey), BigInt(minBalance));
   }
 }
 
@@ -472,11 +471,14 @@ export async function sendTx(
   signers: Keypair[],
   _config?: TestConfig
 ): Promise<string> {
-  tx.recentBlockhash = svm.latestBlockhash();
+  // `recentBlockhash` is a branded `Blockhash` in web3.js v3; LiteSVM hands
+  // back a plain string. They're runtime-identical, so narrow the brand.
+  tx.recentBlockhash = svm.latestBlockhash() as typeof tx.recentBlockhash;
   tx.feePayer = signers[0]!.publicKey;
-  tx.sign(...signers);
+  await tx.sign(...signers);
 
-  const result = svm.sendTransaction(tx);
+  const signedBytes = await tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+  const result = sendSignedTx(svm, signedBytes);
 
   if (result instanceof FailedTransactionMetadata) {
     const meta = result.meta();
@@ -508,14 +510,14 @@ export async function sendTx(
   // Expire blockhash so identical transactions can be sent again
   svm.expireBlockhash();
 
-  return bs58.encode(result.signature());
+  return getBase58Decoder().decode(result.signature());
 }
 
 export async function accountExists(
   svm: LiteSVM,
   pubkey: PublicKey
 ): Promise<boolean> {
-  const info = svm.getAccount(pubkey);
+  const info = svm.getAccount(svmKey(pubkey));
   return info !== null && info.data.length > 0;
 }
 
@@ -526,7 +528,7 @@ async function setupGameEngine(ctx: TestContext): Promise<void> {
     return;
   }
 
-  const ix = createInitGameEngineInstruction({
+  const ix = await createInitGameEngineInstruction({
     authority: ctx.daoAuthority.publicKey,
     treasuryWallet: ctx.treasury.publicKey,
     kingdomId: ctx.kingdomId,
@@ -541,7 +543,7 @@ async function setupShopConfig(ctx: TestContext): Promise<void> {
     return;
   }
 
-  const ix = createInitializeConfigInstruction(
+  const ix = await createInitializeConfigInstruction(
     {
       payer: ctx.daoAuthority.publicKey,
       daoAuthority: ctx.daoAuthority.publicKey,
@@ -555,13 +557,13 @@ async function setupShopConfig(ctx: TestContext): Promise<void> {
 }
 
 async function setupTestGemsItem(ctx: TestContext): Promise<void> {
-  const [gemsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
+  const [gemsItemPda] = await deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
 
   if (await accountExists(ctx.svm, gemsItemPda)) {
     return;
   }
 
-  const ix = createCreateItemInstruction(
+  const ix = await createCreateItemInstruction(
     {
       payer: ctx.daoAuthority.publicKey,
       daoAuthority: ctx.daoAuthority.publicKey,
@@ -579,13 +581,13 @@ async function setupTestGemsItem(ctx: TestContext): Promise<void> {
 }
 
 async function setupTestFragmentsItem(ctx: TestContext): Promise<void> {
-  const [fragmentsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_FRAGMENTS_ITEM.itemId);
+  const [fragmentsItemPda] = await deriveShopItemPda(ctx.gameEngine, TEST_FRAGMENTS_ITEM.itemId);
 
   if (await accountExists(ctx.svm, fragmentsItemPda)) {
     return;
   }
 
-  const ix = createCreateItemInstruction(
+  const ix = await createCreateItemInstruction(
     {
       payer: ctx.daoAuthority.publicKey,
       daoAuthority: ctx.daoAuthority.publicKey,
@@ -603,13 +605,13 @@ async function setupTestFragmentsItem(ctx: TestContext): Promise<void> {
 }
 
 async function setupTestMaterialsItem(ctx: TestContext): Promise<void> {
-  const [materialsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_MATERIALS_ITEM.itemId);
+  const [materialsItemPda] = await deriveShopItemPda(ctx.gameEngine, TEST_MATERIALS_ITEM.itemId);
 
   if (await accountExists(ctx.svm, materialsItemPda)) {
     return;
   }
 
-  const ix = createCreateItemInstruction(
+  const ix = await createCreateItemInstruction(
     {
       payer: ctx.daoAuthority.publicKey,
       daoAuthority: ctx.daoAuthority.publicKey,
@@ -631,7 +633,7 @@ async function setupHeroCollection(ctx: TestContext): Promise<void> {
     return;
   }
 
-  const ix = createCreateCollectionInstruction({
+  const ix = await createCreateCollectionInstruction({
     daoAuthority: ctx.daoAuthority.publicKey,
     gameEngine: ctx.gameEngine,
   });
@@ -642,12 +644,12 @@ async function setupHeroCollection(ctx: TestContext): Promise<void> {
 
 async function setupHeroTemplates(ctx: TestContext): Promise<void> {
   for (const template of HERO_TEMPLATES) {
-    const [templatePda] = deriveHeroTemplatePda(template.templateId);
+    const [templatePda] = await deriveHeroTemplatePda(template.templateId);
     ctx.heroTemplates.set(template.templateId, templatePda);
 
     if (await accountExists(ctx.svm, templatePda)) continue;
 
-    const ix = createCreateTemplateInstruction(
+    const ix = await createCreateTemplateInstruction(
       { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
       template
     );
@@ -665,12 +667,12 @@ async function setupCities(ctx: TestContext): Promise<void> {
 
   // Populate ctx.cities map with PDAs
   for (const city of CITIES) {
-    const [cityPda] = deriveCityPda(ctx.gameEngine, city.id);
+    const [cityPda] = await deriveCityPda(ctx.gameEngine, city.id);
     ctx.cities.set(city.id, cityPda);
   }
 
   // Check if first city already exists
-  const [firstCityPda] = deriveCityPda(ctx.gameEngine, CITIES[0].id);
+  const [firstCityPda] = await deriveCityPda(ctx.gameEngine, CITIES[0].id);
   if (await accountExists(ctx.svm, firstCityPda)) {
     return;
   }
@@ -682,7 +684,7 @@ async function setupCities(ctx: TestContext): Promise<void> {
 
     const cityAccounts: PublicKey[] = [];
     for (let j = 0; j < batchCount; j++) {
-      const [cityPda] = deriveCityPda(ctx.gameEngine, startCityId + j);
+      const [cityPda] = await deriveCityPda(ctx.gameEngine, startCityId + j);
       cityAccounts.push(cityPda);
     }
 
@@ -710,7 +712,7 @@ async function setupCities(ctx: TestContext): Promise<void> {
       landmassSeed: 0,
     }));
 
-    const ix = createBatchCitiesInstruction(
+    const ix = await createBatchCitiesInstruction(
       {
         authority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -729,12 +731,12 @@ async function setupCities(ctx: TestContext): Promise<void> {
 
 async function setupResearchTemplates(ctx: TestContext): Promise<void> {
   for (const template of RESEARCH_TEMPLATES) {
-    const [templatePda] = deriveResearchTemplatePda(template.researchType);
+    const [templatePda] = await deriveResearchTemplatePda(template.researchType);
     ctx.researchTemplates.set(template.researchType, templatePda);
 
     if (await accountExists(ctx.svm, templatePda)) continue;
 
-    const ix = createInitializeTemplateInstruction(
+    const ix = await createInitializeTemplateInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -756,12 +758,12 @@ async function setupResearchTemplates(ctx: TestContext): Promise<void> {
 
 async function setupBuildingTemplates(ctx: TestContext): Promise<void> {
   for (const template of BUILDING_TEMPLATES) {
-    const [templatePda] = deriveBuildingTemplatePda(template.buildingType);
+    const [templatePda] = await deriveBuildingTemplatePda(template.buildingType);
     ctx.buildingTemplates.set(template.buildingType, templatePda);
 
     if (await accountExists(ctx.svm, templatePda)) continue;
 
-    const ix = createInitializeBuildingTemplateInstruction(
+    const ix = await createInitializeBuildingTemplateInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -793,17 +795,17 @@ export async function setupTestContext(
   const fullConfig: TestConfig = { ...DEFAULT_CONFIG, ...config };
 
   const svm = createTestSvm();
-  const daoAuthority = loadOrCreateKeypair('dao-authority');
-  const treasury = loadOrCreateKeypair('treasury');
+  const daoAuthority = await loadOrCreateKeypair('dao-authority');
+  const treasury = await loadOrCreateKeypair('treasury');
 
   // Seed the program-data PDA so `assert_is_program_authority` accepts
   // `daoAuthority` as the upgrade authority. Without this, every
   // init_game_engine call fails with Unauthorized.
   seedProgramDataPda(svm, PROGRAM_ID, daoAuthority.publicKey);
 
-  const [gameEngine] = deriveGameEnginePda(kingdomId);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [shopConfig] = deriveShopConfigPda(gameEngine);
+  const [gameEngine] = await deriveGameEnginePda(kingdomId);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [shopConfig] = await deriveShopConfigPda(gameEngine);
 
   const ctx: TestContext = {
     svm,

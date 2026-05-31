@@ -24,7 +24,7 @@ import {
   deriveArenaParticipantPda,
   deriveArenaLoadoutPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Create Season (Admin)
 
@@ -371,7 +371,7 @@ export async function createClaimArenaDailyRewardInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
   const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const playerNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
   // 0. participant_account (WRITE)
@@ -429,7 +429,7 @@ export async function createClaimMasterRewardInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
   const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const playerNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
   // 0. participant_account (WRITE)

@@ -36,11 +36,12 @@ export async function POST(req: Request) {
 
   const rolls = rollDungeonInteract(run, template);
 
-  const ix = createInteractInstruction(
+  const gameAuthority = await gameAuthorityKeypair();
+  const ix = await createInteractInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: gameAuthority.publicKey,
     },
     {
       templateId: run.dungeonId,

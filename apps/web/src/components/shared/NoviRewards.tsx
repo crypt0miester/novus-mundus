@@ -19,7 +19,7 @@ import {
   deciToNovi,
   noviToDeci,
   deriveNoviMintPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   RESERVED_NOVI_VESTING_PERIOD,
   DEPOSIT_FEE_BPS,
 } from "novus-mundus-sdk";
@@ -61,8 +61,8 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     let cancelled = false;
     (async () => {
       try {
-        const [noviMint] = deriveNoviMintPda();
-        const ata = getAssociatedTokenAddressSync(noviMint, publicKey);
+        const [noviMint] = await deriveNoviMintPda();
+        const ata = await getAssociatedTokenAddressAsync(noviMint, publicKey);
         const info = await connection.getTokenAccountBalance(ata);
         if (!cancelled) setWalletNoviRaw(Number(info.value.amount));
       } catch {
@@ -81,7 +81,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
 
     const tick = () => {
       const now = Math.floor(Date.now() / 1000);
-      const earnedAt = user.reservedNoviEarnedAt.toNumber();
+      const earnedAt = Number(user.reservedNoviEarnedAt);
       if (earnedAt === 0) {
         setVestingRemaining(0);
         return;
@@ -101,7 +101,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     if (!amount || amount <= 0) throw new Error("Invalid amount");
 
     const geKey = client.gameEngine;
-    const ix = createReservedToLockedInstruction(
+    const ix = await createReservedToLockedInstruction(
       { owner: publicKey, gameEngine: geKey },
       { amount: noviToDeci(amount) },
     );
@@ -124,7 +124,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     if (!amount || amount <= 0) throw new Error("Invalid amount");
 
     const geKey = client.gameEngine;
-    const ix = createWithdrawReservedInstruction(
+    const ix = await createWithdrawReservedInstruction(
       { owner: publicKey, gameEngine: geKey },
       { amount: noviToDeci(amount) },
     );
@@ -146,7 +146,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
     const amount = depositAmount;
     if (!amount || amount <= 0) throw new Error("Invalid amount");
     void client;
-    const ix = createDepositNoviInstruction({ owner: publicKey }, { amount: noviToDeci(amount) });
+    const ix = await createDepositNoviInstruction({ owner: publicKey }, { amount: noviToDeci(amount) });
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -164,8 +164,8 @@ export function NoviRewards({ className }: NoviRewardsProps) {
 
   const reservedBalance = deciToNovi(user.reservedNovi);
   const totalEarned = deciToNovi(user.totalReservedEarned);
-  const eventsWon = user.totalEventsWon.toNumber();
-  const eventsPlayed = user.totalEventsParticipated.toNumber();
+  const eventsWon = Number(user.totalEventsWon);
+  const eventsPlayed = Number(user.totalEventsParticipated);
   const isVested = vestingRemaining === 0 && reservedBalance > 0;
   const hasReserved = reservedBalance > 0;
   /* Wallet ATA balance, decimal-normalised. Deposit gate uses raw to
@@ -181,7 +181,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
 
   // Vesting progress (0-100)
   const vestingPct =
-    hasReserved && user.reservedNoviEarnedAt.toNumber() > 0
+    hasReserved && Number(user.reservedNoviEarnedAt) > 0
       ? Math.min(
           100,
           ((RESERVED_NOVI_VESTING_PERIOD - vestingRemaining) / RESERVED_NOVI_VESTING_PERIOD) * 100,

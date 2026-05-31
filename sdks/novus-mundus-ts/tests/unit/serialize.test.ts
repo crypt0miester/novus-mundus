@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
-import BN from 'bn.js';
 import { BufferWriter, createInstructionData } from '../../src/utils/serialize';
 
 describe('BufferWriter', () => {
@@ -80,16 +79,16 @@ describe('BufferWriter', () => {
       writer.writeI32(1000000);
       writer.writeI32(-1000000);
 
-      const buf = writer.toBuffer();
+      const buf = Buffer.from(writer.toBuffer());
       // 1000000 = 0x000F4240
       expect(buf.readInt32LE(0)).toBe(1000000);
       expect(buf.readInt32LE(4)).toBe(-1000000);
     });
 
-    it('should write u64 from BN', () => {
+    it('should write u64 zero and max', () => {
       const writer = new BufferWriter(16);
-      writer.writeU64(new BN(0));
-      writer.writeU64(new BN('18446744073709551615')); // max u64
+      writer.writeU64(0n);
+      writer.writeU64(18446744073709551615n); // max u64
 
       const buf = writer.toBuffer();
       // First u64 should be all zeros
@@ -106,23 +105,21 @@ describe('BufferWriter', () => {
       const writer = new BufferWriter(8);
       writer.writeU64(1000000);
 
-      const buf = writer.toBuffer();
-      const bn = new BN(buf, 'le');
-      expect(bn.toNumber()).toBe(1000000);
+      const buf = Buffer.from(writer.toBuffer());
+      expect(buf.readBigUInt64LE(0)).toBe(1000000n);
     });
 
     it('should write u64 from bigint', () => {
       const writer = new BufferWriter(8);
-      writer.writeU64(BigInt('9007199254740992')); // Beyond safe integer
+      writer.writeU64(9007199254740992n); // Beyond safe integer
 
-      const buf = writer.toBuffer();
-      const bn = new BN(buf, 'le');
-      expect(bn.toString()).toBe('9007199254740992');
+      const buf = Buffer.from(writer.toBuffer());
+      expect(buf.readBigUInt64LE(0).toString()).toBe('9007199254740992');
     });
 
     it('should write i64 with negative values', () => {
       const writer = new BufferWriter(8);
-      writer.writeI64(new BN(-1));
+      writer.writeI64(-1n);
 
       const buf = writer.toBuffer();
       // -1 in two's complement is all 0xFF
@@ -163,13 +160,13 @@ describe('BufferWriter', () => {
       expect(buf[1]).toBe(0);
     });
 
-    it('should write PublicKey correctly', () => {
-      const keypair = Keypair.generate();
+    it('should write PublicKey correctly', async () => {
+      const keypair = await Keypair.generate();
       const writer = new BufferWriter(32);
       writer.writePubkey(keypair.publicKey);
 
       const buf = writer.toBuffer();
-      expect(buf).toEqual(keypair.publicKey.toBuffer());
+      expect(buf).toEqual(keypair.publicKey.toBytes());
     });
   });
 
@@ -178,7 +175,7 @@ describe('BufferWriter', () => {
       const writer = new BufferWriter(32);
       writer.writeString('Hello', 32);
 
-      const buf = writer.toBuffer();
+      const buf = Buffer.from(writer.toBuffer());
       expect(buf.slice(0, 5).toString('utf8')).toBe('Hello');
       // Rest should be zeros
       for (let i = 5; i < 32; i++) {
@@ -190,7 +187,7 @@ describe('BufferWriter', () => {
       const writer = new BufferWriter(5);
       writer.writeString('HelloWorld', 5);
 
-      const buf = writer.toBuffer();
+      const buf = Buffer.from(writer.toBuffer());
       expect(buf.toString('utf8')).toBe('Hello');
     });
 
@@ -242,16 +239,16 @@ describe('BufferWriter', () => {
 
     it('should write u64 array', () => {
       const writer = new BufferWriter(16);
-      writer.writeU64Array([new BN(100), new BN(200)]);
+      writer.writeU64Array([100n, 200n]);
 
-      const buf = writer.toBuffer();
-      expect(new BN(buf.slice(0, 8), 'le').toNumber()).toBe(100);
-      expect(new BN(buf.slice(8, 16), 'le').toNumber()).toBe(200);
+      const buf = Buffer.from(writer.toBuffer());
+      expect(buf.readBigUInt64LE(0)).toBe(100n);
+      expect(buf.readBigUInt64LE(8)).toBe(200n);
     });
 
-    it('should write pubkey array', () => {
-      const k1 = Keypair.generate().publicKey;
-      const k2 = Keypair.generate().publicKey;
+    it('should write pubkey array', async () => {
+      const k1 = (await Keypair.generate()).publicKey;
+      const k2 = (await Keypair.generate()).publicKey;
       const writer = new BufferWriter(64);
       writer.writePubkeyArray([k1, k2]);
 
@@ -275,7 +272,7 @@ describe('BufferWriter', () => {
       writer.writeU32(1);
       expect(writer.getOffset()).toBe(7);
 
-      writer.writeU64(new BN(1));
+      writer.writeU64(1n);
       expect(writer.getOffset()).toBe(15);
 
       writer.writePubkey(PublicKey.default);

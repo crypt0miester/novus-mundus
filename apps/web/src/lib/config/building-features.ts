@@ -103,6 +103,16 @@ export const BUILDING_FEATURES: BuildingFeatureConfig[] = [
     featureHint: "Convert materials",
   },
   {
+    id: BuildingId.Forge,
+    name: "Forge",
+    desc: buildingFraming(BuildingId.Forge).role,
+    tier: 3,
+    category: "Economy",
+    primaryFeature: FEATURES.FORGE_CRAFT,
+    centerView: true,
+    featureHint: "Craft",
+  },
+  {
     id: BuildingId.Vault,
     name: "Vault",
     desc: buildingFraming(BuildingId.Vault).role,

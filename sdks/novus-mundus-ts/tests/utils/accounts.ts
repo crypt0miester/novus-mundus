@@ -9,10 +9,9 @@ import {
   PublicKey,
   type AccountInfo,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import { type LiteSVM } from '../fixtures/svm';
-import { toAccountInfo } from '../fixtures/svm';
+import { toAccountInfo, svmKey } from '../fixtures/svm';
 
 import {
   // State types
@@ -106,7 +105,7 @@ export async function fetchAccount(
   svm: LiteSVM,
   pubkey: PublicKey,
 ): Promise<AccountInfo<Buffer> | null> {
-  const info = svm.getAccount(pubkey);
+  const info = svm.getAccount(svmKey(pubkey));
   if (!info) return null;
   return toAccountInfo(info);
 }
@@ -119,7 +118,7 @@ export async function fetchAccounts(
   pubkeys: PublicKey[],
 ): Promise<(AccountInfo<Buffer> | null)[]> {
   return pubkeys.map(pk => {
-    const info = svm.getAccount(pk);
+    const info = svm.getAccount(svmKey(pk));
     return info ? toAccountInfo(info) : null;
   });
 }
@@ -131,7 +130,7 @@ export async function accountExists(
   svm: LiteSVM,
   pubkey: PublicKey
 ): Promise<boolean> {
-  const info = svm.getAccount(pubkey);
+  const info = svm.getAccount(svmKey(pubkey));
   return info !== null && info.data.length > 0;
 }
 
@@ -151,7 +150,7 @@ export async function fetchPlayerByOwner(
   gameEngine: PublicKey,
   owner: PublicKey
 ): Promise<PlayerAccount | null> {
-  const [playerPda] = derivePlayerPda(gameEngine, owner);
+  const [playerPda] = await derivePlayerPda(gameEngine, owner);
   return fetchPlayer(svm, playerPda);
 }
 
@@ -165,7 +164,7 @@ export async function snapshotPlayer(
   return {
     pubkey: playerPda,
     data: deserializePlayer(info.data),
-    lamports: info.lamports,
+    lamports: Number(info.lamports),
     timestamp: Date.now(),
   };
 }
@@ -186,7 +185,7 @@ export async function fetchTeamById(
   gameEngine: PublicKey,
   teamId: number
 ): Promise<TeamAccount | null> {
-  const [teamPda] = deriveTeamPda(gameEngine, teamId);
+  const [teamPda] = await deriveTeamPda(gameEngine, teamId);
   return fetchTeam(svm, teamPda);
 }
 
@@ -195,7 +194,7 @@ export async function fetchTeamMemberSlot(
   team: PublicKey,
   slotIndex: number
 ): Promise<TeamMemberSlot | null> {
-  const [slotPda] = deriveTeamSlotPda(team, slotIndex);
+  const [slotPda] = await deriveTeamSlotPda(team, slotIndex);
   const info = await fetchAccount(svm, slotPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeamMemberSlot(info.data);
@@ -206,7 +205,7 @@ export async function fetchTeamInvite(
   team: PublicKey,
   invitee: PublicKey
 ): Promise<TeamInviteAccount | null> {
-  const [invitePda] = deriveTeamInvitePda(team, invitee);
+  const [invitePda] = await deriveTeamInvitePda(team, invitee);
   const info = await fetchAccount(svm, invitePda);
   if (!info || info.data.length === 0) return null;
   return deserializeTeamInvite(info.data);
@@ -217,7 +216,7 @@ export async function fetchTreasuryRequest(
   team: PublicKey,
   requester: PublicKey
 ): Promise<TreasuryRequest | null> {
-  const [requestPda] = deriveTreasuryRequestPda(team, requester);
+  const [requestPda] = await deriveTreasuryRequestPda(team, requester);
   const info = await fetchAccount(svm, requestPda);
   if (!info || info.data.length === 0) return null;
   return deserializeTreasuryRequest(info.data);
@@ -240,7 +239,7 @@ export async function fetchRallyByCreator(
   creator: PublicKey,
   rallyId: number
 ): Promise<RallyAccount | null> {
-  const [rallyPda] = deriveRallyPda(gameEngine, creator, rallyId);
+  const [rallyPda] = await deriveRallyPda(gameEngine, creator, rallyId);
   return fetchRally(svm, rallyPda);
 }
 
@@ -251,7 +250,7 @@ export async function fetchRallyParticipant(
   rallyId: number | bigint,
   participant: PublicKey
 ): Promise<RallyParticipant | null> {
-  const [participantPda] = deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, participant);
+  const [participantPda] = await deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, participant);
   const info = await fetchAccount(svm, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeRallyParticipant(info.data);
@@ -265,7 +264,7 @@ export async function fetchReinforcement(
   sender: PublicKey,
   receiver: PublicKey
 ): Promise<ReinforcementAccount | null> {
-  const [reinforcementPda] = deriveReinforcementPda(gameEngine, sender, receiver);
+  const [reinforcementPda] = await deriveReinforcementPda(gameEngine, sender, receiver);
   const info = await fetchAccount(svm, reinforcementPda);
   if (!info || info.data.length === 0) return null;
   return deserializeReinforcement(info.data);
@@ -288,7 +287,7 @@ export async function fetchEncounterByCity(
   cityId: number,
   encounterId: number
 ): Promise<EncounterAccount | null> {
-  const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterId);
+  const [encounterPda] = await deriveEncounterPda(gameEngine, cityId, encounterId);
   return fetchEncounter(svm, encounterPda);
 }
 
@@ -298,7 +297,7 @@ export async function fetchExpedition(
   svm: LiteSVM,
   owner: PublicKey
 ): Promise<ExpeditionAccount | null> {
-  const [expeditionPda] = deriveExpeditionPda(owner);
+  const [expeditionPda] = await deriveExpeditionPda(owner);
   const info = await fetchAccount(svm, expeditionPda);
   if (!info || info.data.length === 0) return null;
   return deserializeExpedition(info.data);
@@ -311,7 +310,7 @@ export async function fetchArenaSeason(
   gameEngine: PublicKey,
   seasonId: number
 ): Promise<ArenaSeasonAccount | null> {
-  const [seasonPda] = deriveArenaSeasonPda(gameEngine, seasonId);
+  const [seasonPda] = await deriveArenaSeasonPda(gameEngine, seasonId);
   const info = await fetchAccount(svm, seasonPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaSeason(info.data);
@@ -323,7 +322,7 @@ export async function fetchArenaParticipant(
   seasonId: number,
   ownerOrPlayerPda: PublicKey
 ): Promise<ArenaParticipantAccount | null> {
-  const [participantPda] = deriveArenaParticipantPda(gameEngine, seasonId, ownerOrPlayerPda);
+  const [participantPda] = await deriveArenaParticipantPda(gameEngine, seasonId, ownerOrPlayerPda);
   const info = await fetchAccount(svm, participantPda);
   if (!info || info.data.length === 0) return null;
   return deserializeArenaParticipant(info.data);
@@ -336,7 +335,7 @@ export async function fetchLoot(
   playerPda: PublicKey,
   lootId: number | bigint
 ): Promise<LootAccount | null> {
-  const [lootPda] = deriveLootPda(playerPda, lootId);
+  const [lootPda] = await deriveLootPda(playerPda, lootId);
   const info = await fetchAccount(svm, lootPda);
   if (!info || info.data.length === 0) return null;
   return deserializeLoot(info.data);
@@ -349,7 +348,7 @@ export async function fetchEvent(
   gameEngine: PublicKey,
   eventId: number
 ): Promise<EventAccount | null> {
-  const [eventPda] = deriveEventPda(gameEngine, eventId);
+  const [eventPda] = await deriveEventPda(gameEngine, eventId);
   const info = await fetchAccount(svm, eventPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEvent(info.data);
@@ -361,7 +360,7 @@ export async function fetchEventParticipation(
   eventId: number,
   playerOwner: PublicKey
 ): Promise<EventParticipation | null> {
-  const [participationPda] = deriveEventParticipationPda(gameEngine, eventId, playerOwner);
+  const [participationPda] = await deriveEventParticipationPda(gameEngine, eventId, playerOwner);
   const info = await fetchAccount(svm, participationPda);
   if (!info || info.data.length === 0) return null;
   return deserializeEventParticipation(info.data);
@@ -375,7 +374,7 @@ export async function fetchCastleRaw(
   cityId: number,
   castleId: number
 ): Promise<AccountInfo<Buffer> | null> {
-  const [castlePda] = deriveCastlePda(gameEngine, cityId, castleId);
+  const [castlePda] = await deriveCastlePda(gameEngine, cityId, castleId);
   return fetchAccount(svm, castlePda);
 }
 
@@ -385,7 +384,7 @@ export async function fetchDungeonRunRaw(
   svm: LiteSVM,
   player: PublicKey
 ): Promise<AccountInfo<Buffer> | null> {
-  const [runPda] = deriveDungeonRunPda(player);
+  const [runPda] = await deriveDungeonRunPda(player);
   return fetchAccount(svm, runPda);
 }
 
@@ -395,7 +394,7 @@ export async function fetchEstateRaw(
   svm: LiteSVM,
   playerPda: PublicKey
 ): Promise<AccountInfo<Buffer> | null> {
-  const [estatePda] = deriveEstatePda(playerPda);
+  const [estatePda] = await deriveEstatePda(playerPda);
   return fetchAccount(svm, estatePda);
 }
 
@@ -405,7 +404,7 @@ export async function fetchGameEngine(
   svm: LiteSVM,
   kingdomId: number
 ): Promise<GameEngineAccount | null> {
-  const [gameEnginePda] = deriveGameEnginePda(kingdomId);
+  const [gameEnginePda] = await deriveGameEnginePda(kingdomId);
   const info = await fetchAccount(svm, gameEnginePda);
   if (!info || info.data.length === 0) return null;
   return deserializeGameEngine(info.data);
@@ -416,7 +415,7 @@ export async function fetchCity(
   gameEngine: PublicKey,
   cityId: number
 ): Promise<CityAccount | null> {
-  const [cityPda] = deriveCityPda(gameEngine, cityId);
+  const [cityPda] = await deriveCityPda(gameEngine, cityId);
   const info = await fetchAccount(svm, cityPda);
   if (!info || info.data.length === 0) return null;
   return deserializeCity(info.data);
@@ -426,7 +425,7 @@ export async function fetchShopConfig(
   svm: LiteSVM,
   gameEngine: PublicKey
 ): Promise<ShopConfigAccount | null> {
-  const [shopConfigPda] = deriveShopConfigPda(gameEngine);
+  const [shopConfigPda] = await deriveShopConfigPda(gameEngine);
   const info = await fetchAccount(svm, shopConfigPda);
   if (!info || info.data.length === 0) return null;
   return deserializeShopConfig(info.data);
@@ -437,7 +436,7 @@ export async function fetchShopItem(
   gameEngine: PublicKey,
   itemId: number
 ): Promise<ShopItemAccount | null> {
-  const [shopItemPda] = deriveShopItemPda(gameEngine, itemId);
+  const [shopItemPda] = await deriveShopItemPda(gameEngine, itemId);
   const info = await fetchAccount(svm, shopItemPda);
   if (!info || info.data.length === 0) return null;
   return deserializeShopItem(info.data);
@@ -467,11 +466,9 @@ export function diffPlayerSnapshots(
     const beforeVal = before.data[key];
     const afterVal = after.data[key];
 
-    if (beforeVal instanceof BN && afterVal instanceof BN) {
-      if (!beforeVal.eq(afterVal)) {
-        changes[key] = { before: beforeVal, after: afterVal };
-      }
-    } else if (beforeVal !== afterVal) {
+    // Numeric player fields are bigint/number post-v3 migration, so a strict
+    // inequality is sufficient to detect changes.
+    if (beforeVal !== afterVal) {
       changes[key] = { before: beforeVal, after: afterVal };
     }
   }

@@ -29,7 +29,7 @@ export async function showLoot(client: NovusMundusClient, ctx: CLIContext, walle
     return;
   }
 
-  const [playerPda] = derivePlayerPda(client.gameEngine, wallet);
+  const [playerPda] = await derivePlayerPda(client.gameEngine, wallet);
   const loot = await client.fetchPlayerLoot(playerPda, { unclaimedOnly: true });
 
   log.info(section(`Unclaimed Loot for ${addr(wallet)} (${loot.length} items)`));
@@ -52,9 +52,9 @@ export async function showLoot(client: NovusMundusClient, ctx: CLIContext, walle
   const now = Math.floor(Date.now() / 1000);
 
   const rows = loot
-    .sort((a, b) => a.account.lootId.cmp(b.account.lootId))
+    .sort((a, b) => (a.account.lootId < b.account.lootId ? -1 : a.account.lootId > b.account.lootId ? 1 : 0))
     .map(({ account: l }) => {
-      const expiry = l.expiresAt.toNumber();
+      const expiry = Number(l.expiresAt);
       const expiresStr = expiry > 0
         ? (expiry < now ? red('EXPIRED') : formatDate(l.expiresAt))
         : dim('--');
@@ -65,7 +65,7 @@ export async function showLoot(client: NovusMundusClient, ctx: CLIContext, walle
         formatNum(l.cash),
         formatNum(l.reservedNovi),
         formatNum(getLootTotalWeapons(l)),
-        formatNum(l.fragments.add(l.gems)),
+        formatNum(l.fragments + l.gems),
         expiresStr,
       ];
     });

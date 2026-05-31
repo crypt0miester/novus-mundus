@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createExpeditionStartInstruction,
@@ -95,14 +94,14 @@ describe('Expedition System', () => {
     it('should start mining expedition', async () => {
       const player = await createMiningReadyPlayer();
 
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Mining,
           tier: 0,
-          operativeUnit1: new BN(10),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(10),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -116,14 +115,14 @@ describe('Expedition System', () => {
     it('should start fishing expedition', async () => {
       const player = await createFishingReadyPlayer();
 
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Fishing,
           tier: 0,
-          operativeUnit1: new BN(10),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(10),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -139,14 +138,14 @@ describe('Expedition System', () => {
       });
       await factory.completeResearch(player, 21); // Unlock mining
 
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Mining,
           tier: 0,
-          operativeUnit1: new BN(10),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(10),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -161,14 +160,14 @@ describe('Expedition System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Try mining without Mine/has_mining — should fail
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Mining,
           tier: 0,
-          operativeUnit1: new BN(10),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(10),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -186,14 +185,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(5),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(5),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -201,14 +200,14 @@ describe('Expedition System', () => {
       );
 
       // Try second — should fail (expedition PDA already exists)
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Mining,
           tier: 0,
-          operativeUnit1: new BN(1),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(1),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -226,14 +225,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -255,14 +254,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -285,14 +284,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -300,7 +299,7 @@ describe('Expedition System', () => {
       );
 
       // Strike requires game authority co-signature
-      const strikeIx = createExpeditionStrikeInstruction(
+      const strikeIx = await createExpeditionStrikeInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -319,7 +318,7 @@ describe('Expedition System', () => {
     it('should reject strike without active expedition', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const strikeIx = createExpeditionStrikeInstruction(
+      const strikeIx = await createExpeditionStrikeInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -342,14 +341,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -360,7 +359,7 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStrikeInstruction(
+          await createExpeditionStrikeInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -376,7 +375,7 @@ describe('Expedition System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStrikeInstruction(
+          await createExpeditionStrikeInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -396,14 +395,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -411,7 +410,7 @@ describe('Expedition System', () => {
       );
 
       // Strike to accumulate loot
-      const strikeIx = createExpeditionStrikeInstruction(
+      const strikeIx = await createExpeditionStrikeInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -440,14 +439,14 @@ describe('Expedition System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createExpeditionStartInstruction(
+            await createExpeditionStartInstruction(
               { gameEngine: ctx.gameEngine, owner: p.publicKey },
               {
                 expeditionType: ExpeditionType.Mining,
                 tier: 0,
-                operativeUnit1: new BN(10),
-                operativeUnit2: new BN(0),
-                operativeUnit3: new BN(0),
+                operativeUnit1: BigInt(10),
+                operativeUnit2: BigInt(0),
+                operativeUnit3: BigInt(0),
               },
             ),
           ),
@@ -459,7 +458,7 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStrikeInstruction(
+          await createExpeditionStrikeInstruction(
             { gameEngine: ctx.gameEngine, owner: buffed.publicKey, gameAuthority: ctx.daoAuthority.publicKey },
             { score: 100 },
           ),
@@ -469,7 +468,7 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStrikeInstruction(
+          await createExpeditionStrikeInstruction(
             { gameEngine: ctx.gameEngine, owner: unbuffed.publicKey, gameAuthority: ctx.daoAuthority.publicKey },
             { score: 30 },
           ),
@@ -499,14 +498,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -516,7 +515,7 @@ describe('Expedition System', () => {
       // Speedup expedition 7 times (tier 2 = 75% reduction each)
       for (let i = 0; i < 7; i++) {
         try {
-          const speedupIx = createExpeditionSpeedupInstruction(
+          const speedupIx = await createExpeditionSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           );
@@ -530,7 +529,7 @@ describe('Expedition System', () => {
       await advanceTime(ctx.svm, 5);
 
       // Claim expedition
-      const claimIx = createExpeditionClaimInstruction({
+      const claimIx = await createExpeditionClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -549,14 +548,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -564,7 +563,7 @@ describe('Expedition System', () => {
       );
 
       // Immediate claim should fail (ExpeditionNotComplete)
-      const claimIx = createExpeditionClaimInstruction({
+      const claimIx = await createExpeditionClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -584,14 +583,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -601,7 +600,7 @@ describe('Expedition System', () => {
       // Speedup to completion
       for (let i = 0; i < 7; i++) {
         try {
-          const speedupIx = createExpeditionSpeedupInstruction(
+          const speedupIx = await createExpeditionSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           );
@@ -614,7 +613,7 @@ describe('Expedition System', () => {
       await advanceTime(ctx.svm, 5);
 
       // Claim
-      const claimIx = createExpeditionClaimInstruction({
+      const claimIx = await createExpeditionClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -638,14 +637,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -655,7 +654,7 @@ describe('Expedition System', () => {
       // Speedup to completion
       for (let i = 0; i < 7; i++) {
         try {
-          const speedupIx = createExpeditionSpeedupInstruction(
+          const speedupIx = await createExpeditionSpeedupInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { speedupTier: 2 }
           );
@@ -668,7 +667,7 @@ describe('Expedition System', () => {
       await advanceTime(ctx.svm, 5);
 
       // Claim expedition rewards
-      const claimIx = createExpeditionClaimInstruction({
+      const claimIx = await createExpeditionClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -691,14 +690,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -706,7 +705,7 @@ describe('Expedition System', () => {
       );
 
       // Speedup tier 1 = 50% time reduction
-      const speedupIx = createExpeditionSpeedupInstruction(
+      const speedupIx = await createExpeditionSpeedupInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { speedupTier: 1 }
       );
@@ -717,7 +716,7 @@ describe('Expedition System', () => {
     it('should reject speedup without active expedition', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const speedupIx = createExpeditionSpeedupInstruction(
+      const speedupIx = await createExpeditionSpeedupInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { speedupTier: 1 }
       );
@@ -736,14 +735,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Fishing,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -751,7 +750,7 @@ describe('Expedition System', () => {
       );
 
       // Speedup tier 2 = 75% time reduction (2x gem cost)
-      const speedupIx = createExpeditionSpeedupInstruction(
+      const speedupIx = await createExpeditionSpeedupInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { speedupTier: 2 }
       );
@@ -769,21 +768,21 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
         [player.keypair]
       );
 
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -798,7 +797,7 @@ describe('Expedition System', () => {
     it('should reject abort without active expedition', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -823,14 +822,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -838,7 +837,7 @@ describe('Expedition System', () => {
       );
 
       // Strike to accumulate some loot
-      const strikeIx = createExpeditionStrikeInstruction(
+      const strikeIx = await createExpeditionStrikeInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -849,7 +848,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
 
       // Abort — accumulated loot should be lost
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -859,7 +858,7 @@ describe('Expedition System', () => {
       const afterSnapshot = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterSnapshot).not.toBeNull();
       // Gems and fragments should not have increased from expedition rewards
-      expect(afterSnapshot!.gems.gte(gemsBefore)).toBe(true);
+      expect(afterSnapshot!.gems >= gemsBefore).toBe(true);
       // Resources should be roughly the same (no expedition reward credit)
     });
 
@@ -870,14 +869,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -889,7 +888,7 @@ describe('Expedition System', () => {
       expect(expedition).not.toBeNull();
 
       // Abort expedition
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -912,14 +911,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -931,7 +930,7 @@ describe('Expedition System', () => {
       expect(duringAccount).not.toBeNull();
 
       // Abort expedition — operatives should be returned
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -941,7 +940,7 @@ describe('Expedition System', () => {
       const afterAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterAccount).not.toBeNull();
       // Operatives should be restored to the pre-expedition level
-      expect(afterAccount!.operativeUnit1.gte(opsBefore)).toBe(true);
+      expect(afterAccount!.operativeUnit1 >= opsBefore).toBe(true);
     });
   });
 
@@ -955,14 +954,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -982,14 +981,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Fishing,
               tier: 0,
-              operativeUnit1: new BN(10),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(10),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             }
           )
         ),
@@ -1006,14 +1005,14 @@ describe('Expedition System', () => {
       // createMiningReadyPlayer builds Mine at level 1. Tier 1 requires Mine level 5.
       const player = await createMiningReadyPlayer();
 
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Mining,
           tier: 1,
-          operativeUnit1: new BN(10),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(10),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         },
       );
       await expectTransactionToFail(
@@ -1028,14 +1027,14 @@ describe('Expedition System', () => {
       // We verify the rejection ladder: at Mine L1, every tier above 0 must fail.
       const player = await createMiningReadyPlayer();
       for (const tier of [1, 2, 3, 4]) {
-        const ix = createExpeditionStartInstruction(
+        const ix = await createExpeditionStartInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey },
           {
             expeditionType: ExpeditionType.Mining,
             tier,
-            operativeUnit1: new BN(10),
-            operativeUnit2: new BN(0),
-            operativeUnit3: new BN(0),
+            operativeUnit1: BigInt(10),
+            operativeUnit2: BigInt(0),
+            operativeUnit3: BigInt(0),
           },
         );
         await expectTransactionToFail(
@@ -1063,14 +1062,14 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionStartInstruction(
+          await createExpeditionStartInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             {
               expeditionType: ExpeditionType.Mining,
               tier: 0,
-              operativeUnit1: new BN(operativesUnit1),
-              operativeUnit2: new BN(0),
-              operativeUnit3: new BN(0),
+              operativeUnit1: BigInt(operativesUnit1),
+              operativeUnit2: BigInt(0),
+              operativeUnit3: BigInt(0),
             },
           ),
         ),
@@ -1082,7 +1081,7 @@ describe('Expedition System', () => {
           await sendTransaction(
             ctx.svm,
             new Transaction().add(
-              createExpeditionSpeedupInstruction(
+              await createExpeditionSpeedupInstruction(
                 { gameEngine: ctx.gameEngine, owner: player.publicKey },
                 { speedupTier: 2 },
               ),
@@ -1097,7 +1096,7 @@ describe('Expedition System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createExpeditionClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
+          await createExpeditionClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
         ),
         [player.keypair],
       );
@@ -1110,7 +1109,7 @@ describe('Expedition System', () => {
       await factory.buildAndCompleteBuilding(player, BuildingType.Camp);
       await factory.hireUnits(player, 3, 200);
       const { before, after } = await runMiningExpedition(player, 5);
-      expect(after.fragments.gt(before.fragments)).toBe(true);
+      expect(after.fragments > before.fragments).toBe(true);
     });
 
     it('should grant produce reward and return operatives', async () => {
@@ -1122,9 +1121,9 @@ describe('Expedition System', () => {
       void before;
       // Mining yields produce on the player. Some mining configs grant 0 produce when
       // bonuses are zero — assert non-decrease rather than strict increase.
-      expect(after.produce.gte(before.produce)).toBe(true);
+      expect(after.produce >= before.produce).toBe(true);
       // Operatives sent on expedition return to the player after claim.
-      expect(after.operativeUnit1.gte(opBefore)).toBe(true);
+      expect(after.operativeUnit1 >= opBefore).toBe(true);
     });
 
     it('should not lose operatives that were temporarily locked on the expedition', async () => {
@@ -1148,15 +1147,15 @@ describe('Expedition System', () => {
       const small = await createMiningReadyPlayer();
       await factory.hireUnits(small, 3, 200);
       const smallRun = await runMiningExpedition(small, 1);
-      const smallFragments = smallRun.after.fragments.sub(smallRun.before.fragments);
+      const smallFragments = smallRun.after.fragments - smallRun.before.fragments;
 
       const big = await createMiningReadyPlayer();
       await factory.hireUnits(big, 3, 200);
       const bigRun = await runMiningExpedition(big, 10);
-      const bigFragments = bigRun.after.fragments.sub(bigRun.before.fragments);
+      const bigFragments = bigRun.after.fragments - bigRun.before.fragments;
 
       // 10× operatives → at least as many fragments (strictly more in practice).
-      expect(bigFragments.gte(smallFragments)).toBe(true);
+      expect(bigFragments >= smallFragments).toBe(true);
     });
 
     it('should boost rewards for a player with Observatory built', async () => {
@@ -1164,16 +1163,16 @@ describe('Expedition System', () => {
       const noObs = await createMiningReadyPlayer();
       await factory.hireUnits(noObs, 3, 200);
       const baselineRun = await runMiningExpedition(noObs, 5);
-      const baselineFragments = baselineRun.after.fragments.sub(baselineRun.before.fragments);
+      const baselineFragments = baselineRun.after.fragments - baselineRun.before.fragments;
 
       const withObs = await createMiningReadyPlayer();
       await factory.buildAndCompleteBuilding(withObs, BuildingType.Observatory);
       await factory.hireUnits(withObs, 3, 200);
       const obsRun = await runMiningExpedition(withObs, 5);
-      const obsFragments = obsRun.after.fragments.sub(obsRun.before.fragments);
+      const obsFragments = obsRun.after.fragments - obsRun.before.fragments;
 
       // Observatory boost is non-decreasing; in most time-of-day windows it's strictly higher.
-      expect(obsFragments.gte(baselineFragments)).toBe(true);
+      expect(obsFragments >= baselineFragments).toBe(true);
     });
   });
 });

@@ -48,16 +48,16 @@ export interface SetPlayerNameAccounts {
  * Domain must be owned by the player's wallet.
  * Also sets the main domain via TLD House CPI so the player PDA's primary name is set.
  */
-export function createSetPlayerNameInstruction(
+export async function createSetPlayerNameInstruction(
   accounts: SetPlayerNameAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [tldHouse] = deriveTldHousePda(accounts.tld);
-  const [tldState] = deriveTldStatePda();
-  const [mainDomain] = deriveMainDomainPda(player);
-  const [nameParent] = deriveTldHousePda(accounts.tld); // TLD account (same as tldHouse)
-  const [nameAccount] = deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = deriveReverseNameAccountPda(nameAccount, tldHouse);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [tldHouse] = await deriveTldHousePda(accounts.tld);
+  const [tldState] = await deriveTldStatePda();
+  const [mainDomain] = await deriveMainDomainPda(player);
+  const [nameParent] = await deriveTldHousePda(accounts.tld); // TLD account (same as tldHouse)
+  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
+  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
   // NULL_PUBKEY for standard domains (name_class)
   const nameClass = PublicKey.default;
@@ -95,7 +95,7 @@ export function createSetPlayerNameInstruction(
   const reverseAccHashedName = getHashedName(nameAccount.toBase58());
 
   const writer = new BufferWriter(32);
-  writer.writeBytes(Buffer.from(reverseAccHashedName));
+  writer.writeBytes(reverseAccHashedName);
 
   const data = createInstructionData(DISCRIMINATORS.NAME_SET_PLAYER, writer.toBuffer());
 
@@ -129,20 +129,20 @@ export interface UpdatePlayerNameAccounts {
  *
  * Transfers old domain back to wallet, sets new domain.
  */
-export function createUpdatePlayerNameInstruction(
+export async function createUpdatePlayerNameInstruction(
   accounts: UpdatePlayerNameAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [tldHouse] = deriveTldHousePda(accounts.tld);
-  const [tldState] = deriveTldStatePda();
-  const [mainDomain] = deriveMainDomainPda(player);
-  const [nameParent] = deriveTldHousePda(accounts.tld);
-  const [nameAccount] = deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = deriveReverseNameAccountPda(nameAccount, tldHouse);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [tldHouse] = await deriveTldHousePda(accounts.tld);
+  const [tldState] = await deriveTldStatePda();
+  const [mainDomain] = await deriveMainDomainPda(player);
+  const [nameParent] = await deriveTldHousePda(accounts.tld);
+  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
+  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
   // Old domain accounts
-  const [oldNameParent] = deriveTldHousePda(accounts.oldTld);
-  const [oldNameAccount] = deriveNameAccountPda(accounts.oldDomainName, oldNameParent);
+  const [oldNameParent] = await deriveTldHousePda(accounts.oldTld);
+  const [oldNameAccount] = await deriveNameAccountPda(accounts.oldDomainName, oldNameParent);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -159,8 +159,8 @@ export function createUpdatePlayerNameInstruction(
   ];
 
   // Instruction data: same as set_player
-  const nameBytes = Buffer.from(accounts.domainName, 'utf8');
-  const tldBytes = Buffer.from(accounts.tld, 'utf8');
+  const nameBytes = new TextEncoder().encode(accounts.domainName);
+  const tldBytes = new TextEncoder().encode(accounts.tld);
   const hashedName = getHashedName(accounts.domainName);
 
   const writer = new BufferWriter(1 + nameBytes.length + 1 + tldBytes.length + 32);
@@ -168,7 +168,7 @@ export function createUpdatePlayerNameInstruction(
   writer.writeBytes(nameBytes);
   writer.writeU8(tldBytes.length);
   writer.writeBytes(tldBytes);
-  writer.writeBytes(Buffer.from(hashedName));
+  writer.writeBytes(hashedName);
 
   const data = createInstructionData(DISCRIMINATORS.NAME_UPDATE_PLAYER, writer.toBuffer());
 
@@ -209,14 +209,14 @@ export interface RemovePlayerNameAccounts {
  * Instruction data (32 bytes):
  * - reverse_acc_hashed_name: [u8; 32]
  */
-export function createRemovePlayerNameInstruction(
+export async function createRemovePlayerNameInstruction(
   accounts: RemovePlayerNameAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [tldHouse] = deriveTldHousePda(accounts.tld);
-  const [nameParent] = deriveTldHousePda(accounts.tld);
-  const [nameAccount] = deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = deriveReverseNameAccountPda(nameAccount, tldHouse);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [tldHouse] = await deriveTldHousePda(accounts.tld);
+  const [nameParent] = await deriveTldHousePda(accounts.tld);
+  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
+  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
   // NULL_PUBKEY for standard domains (name_class)
   const nameClass = PublicKey.default;
@@ -236,7 +236,7 @@ export function createRemovePlayerNameInstruction(
   const reverseAccHashedName = getHashedName(nameAccount.toBase58());
 
   const writer = new BufferWriter(32);
-  writer.writeBytes(Buffer.from(reverseAccHashedName));
+  writer.writeBytes(reverseAccHashedName);
 
   const data = createInstructionData(DISCRIMINATORS.NAME_REMOVE_PLAYER, writer.toBuffer());
 
@@ -268,16 +268,16 @@ export interface SetTeamNameAccounts {
  *
  * Only team leader can set team name.
  */
-export function createSetTeamNameInstruction(
+export async function createSetTeamNameInstruction(
   accounts: SetTeamNameAccounts
-): TransactionInstruction {
-  const [leaderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [tldHouse] = deriveTldHousePda(accounts.tld);
-  const [tldState] = deriveTldStatePda();
-  const [mainDomain] = deriveMainDomainPda(accounts.team);
-  const [nameParent] = deriveTldHousePda(accounts.tld);
-  const [nameAccount] = deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = deriveReverseNameAccountPda(nameAccount, tldHouse);
+): Promise<TransactionInstruction> {
+  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
+  const [tldHouse] = await deriveTldHousePda(accounts.tld);
+  const [tldState] = await deriveTldStatePda();
+  const [mainDomain] = await deriveMainDomainPda(accounts.team);
+  const [nameParent] = await deriveTldHousePda(accounts.tld);
+  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
+  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
   const keys = [
     { pubkey: leaderPlayer, isSigner: false, isWritable: false },
@@ -293,8 +293,8 @@ export function createSetTeamNameInstruction(
     { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const nameBytes = Buffer.from(accounts.domainName, 'utf8');
-  const tldBytes = Buffer.from(accounts.tld, 'utf8');
+  const nameBytes = new TextEncoder().encode(accounts.domainName);
+  const tldBytes = new TextEncoder().encode(accounts.tld);
   const hashedName = getHashedName(accounts.domainName);
 
   const writer = new BufferWriter(1 + nameBytes.length + 1 + tldBytes.length + 32);
@@ -302,7 +302,7 @@ export function createSetTeamNameInstruction(
   writer.writeBytes(nameBytes);
   writer.writeU8(tldBytes.length);
   writer.writeBytes(tldBytes);
-  writer.writeBytes(Buffer.from(hashedName));
+  writer.writeBytes(hashedName);
 
   const data = createInstructionData(DISCRIMINATORS.NAME_SET_TEAM, writer.toBuffer());
 
@@ -336,20 +336,20 @@ export interface UpdateTeamNameAccounts {
 /**
  * Update team's display name to a different domain.
  */
-export function createUpdateTeamNameInstruction(
+export async function createUpdateTeamNameInstruction(
   accounts: UpdateTeamNameAccounts
-): TransactionInstruction {
-  const [leaderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [tldHouse] = deriveTldHousePda(accounts.tld);
-  const [tldState] = deriveTldStatePda();
-  const [mainDomain] = deriveMainDomainPda(accounts.team);
-  const [nameParent] = deriveTldHousePda(accounts.tld);
-  const [nameAccount] = deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = deriveReverseNameAccountPda(nameAccount, tldHouse);
+): Promise<TransactionInstruction> {
+  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
+  const [tldHouse] = await deriveTldHousePda(accounts.tld);
+  const [tldState] = await deriveTldStatePda();
+  const [mainDomain] = await deriveMainDomainPda(accounts.team);
+  const [nameParent] = await deriveTldHousePda(accounts.tld);
+  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
+  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
   // Old domain
-  const [oldNameParent] = deriveTldHousePda(accounts.oldTld);
-  const [oldNameAccount] = deriveNameAccountPda(accounts.oldDomainName, oldNameParent);
+  const [oldNameParent] = await deriveTldHousePda(accounts.oldTld);
+  const [oldNameAccount] = await deriveNameAccountPda(accounts.oldDomainName, oldNameParent);
 
   const keys = [
     { pubkey: leaderPlayer, isSigner: false, isWritable: false },
@@ -366,8 +366,8 @@ export function createUpdateTeamNameInstruction(
     { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const nameBytes = Buffer.from(accounts.domainName, 'utf8');
-  const tldBytes = Buffer.from(accounts.tld, 'utf8');
+  const nameBytes = new TextEncoder().encode(accounts.domainName);
+  const tldBytes = new TextEncoder().encode(accounts.tld);
   const hashedName = getHashedName(accounts.domainName);
 
   const writer = new BufferWriter(1 + nameBytes.length + 1 + tldBytes.length + 32);
@@ -375,7 +375,7 @@ export function createUpdateTeamNameInstruction(
   writer.writeBytes(nameBytes);
   writer.writeU8(tldBytes.length);
   writer.writeBytes(tldBytes);
-  writer.writeBytes(Buffer.from(hashedName));
+  writer.writeBytes(hashedName);
 
   const data = createInstructionData(DISCRIMINATORS.NAME_UPDATE_TEAM, writer.toBuffer());
 
@@ -405,14 +405,14 @@ export interface RemoveTeamNameAccounts {
 /**
  * Remove team's display name (transfer domain back to leader).
  */
-export function createRemoveTeamNameInstruction(
+export async function createRemoveTeamNameInstruction(
   accounts: RemoveTeamNameAccounts
-): TransactionInstruction {
-  const [leaderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [tldHouse] = deriveTldHousePda(accounts.tld);
-  const [mainDomain] = deriveMainDomainPda(accounts.team);
-  const [nameParent] = deriveTldHousePda(accounts.tld);
-  const [nameAccount] = deriveNameAccountPda(accounts.domainName, nameParent);
+): Promise<TransactionInstruction> {
+  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
+  const [tldHouse] = await deriveTldHousePda(accounts.tld);
+  const [mainDomain] = await deriveMainDomainPda(accounts.team);
+  const [nameParent] = await deriveTldHousePda(accounts.tld);
+  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
 
   const keys = [
     { pubkey: leaderPlayer, isSigner: false, isWritable: false },

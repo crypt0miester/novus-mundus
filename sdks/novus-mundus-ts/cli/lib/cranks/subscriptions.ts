@@ -35,7 +35,7 @@ export async function crankSubscriptions(ctx: CLIContext): Promise<PhaseStats> {
   const toDowngrade: { pubkey: typeof accounts[0]['pubkey'] }[] = [];
 
   for (const account of accounts) {
-    const data = account.account.data;
+    const data = Buffer.from(account.account.data);
     // subscription_tier is at a known offset in PlayerAccount
     // Layout: 8 (discriminator) + ... player fields ...
     // We need to read subscription_tier (u8) and subscription_end (i64)

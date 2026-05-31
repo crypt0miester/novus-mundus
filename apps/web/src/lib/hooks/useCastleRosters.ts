@@ -12,7 +12,7 @@ import {
   type CourtPositionAccount,
   type GarrisonContributionAccount,
 } from "novus-mundus-sdk";
-import bs58 from "bs58";
+import { getBase58Decoder } from "@solana/codecs-strings";
 
 // Resolve a batch of player PDAs to their owner wallets. The court-candidate
 // effect in castle-tab also depends on this, so the resolver stays owned by
@@ -54,7 +54,9 @@ export function useCourtRoster({
     }
     let cancelled = false;
     (async () => {
-      const courtPdas = [0, 1, 2, 3, 4].map((i) => deriveCourtPda(castlePda, i)[0]);
+      const courtPdas = await Promise.all(
+        [0, 1, 2, 3, 4].map(async (i) => (await deriveCourtPda(castlePda, i))[0]),
+      );
       const infos = await connection.getMultipleAccountsInfo(courtPdas);
       const occupied: { position: number; account: CourtPositionAccount }[] = [];
       for (let i = 0; i < infos.length; i++) {
@@ -109,7 +111,7 @@ export function useGarrisonRoster({
     }
     let cancelled = false;
     (async () => {
-      const keyByte = bs58.encode(Buffer.from([AccountKey.CastleGarrison]));
+      const keyByte = getBase58Decoder().decode(Uint8Array.of(AccountKey.CastleGarrison));
       const accounts = await connection.getProgramAccounts(NOVUS_PROGRAM_ID, {
         filters: [
           { memcmp: { offset: 0, bytes: keyByte } },

@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createInitPlayerInstruction,
@@ -45,6 +44,7 @@ import {
   expectTransactionToFail,
 } from '../utils/transactions';
 import { log } from '../utils/logger';
+import { svmKey } from '../fixtures/svm';
 import {
   fetchPlayer,
 } from '../utils/accounts';
@@ -117,7 +117,7 @@ describe('Player Lifecycle', () => {
       });
 
       // Try to initialize again
-      const ix = createInitPlayerInstruction({
+      const ix = await createInitPlayerInstruction({
         owner: player.publicKey,
         gameEngine: ctx.gameEngine,
         startingCityId: 1,
@@ -130,14 +130,14 @@ describe('Player Lifecycle', () => {
     });
 
     it('should reject initialization with invalid city', async () => {
-      const keypair = Keypair.generate();
-      const [playerPda] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+      const keypair = await Keypair.generate();
+      const [playerPda] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
 
       // Airdrop some SOL
-      ctx.svm.airdrop(keypair.publicKey, BigInt(1_000_000_000));
+      ctx.svm.airdrop(svmKey(keypair.publicKey), BigInt(1_000_000_000));
 
       // Try to initialize with non-existent city (999)
-      const ix = createInitPlayerInstruction({
+      const ix = await createInitPlayerInstruction({
         owner: keypair.publicKey,
         gameEngine: ctx.gameEngine,
         startingCityId: 999,
@@ -294,7 +294,7 @@ describe('Player Lifecycle', () => {
       assertPlayerProtected(account!, currentTime);
 
       // Protection should be set for ~24 hours in the future
-      const protectionEnd = account!.newPlayerProtectionUntil.toNumber();
+      const protectionEnd = Number(account!.newPlayerProtectionUntil);
       const expectedEnd = currentTime + SECONDS_PER_DAY;
 
       // Allow some tolerance (within 1 hour)
@@ -343,7 +343,7 @@ describe('Player Lifecycle', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
 
-      const createdAt = account!.createdAt.toNumber();
+      const createdAt = Number(account!.createdAt);
       expect(createdAt).toBeGreaterThanOrEqual(beforeTime - 10);
       expect(createdAt).toBeLessThanOrEqual(afterTime + 10);
     });
@@ -395,30 +395,30 @@ describe('Player Lifecycle', () => {
 
   describe('PDA Derivation', () => {
     it('should derive correct player PDA', async () => {
-      const keypair = Keypair.generate();
-      const [derivedPda, bump] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+      const keypair = await Keypair.generate();
+      const [derivedPda, bump] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
 
       // PDA should be valid (off-curve)
       expect(PublicKey.isOnCurve(derivedPda.toBytes())).toBe(false);
 
       // Same owner should always derive same PDA
-      const [derivedPda2] = derivePlayerPda(ctx.gameEngine, keypair.publicKey);
+      const [derivedPda2] = await derivePlayerPda(ctx.gameEngine, keypair.publicKey);
       expect(derivedPda.equals(derivedPda2)).toBe(true);
     });
 
     it('should derive different PDAs for different owners', async () => {
-      const keypair1 = Keypair.generate();
-      const keypair2 = Keypair.generate();
+      const keypair1 = await Keypair.generate();
+      const keypair2 = await Keypair.generate();
 
-      const [pda1] = derivePlayerPda(ctx.gameEngine, keypair1.publicKey);
-      const [pda2] = derivePlayerPda(ctx.gameEngine, keypair2.publicKey);
+      const [pda1] = await derivePlayerPda(ctx.gameEngine, keypair1.publicKey);
+      const [pda2] = await derivePlayerPda(ctx.gameEngine, keypair2.publicKey);
 
       expect(pda1.equals(pda2)).toBe(false);
     });
 
     it('should derive correct city PDA', async () => {
       for (const city of CITIES) {
-        const [cityPda] = deriveCityPda(ctx.gameEngine, city.id);
+        const [cityPda] = await deriveCityPda(ctx.gameEngine, city.id);
         expect(PublicKey.isOnCurve(cityPda.toBytes())).toBe(false);
 
         // Verify it matches what we stored in context

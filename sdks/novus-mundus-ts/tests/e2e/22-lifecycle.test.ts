@@ -14,7 +14,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Keypair, PublicKey, Transaction, ComputeBudgetProgram } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   // Economy
@@ -176,6 +175,11 @@ import { getCurrentTimestamp, advanceTime } from '../fixtures/time';
 
 // Test
 
+// Player-snapshot diff values are `bigint` post web3.js v3 migration, which
+// `JSON.stringify` refuses to serialize — stringify bigints as decimal for logs.
+const jstr = (v: unknown): string =>
+  JSON.stringify(v, (_k, x) => (typeof x === 'bigint' ? x.toString() : x));
+
 describe('Full Game Lifecycle', () => {
   let ctx: TestContext;
   let factory: PlayerFactory;
@@ -215,7 +219,7 @@ describe('Full Game Lifecycle', () => {
 
     // ── Admin Bootstrap ──
     log.step('Admin: Creating castle');
-    const castleIx = createCreateCastleInstruction(
+    const castleIx = await createCreateCastleInstruction(
       { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
       {
         cityId: CASTLE_CITY_ID,
@@ -233,7 +237,7 @@ describe('Full Game Lifecycle', () => {
     log.txSuccess('Castle created');
 
     log.step('Admin: Creating arena season');
-    const arenaIx = createCreateSeasonInstruction(
+    const arenaIx = await createCreateSeasonInstruction(
       {
         authority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -250,7 +254,7 @@ describe('Full Game Lifecycle', () => {
     log.txSuccess('Arena season created');
 
     log.step('Admin: Creating dungeon template');
-    const dungeonIx = createCreateDungeonTemplateInstruction(
+    const dungeonIx = await createCreateDungeonTemplateInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -287,7 +291,7 @@ describe('Full Game Lifecycle', () => {
     {
       log.step('Admin: Creating event');
       const now = Math.floor(Date.now() / 1000);
-      const eventIx = createCreateEventInstruction(
+      const eventIx = await createCreateEventInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
@@ -312,7 +316,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       log.step('Admin: Creating bundle');
-      const bundleIx = createCreateBundleInstruction(
+      const bundleIx = await createCreateBundleInstruction(
         {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -324,9 +328,9 @@ describe('Full Game Lifecycle', () => {
           category: 0,
           requiresSubscription: 0,
           savingsBps: 1000,
-          priceSolLamports: new BN(5000),
-          availableFrom: new BN(0),
-          availableUntil: new BN(0),
+          priceSolLamports: BigInt(5000),
+          availableFrom: BigInt(0),
+          availableUntil: BigInt(0),
           isActive: true,
           items: [
             { itemId: TEST_GEMS_ITEM.itemId, quantity: 5 },
@@ -341,7 +345,7 @@ describe('Full Game Lifecycle', () => {
     {
       log.step('Admin: Creating flash sale');
       const onChainNow = await getCurrentTimestamp(ctx.svm);
-      const flashIx = createCreateFlashSaleInstruction(
+      const flashIx = await createCreateFlashSaleInstruction(
         {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -352,7 +356,7 @@ describe('Full Game Lifecycle', () => {
           itemId: TEST_GEMS_ITEM.itemId,
           isBundle: false,
           discountBps: 2000,
-          startsAt: new BN(onChainNow + 2), // Starts in 2s — active well before Layer 4
+          startsAt: BigInt(onChainNow + 2), // Starts in 2s — active well before Layer 4
           durationSecs: 3600, // 1 hour (min=3600, max=21600)
           maxStock: 100,
         }
@@ -408,14 +412,14 @@ describe('Full Game Lifecycle', () => {
     // Alpha: Buy plots 2+3 → 12 slots (3 plots × 4)
     log.step('Alpha: Buying extra plots');
     {
-      const buyPlotIx1 = createBuyPlotInstruction({
+      const buyPlotIx1 = await createBuyPlotInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
       await sendTx(ctx.svm, new Transaction().add(buyPlotIx1), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: bought plot 2');
 
-      const buyPlotIx2 = createBuyPlotInstruction({
+      const buyPlotIx2 = await createBuyPlotInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -426,7 +430,7 @@ describe('Full Game Lifecycle', () => {
     // Bravo: Buy plot 2 → 8 slots (2 plots × 4)
     log.step('Bravo: Buying extra plot');
     {
-      const buyPlotIx = createBuyPlotInstruction({
+      const buyPlotIx = await createBuyPlotInstruction({
         owner: bravo.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -485,7 +489,7 @@ describe('Full Game Lifecycle', () => {
     // Alpha: updateLockedNovi
     const beforeNovi = await snapshotPlayer(ctx.svm, alpha.playerPda);
     {
-      const ix = createUpdateLockedNoviInstruction({
+      const ix = await createUpdateLockedNoviInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -529,7 +533,7 @@ describe('Full Game Lifecycle', () => {
     // Alpha: collectResources (cash)
     {
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const ix = createCollectResourcesInstruction(
+      const ix = await createCollectResourcesInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         { noviAmount: 50, collectionType: 0 }
       );
@@ -537,7 +541,7 @@ describe('Full Game Lifecycle', () => {
       const after = await snapshotPlayer(ctx.svm, alpha.playerPda);
       if (before && after) {
         const diff = diffPlayerSnapshots(before, after);
-        log.info(`Cash change: ${JSON.stringify(diff.changes['cashOnHand'] ?? 'no change')}`);
+        log.info(`Cash change: ${jstr(diff.changes['cashOnHand'] ?? 'no change')}`);
       }
       log.txSuccess('Alpha: collectResources (cash)');
     }
@@ -557,7 +561,7 @@ describe('Full Game Lifecycle', () => {
 
     // Alpha: purchaseStamina
     {
-      const ix = createPurchaseStaminaInstruction(
+      const ix = await createPurchaseStaminaInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         { amount: 50 }
       );
@@ -568,7 +572,7 @@ describe('Full Game Lifecycle', () => {
     // Alpha: vaultTransfer (deposit) — Vault now built
     {
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const ix = createVaultTransferInstruction(
+      const ix = await createVaultTransferInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         { amount: 1000, toVault: true }
       );
@@ -576,7 +580,7 @@ describe('Full Game Lifecycle', () => {
       const after = await snapshotPlayer(ctx.svm, alpha.playerPda);
       if (before && after) {
         const diff = diffPlayerSnapshots(before, after);
-        log.info(`Vault transfer: ${JSON.stringify(diff.changes['cashInVault'] ?? 'no change')}`);
+        log.info(`Vault transfer: ${jstr(diff.changes['cashInVault'] ?? 'no change')}`);
       }
       log.txSuccess('Alpha: vaultTransfer (deposit)');
     }
@@ -589,7 +593,7 @@ describe('Full Game Lifecycle', () => {
     // Purchase item (gems) — EXT_INVENTORY already unlocked from createEstateBatched
     {
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         {
           buyer: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -605,9 +609,9 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Purchase bundle
-      const [gemsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
-      const [fragmentsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_FRAGMENTS_ITEM.itemId);
-      const ix = createPurchaseBundleInstruction(
+      const [gemsItemPda] = await deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
+      const [fragmentsItemPda] = await deriveShopItemPda(ctx.gameEngine, TEST_FRAGMENTS_ITEM.itemId);
+      const ix = await createPurchaseBundleInstruction(
         {
           buyer: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -624,8 +628,8 @@ describe('Full Game Lifecycle', () => {
       // Advance time so flash sale becomes active (startsAt = onChainNow + 2 in beforeAll)
       await advanceTime(ctx.svm, 5);
       // Purchase flash sale
-      const [gemsItemPda] = deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
-      const ix = createPurchaseFlashSaleInstruction(
+      const [gemsItemPda] = await deriveShopItemPda(ctx.gameEngine, TEST_GEMS_ITEM.itemId);
+      const ix = await createPurchaseFlashSaleInstruction(
         {
           buyer: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -645,11 +649,11 @@ describe('Full Game Lifecycle', () => {
     log.section('Layer 5: Team');
 
     let teamPda: PublicKey;
-    [teamPda] = deriveTeamPda(ctx.gameEngine, TEAM_ID);
+    [teamPda] = await deriveTeamPda(ctx.gameEngine, TEAM_ID);
 
     // Alpha: createTeam → unlocks EXT_TEAM for Alpha
     {
-      const ix = createTeamCreateInstruction(
+      const ix = await createTeamCreateInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -665,7 +669,7 @@ describe('Full Game Lifecycle', () => {
 
     // Invite + accept: Bravo (slot 1) → unlocks EXT_TEAM for Bravo
     {
-      const inviteBravoIx = createTeamInviteInstruction({
+      const inviteBravoIx = await createTeamInviteInstruction({
         inviter: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -676,7 +680,7 @@ describe('Full Game Lifecycle', () => {
       });
       await sendTx(ctx.svm, new Transaction().add(inviteBravoIx), [alpha.keypair], ctx.config);
 
-      const acceptBravoIx = createTeamAcceptInviteInstruction({
+      const acceptBravoIx = await createTeamAcceptInviteInstruction({
         owner: bravo.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -691,7 +695,7 @@ describe('Full Game Lifecycle', () => {
 
     // Invite + accept: Charlie (slot 2) → unlocks EXT_TEAM for Charlie
     {
-      const inviteCharlieIx = createTeamInviteInstruction({
+      const inviteCharlieIx = await createTeamInviteInstruction({
         inviter: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -702,7 +706,7 @@ describe('Full Game Lifecycle', () => {
       });
       await sendTx(ctx.svm, new Transaction().add(inviteCharlieIx), [alpha.keypair], ctx.config);
 
-      const acceptCharlieIx = createTeamAcceptInviteInstruction({
+      const acceptCharlieIx = await createTeamAcceptInviteInstruction({
         owner: charlie.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -717,7 +721,7 @@ describe('Full Game Lifecycle', () => {
 
     // Invite + accept: Foxtrot (slot 3) → unlocks EXT_TEAM for Foxtrot
     {
-      const inviteFoxtrotIx = createTeamInviteInstruction({
+      const inviteFoxtrotIx = await createTeamInviteInstruction({
         inviter: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -728,7 +732,7 @@ describe('Full Game Lifecycle', () => {
       });
       await sendTx(ctx.svm, new Transaction().add(inviteFoxtrotIx), [alpha.keypair], ctx.config);
 
-      const acceptFoxtrotIx = createTeamAcceptInviteInstruction({
+      const acceptFoxtrotIx = await createTeamAcceptInviteInstruction({
         owner: foxtrot.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -743,7 +747,7 @@ describe('Full Game Lifecycle', () => {
 
     // Bravo: depositTreasury
     {
-      const ix = createTeamDepositTreasuryInstruction(
+      const ix = await createTeamDepositTreasuryInstruction(
         {
           owner: bravo.publicKey,
           gameEngine: ctx.gameEngine,
@@ -758,7 +762,7 @@ describe('Full Game Lifecycle', () => {
 
     // Alpha: setMotd
     {
-      const ix = createTeamSetMotdInstruction(
+      const ix = await createTeamSetMotdInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -774,7 +778,7 @@ describe('Full Game Lifecycle', () => {
 
     // Alpha: updateSettings
     {
-      const ix = createTeamUpdateSettingsInstruction(
+      const ix = await createTeamUpdateSettingsInstruction(
         {
           member: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -798,9 +802,9 @@ describe('Full Game Lifecycle', () => {
 
     // Alpha: createRally targeting Delta → unlocks EXT_RALLY for Alpha
     {
-      [rallyPda] = deriveRallyPda(ctx.gameEngine, alpha.publicKey, RALLY_ID);
+      [rallyPda] = await deriveRallyPda(ctx.gameEngine, alpha.publicKey, RALLY_ID);
 
-      const ix = createRallyCreateInstruction(
+      const ix = await createRallyCreateInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -827,7 +831,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Alpha: createRally');
 
       // Bravo: joinRally → unlocks EXT_RALLY for Bravo
-      const joinIx = createRallyJoinInstruction(
+      const joinIx = await createRallyJoinInstruction(
         {
           owner: bravo.publicKey,
           gameEngine: ctx.gameEngine,
@@ -851,7 +855,7 @@ describe('Full Game Lifecycle', () => {
 
       // Alpha: cancelRally → units should be returned
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const cancelIx = createRallyCancelInstruction({
+      const cancelIx = await createRallyCancelInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         rally: rallyPda,
@@ -920,7 +924,7 @@ describe('Full Game Lifecycle', () => {
     log.section('Layer 8: Research');
 
     {
-      const ix = createStartResearchInstruction({
+      const ix = await createStartResearchInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         researchType: 0,
@@ -929,7 +933,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Alpha: startResearch (type 0)');
 
       // Speed up and complete
-      const speedIx1 = createSpeedUpResearchInstruction(
+      const speedIx1 = await createSpeedUpResearchInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -940,7 +944,7 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(speedIx1), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: speedUpResearch');
 
-      const completeIx = createCompleteResearchInstruction({
+      const completeIx = await createCompleteResearchInstruction({
         payer: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         playerOwner: alpha.publicKey,
@@ -957,7 +961,7 @@ describe('Full Game Lifecycle', () => {
 
     // Alpha: purchase Expert tier (offchain payment with DAO as paymentAuthority)
     {
-      const ix = createPurchaseSubscriptionInstruction(
+      const ix = await createPurchaseSubscriptionInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -988,20 +992,20 @@ describe('Full Game Lifecycle', () => {
 
     // Research type 20 (DailyRewardsSystem) to unlock has_daily_rewards
     {
-      const ix20 = createStartResearchInstruction({
+      const ix20 = await createStartResearchInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         researchType: 20,
       });
       await sendTx(ctx.svm, new Transaction().add(ix20), [alpha.keypair], ctx.config);
 
-      const speed20 = createSpeedUpResearchInstruction(
+      const speed20 = await createSpeedUpResearchInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine, researchType: 20 },
         { speedUpSeconds: 0 }
       );
       await sendTx(ctx.svm, new Transaction().add(speed20), [alpha.keypair], ctx.config);
 
-      const complete20 = createCompleteResearchInstruction({
+      const complete20 = await createCompleteResearchInstruction({
         payer: alpha.publicKey,
         playerOwner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
@@ -1013,7 +1017,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const ix = createClaimDailyRewardInstruction({
+      const ix = await createClaimDailyRewardInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -1085,10 +1089,10 @@ describe('Full Game Lifecycle', () => {
       const echoLoc = await factory.getPlayerLocation(echo);
       if (echoLoc) {
         const encounterIndex = 0;
-        const [encPda] = deriveEncounterPda(ctx.gameEngine, echoLoc.cityId, encounterIndex);
+        const [encPda] = await deriveEncounterPda(ctx.gameEngine, echoLoc.cityId, encounterIndex);
         encounterPda = encPda;
 
-        const ix = createSpawnEncounterInstruction(
+        const ix = await createSpawnEncounterInstruction(
           {
             payer: echo.publicKey,
             playerOwner: echo.publicKey,
@@ -1104,7 +1108,7 @@ describe('Full Game Lifecycle', () => {
         log.txSuccess('Echo: spawnEncounter (Common)');
 
         // Echo: attackEncounter
-        const attackEncIx = createAttackEncounterInstruction(
+        const attackEncIx = await createAttackEncounterInstruction(
           {
             owner: echo.publicKey,
             gameEngine: ctx.gameEngine,
@@ -1116,10 +1120,10 @@ describe('Full Game Lifecycle', () => {
         log.txSuccess('Echo: attackEncounter');
 
         // Try to claim loot
-        const [lootPda] = deriveLootPda(echo.playerPda, 0);
+        const [lootPda] = await deriveLootPda(echo.playerPda, 0);
         const lootExists = await accountExists(ctx.svm, lootPda);
         if (lootExists) {
-          const claimIx = createClaimLootInstruction({
+          const claimIx = await createClaimLootInstruction({
             owner: echo.publicKey,
             gameEngine: ctx.gameEngine,
             loot: lootPda,
@@ -1135,7 +1139,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Alpha: attackPlayer(Delta) — both have units + equipment
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           attacker: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1159,7 +1163,7 @@ describe('Full Game Lifecycle', () => {
       // Alpha moved to Delta's city in Layer 11, so use Delta's city as destination
       const alphaCurrentCity = (await factory.getPlayerLocation(alpha))?.cityId ?? alpha.startingCityId;
       const beforeBravo = await snapshotPlayer(ctx.svm, bravo.playerPda);
-      const ix = createSendReinforcementInstruction(
+      const ix = await createSendReinforcementInstruction(
         {
           sender: bravo.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1182,7 +1186,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Bravo: sendReinforcement to Alpha (5 DU1)');
 
       // Verify reinforcement account exists
-      const [reinforcementPda] = deriveReinforcementPda(ctx.gameEngine, bravo.publicKey, alpha.publicKey);
+      const [reinforcementPda] = await deriveReinforcementPda(ctx.gameEngine, bravo.publicKey, alpha.publicKey);
       const exists = await accountExists(ctx.svm, reinforcementPda);
       expect(exists).toBe(true);
       log.info('Reinforcement account exists');
@@ -1192,7 +1196,7 @@ describe('Full Game Lifecycle', () => {
       if (beforeBravo && afterBravo) {
         const diff = diffPlayerSnapshots(beforeBravo, afterBravo);
         expect(diff.changes['defensiveUnit1']).toBeDefined();
-        log.info(`Bravo DU1 change: ${JSON.stringify(diff.changes['defensiveUnit1'])}`);
+        log.info(`Bravo DU1 change: ${jstr(diff.changes['defensiveUnit1'])}`);
       }
 
       // Buy gems for Bravo to pay for speedups
@@ -1201,7 +1205,7 @@ describe('Full Game Lifecycle', () => {
 
       // Speedup outbound travel (tier 2 = 25% remaining per application)
       for (let i = 0; i < 5; i++) {
-        const speedupIx = createReinforcementSpeedupInstruction(
+        const speedupIx = await createReinforcementSpeedupInstruction(
           {
             sender: bravo.publicKey,
             gameEngine: ctx.gameEngine,
@@ -1225,7 +1229,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Reinforcement: processArrival');
 
       // Bravo: recallReinforcement (Alpha is now in Delta's city)
-      const recallIx = createRecallReinforcementInstruction({
+      const recallIx = await createRecallReinforcementInstruction({
         sender: bravo.publicKey,
         gameEngine: ctx.gameEngine,
         destinationOwner: alpha.publicKey,
@@ -1237,7 +1241,7 @@ describe('Full Game Lifecycle', () => {
 
       // Speedup return travel (tier 2 = 25% remaining per application)
       for (let i = 0; i < 5; i++) {
-        const speedupIx = createReinforcementSpeedupInstruction(
+        const speedupIx = await createReinforcementSpeedupInstruction(
           {
             sender: bravo.publicKey,
             gameEngine: ctx.gameEngine,
@@ -1254,7 +1258,7 @@ describe('Full Game Lifecycle', () => {
 
       // processReturn — verify Bravo gets units back
       const beforeReturn = await snapshotPlayer(ctx.svm, bravo.playerPda);
-      const [bravoEstate] = deriveEstatePda(bravo.playerPda);
+      const [bravoEstate] = await deriveEstatePda(bravo.playerPda);
       const returnIx = createProcessReturnInstruction({
         reinforcement: reinforcementPda,
         senderPlayer: bravo.playerPda,
@@ -1278,7 +1282,7 @@ describe('Full Game Lifecycle', () => {
 
     // First do research type 21 (Mining) to unlock has_mining
     {
-      const ix21 = createStartResearchInstruction({
+      const ix21 = await createStartResearchInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         researchType: 21,
@@ -1286,13 +1290,13 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(ix21), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: startResearch (type 21 - Mining)');
 
-      const speed21 = createSpeedUpResearchInstruction(
+      const speed21 = await createSpeedUpResearchInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine, researchType: 21 },
         { speedUpSeconds: 0 }
       );
       await sendTx(ctx.svm, new Transaction().add(speed21), [alpha.keypair], ctx.config);
 
-      const complete21 = createCompleteResearchInstruction({
+      const complete21 = await createCompleteResearchInstruction({
         payer: alpha.publicKey,
         playerOwner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
@@ -1309,7 +1313,7 @@ describe('Full Game Lifecycle', () => {
     // Alpha: startExpedition (Mining, tier 0, 10 OP1) — has operatives from Layer 3
     {
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const ix = createExpeditionStartInstruction(
+      const ix = await createExpeditionStartInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         {
           expeditionType: 1, // Mining
@@ -1321,19 +1325,19 @@ describe('Full Game Lifecycle', () => {
       );
       await sendTx(ctx.svm, new Transaction().add(ix), [alpha.keypair], ctx.config);
 
-      const [expeditionPda] = deriveExpeditionPda(alpha.publicKey);
+      const [expeditionPda] = await deriveExpeditionPda(alpha.publicKey);
       const exists = await accountExists(ctx.svm, expeditionPda);
       expect(exists).toBe(true);
 
       const after = await snapshotPlayer(ctx.svm, alpha.playerPda);
       if (before && after) {
         const diff = diffPlayerSnapshots(before, after);
-        log.info(`Expedition start: OP1 change = ${JSON.stringify(diff.changes['operativeUnit1'])}`);
+        log.info(`Expedition start: OP1 change = ${jstr(diff.changes['operativeUnit1'])}`);
       }
       log.txSuccess('Alpha: startExpedition (Mining)');
 
       // Strike
-      const strikeIx = createExpeditionStrikeInstruction(
+      const strikeIx = await createExpeditionStrikeInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1346,7 +1350,7 @@ describe('Full Game Lifecycle', () => {
 
       // Speedup ×5 (each tier 2 reduces 75% of remaining time) + Claim
       for (let i = 0; i < 5; i++) {
-        const speedIx = createExpeditionSpeedupInstruction(
+        const speedIx = await createExpeditionSpeedupInstruction(
           { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
           { speedupTier: 2 }
         );
@@ -1357,7 +1361,7 @@ describe('Full Game Lifecycle', () => {
       // Advance LiteSVM clock past expedition completion time
       await advanceTime(ctx.svm, 10);
 
-      const claimIx = createExpeditionClaimInstruction({
+      const claimIx = await createExpeditionClaimInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -1367,20 +1371,20 @@ describe('Full Game Lifecycle', () => {
 
     // Research type 22 (Fishing) to unlock has_fishing, then start+abort
     {
-      const ix22 = createStartResearchInstruction({
+      const ix22 = await createStartResearchInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         researchType: 22,
       });
       await sendTx(ctx.svm, new Transaction().add(ix22), [alpha.keypair], ctx.config);
 
-      const speed22 = createSpeedUpResearchInstruction(
+      const speed22 = await createSpeedUpResearchInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine, researchType: 22 },
         { speedUpSeconds: 0 }
       );
       await sendTx(ctx.svm, new Transaction().add(speed22), [alpha.keypair], ctx.config);
 
-      const complete22 = createCompleteResearchInstruction({
+      const complete22 = await createCompleteResearchInstruction({
         payer: alpha.publicKey,
         playerOwner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
@@ -1393,7 +1397,7 @@ describe('Full Game Lifecycle', () => {
     // Start fishing expedition then abort
     {
       const before = await snapshotPlayer(ctx.svm, alpha.playerPda);
-      const startIx = createExpeditionStartInstruction(
+      const startIx = await createExpeditionStartInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         {
           expeditionType: 2, // Fishing
@@ -1406,7 +1410,7 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(startIx), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: startExpedition (Fishing)');
 
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -1426,7 +1430,7 @@ describe('Full Game Lifecycle', () => {
     log.section('Layer 15: Forge');
 
     {
-      const initForgeIx = createInitializeForgeInstruction({
+      const initForgeIx = await createInitializeForgeInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
@@ -1434,7 +1438,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Alpha: initializeForge');
 
       // Buy materials for crafting
-      const buyMaterialsIx = createPurchaseItemInstruction(
+      const buyMaterialsIx = await createPurchaseItemInstruction(
         {
           buyer: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1446,7 +1450,7 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(buyMaterialsIx), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: bought materials for forge');
 
-      const startCraftIx = createStartCraftInstruction(
+      const startCraftIx = await createStartCraftInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         { equipmentType: 0, qualityTier: 1 } // melee, Uncommon
       );
@@ -1456,14 +1460,14 @@ describe('Full Game Lifecycle', () => {
       // Advance LiteSVM clock past 60s forge stage interval
       await advanceTime(ctx.svm, 65);
 
-      const strikeIx = createStrikeInstruction({
+      const strikeIx = await createStrikeInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
       });
       await sendTx(ctx.svm, new Transaction().add(strikeIx), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: forgeStrike');
 
-      const equipIx = createEquipInstruction(
+      const equipIx = await createEquipInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         { equipmentType: 0, qualityTier: 1 }
       );
@@ -1478,7 +1482,7 @@ describe('Full Game Lifecycle', () => {
     log.section('Layer 16: Sanctuary');
 
     {
-      const ix = createStartMeditationInstruction(
+      const ix = await createStartMeditationInstruction(
         {
           owner: alpha.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1495,7 +1499,7 @@ describe('Full Game Lifecycle', () => {
       log.txSuccess('Alpha: advanced time past meditation');
 
       // Claim meditation
-      const claimIx = createClaimMeditationInstruction({
+      const claimIx = await createClaimMeditationInstruction({
         owner: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         heroMint: alphaWarrior.mintPubkey,
@@ -1515,7 +1519,7 @@ describe('Full Game Lifecycle', () => {
       for (const [player, label] of [
         [bravo, 'Bravo'], [echo, 'Echo'], [alpha, 'Alpha'], [charlie, 'Charlie'],
       ] as [TestPlayer, string][]) {
-        const joinIx = createJoinSeasonInstruction({
+        const joinIx = await createJoinSeasonInstruction({
           owner: player.publicKey,
           gameEngine: ctx.gameEngine,
           seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1524,7 +1528,7 @@ describe('Full Game Lifecycle', () => {
         await sendTx(ctx.svm, new Transaction().add(joinIx), [player.keypair], ctx.config);
         log.txSuccess(`${label}: joinArenaSeason`);
 
-        const loadoutIx = createUpdateLoadoutInstruction(
+        const loadoutIx = await createUpdateLoadoutInstruction(
           { owner: player.publicKey, gameEngine: ctx.gameEngine },
           {
             arenaHero: PublicKey.default,
@@ -1553,7 +1557,7 @@ describe('Full Game Lifecycle', () => {
       for (const [opponent, label] of opponents) {
         matchId += 1;
         const now = await getCurrentTimestamp(ctx.svm);
-        const ix = createChallengePlayerInstruction(
+        const ix = await createChallengePlayerInstruction(
           {
             challenger: bravo.publicKey,
             gameEngine: ctx.gameEngine,
@@ -1579,7 +1583,7 @@ describe('Full Game Lifecycle', () => {
     {
       // Bravo: claimArenaDailyReward (5 battles completed)
       const before = await snapshotPlayer(ctx.svm, bravo.playerPda);
-      const ix = createClaimArenaDailyRewardInstruction({
+      const ix = await createClaimArenaDailyRewardInstruction({
         playerOwner: bravo.publicKey,
         gameEngine: ctx.gameEngine,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1590,7 +1594,7 @@ describe('Full Game Lifecycle', () => {
       if (before && after) {
         const diff = diffPlayerSnapshots(before, after);
         const noviChange = diff.changes['lockedNovi'];
-        log.info(`Arena daily reward: lockedNovi change = ${JSON.stringify(noviChange ?? 'none')}`);
+        log.info(`Arena daily reward: lockedNovi change = ${jstr(noviChange ?? 'none')}`);
         expect(noviChange).toBeDefined();
       }
       log.txSuccess('Bravo: claimArenaDailyReward');
@@ -1603,7 +1607,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Echo: has Arena building + echoWarrior + no rally state
-      const enterIx = enterDungeonIx(ctx, echo.publicKey, echoWarrior.mintPubkey, {
+      const enterIx = await enterDungeonIx(ctx, echo.publicKey, echoWarrior.mintPubkey, {
         templateId: DUNGEON_TEMPLATE_ID,
         firstRoomType: 0, // Enemy room
         heroSpecialization: 0, // Warrior
@@ -1611,7 +1615,7 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(enterIx), [echo.keypair, ctx.daoAuthority], ctx.config);
       log.txSuccess('Echo: enterDungeon');
 
-      const attackIx = createAttackInstruction(
+      const attackIx = await createAttackInstruction(
         { owner: echo.publicKey, gameEngine: ctx.gameEngine, gameAuthority: ctx.daoAuthority.publicKey },
         {
           templateId: DUNGEON_TEMPLATE_ID,
@@ -1623,7 +1627,7 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(attackIx), [echo.keypair, ctx.daoAuthority], ctx.config);
       log.txSuccess('Echo: dungeon attackRoom');
 
-      const fleeIx = createFleeInstruction({
+      const fleeIx = await createFleeInstruction({
         owner: echo.publicKey,
         gameEngine: ctx.gameEngine,
         heroMint: echoWarrior.mintPubkey,
@@ -1637,11 +1641,11 @@ describe('Full Game Lifecycle', () => {
     // ══════════════════════════════════════════════════════════
     log.section('Layer 19: Castle');
 
-    const [castlePda] = deriveCastlePda(ctx.gameEngine, CASTLE_CITY_ID, CASTLE_ID);
+    const [castlePda] = await deriveCastlePda(ctx.gameEngine, CASTLE_CITY_ID, CASTLE_ID);
 
     {
       // Alpha: claimVacantCastle
-      const ix = createClaimVacantCastleInstruction({
+      const ix = await createClaimVacantCastleInstruction({
         claimer: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         cityId: CASTLE_CITY_ID,
@@ -1653,7 +1657,7 @@ describe('Full Game Lifecycle', () => {
       // Transition castle: CONTEST → PROTECTED.
       // CASTLE_CONTEST_DURATION is 7200s on-chain; advance past it.
       await advanceTime(ctx.svm, 7201);
-      const statusIx = createUpdateCastleStatusInstruction({
+      const statusIx = await createUpdateCastleStatusInstruction({
         caller: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
         cityId: CASTLE_CITY_ID,
@@ -1665,7 +1669,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Alpha: appointCourt(Bravo, position=0)
-      const ix = createAppointCourtInstruction(
+      const ix = await createAppointCourtInstruction(
         {
           king: alpha.publicKey,
           appointee: bravo.publicKey,
@@ -1681,7 +1685,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Charlie: joinGarrison(10 DU1) — Charlie has units from Layer 3
-      const ix = createJoinGarrisonInstruction(
+      const ix = await createJoinGarrisonInstruction(
         {
           owner: charlie.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1697,7 +1701,7 @@ describe('Full Game Lifecycle', () => {
     {
       // Alpha: claimCastleRewards
       try {
-        const ix = createClaimCastleRewardsInstruction({
+        const ix = await createClaimCastleRewardsInstruction({
           claimant: alpha.publicKey,
           gameEngine: ctx.gameEngine,
           cityId: CASTLE_CITY_ID,
@@ -1715,7 +1719,7 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Alpha: joinEvent
-      const ix = createJoinEventInstruction({
+      const ix = await createJoinEventInstruction({
         payer: alpha.publicKey,
         gameEngine: ctx.gameEngine,
         playerOwner: alpha.publicKey,
@@ -1724,7 +1728,7 @@ describe('Full Game Lifecycle', () => {
       await sendTx(ctx.svm, new Transaction().add(ix), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: joinEvent');
 
-      const [participationPda] = deriveEventParticipationPda(ctx.gameEngine, EVENT_ID, alpha.publicKey);
+      const [participationPda] = await deriveEventParticipationPda(ctx.gameEngine, EVENT_ID, alpha.publicKey);
       const exists = await accountExists(ctx.svm, participationPda);
       log.info(`Event participation exists: ${exists}`);
     }
@@ -1736,21 +1740,21 @@ describe('Full Game Lifecycle', () => {
 
     {
       // Purchase NOVI to create reserved balance
-      const [noviMint] = deriveNoviMintPda();
-      const purchaseNoviIx = createPurchaseNoviInstruction(
+      const [noviMint] = await deriveNoviMintPda();
+      const purchaseNoviIx = await createPurchaseNoviInstruction(
         {
           buyer: alpha.publicKey,
           gameEngine: ctx.gameEngine,
           treasury: ctx.treasury.publicKey,
           noviMint,
         },
-        { packageIndex: 0, maxLamports: new BN(1_000_000_000) }
+        { packageIndex: 0, maxLamports: BigInt(1_000_000_000) }
       );
       await sendTx(ctx.svm, new Transaction().add(purchaseNoviIx), [alpha.keypair], ctx.config);
       log.txSuccess('Alpha: purchaseNovi');
 
       // reservedToLocked conversion
-      const ix = createReservedToLockedInstruction(
+      const ix = await createReservedToLockedInstruction(
         { owner: alpha.publicKey, gameEngine: ctx.gameEngine },
         { amount: 100 }
       );

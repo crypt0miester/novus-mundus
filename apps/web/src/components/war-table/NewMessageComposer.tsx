@@ -108,27 +108,49 @@ export function NewMessageComposer({ open, onClose }: NewMessageComposerProps) {
   // A pasted value long enough to be a base58 key. If it already names a known
   // player PDA we route to it directly; otherwise we treat it as a wallet and
   // derive its PlayerAccount PDA. Surfaced as a confirmation row below.
-  const pasted = useMemo(() => {
+  const [pasted, setPasted] = useState<{ playerPda: string; isKnown: boolean } | null>(null);
+  useEffect(() => {
     const raw = query.trim();
-    if (raw.length < MIN_KEY_LENGTH) return null;
+    if (raw.length < MIN_KEY_LENGTH) {
+      setPasted(null);
+      return;
+    }
 
     // A pasted PDA can only be honored if it matches a known player; we cannot
     // derive a wallet from a PDA. Route known PDAs straight through.
     if (otherPlayers.has(raw) && raw !== myPlayerPda) {
-      return { playerPda: raw, isKnown: true } as const;
+      setPasted({ playerPda: raw, isKnown: true });
+      return;
     }
 
-    if (!gameEngine) return null;
+    if (!gameEngine) {
+      setPasted(null);
+      return;
+    }
     let wallet: PublicKey;
     try {
       wallet = new PublicKey(raw);
     } catch {
-      return null;
+      setPasted(null);
+      return;
     }
-    const [pda] = derivePlayerPda(gameEngine, wallet);
-    const playerPda = pda.toBase58();
-    if (playerPda === myPlayerPda) return null;
-    return { playerPda, isKnown: otherPlayers.has(playerPda) } as const;
+    let cancelled = false;
+    derivePlayerPda(gameEngine, wallet)
+      .then(([pda]) => {
+        if (cancelled) return;
+        const playerPda = pda.toBase58();
+        if (playerPda === myPlayerPda) {
+          setPasted(null);
+          return;
+        }
+        setPasted({ playerPda, isKnown: otherPlayers.has(playerPda) });
+      })
+      .catch(() => {
+        if (!cancelled) setPasted(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [query, otherPlayers, myPlayerPda, gameEngine]);
 
   // Whether to surface the paste confirmation row: only when the pasted key is

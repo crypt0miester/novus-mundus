@@ -6,11 +6,25 @@
 
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import type { VersionedTransactionResponse, TransactionResponse } from '@solana/web3.js';
+import { getBase64Encoder, getBase64Decoder } from '@solana/codecs-strings';
 import type { ParsedInstruction } from './instruction';
 import { parseInstructionData, isNovusMundusInstruction } from './instruction';
 import { parseEventsFromLogs } from '../events/parser';
 import type { NovusMundusEvent } from '../events/types';
 import { PROGRAM_ID } from '../program';
+
+const base64Encoder = getBase64Encoder();
+const base64Decoder = getBase64Decoder();
+
+/** Decode a base64 string into raw bytes (was `Buffer.from(str, 'base64')`). */
+function base64ToBytes(s: string): Uint8Array {
+  return new Uint8Array(base64Encoder.encode(s));
+}
+
+/** Encode raw bytes as a base64 string (was `Buffer.from(bytes).toString('base64')`). */
+function bytesToBase64(b: Uint8Array): string {
+  return base64Decoder.decode(b);
+}
 
 // Types
 
@@ -102,7 +116,7 @@ function getInstructions(
       return message.compiledInstructions.map(ix => ({
         programIdIndex: ix.programIdIndex,
         accounts: Array.from(ix.accountKeyIndexes),
-        data: Buffer.from(ix.data).toString('base64'),
+        data: bytesToBase64(ix.data),
       }));
     }
   }
@@ -131,14 +145,17 @@ export function parseTransaction(
     ? '' // Versioned doesn't have signature at top level
     : (response.transaction.signatures[0] ?? '');
 
-  const slot = response.slot;
-  const blockTime = response.blockTime ?? null;
+  // v3 RPC numeric fields are bigint; coerce to number at the boundary so the
+  // exported ParsedTransaction shape stays stable.
+  const slot = Number(response.slot);
+  const blockTime = response.blockTime != null ? Number(response.blockTime) : null;
   const meta = response.meta;
 
   const success = meta?.err === null;
   const error = meta?.err ? JSON.stringify(meta.err) : null;
-  const fee = meta?.fee ?? 0;
-  const computeUnitsConsumed = meta?.computeUnitsConsumed ?? null;
+  const fee = meta?.fee != null ? Number(meta.fee) : 0;
+  const computeUnitsConsumed =
+    meta?.computeUnitsConsumed != null ? Number(meta.computeUnitsConsumed) : null;
   const logs = meta?.logMessages ?? [];
 
   // Get account keys
@@ -157,7 +174,7 @@ export function parseTransaction(
 
     // Check if this is a Novus Mundus instruction
     if (programId.equals(PROGRAM_ID)) {
-      const data = Buffer.from(rawIx.data, 'base64');
+      const data = base64ToBytes(rawIx.data);
       const parsed = parseInstructionData(data);
 
       if (parsed) {
@@ -186,7 +203,7 @@ export function parseTransaction(
         if (!programId) continue;
 
         if (programId.equals(PROGRAM_ID)) {
-          const data = Buffer.from(ix.data, 'base64');
+          const data = base64ToBytes(ix.data);
           const parsed = parseInstructionData(data);
 
           if (parsed) {
@@ -252,16 +269,16 @@ export function parseTransactionInstruction(
  */
 export function extractNovusMundusInstructions(
   response: VersionedTransactionResponse | TransactionResponse
-): Buffer[] {
+): Uint8Array[] {
   const accountKeys = getAccountKeys(response);
   const rawInstructions = getInstructions(response);
-  const result: Buffer[] = [];
+  const result: Uint8Array[] = [];
 
   for (const rawIx of rawInstructions) {
     if (!rawIx) continue;
     const programId = accountKeys[rawIx.programIdIndex];
     if (programId && programId.equals(PROGRAM_ID)) {
-      const data = Buffer.from(rawIx.data, 'base64');
+      const data = base64ToBytes(rawIx.data);
       if (isNovusMundusInstruction(data)) {
         result.push(data);
       }

@@ -2,9 +2,17 @@
  * PDA Derivation Functions
  *
  * All Program Derived Address derivation functions for Novus Mundus.
+ *
+ * web3.js v3: `PublicKey.findProgramAddressSync` no longer exists. Derivation
+ * is async (native crypto.subtle under the hood) via `getProgramDerivedAddress`
+ * from '@solana/addresses'. Every exported `derive*Pda` is therefore `async` and
+ * returns a Promise; callers MUST `await`. The returned Address (a base58
+ * string) is wrapped in `new PublicKey(...)` so the public types stay
+ * PublicKey-based and downstream code that holds PublicKeys is unchanged.
  */
 
 import { PublicKey } from '@solana/web3.js';
+import { getProgramDerivedAddress, type Address } from '@solana/addresses';
 import { sha256 } from '@noble/hashes/sha2.js';
 import {
   PROGRAM_ID,
@@ -33,413 +41,336 @@ function u64le(v: number | bigint): Uint8Array {
 }
 function strBytes(s: string): Uint8Array { return new TextEncoder().encode(s); }
 
+/**
+ * Core async derivation: run `getProgramDerivedAddress` with the given seeds
+ * under the given program and wrap the result as `[PublicKey, bump]`.
+ *
+ * `programId` is a PublicKey; its base58 form is the `programAddress` the
+ * @solana/addresses API expects. Seeds are raw bytes (Uint8Array).
+ */
+async function derive(
+  programId: PublicKey,
+  seeds: Uint8Array[],
+): Promise<[PublicKey, number]> {
+  const [addr, bump] = await getProgramDerivedAddress({
+    programAddress: programId.toBase58() as Address,
+    seeds,
+  });
+  return [new PublicKey(addr), bump];
+}
+
 // Core Account PDAs
 
 /** Derive GameEngine PDA for a specific kingdom */
-export function deriveGameEnginePda(kingdomId: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.GAME_ENGINE, u16le(kingdomId)],
-    PROGRAM_ID
-  );
+export async function deriveGameEnginePda(kingdomId: number): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.GAME_ENGINE, u16le(kingdomId)]);
 }
 
 /** Derive NOVI Mint PDA */
-export function deriveNoviMintPda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([SEEDS.NOVI_MINT], PROGRAM_ID);
+export async function deriveNoviMintPda(): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.NOVI_MINT]);
 }
 
 /** Derive PlayerAccount PDA from game engine and owner wallet */
-export function derivePlayerPda(gameEngine: PublicKey, owner: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.PLAYER, gameEngine.toBuffer(), owner.toBuffer()],
-    PROGRAM_ID
-  );
+export async function derivePlayerPda(gameEngine: PublicKey, owner: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.PLAYER, gameEngine.toBytes(), owner.toBytes()]);
 }
 
 /** Derive User PDA from wallet */
-export function deriveUserPda(wallet: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.USER, wallet.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveUserPda(wallet: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.USER, wallet.toBytes()]);
 }
 
 /** Derive City PDA from game engine and city ID */
-export function deriveCityPda(gameEngine: PublicKey, cityId: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.CITY, gameEngine.toBuffer(), u16le(cityId)],
-    PROGRAM_ID
-  );
+export async function deriveCityPda(gameEngine: PublicKey, cityId: number): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.CITY, gameEngine.toBytes(), u16le(cityId)]);
 }
 
 // Team System PDAs
 
 /** Derive Team PDA from game engine and team ID */
-export function deriveTeamPda(gameEngine: PublicKey, teamId: bigint | number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.TEAM, gameEngine.toBuffer(), u64le(teamId)],
-    PROGRAM_ID
-  );
+export async function deriveTeamPda(gameEngine: PublicKey, teamId: bigint | number): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.TEAM, gameEngine.toBytes(), u64le(teamId)]);
 }
 
 /** Derive Team Member Slot PDA */
-export function deriveTeamSlotPda(
+export async function deriveTeamSlotPda(
   team: PublicKey,
   slotIndex: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.TEAM_SLOT, team.toBuffer(), u16le(slotIndex)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.TEAM_SLOT, team.toBytes(), u16le(slotIndex)]);
 }
 
 /** Derive Team Invite PDA */
-export function deriveTeamInvitePda(
+export async function deriveTeamInvitePda(
   team: PublicKey,
   invitee: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.TEAM_INVITE, team.toBuffer(), invitee.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.TEAM_INVITE, team.toBytes(), invitee.toBytes()]);
 }
 
 /** Derive Treasury Request PDA */
-export function deriveTreasuryRequestPda(
+export async function deriveTreasuryRequestPda(
   team: PublicKey,
   requester: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.TREASURY_REQUEST, team.toBuffer(), requester.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.TREASURY_REQUEST, team.toBytes(), requester.toBytes()]);
 }
 
 // Rally System PDAs
 
 /** Derive Rally PDA */
-export function deriveRallyPda(
+export async function deriveRallyPda(
   gameEngine: PublicKey,
   creator: PublicKey,
   rallyId: number | bigint
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.RALLY, gameEngine.toBuffer(), creator.toBuffer(), u64le(rallyId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.RALLY, gameEngine.toBytes(), creator.toBytes(), u64le(rallyId)]);
 }
 
 /** Derive Rally Participant PDA */
-export function deriveRallyParticipantPda(
+export async function deriveRallyParticipantPda(
   gameEngine: PublicKey,
   rallyCreator: PublicKey,
   rallyId: number | bigint,
   participant: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.RALLY_PARTICIPANT, gameEngine.toBuffer(), rallyCreator.toBuffer(), u64le(rallyId), participant.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [
+    SEEDS.RALLY_PARTICIPANT,
+    gameEngine.toBytes(),
+    rallyCreator.toBytes(),
+    u64le(rallyId),
+    participant.toBytes(),
+  ]);
 }
 
 // Reinforcement System PDAs
 
 /** Derive Reinforcement PDA (player-to-player) */
-export function deriveReinforcementPda(
+export async function deriveReinforcementPda(
   gameEngine: PublicKey,
   sender: PublicKey,
   receiver: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.REINFORCEMENT, gameEngine.toBuffer(), sender.toBuffer(), receiver.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.REINFORCEMENT, gameEngine.toBytes(), sender.toBytes(), receiver.toBytes()]);
 }
 
 /** Derive Garrison Reinforcement PDA (player-to-castle) */
-export function deriveGarrisonReinforcementPda(
+export async function deriveGarrisonReinforcementPda(
   gameEngine: PublicKey,
   sender: PublicKey,
   castle: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.GARRISON, gameEngine.toBuffer(), sender.toBuffer(), castle.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.GARRISON, gameEngine.toBytes(), sender.toBytes(), castle.toBytes()]);
 }
 
 /** Derive Garrison Contribution PDA */
-export function deriveGarrisonPda(
+export async function deriveGarrisonPda(
   castle: PublicKey,
   player: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.GARRISON, castle.toBuffer(), player.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.GARRISON, castle.toBytes(), player.toBytes()]);
 }
 
 // Location PDAs
 
 /** Derive Location PDA from game engine, city and grid coordinates */
-export function deriveLocationPda(
+export async function deriveLocationPda(
   gameEngine: PublicKey,
   cityId: number,
   gridLat: number,
   gridLong: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.LOCATION, gameEngine.toBuffer(), u16le(cityId), i32le(gridLat), i32le(gridLong)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.LOCATION, gameEngine.toBytes(), u16le(cityId), i32le(gridLat), i32le(gridLong)]);
 }
 
 // Encounter & Loot PDAs
 
 /** Derive Encounter PDA */
-export function deriveEncounterPda(
+export async function deriveEncounterPda(
   gameEngine: PublicKey,
   cityId: number,
   encounterId: bigint | number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ENCOUNTER, gameEngine.toBuffer(), u16le(cityId), u64le(encounterId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ENCOUNTER, gameEngine.toBytes(), u16le(cityId), u64le(encounterId)]);
 }
 
 /** Derive Loot PDA: [b"loot", player_pda, loot_id_le] */
-export function deriveLootPda(
+export async function deriveLootPda(
   playerPda: PublicKey,
   lootId: number | bigint
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.LOOT, playerPda.toBuffer(), u64le(lootId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.LOOT, playerPda.toBytes(), u64le(lootId)]);
 }
 
 // Event System PDAs
 
 /** Derive Event PDA */
-export function deriveEventPda(gameEngine: PublicKey, eventId: bigint | number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.EVENT, gameEngine.toBuffer(), u64le(eventId)],
-    PROGRAM_ID
-  );
+export async function deriveEventPda(gameEngine: PublicKey, eventId: bigint | number): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.EVENT, gameEngine.toBytes(), u64le(eventId)]);
 }
 
 /** Derive Event Participation PDA */
-export function deriveEventParticipationPda(
+export async function deriveEventParticipationPda(
   gameEngine: PublicKey,
   eventId: bigint | number,
   playerOwner: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.EVENT_PARTICIPATION, gameEngine.toBuffer(), u64le(eventId), playerOwner.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.EVENT_PARTICIPATION, gameEngine.toBytes(), u64le(eventId), playerOwner.toBytes()]);
 }
 
 // Progression System PDAs
 
 /** Derive Progression PDA */
-export function deriveProgressionPda(player: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.PROGRESSION, player.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveProgressionPda(player: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.PROGRESSION, player.toBytes()]);
 }
 
 // Research System PDAs
 
 /** Derive Research Template PDA */
-export function deriveResearchTemplatePda(
+export async function deriveResearchTemplatePda(
   templateId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.RESEARCH_TEMPLATE, u8(templateId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.RESEARCH_TEMPLATE, u8(templateId)]);
 }
 
 /** Derive Building Template PDA (one per BuildingType) */
-export function deriveBuildingTemplatePda(
+export async function deriveBuildingTemplatePda(
   buildingType: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.BUILDING_TEMPLATE, u8(buildingType)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.BUILDING_TEMPLATE, u8(buildingType)]);
 }
 
 /** Derive Research Progress PDA */
-export function deriveResearchPda(player: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.RESEARCH, player.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveResearchPda(player: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.RESEARCH, player.toBytes()]);
 }
 
 // Hero System PDAs
 
 /** Derive Hero Template PDA */
-export function deriveHeroTemplatePda(templateId: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.HERO_TEMPLATE, u16le(templateId)],
-    PROGRAM_ID
-  );
+export async function deriveHeroTemplatePda(templateId: number): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.HERO_TEMPLATE, u16le(templateId)]);
 }
 
 /** Derive Hero Collection PDA */
-export function deriveHeroCollectionPda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync([SEEDS.HERO_COLLECTION], PROGRAM_ID);
+export async function deriveHeroCollectionPda(): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.HERO_COLLECTION]);
 }
 
 /** Derive Hero Mint Receipt PDA (existence = player already minted this template) */
-export function deriveHeroMintReceiptPda(
+export async function deriveHeroMintReceiptPda(
   playerPda: PublicKey,
   templateId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.HERO_MINT_RECEIPT, playerPda.toBuffer(), u16le(templateId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.HERO_MINT_RECEIPT, playerPda.toBytes(), u16le(templateId)]);
 }
 
 // Shop System PDAs
 
 /** Derive Shop Config PDA */
-export function deriveShopConfigPda(
+export async function deriveShopConfigPda(
   gameEngine: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.SHOP_CONFIG, gameEngine.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.SHOP_CONFIG, gameEngine.toBytes()]);
 }
 
 /** Derive Shop Item PDA */
-export function deriveShopItemPda(
+export async function deriveShopItemPda(
   gameEngine: PublicKey,
   itemId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.SHOP_ITEM, gameEngine.toBuffer(), u32le(itemId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.SHOP_ITEM, gameEngine.toBytes(), u32le(itemId)]);
 }
 
 /** Derive Bundle PDA */
-export function deriveBundlePda(
+export async function deriveBundlePda(
   gameEngine: PublicKey,
   bundleId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.BUNDLE, gameEngine.toBuffer(), u32le(bundleId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.BUNDLE, gameEngine.toBytes(), u32le(bundleId)]);
 }
 
 /** Derive Daily Deal PDA */
-export function deriveDailyDealPda(
+export async function deriveDailyDealPda(
   gameEngine: PublicKey,
   slotIndex: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.DAILY_DEAL, gameEngine.toBuffer(), u8(slotIndex)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.DAILY_DEAL, gameEngine.toBytes(), u8(slotIndex)]);
 }
 
 /** Derive Flash Sale PDA */
-export function deriveFlashSalePda(
+export async function deriveFlashSalePda(
   gameEngine: PublicKey,
   saleId: bigint | number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.FLASH_SALE, gameEngine.toBuffer(), u64le(saleId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.FLASH_SALE, gameEngine.toBytes(), u64le(saleId)]);
 }
 
 /** Derive Weekly Sale PDA */
-export function deriveWeeklySalePda(
+export async function deriveWeeklySalePda(
   gameEngine: PublicKey,
   weekNumber: bigint | number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.WEEKLY_SALE, gameEngine.toBuffer(), u64le(weekNumber)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.WEEKLY_SALE, gameEngine.toBytes(), u64le(weekNumber)]);
 }
 
 /** Derive Seasonal Sale PDA */
-export function deriveSeasonalSalePda(
+export async function deriveSeasonalSalePda(
   gameEngine: PublicKey,
   event: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.SEASONAL_SALE, gameEngine.toBuffer(), event.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.SEASONAL_SALE, gameEngine.toBytes(), event.toBytes()]);
 }
 
 /** Derive DAO Promotion PDA */
-export function deriveDaoPromotionPda(
+export async function deriveDaoPromotionPda(
   gameEngine: PublicKey,
   proposalId: bigint | number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.DAO_PROMOTION, gameEngine.toBuffer(), u64le(proposalId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.DAO_PROMOTION, gameEngine.toBytes(), u64le(proposalId)]);
 }
 
 /** Derive Player Purchase PDA */
-export function derivePlayerPurchasePda(
+export async function derivePlayerPurchasePda(
   player: PublicKey,
   itemId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.PLAYER_PURCHASE, player.toBuffer(), u32le(itemId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.PLAYER_PURCHASE, player.toBytes(), u32le(itemId)]);
 }
 
 /**
  * Build a reverse lookup (PlayerPurchase PDA base58 -> itemId) for a wallet,
  * covering item ids 0..maxItemId. PlayerPurchase accounts store no itemId, so
  * this map is how a fetched account is matched back to its item.
+ *
+ * Async: derivation is async in v3; the per-id derivations run concurrently.
  */
-export function derivePlayerPurchaseIndex(
+export async function derivePlayerPurchaseIndex(
   wallet: PublicKey,
   maxItemId: number = 200
-): Map<string, number> {
-  const map = new Map<string, number>();
-  for (let i = 0; i < maxItemId; i++) {
-    map.set(derivePlayerPurchasePda(wallet, i)[0].toBase58(), i);
-  }
-  return map;
+): Promise<Map<string, number>> {
+  const entries = await Promise.all(
+    Array.from({ length: maxItemId }, async (_unused, i): Promise<[string, number]> => {
+      const [pda] = await derivePlayerPurchasePda(wallet, i);
+      return [pda.toBase58(), i];
+    })
+  );
+  return new Map(entries);
 }
 
 /** Derive Inventory PDA */
-export function deriveInventoryPda(player: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.INVENTORY, player.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveInventoryPda(player: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.INVENTORY, player.toBytes()]);
 }
 
 /** Derive Allowed Token PDA */
-export function deriveAllowedTokenPda(
+export async function deriveAllowedTokenPda(
   gameEngine: PublicKey,
   tokenMint: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ALLOWED_TOKEN, gameEngine.toBuffer(), tokenMint.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ALLOWED_TOKEN, gameEngine.toBytes(), tokenMint.toBytes()]);
 }
 
 /**
@@ -447,151 +378,109 @@ export function deriveAllowedTokenPda(
  *
  * On-chain seeds: `["oracle_quote", switchboard_queue]`.
  */
-export function deriveOracleQuotePda(
+export async function deriveOracleQuotePda(
   switchboardQueue: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ORACLE_QUOTE, switchboardQueue.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ORACLE_QUOTE, switchboardQueue.toBytes()]);
 }
 
 // Estate System PDAs
 
 /** Derive Estate PDA (scoped to player PDA) */
-export function deriveEstatePda(playerPda: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ESTATE, playerPda.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveEstatePda(playerPda: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ESTATE, playerPda.toBytes()]);
 }
 
 /** Derive Crafted Equipment PDA */
-export function deriveCraftedEquipmentPda(
+export async function deriveCraftedEquipmentPda(
   owner: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.CRAFTED_EQUIPMENT, owner.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.CRAFTED_EQUIPMENT, owner.toBytes()]);
 }
 
 // Expedition System PDAs
 
 /** Derive Expedition PDA for a player */
-export function deriveExpeditionPda(owner: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.EXPEDITION, owner.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveExpeditionPda(owner: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.EXPEDITION, owner.toBytes()]);
 }
 
 // Arena System PDAs
 
 /** Derive Arena Season PDA */
-export function deriveArenaSeasonPda(
+export async function deriveArenaSeasonPda(
   gameEngine: PublicKey,
   seasonId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ARENA_SEASON, gameEngine.toBuffer(), u32le(seasonId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ARENA_SEASON, gameEngine.toBytes(), u32le(seasonId)]);
 }
 
 /** Derive Arena Participant PDA */
-export function deriveArenaParticipantPda(
+export async function deriveArenaParticipantPda(
   gameEngine: PublicKey,
   seasonId: number,
   player: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ARENA_PARTICIPANT, gameEngine.toBuffer(), u32le(seasonId), player.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ARENA_PARTICIPANT, gameEngine.toBytes(), u32le(seasonId), player.toBytes()]);
 }
 
 /** Derive Arena Loadout PDA (per-player, kingdom-scoped) */
-export function deriveArenaLoadoutPda(
+export async function deriveArenaLoadoutPda(
   gameEngine: PublicKey,
   player: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.ARENA_LOADOUT, gameEngine.toBuffer(), player.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.ARENA_LOADOUT, gameEngine.toBytes(), player.toBytes()]);
 }
 
 // Dungeon System PDAs
 
 /** Derive Dungeon Template PDA */
-export function deriveDungeonTemplatePda(
+export async function deriveDungeonTemplatePda(
   templateId: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.DUNGEON_TEMPLATE, u16le(templateId)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.DUNGEON_TEMPLATE, u16le(templateId)]);
 }
 
 /** Derive Dungeon Run PDA */
-export function deriveDungeonRunPda(player: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.DUNGEON_RUN, player.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveDungeonRunPda(player: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.DUNGEON_RUN, player.toBytes()]);
 }
 
 /** Derive Dungeon Leaderboard PDA */
-export function deriveDungeonLeaderboardPda(
+export async function deriveDungeonLeaderboardPda(
   gameEngine: PublicKey,
   dungeonId: number,
   weekNumber: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.DUNGEON_LEADERBOARD, gameEngine.toBuffer(), u16le(dungeonId), u16le(weekNumber)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.DUNGEON_LEADERBOARD, gameEngine.toBytes(), u16le(dungeonId), u16le(weekNumber)]);
 }
 
 // Castle System PDAs
 
 /** Derive Castle PDA from game engine, city ID and castle ID */
-export function deriveCastlePda(gameEngine: PublicKey, cityId: number, castleId: number): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.CASTLE, gameEngine.toBuffer(), u16le(cityId), u16le(castleId)],
-    PROGRAM_ID
-  );
+export async function deriveCastlePda(gameEngine: PublicKey, cityId: number, castleId: number): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.CASTLE, gameEngine.toBytes(), u16le(cityId), u16le(castleId)]);
 }
 
 /** Derive Court Position PDA */
-export function deriveCourtPda(
+export async function deriveCourtPda(
   castle: PublicKey,
   position: number
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.COURT, castle.toBuffer(), u8(position)],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.COURT, castle.toBytes(), u8(position)]);
 }
 
 /** Derive King Registry PDA */
-export function deriveKingRegistryPda(king: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.KING_REGISTRY, king.toBuffer()],
-    PROGRAM_ID
-  );
+export async function deriveKingRegistryPda(king: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.KING_REGISTRY, king.toBytes()]);
 }
 
 /** Derive Team Castle Reward PDA */
-export function deriveTeamCastleRewardPda(
+export async function deriveTeamCastleRewardPda(
   castle: PublicKey,
   team: PublicKey
-): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [SEEDS.TEAM_CASTLE_REWARD, castle.toBuffer(), team.toBuffer()],
-    PROGRAM_ID
-  );
+): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.TEAM_CASTLE_REWARD, castle.toBytes(), team.toBytes()]);
 }
 
 // War Table PDAs
@@ -603,18 +492,27 @@ export function deriveTeamCastleRewardPda(
  * their raw 32 bytes so the result is symmetric: deriveDmThreadPda(A,B) ===
  * deriveDmThreadPda(B,A). Seeds [b"wt_dm", lo, hi]. Throws on equal players.
  */
-export function deriveDmThreadPda(
+export async function deriveDmThreadPda(
   playerPdaA: PublicKey,
   playerPdaB: PublicKey,
-): [PublicKey, number] {
-  const a = playerPdaA.toBuffer();
-  const b = playerPdaB.toBuffer();
-  const cmp = Buffer.compare(a as Uint8Array, b as Uint8Array);
+): Promise<[PublicKey, number]> {
+  const a = playerPdaA.toBytes();
+  const b = playerPdaB.toBytes();
+  const cmp = compareBytes(a, b);
   if (cmp === 0) {
     throw new Error('DM thread requires two distinct players');
   }
   const [lo, hi] = cmp < 0 ? [a, b] : [b, a];
-  return PublicKey.findProgramAddressSync([SEEDS.DM_THREAD, lo, hi], PROGRAM_ID);
+  return derive(PROGRAM_ID, [SEEDS.DM_THREAD, lo, hi]);
+}
+
+/** Lexicographic byte comparison (replaces Buffer.compare). */
+function compareBytes(a: Uint8Array, b: Uint8Array): number {
+  const len = Math.min(a.length, b.length);
+  for (let i = 0; i < len; i++) {
+    if (a[i]! !== b[i]!) return a[i]! - b[i]!;
+  }
+  return a.length - b.length;
 }
 
 // Name Service PDAs (ANS / TLD House)
@@ -626,53 +524,38 @@ const ANS_HASH_PREFIX = 'ALT Name Service';
 const NULL_PUBKEY = new PublicKey(new Uint8Array(32));
 
 /** Derive ANS name account PDA (forward lookup) */
-export function deriveNameAccountPda(
+export async function deriveNameAccountPda(
   domainName: string,
   nameParent: PublicKey
-): [PublicKey, number] {
+): Promise<[PublicKey, number]> {
   const hashedName = sha256(strBytes(ANS_HASH_PREFIX + domainName));
-  return PublicKey.findProgramAddressSync(
-    [hashedName, NULL_PUBKEY.toBuffer(), nameParent.toBuffer()],
-    ALT_NAME_SERVICE_PROGRAM_ID
-  );
+  return derive(ALT_NAME_SERVICE_PROGRAM_ID, [hashedName, NULL_PUBKEY.toBytes(), nameParent.toBytes()]);
 }
 
 /** Derive ANS reverse name account PDA */
-export function deriveReverseNameAccountPda(
+export async function deriveReverseNameAccountPda(
   nameAccount: PublicKey,
   tldHouse: PublicKey
-): [PublicKey, number] {
+): Promise<[PublicKey, number]> {
   const hashedReverse = sha256(
     strBytes(ANS_HASH_PREFIX + nameAccount.toBase58())
   );
-  return PublicKey.findProgramAddressSync(
-    [hashedReverse, tldHouse.toBuffer(), NULL_PUBKEY.toBuffer()],
-    ALT_NAME_SERVICE_PROGRAM_ID
-  );
+  return derive(ALT_NAME_SERVICE_PROGRAM_ID, [hashedReverse, tldHouse.toBytes(), NULL_PUBKEY.toBytes()]);
 }
 
 /** Derive TLD House MainDomain PDA */
-export function deriveMainDomainPda(owner: PublicKey): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [strBytes('main_domain'), owner.toBuffer()],
-    TLD_HOUSE_PROGRAM_ID
-  );
+export async function deriveMainDomainPda(owner: PublicKey): Promise<[PublicKey, number]> {
+  return derive(TLD_HOUSE_PROGRAM_ID, [strBytes('main_domain'), owner.toBytes()]);
 }
 
 /** Derive TLD State PDA */
-export function deriveTldStatePda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [strBytes('tld_pda')],
-    TLD_HOUSE_PROGRAM_ID
-  );
+export async function deriveTldStatePda(): Promise<[PublicKey, number]> {
+  return derive(TLD_HOUSE_PROGRAM_ID, [strBytes('tld_pda')]);
 }
 
 /** Derive TLD House PDA for a specific TLD */
-export function deriveTldHousePda(tld: string): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [strBytes('tld_house'), strBytes(tld.toLowerCase())],
-    TLD_HOUSE_PROGRAM_ID
-  );
+export async function deriveTldHousePda(tld: string): Promise<[PublicKey, number]> {
+  return derive(TLD_HOUSE_PROGRAM_ID, [strBytes('tld_house'), strBytes(tld.toLowerCase())]);
 }
 
 // Helper: Hash domain name for ANS

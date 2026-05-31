@@ -17,7 +17,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -29,7 +28,7 @@ import {
   deriveHeroCollectionPda,
   deriveEstatePda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Create Template (Admin)
 
@@ -75,8 +74,8 @@ export interface CreateDungeonTemplateParams {
   /** Time limit in seconds (0 = unlimited) */
   timeLimitSeconds?: number;
   /** Reward config */
-  baseXpPerRoom?: BN | number | bigint;
-  baseNoviPerFloor?: BN | number | bigint;
+  baseXpPerRoom?: number | bigint;
+  baseNoviPerFloor?: number | bigint;
   completionBonusBps?: number;
   rewardScalingBps?: number;
 }
@@ -90,11 +89,11 @@ export interface CreateDungeonTemplateParams {
  * Rust account order: [dao_authority, dungeon_template, game_engine, system_program]
  * Instruction data: 128 bytes matching DungeonTemplate struct layout.
  */
-export function createCreateDungeonTemplateInstruction(
+export async function createCreateDungeonTemplateInstruction(
   accounts: CreateDungeonTemplateAccounts,
   params: CreateDungeonTemplateParams
-): TransactionInstruction {
-  const [template] = deriveDungeonTemplatePda(params.templateId);
+): Promise<TransactionInstruction> {
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
 
   // Rust expects: [dao_authority, dungeon_template, game_engine, system_program]
   const keys = [
@@ -143,7 +142,7 @@ export function createCreateDungeonTemplateInstruction(
   writer.writeZeros(4);                                          // [12..16] padding
 
   // Name (32 bytes, zero-padded)
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
+  const nameBytes = new TextEncoder().encode(params.name).subarray(0, 32);
   writer.writeBytes(nameBytes);                                  // [16..16+len]
   writer.writeZeros(32 - nameBytes.length);                      // pad to [48]
 
@@ -200,7 +199,7 @@ export interface CreateLeaderboardParams {
   /** Week number */
   weekNumber: number;
   /** Prize pool in NOVI */
-  prizePool: BN | number | bigint;
+  prizePool: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -209,12 +208,12 @@ export interface CreateLeaderboardParams {
  *
  * Admin-only. Creates leaderboard for weekly competitions.
  */
-export function createCreateLeaderboardInstruction(
+export async function createCreateLeaderboardInstruction(
   accounts: CreateLeaderboardAccounts,
   params: CreateLeaderboardParams
-): TransactionInstruction {
-  const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
-  const [dungeonTemplate] = deriveDungeonTemplatePda(params.templateId);
+): Promise<TransactionInstruction> {
+  const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
+  const [dungeonTemplate] = await deriveDungeonTemplatePda(params.templateId);
 
   // Rust account order: payer, dungeon_template, leaderboard, game_engine, system_program
   const keys = [
@@ -267,15 +266,15 @@ export interface EnterDungeonParams {
  *
  * Starts a new dungeon run. Hero is transferred to DungeonRun PDA as escrow.
  */
-export function createEnterDungeonInstruction(
+export async function createEnterDungeonInstruction(
   accounts: EnterDungeonAccounts,
   params: EnterDungeonParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
-  const [estate] = deriveEstatePda(player);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
+  const [estate] = await deriveEstatePda(player);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -346,13 +345,13 @@ export interface AttackParams {
  *
  * Single target attack. Auto-advances on kill.
  */
-export function createAttackInstruction(
+export async function createAttackInstruction(
   accounts: AttackAccounts,
   params: AttackParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order (process_attacks):
   // 0. owner (signer)
@@ -415,13 +414,13 @@ export interface AttackMultiParams {
  *
  * Executes up to 5 attacks. Stops early if enemy dies.
  */
-export function createAttackMultiInstruction(
+export async function createAttackMultiInstruction(
   accounts: AttackMultiAccounts,
   params: AttackMultiParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Same accounts as single attack (see createAttackInstruction)
   const keys = [
@@ -475,13 +474,13 @@ export interface InteractParams {
  *
  * Opens chests, activates shrines, etc.
  */
-export function createInteractInstruction(
+export async function createInteractInstruction(
   accounts: InteractAccounts,
   params: InteractParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -544,13 +543,13 @@ export interface ChooseRelicParams {
  *
  * Relics provide run-long buffs.
  */
-export function createChooseRelicInstruction(
+export async function createChooseRelicInstruction(
   accounts: ChooseRelicAccounts,
   params: ChooseRelicParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -603,14 +602,14 @@ export interface FleeAccounts {
  * Ends run early, keeps partial rewards based on floor.
  * Hero is returned from escrow.
  */
-export function createFleeInstruction(
+export async function createFleeInstruction(
   accounts: FleeAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [dungeonRun] = deriveDungeonRunPda(player);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [noviMint] = deriveNoviMintPda();
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [noviMint] = await deriveNoviMintPda();
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -673,15 +672,15 @@ export interface ClaimDungeonParams {
  *
  * Called after completing or failing a run. Hero is returned from escrow.
  */
-export function createClaimDungeonInstruction(
+export async function createClaimDungeonInstruction(
   accounts: ClaimDungeonAccounts,
   params?: ClaimDungeonParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [dungeonRun] = deriveDungeonRunPda(player);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [noviMint] = deriveNoviMintPda();
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [noviMint] = await deriveNoviMintPda();
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer, writable)
@@ -714,7 +713,7 @@ export function createClaimDungeonInstruction(
   if (accounts.leaderboard) {
     keys.push({ pubkey: accounts.leaderboard, isSigner: false, isWritable: true });
   } else if (params?.templateId !== undefined && params?.weekNumber !== undefined) {
-    const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
+    const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.templateId, params.weekNumber);
     keys.push({ pubkey: leaderboard, isSigner: false, isWritable: true });
   }
 
@@ -751,13 +750,13 @@ export interface ResumeParams {
  *
  * Continues from last saved checkpoint. Costs gems.
  */
-export function createResumeInstruction(
+export async function createResumeInstruction(
   accounts: ResumeAccounts,
   params: ResumeParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveDungeonTemplatePda(params.templateId);
-  const [dungeonRun] = deriveDungeonRunPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveDungeonTemplatePda(params.templateId);
+  const [dungeonRun] = await deriveDungeonRunPda(player);
 
   // Rust account order:
   // 0. owner (signer)
@@ -810,15 +809,15 @@ export interface ClaimLeaderboardPrizeParams {
  *
  * For top 10 finishers in weekly competition. Mints NOVI tokens as prize.
  */
-export function createClaimLeaderboardPrizeInstruction(
+export async function createClaimLeaderboardPrizeInstruction(
   accounts: ClaimLeaderboardPrizeAccounts,
   params: ClaimLeaderboardPrizeParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [leaderboard] = deriveDungeonLeaderboardPda(accounts.gameEngine, params.dungeonId, params.weekNumber);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.dungeonId, params.weekNumber);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer)

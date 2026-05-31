@@ -5,10 +5,16 @@
  * Uses the discriminators from program.ts and the BufferReader from deserialize.ts.
  */
 
-import { PublicKey } from '@solana/web3.js';
-import type BN from 'bn.js';
+import { getBase64Encoder } from '@solana/codecs-strings';
 import { DISCRIMINATORS, INSTRUCTION_NAMES } from '../program';
 import { BufferReader } from '../utils/deserialize';
+
+const base64Encoder = getBase64Encoder();
+
+/** Read a little-endian u16 from the first two bytes of a byte array. */
+function readU16LE(data: Uint8Array, offset = 0): number {
+  return data[offset]! | (data[offset + 1]! << 8);
+}
 
 // Types
 
@@ -51,7 +57,7 @@ export interface InitCityData {
 // Economy
 export interface HireUnitsData {
   unitType: number;
-  noviAmount: BN;
+  noviAmount: bigint;
 }
 
 export interface CollectResourcesData {
@@ -60,7 +66,7 @@ export interface CollectResourcesData {
 
 export interface PurchaseEquipmentData {
   equipmentType: number;
-  amount: BN;
+  amount: bigint;
 }
 
 export interface PurchaseStaminaData {
@@ -68,11 +74,11 @@ export interface PurchaseStaminaData {
 }
 
 export interface TransferCashData {
-  amount: BN;
+  amount: bigint;
 }
 
 export interface VaultTransferData {
-  amount: BN;
+  amount: bigint;
   isDeposit: boolean;
 }
 
@@ -109,11 +115,11 @@ export interface TeamCreateData {
 }
 
 export interface TeamDepositTreasuryData {
-  amount: BN;
+  amount: bigint;
 }
 
 export interface TeamWithdrawTreasuryData {
-  amount: BN;
+  amount: bigint;
 }
 
 export interface TeamSetMotdData {
@@ -125,35 +131,35 @@ export interface TeamUpdateSettingsData {
 }
 
 export interface TreasuryRequestWithdrawData {
-  amount: BN;
+  amount: bigint;
   reason: string;
 }
 
 export interface TreasuryUpdateSettingsData {
   requiredApprovals: number;
-  maxWithdrawalWithoutApproval: BN;
+  maxWithdrawalWithoutApproval: bigint;
 }
 
 // Rally
 export interface RallyCreateData {
   targetType: number;
-  targetId: BN;
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  executionTime: BN;
+  targetId: bigint;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  executionTime: bigint;
 }
 
 export interface RallyJoinData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
 }
 
 export interface RallySpeedupData {
@@ -175,7 +181,7 @@ export interface MintHeroData {
 }
 
 export interface LevelUpHeroData {
-  xpToSpend: BN;
+  xpToSpend: bigint;
 }
 
 export interface AssignDefensiveHeroData {
@@ -184,7 +190,7 @@ export interface AssignDefensiveHeroData {
 
 // Sanctuary
 export interface StartMeditationData {
-  noviAmount: BN;
+  noviAmount: bigint;
 }
 
 // Shop
@@ -198,7 +204,7 @@ export interface PurchaseBundleData {
 }
 
 export interface PurchaseFlashSaleData {
-  saleId: BN;
+  saleId: bigint;
 }
 
 // Estate
@@ -231,9 +237,9 @@ export interface EquipCraftedData {
 
 // Reinforcement
 export interface SendReinforcementData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
 }
 
 export interface SpeedupReinforcementData {
@@ -243,8 +249,8 @@ export interface SpeedupReinforcementData {
 // Expedition
 export interface StartExpeditionData {
   expeditionType: number;
-  operatives: BN;
-  duration: BN;
+  operatives: bigint;
+  duration: bigint;
 }
 
 export interface ExpeditionStrikeData {
@@ -261,13 +267,13 @@ export interface JoinArenaSeasonData {
 }
 
 export interface UpdateArenaLoadoutData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  armor: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armor: bigint;
 }
 
 export interface ChallengePlayerData {
@@ -310,22 +316,22 @@ export interface InitiateUpgradeData {
 }
 
 export interface JoinGarrisonData {
-  du1: BN;
-  du2: BN;
-  du3: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
 }
 
 export interface UpdateCastleConfigData {
   minLevel: number;
   minNetworthMillions: number;
   minTroopsThousands: number;
-  protectionDuration: BN;
-  kingNoviPerDay: BN;
-  kingCashPerDay: BN;
-  courtNoviPerDay: BN;
-  courtCashPerDay: BN;
-  memberNoviPerDay: BN;
-  memberCashPerDay: BN;
+  protectionDuration: bigint;
+  kingNoviPerDay: bigint;
+  kingCashPerDay: bigint;
+  courtNoviPerDay: bigint;
+  courtCashPerDay: bigint;
+  memberNoviPerDay: bigint;
+  memberCashPerDay: bigint;
 }
 
 // Instruction Category Mapping
@@ -724,14 +730,13 @@ function parseUpdateCastleConfig(reader: BufferReader): UpdateCastleConfigData {
 // Main Parser
 
 /** Parse raw instruction data into structured object */
-export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstruction | null {
+export function parseInstructionData(data: Uint8Array): ParsedInstruction | null {
   if (data.length < 2) {
     return null;
   }
 
-  // Safe to access after length check - use Buffer.readUInt16LE for clarity
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buf.readUInt16LE(0);
+  // Safe to access after length check - read the little-endian u16 discriminator.
+  const discriminator = readU16LE(data);
   const name = INSTRUCTION_NAMES[discriminator];
 
   if (!name) {
@@ -739,7 +744,7 @@ export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstructi
   }
 
   const category = getCategory(discriminator);
-  const reader = new BufferReader(data.slice(2));
+  const reader = new BufferReader(data.subarray(2));
 
   let parsedData: unknown = {};
 
@@ -946,22 +951,20 @@ export function parseInstructionData(data: Buffer | Uint8Array): ParsedInstructi
 
 /** Parse instruction from base64 string */
 export function parseInstructionFromBase64(base64Data: string): ParsedInstruction | null {
-  const buffer = Buffer.from(base64Data, 'base64');
-  return parseInstructionData(buffer);
+  const bytes = new Uint8Array(base64Encoder.encode(base64Data));
+  return parseInstructionData(bytes);
 }
 
 /** Check if data is a Novus Mundus instruction */
-export function isNovusMundusInstruction(data: Buffer | Uint8Array): boolean {
+export function isNovusMundusInstruction(data: Uint8Array): boolean {
   if (data.length < 2) return false;
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buf.readUInt16LE(0);
+  const discriminator = readU16LE(data);
   return INSTRUCTION_NAMES[discriminator] !== undefined;
 }
 
 /** Get instruction name from data without full parsing */
-export function getInstructionNameFromData(data: Buffer | Uint8Array): string | undefined {
+export function getInstructionNameFromData(data: Uint8Array): string | undefined {
   if (data.length < 2) return undefined;
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
-  const discriminator = buf.readUInt16LE(0);
+  const discriminator = readU16LE(data);
   return INSTRUCTION_NAMES[discriminator];
 }

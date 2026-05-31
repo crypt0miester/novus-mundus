@@ -43,8 +43,8 @@ export default function DashboardPage() {
   const showPanel = useRightPanelStore((s) => s.show);
 
   const xpForNext = player ? xpRequiredForLevel(player.level + 1) : 0;
-  const xpProgress = player ? levelProgressPercent(player.level, player.currentXp.toNumber()) : 0;
-  const networth = player ? player.networth.toNumber() : 0;
+  const xpProgress = player ? levelProgressPercent(player.level, Number(player.currentXp)) : 0;
+  const networth = player ? Number(player.networth) : 0;
   const staminaPct = stamina.max > 0 ? (stamina.current / stamina.max) * 100 : 0;
 
   const [completedKeys] = useState(() => new Set<string>());
@@ -174,7 +174,7 @@ export default function DashboardPage() {
                         </ProgressRing>
                         <div className="text-center text-[11px] text-text-muted">
                           <span className="font-mono tabular-nums text-text-secondary">
-                            {formatNumber(player.currentXp.toNumber(), "compact")}
+                            {formatNumber(Number(player.currentXp), "compact")}
                           </span>{" "}
                           / {formatNumber(xpForNext, "compact")} XP
                         </div>
@@ -237,7 +237,7 @@ export default function DashboardPage() {
                           <span className="text-text-secondary">Cash</span>
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-cash" size={14} />
-                            <GoldNumber value={player.cashOnHand.toNumber()} format="full" />
+                            <GoldNumber value={Number(player.cashOnHand)} format="full" />
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
@@ -245,7 +245,7 @@ export default function DashboardPage() {
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-cash" size={14} />
                             <GoldNumber
-                              value={player.cashInVault.toNumber()}
+                              value={Number(player.cashInVault)}
                               format="full"
                               glow={false}
                             />
@@ -255,14 +255,14 @@ export default function DashboardPage() {
                           <span className="text-text-secondary">Gems</span>
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-gem" size={14} />
-                            <GoldNumber value={player.gems.toNumber()} />
+                            <GoldNumber value={Number(player.gems)} />
                           </span>
                         </div>
                         <div className="flex justify-between text-sm">
                           <span className="text-text-secondary">Fragments</span>
                           <span className="flex items-center gap-1">
                             <GameIcon id="resource-fragments" size={14} />
-                            <GoldNumber value={player.fragments.toNumber()} glow={false} />
+                            <GoldNumber value={Number(player.fragments)} glow={false} />
                           </span>
                         </div>
                         <div className="mt-1.5 border-t border-border-default pt-1.5 flex justify-between text-sm">
@@ -282,14 +282,14 @@ export default function DashboardPage() {
                       </div>
                       <UnitGrid
                         defense={[
-                          player.defensiveUnit1.toNumber(),
-                          player.defensiveUnit2.toNumber(),
-                          player.defensiveUnit3.toNumber(),
+                          Number(player.defensiveUnit1),
+                          Number(player.defensiveUnit2),
+                          Number(player.defensiveUnit3),
                         ]}
                         offense={[
-                          player.operativeUnit1.toNumber(),
-                          player.operativeUnit2.toNumber(),
-                          player.operativeUnit3.toNumber(),
+                          Number(player.operativeUnit1),
+                          Number(player.operativeUnit2),
+                          Number(player.operativeUnit3),
                         ]}
                       />
                     </div>
@@ -313,22 +313,22 @@ export default function DashboardPage() {
                                 { label: "Theme", value: ge.kingdomTheme.toString() },
                                 {
                                   label: "Total Players",
-                                  value: ge.totalPlayers.toNumber().toLocaleString(),
+                                  value: Number(ge.totalPlayers).toLocaleString(),
                                 },
                                 {
                                   label: "Protection",
                                   value: formatTime(
-                                    gp.newPlayerProtectionDuration.toNumber(),
+                                    Number(gp.newPlayerProtectionDuration),
                                     "compact",
                                   ),
                                 },
                                 {
                                   label: "Daily Cash",
-                                  value: gp.dailyCashBase.toNumber().toLocaleString(),
+                                  value: Number(gp.dailyCashBase).toLocaleString(),
                                 },
                                 {
                                   label: "Daily XP",
-                                  value: gp.dailyXpBase.toNumber().toLocaleString(),
+                                  value: Number(gp.dailyXpBase).toLocaleString(),
                                 },
                                 {
                                   label: "Attack Mult",

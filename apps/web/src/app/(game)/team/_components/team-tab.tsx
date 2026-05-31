@@ -159,6 +159,23 @@ export function TeamTab() {
   const { publicKey } = useWallet();
   const transact = useTransact();
 
+  // The current player's own PlayerAccount PDA — used to detect own rank,
+  // membership and treasury request. Derived async (v3 PDA derivation).
+  const [myPlayerPda, setMyPlayerPda] = useState<PublicKey | null>(null);
+  useEffect(() => {
+    if (!publicKey) {
+      setMyPlayerPda(null);
+      return;
+    }
+    let cancelled = false;
+    derivePlayerPda(client.gameEngine, publicKey).then(([pda]) => {
+      if (!cancelled) setMyPlayerPda(pda);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [publicKey, client.gameEngine]);
+
   const hasTeam = !!player?.team && !isNullPubkey(player.team);
   const teamPubkey = hasTeam ? player!.team : null;
 
@@ -174,11 +191,10 @@ export function TeamTab() {
   }, [publicKey, team]);
 
   const myRank = useMemo(() => {
-    if (!publicKey || !members) return 99;
-    const myPda = derivePlayerPda(client.gameEngine, publicKey)[0];
-    const me = members.find((m) => m.account.player.equals(myPda));
+    if (!publicKey || !members || !myPlayerPda) return 99;
+    const me = members.find((m) => m.account.player.equals(myPlayerPda));
     return me?.account.rank ?? 99;
-  }, [publicKey, members, client.gameEngine]);
+  }, [publicKey, members, myPlayerPda]);
 
   const isOfficerPlus = myRank <= 2; // Leader(0), Co-Leader(1), Officer(2)
 
@@ -287,7 +303,7 @@ export function TeamTab() {
     if (!publicKey || !teamName.trim()) throw new Error("Missing data");
     const ge = client.gameEngine;
     const teamIdNum = Date.now();
-    const ix = createTeamCreateInstruction(
+    const ix = await createTeamCreateInstruction(
       { owner: publicKey, gameEngine: ge, teamId: teamIdNum },
       { name: teamName.trim() },
     );
@@ -304,7 +320,7 @@ export function TeamTab() {
   const handleLeave = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamLeaveInstruction({
+    const ix = await createTeamLeaveInstruction({
       owner: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -324,7 +340,7 @@ export function TeamTab() {
   const handleDisband = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamDisbandInstruction({
+    const ix = await createTeamDisbandInstruction({
       leader: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -344,7 +360,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || depositAmount <= 0)
       throw new Error("Invalid amount");
     const ge = client.gameEngine;
-    const ix = createTeamDepositTreasuryInstruction(
+    const ix = await createTeamDepositTreasuryInstruction(
       { owner: publicKey, gameEngine: ge, team: teamPubkey, teamId },
       { amount: depositAmount },
     );
@@ -362,7 +378,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player || withdrawAmount <= 0)
       throw new Error("Invalid amount");
     const ge = client.gameEngine;
-    const ix = createTeamWithdrawTreasuryInstruction(
+    const ix = await createTeamWithdrawTreasuryInstruction(
       {
         owner: publicKey,
         gameEngine: ge,
@@ -386,7 +402,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player || !motd.trim())
       throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamSetMotdInstruction(
+    const ix = await createTeamSetMotdInstruction(
       {
         owner: publicKey,
         gameEngine: ge,
@@ -409,8 +425,8 @@ export function TeamTab() {
   const handleInvite = async (inviteeWallet: PublicKey, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId || !player || !team) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const [inviteePlayerPda] = derivePlayerPda(ge, inviteeWallet);
-    const ix = createTeamInviteInstruction({
+    const [inviteePlayerPda] = await derivePlayerPda(ge, inviteeWallet);
+    const ix = await createTeamInviteInstruction({
       inviter: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -429,12 +445,12 @@ export function TeamTab() {
       .then((r) => r.signature);
   };
 
-  const handleTeamNameSet = (domain: string, tld: string) => {
+  const handleTeamNameSet = async (domain: string, tld: string) => {
     if (!publicKey || !teamPubkey) return;
     const ge = client.gameEngine;
 
     if (parsedTeamName) {
-      const ix = createUpdateTeamNameInstruction({
+      const ix = await createUpdateTeamNameInstruction({
         leader: publicKey,
         gameEngine: ge,
         team: teamPubkey,
@@ -449,7 +465,7 @@ export function TeamTab() {
         successMessage: "Team name updated!",
       });
     } else {
-      const ix = createSetTeamNameInstruction({
+      const ix = await createSetTeamNameInstruction({
         leader: publicKey,
         gameEngine: ge,
         team: teamPubkey,
@@ -464,10 +480,10 @@ export function TeamTab() {
     }
   };
 
-  const handleTeamNameRemove = () => {
+  const handleTeamNameRemove = async () => {
     if (!publicKey || !teamPubkey || !parsedTeamName) return;
     const ge = client.gameEngine;
-    const ix = createRemoveTeamNameInstruction({
+    const ix = await createRemoveTeamNameInstruction({
       leader: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -488,7 +504,7 @@ export function TeamTab() {
   ) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamKickMemberInstruction({
+    const ix = await createTeamKickMemberInstruction({
       kicker: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -511,7 +527,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const newRank = Math.max(1, currentRank - 1); // promote = lower rank number (but not 0=leader)
-    const ix = createTeamPromoteMemberInstruction(
+    const ix = await createTeamPromoteMemberInstruction(
       {
         promoter: publicKey,
         gameEngine: ge,
@@ -535,7 +551,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const newRank = Math.min(4, currentRank + 1); // demote = higher rank number
-    const ix = createTeamDemoteMemberInstruction(
+    const ix = await createTeamDemoteMemberInstruction(
       {
         demoter: publicKey,
         gameEngine: ge,
@@ -558,7 +574,7 @@ export function TeamTab() {
   const handleTransferLeadership = async (newLeaderPlayer: PublicKey, newSlotIndex: number) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamTransferLeadershipInstruction({
+    const ix = await createTeamTransferLeadershipInstruction({
       leader: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -579,7 +595,7 @@ export function TeamTab() {
   const handleCancelInvite = async (inviteePlayer: PublicKey) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamCancelInviteInstruction({
+    const ix = await createTeamCancelInviteInstruction({
       member: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -604,7 +620,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
     const settings = isPublic ? 1 : 0; // bit 0 = PUBLIC
-    const ix = createTeamUpdateSettingsInstruction(
+    const ix = await createTeamUpdateSettingsInstruction(
       {
         member: publicKey,
         gameEngine: ge,
@@ -628,7 +644,7 @@ export function TeamTab() {
     if (!publicKey || !teamPubkey || !teamId || !player || requestWithdrawAmount <= 0)
       throw new Error("Invalid amount");
     const ge = client.gameEngine;
-    const ix = createTeamTreasuryRequestWithdrawInstruction(
+    const ix = await createTeamTreasuryRequestWithdrawInstruction(
       {
         owner: publicKey,
         gameEngine: ge,
@@ -658,7 +674,7 @@ export function TeamTab() {
   ) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamTreasuryApproveRequestInstruction({
+    const ix = await createTeamTreasuryApproveRequestInstruction({
       approver: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -680,7 +696,7 @@ export function TeamTab() {
   const handleTreasuryReject = async (requesterPlayer: PublicKey, requesterRefund: PublicKey) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamTreasuryRejectRequestInstruction({
+    const ix = await createTeamTreasuryRejectRequestInstruction({
       rejecter: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -701,7 +717,7 @@ export function TeamTab() {
   const handleTreasuryExecute = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamTreasuryExecuteRequestInstruction({
+    const ix = await createTeamTreasuryExecuteRequestInstruction({
       owner: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -721,7 +737,7 @@ export function TeamTab() {
   const handleTreasuryCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamPubkey || !teamId) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamTreasuryCancelRequestInstruction({
+    const ix = await createTeamTreasuryCancelRequestInstruction({
       owner: publicKey,
       gameEngine: ge,
       team: teamPubkey,
@@ -745,7 +761,7 @@ export function TeamTab() {
   ) => {
     if (!publicKey || !teamPubkey || !teamId || !player) throw new Error("Missing data");
     const ge = client.gameEngine;
-    const ix = createTeamUpdateTreasurySettingsInstruction(
+    const ix = await createTeamUpdateTreasurySettingsInstruction(
       {
         leader: publicKey,
         gameEngine: ge,
@@ -769,7 +785,7 @@ export function TeamTab() {
     otherPlayers.get(playerPda.toBase58())?.account ?? null;
 
   const getMemberNetworth = (playerPda: PublicKey): number =>
-    getMemberAccount(playerPda)?.networth?.toNumber?.() ?? 0;
+    Number(getMemberAccount(playerPda)?.networth ?? 0n);
 
   const getMemberLevel = (playerPda: PublicKey): number => getMemberAccount(playerPda)?.level ?? 0;
 
@@ -780,31 +796,31 @@ export function TeamTab() {
     const p = getMemberAccount(playerPda);
     if (!p) return 0;
     return calculateDefensivePower(
-      p.defensiveUnit1.toNumber(),
-      p.defensiveUnit2.toNumber(),
-      p.defensiveUnit3.toNumber(),
+      Number(p.defensiveUnit1),
+      Number(p.defensiveUnit2),
+      Number(p.defensiveUnit3),
     );
   };
 
   const getMemberDefensiveUnits = (playerPda: PublicKey): number => {
     const p = getMemberAccount(playerPda);
     if (!p) return 0;
-    return p.defensiveUnit1.toNumber() + p.defensiveUnit2.toNumber() + p.defensiveUnit3.toNumber();
+    return Number(p.defensiveUnit1) + Number(p.defensiveUnit2) + Number(p.defensiveUnit3);
   };
 
   const getMemberOffensiveUnits = (playerPda: PublicKey): number => {
     const p = getMemberAccount(playerPda);
     if (!p) return 0;
-    return p.operativeUnit1.toNumber() + p.operativeUnit2.toNumber() + p.operativeUnit3.toNumber();
+    return Number(p.operativeUnit1) + Number(p.operativeUnit2) + Number(p.operativeUnit3);
   };
 
   const getMemberReinforcements = (playerPda: PublicKey): number => {
     const p = getMemberAccount(playerPda);
     if (!p) return 0;
     return (
-      p.reinforcementDef1.toNumber() +
-      p.reinforcementDef2.toNumber() +
-      p.reinforcementDef3.toNumber()
+      Number(p.reinforcementDef1) +
+      Number(p.reinforcementDef2) +
+      Number(p.reinforcementDef3)
     );
   };
 
@@ -829,12 +845,6 @@ export function TeamTab() {
       return a.account.slotIndex - b.account.slotIndex;
     });
   }, [members, otherPlayers]);
-
-  // The current player's own PlayerAccount PDA — used to detect own treasury request.
-  const myPlayerPda = useMemo(() => {
-    if (!publicKey) return null;
-    return derivePlayerPda(client.gameEngine, publicKey)[0];
-  }, [publicKey, client.gameEngine]);
 
   // Pending treasury withdrawal requests for this team, enriched with the
   // requester's slot index (for approve) and refund wallet (rent recipient).
@@ -923,11 +933,11 @@ export function TeamTab() {
     }
     if (freeSlot < 0) throw new Error("Team is full");
 
-    const ix = createTeamAcceptInviteInstruction({
+    const ix = await createTeamAcceptInviteInstruction({
       owner: publicKey,
       gameEngine: ge,
       team: inviteTeam,
-      teamId: inviteTeamAccount.id.toNumber(),
+      teamId: inviteTeamAccount.id,
       slotIndex: freeSlot,
       inviteRefund: inviterRefund,
       leaderPlayer: inviteTeamAccount.leader,
@@ -953,7 +963,7 @@ export function TeamTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createTeamDeclineInviteInstruction({
+    const ix = await createTeamDeclineInviteInstruction({
       owner: publicKey,
       gameEngine: ge,
       team: inviteTeam,
@@ -1070,7 +1080,7 @@ export function TeamTab() {
                   <div className="text-xs text-text-muted">Treasury</div>
                   <span className="inline-flex items-center gap-1">
                     <GameIcon id="resource-cash" size={14} />
-                    <GoldNumber value={team.treasury.toNumber()} />
+                    <GoldNumber value={Number(team.treasury)} />
                   </span>
                 </div>
                 <div className="text-right">
@@ -1094,8 +1104,8 @@ export function TeamTab() {
                   {sortedMembers.map((m) => {
                     const memberPda = m.account.player;
                     const memberAccount = getMemberAccount(memberPda);
-                    const isCurrentPlayer = publicKey
-                      ? derivePlayerPda(client.gameEngine, publicKey)[0].equals(memberPda)
+                    const isCurrentPlayer = myPlayerPda
+                      ? myPlayerPda.equals(memberPda)
                       : false;
                     const displayName = getMemberName(memberPda);
                     const level = getMemberLevel(memberPda);
@@ -1190,14 +1200,14 @@ export function TeamTab() {
                           <div className="space-y-3 border-t border-zinc-800 px-3 py-3">
                             <UnitGrid
                               defense={[
-                                memberAccount.defensiveUnit1.toNumber(),
-                                memberAccount.defensiveUnit2.toNumber(),
-                                memberAccount.defensiveUnit3.toNumber(),
+                                Number(memberAccount.defensiveUnit1),
+                                Number(memberAccount.defensiveUnit2),
+                                Number(memberAccount.defensiveUnit3),
                               ]}
                               offense={[
-                                memberAccount.operativeUnit1.toNumber(),
-                                memberAccount.operativeUnit2.toNumber(),
-                                memberAccount.operativeUnit3.toNumber(),
+                                Number(memberAccount.operativeUnit1),
+                                Number(memberAccount.operativeUnit2),
+                                Number(memberAccount.operativeUnit3),
                               ]}
                             />
 
@@ -1210,19 +1220,19 @@ export function TeamTab() {
                                   <span>
                                     <span className="text-text-muted">T1 </span>
                                     <span className="game-num">
-                                      {memberAccount.reinforcementDef1.toNumber().toLocaleString()}
+                                      {Number(memberAccount.reinforcementDef1).toLocaleString()}
                                     </span>
                                   </span>
                                   <span>
                                     <span className="text-text-muted">T2 </span>
                                     <span className="game-num">
-                                      {memberAccount.reinforcementDef2.toNumber().toLocaleString()}
+                                      {Number(memberAccount.reinforcementDef2).toLocaleString()}
                                     </span>
                                   </span>
                                   <span>
                                     <span className="text-text-muted">T3 </span>
                                     <span className="game-num">
-                                      {memberAccount.reinforcementDef3.toNumber().toLocaleString()}
+                                      {Number(memberAccount.reinforcementDef3).toLocaleString()}
                                     </span>
                                   </span>
                                 </div>
@@ -1355,7 +1365,7 @@ export function TeamTab() {
                         items={[
                           {
                             label: "Team Creation Cost",
-                            value: gp.teamCreationCost.toNumber().toLocaleString(),
+                            value: Number(gp.teamCreationCost).toLocaleString(),
                             suffix: "NOVI",
                             highlight: true,
                           },
@@ -1415,7 +1425,7 @@ export function TeamTab() {
                       <div className="text-[10px] text-text-muted">Treasury Balance</div>
                       <span className="inline-flex items-center gap-1">
                         <GameIcon id="resource-cash" size={14} />
-                        <GoldNumber value={team.treasury.toNumber()} />
+                        <GoldNumber value={Number(team.treasury)} />
                       </span>
                     </div>
 
@@ -1426,9 +1436,9 @@ export function TeamTab() {
                         value={depositAmount}
                         onChange={setDepositAmount}
                         min={0}
-                        max={player?.cashOnHand?.toNumber?.() ?? 0}
+                        max={Number(player?.cashOnHand ?? 0n)}
                       />
-                      {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) &&
+                      {depositAmount > (Number(player?.cashOnHand ?? 0n)) &&
                         depositAmount > 0 && (
                           <p className="text-xs text-red-400">Exceeds cash on hand</p>
                         )}
@@ -1439,7 +1449,7 @@ export function TeamTab() {
                           className="text-xs"
                           disabled={
                             depositAmount <= 0 ||
-                            depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)
+                            depositAmount > (Number(player?.cashOnHand ?? 0n))
                           }
                         >
                           Deposit
@@ -1450,7 +1460,7 @@ export function TeamTab() {
                           className="text-xs"
                           disabled={
                             withdrawAmount <= 0 ||
-                            withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)
+                            withdrawAmount > (Number(team?.treasury ?? 0n))
                           }
                         >
                           Withdraw
@@ -1468,7 +1478,7 @@ export function TeamTab() {
                         value={requestWithdrawAmount}
                         onChange={setRequestWithdrawAmount}
                         min={0}
-                        max={team.treasury.toNumber()}
+                        max={Number(team.treasury)}
                       />
                       <TxButton
                         onClick={handleTreasuryRequestWithdraw}
@@ -1486,7 +1496,7 @@ export function TeamTab() {
                             variant="secondary"
                             className="text-xs"
                             disabled={
-                              myRequest.account.executableAt.toNumber() >
+                              Number(myRequest.account.executableAt) >
                               Math.floor(Date.now() / 1000)
                             }
                           >
@@ -1679,7 +1689,7 @@ export function TeamTab() {
                   <div className="text-[10px] text-text-muted">Treasury Balance</div>
                   <span className="inline-flex items-center gap-1">
                     <GameIcon id="resource-cash" size={14} />
-                    <GoldNumber value={team.treasury.toNumber()} />
+                    <GoldNumber value={Number(team.treasury)} />
                   </span>
                 </div>
 
@@ -1689,9 +1699,9 @@ export function TeamTab() {
                     value={depositAmount}
                     onChange={setDepositAmount}
                     min={0}
-                    max={player?.cashOnHand?.toNumber?.() ?? 0}
+                    max={Number(player?.cashOnHand ?? 0n)}
                   />
-                  {depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0) && depositAmount > 0 && (
+                  {depositAmount > (Number(player?.cashOnHand ?? 0n)) && depositAmount > 0 && (
                     <p className="text-xs text-red-400">Exceeds cash on hand</p>
                   )}
                   <div className="grid grid-cols-2 gap-2">
@@ -1701,7 +1711,7 @@ export function TeamTab() {
                       className="text-xs"
                       disabled={
                         depositAmount <= 0 ||
-                        depositAmount > (player?.cashOnHand?.toNumber?.() ?? 0)
+                        depositAmount > (Number(player?.cashOnHand ?? 0n))
                       }
                     >
                       Deposit
@@ -1711,7 +1721,7 @@ export function TeamTab() {
                       variant="secondary"
                       className="text-xs"
                       disabled={
-                        withdrawAmount <= 0 || withdrawAmount > (team?.treasury?.toNumber?.() ?? 0)
+                        withdrawAmount <= 0 || withdrawAmount > (Number(team?.treasury ?? 0n))
                       }
                     >
                       Withdraw
@@ -1728,7 +1738,7 @@ export function TeamTab() {
                     value={requestWithdrawAmount}
                     onChange={setRequestWithdrawAmount}
                     min={0}
-                    max={team.treasury.toNumber()}
+                    max={Number(team.treasury)}
                   />
                   <TxButton
                     onClick={handleTreasuryRequestWithdraw}
@@ -1746,7 +1756,7 @@ export function TeamTab() {
                         variant="secondary"
                         className="text-xs"
                         disabled={
-                          myRequest.account.executableAt.toNumber() > Math.floor(Date.now() / 1000)
+                          Number(myRequest.account.executableAt) > Math.floor(Date.now() / 1000)
                         }
                       >
                         Execute
@@ -1910,6 +1920,25 @@ function InvitePlayerPanel({
   const domains = useDomainNames(owners);
   const knownOwners = useMemo(() => new Set(owners.map((o) => o.toBase58())), [owners]);
 
+  // Resolve a owner-wallet -> PlayerAccount-PDA map (v3 PDA derivation is async)
+  // so the candidate filter can synchronously drop already-invited players.
+  const [ownerPdaMap, setOwnerPdaMap] = useState<Map<string, string>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const entries = await Promise.all(
+        owners.map(
+          async (o) =>
+            [o.toBase58(), (await derivePlayerPda(gameEngine, o))[0].toBase58()] as const,
+        ),
+      );
+      if (!cancelled) setOwnerPdaMap(new Map(entries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [owners, gameEngine]);
+
   const candidates = useMemo(() => {
     if (!players) return [];
     const selfStr = selfWallet?.toBase58();
@@ -1919,18 +1948,20 @@ function InvitePlayerPanel({
       if (!isNullPubkey(p.account.team)) return false;
       return matchesPlayerQuery(p.account, addr, domains.get(addr), query);
     });
-    // Derive PDAs only for the few we'll show, to drop already-invited players.
+    // Drop already-invited players. The PDA map is resolved async; until an
+    // owner's PDA is known we keep the candidate (the on-chain invite rejects
+    // a dup, and the row drops once the map fills on the next render).
     const result: typeof matched = [];
     for (const p of matched) {
       if (invitedPdas.size > 0) {
-        const [pda] = derivePlayerPda(gameEngine, p.account.owner);
-        if (invitedPdas.has(pda.toBase58())) continue;
+        const pda = ownerPdaMap.get(p.account.owner.toBase58());
+        if (pda && invitedPdas.has(pda)) continue;
       }
       result.push(p);
       if (result.length >= 8) break;
     }
     return result;
-  }, [players, query, domains, invitedPdas, gameEngine, selfWallet]);
+  }, [players, query, domains, invitedPdas, ownerPdaMap, selfWallet]);
 
   // A pasted wallet address still works for accounts not in the directory yet.
   const pastedWallet = useMemo(() => {
@@ -2090,9 +2121,9 @@ function TreasurySettingsPanel({
   compact,
 }: {
   team: {
-    treasury: { toNumber: () => number };
-    treasuryInstantLimit: { toNumber: () => number }[];
-    treasuryDailyCap: { toNumber: () => number }[];
+    treasury: bigint;
+    treasuryInstantLimit: bigint[];
+    treasuryDailyCap: bigint[];
     treasuryCooldownHours: number;
   };
   onSave: (
@@ -2104,16 +2135,16 @@ function TreasurySettingsPanel({
   compact?: boolean;
 }) {
   const [limits, setLimits] = useState<[number, number, number, number]>(() => [
-    team.treasuryInstantLimit[0]?.toNumber() ?? 0,
-    team.treasuryInstantLimit[1]?.toNumber() ?? 0,
-    team.treasuryInstantLimit[2]?.toNumber() ?? 0,
-    team.treasuryInstantLimit[3]?.toNumber() ?? 0,
+    Number(team.treasuryInstantLimit[0] ?? 0n),
+    Number(team.treasuryInstantLimit[1] ?? 0n),
+    Number(team.treasuryInstantLimit[2] ?? 0n),
+    Number(team.treasuryInstantLimit[3] ?? 0n),
   ]);
   const [caps, setCaps] = useState<[number, number, number, number]>(() => [
-    team.treasuryDailyCap[0]?.toNumber() ?? 0,
-    team.treasuryDailyCap[1]?.toNumber() ?? 0,
-    team.treasuryDailyCap[2]?.toNumber() ?? 0,
-    team.treasuryDailyCap[3]?.toNumber() ?? 0,
+    Number(team.treasuryDailyCap[0] ?? 0n),
+    Number(team.treasuryDailyCap[1] ?? 0n),
+    Number(team.treasuryDailyCap[2] ?? 0n),
+    Number(team.treasuryDailyCap[3] ?? 0n),
   ]);
   const [cooldown, setCooldown] = useState(team.treasuryCooldownHours);
 
@@ -2157,7 +2188,7 @@ function TreasurySettingsPanel({
               setLimits(updated);
             }}
             min={0}
-            max={team.treasury.toNumber()}
+            max={Number(team.treasury)}
           />
           <NumberField
             label="Daily Cap"
@@ -2168,7 +2199,7 @@ function TreasurySettingsPanel({
               setCaps(updated);
             }}
             min={0}
-            max={team.treasury.toNumber()}
+            max={Number(team.treasury)}
           />
         </div>
       ))}
@@ -2199,8 +2230,8 @@ interface TreasuryRequestRow {
   pubkey: PublicKey;
   account: {
     requester: PublicKey;
-    amount: { toNumber: () => number };
-    executableAt: { toNumber: () => number };
+    amount: bigint;
+    executableAt: bigint;
   };
   requesterPda: PublicKey;
   requesterSlotIndex: number | null;
@@ -2240,7 +2271,7 @@ function TreasuryRequestsPanel({
         Pending Requests
       </div>
       {requests.map((r) => {
-        const executableAt = r.account.executableAt.toNumber();
+        const executableAt = Number(r.account.executableAt);
         const cooldownRemaining = Math.max(0, executableAt - nowSec);
         const ready = cooldownRemaining === 0;
         return (
@@ -2255,7 +2286,7 @@ function TreasuryRequestsPanel({
               </span>
               <span className="inline-flex items-center gap-1">
                 <GameIcon id="resource-cash" size={14} />
-                <GoldNumber value={r.account.amount.toNumber()} size="sm" />
+                <GoldNumber value={Number(r.account.amount)} size="sm" />
               </span>
             </div>
             <div className="flex items-center justify-between">

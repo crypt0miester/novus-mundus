@@ -77,7 +77,7 @@ export function CampTab() {
   const handleHire = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createHireUnitsInstruction(
+    const ix = await createHireUnitsInstruction(
       { owner: publicKey, gameEngine: ge },
       { unitType: OPERATIVE_UNITS[hireType]!.unitType, noviAmount: noviToDeci(hireNoviAmount) },
     );
@@ -108,15 +108,15 @@ export function CampTab() {
     ? forecastHire(noviToDeci(hireNoviAmount), selectedUnit.unitType, player, ge, now)
     : null;
 
-  const op1 = player.operativeUnit1?.toNumber?.() ?? 0;
-  const op2 = player.operativeUnit2?.toNumber?.() ?? 0;
-  const op3 = player.operativeUnit3?.toNumber?.() ?? 0;
+  const op1 = Number(player.operativeUnit1 ?? 0n);
+  const op2 = Number(player.operativeUnit2 ?? 0n);
+  const op3 = Number(player.operativeUnit3 ?? 0n);
   const operativePower = calculateOperativePower(op1, op2, op3);
 
   // Operatives lose happiness — and start abandoning — when there's no food.
   const produceDeficit = calculateProduceDeficit(
     op1 + op2 + op3,
-    player.produce?.toNumber?.() ?? 0,
+    Number(player.produce ?? 0n),
   );
 
   return (
@@ -153,7 +153,7 @@ export function CampTab() {
 
           <div className="grid gap-2 grid-cols-3">
             {OPERATIVE_UNITS.map((unit, i) => {
-              const count = player[unit.field]?.toNumber?.() ?? 0;
+              const count = Number(player[unit.field] ?? 0n);
               const isSelected = hireType === i;
               const isLocked = !gate.allowed;
               return (

@@ -18,7 +18,7 @@ import {
   derivePlayerPda,
   deriveNoviMintPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Enums
 
@@ -84,16 +84,16 @@ export interface SpawnEncounterParams {
  * 8. [] system_program
  * 9. [] spawn_location
  */
-export function createSpawnEncounterInstruction(
+export async function createSpawnEncounterInstruction(
   accounts: SpawnEncounterAccounts,
   params: SpawnEncounterParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
-  const [encounter] = deriveEncounterPda(accounts.gameEngine, accounts.cityId, accounts.encounterIndex);
-  const [noviMint] = deriveNoviMintPda();
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
-  const [spawnLocation] = deriveLocationPda(accounts.gameEngine, accounts.cityId, accounts.gridLat, accounts.gridLong);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
+  const [encounter] = await deriveEncounterPda(accounts.gameEngine, accounts.cityId, accounts.encounterIndex);
+  const [noviMint] = await deriveNoviMintPda();
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
+  const [spawnLocation] = await deriveLocationPda(accounts.gameEngine, accounts.cityId, accounts.gridLat, accounts.gridLong);
 
   // Rust account order (10):
   // 0. payer (signer, writable)
@@ -175,16 +175,16 @@ export interface CleanupEncounterAccounts {
  * 3. [writable] encounter_location
  * 4. [writable] rent_recipient
  */
-export function createCleanupEncounterInstruction(
+export async function createCleanupEncounterInstruction(
   accounts: CleanupEncounterAccounts
-): TransactionInstruction {
-  const [encounter] = deriveEncounterPda(
+): Promise<TransactionInstruction> {
+  const [encounter] = await deriveEncounterPda(
     accounts.gameEngine,
     accounts.cityId,
     accounts.encounterIndex
   );
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
-  const [encounterLocation] = deriveLocationPda(
+  const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
+  const [encounterLocation] = await deriveLocationPda(
     accounts.gameEngine,
     accounts.cityId,
     accounts.gridLat,

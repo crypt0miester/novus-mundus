@@ -36,7 +36,7 @@ export default function CityRosterPage({ params }: { params: Promise<{ id: strin
     if (!allPlayers) return [];
     return allPlayers
       .filter((p) => p.account.currentCity === cityId)
-      .sort((a, b) => b.account.networth.toNumber() - a.account.networth.toNumber());
+      .sort((a, b) => Number(b.account.networth) - Number(a.account.networth));
   }, [allPlayers, cityId]);
 
   // Build team lookup map
@@ -45,7 +45,7 @@ export default function CityRosterPage({ params }: { params: Promise<{ id: strin
     const map = new Map<string, { id: number; name: string }>();
     for (const t of allTeams) {
       map.set(t.pubkey.toBase58(), {
-        id: t.account.id.toNumber(),
+        id: Number(t.account.id),
         name: t.account.name,
       });
     }

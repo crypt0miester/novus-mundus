@@ -6,67 +6,66 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { BufferWriter } from '../utils/serialize';
 
 // Nested Types
 
 export interface GameCaps {
-  maxReservedNoviPerPlayer: BN;
-  noviExpirationDuration: BN;
-  maxEventMintedPrize: BN;
-  maxDailyMintedPrizePool: BN;
-  maxWeeklyMintedPrizePool: BN;
-  minClaimInterval: BN;
-  maxGenerationTime: BN;
-  minAccountAgeForEvents: BN;
+  maxReservedNoviPerPlayer: bigint;
+  noviExpirationDuration: bigint;
+  maxEventMintedPrize: bigint;
+  maxDailyMintedPrizePool: bigint;
+  maxWeeklyMintedPrizePool: bigint;
+  minClaimInterval: bigint;
+  maxGenerationTime: bigint;
+  minAccountAgeForEvents: bigint;
 }
 
 export interface EconomicConfig {
-  costMultiplier: BN;
-  lastCostUpdate: BN;
-  defensiveUnit1Cost: BN;
-  defensiveUnit2Cost: BN;
-  defensiveUnit3Cost: BN;
-  operativeUnit1Cost: BN;
-  operativeUnit2Cost: BN;
-  operativeUnit3Cost: BN;
-  meleeWeaponCost: BN;
-  rangedWeaponCost: BN;
-  siegeWeaponCost: BN;
-  armorCost: BN;
-  produceCost: BN;
-  vehicleCost: BN;
-  staminaCost: BN;
+  costMultiplier: bigint;
+  lastCostUpdate: bigint;
+  defensiveUnit1Cost: bigint;
+  defensiveUnit2Cost: bigint;
+  defensiveUnit3Cost: bigint;
+  operativeUnit1Cost: bigint;
+  operativeUnit2Cost: bigint;
+  operativeUnit3Cost: bigint;
+  meleeWeaponCost: bigint;
+  rangedWeaponCost: bigint;
+  siegeWeaponCost: bigint;
+  armorCost: bigint;
+  produceCost: bigint;
+  vehicleCost: bigint;
+  staminaCost: bigint;
   industrialMultiplier: number;
   officeMultiplier: number;
   generalMultiplier: number;
-  defensiveUnit1Value: BN;
-  defensiveUnit2Value: BN;
-  defensiveUnit3Value: BN;
-  operativeUnit1Value: BN;
-  operativeUnit2Value: BN;
-  operativeUnit3Value: BN;
-  meleeWeaponValue: BN;
-  rangedWeaponValue: BN;
-  siegeWeaponValue: BN;
-  armorValue: BN;
-  produceValue: BN;
-  vehicleValue: BN;
-  noviConsumptionBase: BN;
+  defensiveUnit1Value: bigint;
+  defensiveUnit2Value: bigint;
+  defensiveUnit3Value: bigint;
+  operativeUnit1Value: bigint;
+  operativeUnit2Value: bigint;
+  operativeUnit3Value: bigint;
+  meleeWeaponValue: bigint;
+  rangedWeaponValue: bigint;
+  siegeWeaponValue: bigint;
+  armorValue: bigint;
+  produceValue: bigint;
+  vehicleValue: bigint;
+  noviConsumptionBase: bigint;
   /** Per-kingdom starter NOVI granted on init_player (raw units, 1 decimal). */
-  starterLockedNovi: BN;
+  starterLockedNovi: bigint;
   secondaryMultiplierBase: number;
   fibonacciBonusBase: number;
-  encounterBaseCash: BN[];
-  encounterBaseNovi: BN[];
-  encounterBaseWeapons: BN[];
-  encounterBaseProduce: BN[];
-  encounterBaseVehicles: BN[];
+  encounterBaseCash: bigint[];
+  encounterBaseNovi: bigint[];
+  encounterBaseWeapons: bigint[];
+  encounterBaseProduce: bigint[];
+  encounterBaseVehicles: bigint[];
   encounterOscillationFreq: number[];
   encounterOscillationAmp: number[];
-  maxOperativesPerExpedition: BN;
+  maxOperativesPerExpedition: bigint;
   miningGemsPerOpHour: number[];
   fishingProducePerOpHour: number[];
 }
@@ -76,7 +75,7 @@ export interface GameplayConfig {
   attackBaseEffectiveness: number;
   armorDamageReductionBps: number;
   armorDamageReductionCapBps: number;
-  vehicleCapacity: BN;
+  vehicleCapacity: bigint;
   abandonRateHappy: number;
   abandonRateContent: number;
   abandonRateUnhappy: number;
@@ -91,85 +90,85 @@ export interface GameplayConfig {
   safeboxProtectionPercent: number;
   pvpLootPercentageBase: number;
   pvpLootOscillationAmp: number;
-  newPlayerProtectionDuration: BN;
-  teleportBaseCost: BN;
-  teleportCostPer100km: BN;
-  teamCreationCost: BN;
+  newPlayerProtectionDuration: bigint;
+  teleportBaseCost: bigint;
+  teleportCostPer100km: bigint;
+  teamCreationCost: bigint;
   themeTravelSpeedsKmh: number[];
   intracityTravelSpeedKmh: number;
   gemCostPerMinuteSpeedup: number;
-  dailyRewardCooldown: BN;
-  dailyCashBase: BN;
-  dailyProduceBase: BN;
-  dailyXpBase: BN;
+  dailyRewardCooldown: bigint;
+  dailyCashBase: bigint;
+  dailyProduceBase: bigint;
+  dailyXpBase: bigint;
   happinessSynchronyMax: number;
   levelSynchronyBonusPerLevel: number;
   reputationSynchronyBonuses: number[];
   maxEncounterLevelDiff: number;
   lootLevelScalingExp: number;
   lootLevelScalingDivisor: number;
-  healthPerLevel: BN;
+  healthPerLevel: bigint;
   defensePerLevel: number;
 }
 
 export interface RallyCaps {
   maxActiveRalliesJoined: number;
   maxRalliesCreatedPerDay: number;
-  maxRallyTroopContribution: BN;
+  maxRallyTroopContribution: bigint;
   maxRallySize: number;
-  maxRallyDurationSeconds: BN;
+  maxRallyDurationSeconds: bigint;
 }
 
 export interface SubscriptionTierConfig {
   name: string;
   tierIndex: number;
-  costInUsdCents: BN;
+  costInUsdCents: bigint;
   durationDays: number;
-  generationMultiplier: BN;
-  maxLockedNovi: BN;
-  dailyRewardMultiplier: BN;
+  generationMultiplier: bigint;
+  maxLockedNovi: bigint;
+  dailyRewardMultiplier: bigint;
   synchronyBonus: number;
-  novi: BN;
-  cash: BN;
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  op1: BN;
-  op2: BN;
-  op3: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  armor: BN;
-  produce: BN;
-  vehicles: BN;
-  reputation: BN;
-  xp: BN;
+  novi: bigint;
+  cash: bigint;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  op1: bigint;
+  op2: bigint;
+  op3: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armor: bigint;
+  produce: bigint;
+  vehicles: bigint;
+  reputation: bigint;
+  xp: bigint;
   rallyCaps: RallyCaps;
   maxTeamMembers: number;
-  maxDailyTransferAmount: BN;
+  maxDailyTransferAmount: bigint;
   maxDailyTransferCount: number;
   travelSpeedBonusBps: number;
 }
 
 export interface MintingConfig {
-  maxSupplyCap: BN;
-  maxMintPerProposal: BN;
-  lastMintTimestamp: BN;
+  maxSupplyCap: bigint;
+  maxMintPerProposal: bigint;
+  lastMintTimestamp: bigint;
   emergencyMintEnabled: boolean;
-  totalMinted: BN;
-  mintedForPrizes: BN;
-  mintedForLiquidity: BN;
-  mintedForDevelopment: BN;
-  mintedForMarketing: BN;
-  mintedForPartnerships: BN;
-  mintedForTreasury: BN;
-  mintedForEmergency: BN;
-  maxLiquidityAllocation: BN;
-  maxDevelopmentAllocation: BN;
-  maxMarketingAllocation: BN;
-  maxPartnershipAllocation: BN;
-  maxTreasuryAllocation: BN;
+  totalMinted: bigint;
+  mintedForPrizes: bigint;
+  mintedForLiquidity: bigint;
+  mintedForDevelopment: bigint;
+  mintedForMarketing: bigint;
+  mintedForPartnerships: bigint;
+  mintedForTreasury: bigint;
+  mintedForEmergency: bigint;
+  maxLiquidityAllocation: bigint;
+  maxDevelopmentAllocation: bigint;
+  maxMarketingAllocation: bigint;
+  maxPartnershipAllocation: bigint;
+  maxTreasuryAllocation: bigint;
 }
 
 export interface ThemeMultipliers {
@@ -186,17 +185,17 @@ export interface ThemeModifierConfig {
 
 export interface NoviPurchaseConfig {
   /** Base price per NOVI in lamports (FALLBACK when no oracle) */
-  noviBasePriceLamports: BN;
+  noviBasePriceLamports: bigint;
   /** Market undercut in basis points (e.g., 1500 = 15%) */
   noviMarketUndercutBps: number;
   /** Fixed purchase amounts (5 tiers, with 1 decimal) */
-  noviPurchaseAmounts: BN[];
+  noviPurchaseAmounts: bigint[];
   /** Bulk bonus in basis points per tier */
   noviBulkBonusBps: number[];
   /** Subscription bonus in basis points (4 tiers) */
   noviSubBonusBps: number[];
   /** Daily cap per subscription tier (with 1 decimal) */
-  noviSubDailyCap: BN[];
+  noviSubDailyCap: bigint[];
   /** Streak bonus in basis points (days 1-7) */
   noviStreakBonusBps: number[];
   /** Pyth NOVI/USD price feed (null if not configured) */
@@ -212,19 +211,19 @@ export interface NoviPurchaseConfig {
 // Arena PvP Configuration
 
 export interface ArenaConfig {
-  seasonDuration: BN;
-  claimDeadline: BN;
-  matchExpirySeconds: BN;
-  dailyBaseReward: BN;
-  minPointsForLeaderboard: BN;
-  meleeWeaponPower: BN;
-  rangedWeaponPower: BN;
-  siegeWeaponPower: BN;
-  armorPower: BN;
-  baseWinPoints: BN;
-  baseLossPoints: BN;
-  drawPoints: BN;
-  underdogBonusBps: BN;
+  seasonDuration: bigint;
+  claimDeadline: bigint;
+  matchExpirySeconds: bigint;
+  dailyBaseReward: bigint;
+  minPointsForLeaderboard: bigint;
+  meleeWeaponPower: bigint;
+  rangedWeaponPower: bigint;
+  siegeWeaponPower: bigint;
+  armorPower: bigint;
+  baseWinPoints: bigint;
+  baseLossPoints: bigint;
+  drawPoints: bigint;
+  underdogBonusBps: bigint;
   startingElo: number;
   eloKFactor: number;
   prizeDistribution: number[];
@@ -236,14 +235,14 @@ export interface ArenaConfig {
 // Expedition Configuration
 
 export interface ExpeditionConfig {
-  miningNoviCost: BN[];
-  miningFragmentBonus: BN[];
-  fishingNoviCost: BN[];
-  fishingFragmentBonus: BN[];
-  rareFindMultiplier: BN;
-  operativeTier1MultiplierBps: BN;
-  operativeTier2MultiplierBps: BN;
-  operativeTier3MultiplierBps: BN;
+  miningNoviCost: bigint[];
+  miningFragmentBonus: bigint[];
+  fishingNoviCost: bigint[];
+  fishingFragmentBonus: bigint[];
+  rareFindMultiplier: bigint;
+  operativeTier1MultiplierBps: bigint;
+  operativeTier2MultiplierBps: bigint;
+  operativeTier3MultiplierBps: bigint;
   miningRareChanceBps: number[];
   fishingRareChanceBps: number[];
   perfectExpeditionBonusBps: number;
@@ -258,9 +257,9 @@ export interface ExpeditionConfig {
 // Dungeon Configuration
 
 export interface DungeonConfig {
-  resumeGemCost: BN;
-  unitPower: BN[];
-  unitHealth: BN[];
+  resumeGemCost: bigint;
+  unitPower: bigint[];
+  unitHealth: bigint[];
   floorMultipliers: number[];
   relicEffects: number[];
   synergy2BonusBps: number[];
@@ -284,15 +283,15 @@ export interface DungeonConfig {
 // Castle Configuration
 
 export interface CastleConfig {
-  contestDuration: BN;
-  protectionDuration: BN;
+  contestDuration: bigint;
+  protectionDuration: bigint;
   attackRangeMeters: number;
-  kingNoviPerDay: BN;
-  kingCashPerDay: BN;
-  courtNoviPerDay: BN;
-  courtCashPerDay: BN;
-  memberNoviPerDay: BN;
-  memberCashPerDay: BN;
+  kingNoviPerDay: bigint;
+  kingCashPerDay: bigint;
+  courtNoviPerDay: bigint;
+  courtCashPerDay: bigint;
+  memberNoviPerDay: bigint;
+  memberCashPerDay: bigint;
   tierMultiplierBps: number[];
   kingLootCutBps: number;
   garrisonCapByTier: number[];
@@ -307,14 +306,14 @@ export interface CastleConfig {
 // Combat Configuration
 
 export interface CombatConfig {
-  damagePerSiegeWeapon: BN;
-  maxReinforcementReceive: BN;
-  defensiveUnit1Power: BN;
-  defensiveUnit2Power: BN;
-  defensiveUnit3Power: BN;
-  encounterStaminaCosts: BN[];
-  maxStaminaByTier: BN[];
-  staminaRegenInterval: BN;
+  damagePerSiegeWeapon: bigint;
+  maxReinforcementReceive: bigint;
+  defensiveUnit1Power: bigint;
+  defensiveUnit2Power: bigint;
+  defensiveUnit3Power: bigint;
+  encounterStaminaCosts: bigint[];
+  maxStaminaByTier: bigint[];
+  staminaRegenInterval: bigint;
   encounterAttackRangeMeters: number;
   pvpAttackRangeMeters: number;
   encountersPerPlayerCount: number;
@@ -348,9 +347,9 @@ export const UPDATE_FLAGS = {
 export interface GameEngine {
   kingdomId: number;
   kingdomName: string;
-  kingdomStartTime: BN;
+  kingdomStartTime: bigint;
   registrationOpen: boolean;
-  registrationClosesAt: BN;
+  registrationClosesAt: bigint;
   kingdomTheme: number;
   authority: PublicKey;
   paymentAuthority: PublicKey;
@@ -359,12 +358,12 @@ export interface GameEngine {
   bump: number;
   noviMint: PublicKey;
   noviMintBump: number;
-  version: BN;
+  version: bigint;
   paused: boolean;
-  totalPlayers: BN;
-  maxPlayers: BN;
+  totalPlayers: bigint;
+  maxPlayers: bigint;
   allowOffchainPayments: boolean;
-  usdPriceCents: BN;
+  usdPriceCents: bigint;
   caps: GameCaps;
   economicConfig: EconomicConfig;
   gameplayConfig: GameplayConfig;
@@ -969,7 +968,7 @@ function deserializeCombatConfig(reader: BufferReader): CombatConfig {
 // Config Serializers (for update_game_config instruction)
 
 /** Serialize GameCaps to raw #[repr(C)] bytes (64 bytes) */
-export function serializeGameCaps(config: GameCaps): Buffer {
+export function serializeGameCaps(config: GameCaps): Uint8Array {
   const w = new BufferWriter(64);
   w.writeU64(config.maxReservedNoviPerPlayer);
   w.writeI64(config.noviExpirationDuration);
@@ -983,7 +982,7 @@ export function serializeGameCaps(config: GameCaps): Buffer {
 }
 
 /** Serialize GameplayConfig to raw #[repr(C)] bytes (248 bytes) */
-export function serializeGameplayConfig(config: GameplayConfig): Buffer {
+export function serializeGameplayConfig(config: GameplayConfig): Uint8Array {
   const w = new BufferWriter(248);
   w.writeU32(config.driveByBonusBase);
   w.writeZeros(4); // _reserved_drive_by
@@ -1034,7 +1033,7 @@ export function serializeGameplayConfig(config: GameplayConfig): Buffer {
 }
 
 /** Serialize ArenaConfig to raw #[repr(C)] bytes (136 bytes) */
-export function serializeArenaConfig(config: ArenaConfig): Buffer {
+export function serializeArenaConfig(config: ArenaConfig): Uint8Array {
   const w = new BufferWriter(136);
   w.writeI64(config.seasonDuration);
   w.writeI64(config.claimDeadline);
@@ -1060,7 +1059,7 @@ export function serializeArenaConfig(config: ArenaConfig): Buffer {
 }
 
 /** Serialize ExpeditionConfig to raw #[repr(C)] bytes (240 bytes) */
-export function serializeExpeditionConfig(config: ExpeditionConfig): Buffer {
+export function serializeExpeditionConfig(config: ExpeditionConfig): Uint8Array {
   const w = new BufferWriter(240);
   w.writeU64Array(config.miningNoviCost);
   w.writeU64Array(config.miningFragmentBonus);
@@ -1084,7 +1083,7 @@ export function serializeExpeditionConfig(config: ExpeditionConfig): Buffer {
 }
 
 /** Serialize DungeonConfig to raw #[repr(C)] bytes (224 bytes) */
-export function serializeDungeonConfig(config: DungeonConfig): Buffer {
+export function serializeDungeonConfig(config: DungeonConfig): Uint8Array {
   const w = new BufferWriter(224);
   w.writeU64(config.resumeGemCost);
   w.writeU64Array(config.unitPower);
@@ -1112,7 +1111,7 @@ export function serializeDungeonConfig(config: DungeonConfig): Buffer {
 }
 
 /** Serialize CastleConfig to raw #[repr(C)] bytes (96 bytes) */
-export function serializeCastleConfig(config: CastleConfig): Buffer {
+export function serializeCastleConfig(config: CastleConfig): Uint8Array {
   const w = new BufferWriter(96);
   w.writeI64(config.contestDuration);
   w.writeI64(config.protectionDuration);
@@ -1137,7 +1136,7 @@ export function serializeCastleConfig(config: CastleConfig): Buffer {
 }
 
 /** Serialize CombatConfig to raw #[repr(C)] bytes (160 bytes) */
-export function serializeCombatConfig(config: CombatConfig): Buffer {
+export function serializeCombatConfig(config: CombatConfig): Uint8Array {
   const w = new BufferWriter(160);
   w.writeU64(config.damagePerSiegeWeapon);
   w.writeU64(config.maxReinforcementReceive);
@@ -1161,7 +1160,7 @@ export function serializeCombatConfig(config: CombatConfig): Buffer {
 }
 
 /** Deserialize GameEngine account from raw bytes */
-export function deserializeGameEngine(data: Uint8Array | Buffer): GameEngine {
+export function deserializeGameEngine(data: Uint8Array): GameEngine {
   const reader = new BufferReader(data);
 
   // Kingdom fields (80 bytes)
@@ -1258,7 +1257,7 @@ export function deserializeGameEngine(data: Uint8Array | Buffer): GameEngine {
 }
 
 /** Parse GameEngine from account info */
-export function parseGameEngine(accountInfo: AccountInfo<Buffer>): GameEngine | null {
+export function parseGameEngine(accountInfo: AccountInfo<Uint8Array>): GameEngine | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }

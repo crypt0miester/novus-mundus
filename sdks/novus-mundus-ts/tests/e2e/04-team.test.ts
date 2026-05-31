@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createTeamCreateInstruction,
@@ -74,6 +73,11 @@ import {
 
 setDefaultTimeout(60_000);
 
+// LiteSVM bundles web3.js v1, whose PublicKey is nominally distinct from the v3
+// PublicKey the SDK uses. They are runtime-compatible; cast at the call boundary.
+const svmKey = (pk: PublicKey) =>
+  pk as unknown as Parameters<TestContext['svm']['getAccount']>[0];
+
 describe('Team System', () => {
   let ctx: TestContext;
   let factory: PlayerFactory;
@@ -99,8 +103,8 @@ describe('Team System', () => {
   }
 
   // Helper to get team PDA from team ID
-  function getTeamPda(teamId: number): PublicKey {
-    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  async function getTeamPda(teamId: number): Promise<PublicKey> {
+    const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
     return teamPda;
   }
 
@@ -112,7 +116,7 @@ describe('Team System', () => {
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
 
-      const ix = createTeamCreateInstruction(
+      const ix = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
@@ -135,7 +139,7 @@ describe('Team System', () => {
       const teamId2 = uniqueTeamId();
 
       // Create first team
-      const ix1 = createTeamCreateInstruction(
+      const ix1 = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId: teamId1 },
         { name: teamName1 }
       );
@@ -144,7 +148,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, tx1, [leader.keypair]);
 
       // Try to create second team - should fail
-      const ix2 = createTeamCreateInstruction(
+      const ix2 = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId: teamId2 },
         { name: teamName2 }
       );
@@ -156,7 +160,7 @@ describe('Team System', () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamId = uniqueTeamId();
 
-      const ix = createTeamCreateInstruction(
+      const ix = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: '' }
       );
@@ -170,12 +174,13 @@ describe('Team System', () => {
       const teamId = uniqueTeamId();
 
       // SDK validates client-side and throws before sending tx
-      expect(() => {
+      const owner = (await Keypair.generate()).publicKey;
+      await expect(
         createTeamCreateInstruction(
-          { owner: Keypair.generate().publicKey, gameEngine: ctx.gameEngine, teamId },
+          { owner, gameEngine: ctx.gameEngine, teamId },
           { name: longName }
-        );
-      }).toThrow('Team name too long');
+        )
+      ).rejects.toThrow('Team name too long');
     });
   });
 
@@ -187,10 +192,10 @@ describe('Team System', () => {
       const invitee = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team
-      const createIx = createTeamCreateInstruction(
+      const createIx = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
@@ -198,7 +203,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, createTx, [leader.keypair]);
 
       // Invite member
-      const inviteIx = createTeamInviteInstruction({
+      const inviteIx = await createTeamInviteInstruction({
         inviter: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -220,17 +225,17 @@ describe('Team System', () => {
       const invitee = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team
-      const createIx = createTeamCreateInstruction(
+      const createIx = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
       await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
       // Invite
-      const inviteIx = createTeamInviteInstruction({
+      const inviteIx = await createTeamInviteInstruction({
         inviter: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -242,7 +247,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
       // Accept
-      const acceptIx = createTeamAcceptInviteInstruction({
+      const acceptIx = await createTeamAcceptInviteInstruction({
         owner: invitee.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -264,16 +269,16 @@ describe('Team System', () => {
       const invitee = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create and invite
-      const createIx = createTeamCreateInstruction(
+      const createIx = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
       await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
-      const inviteIx = createTeamInviteInstruction({
+      const inviteIx = await createTeamInviteInstruction({
         inviter: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -285,7 +290,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
       // Decline
-      const declineIx = createTeamDeclineInviteInstruction({
+      const declineIx = await createTeamDeclineInviteInstruction({
         owner: invitee.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -304,16 +309,16 @@ describe('Team System', () => {
       const invitee = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create and invite
-      const createIx = createTeamCreateInstruction(
+      const createIx = await createTeamCreateInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: teamName }
       );
       await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
-      const inviteIx = createTeamInviteInstruction({
+      const inviteIx = await createTeamInviteInstruction({
         inviter: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -325,7 +330,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(inviteIx), [leader.keypair]);
 
       // Cancel (by inviter)
-      const cancelIx = createTeamCancelInviteInstruction({
+      const cancelIx = await createTeamCancelInviteInstruction({
         member: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -336,7 +341,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(cancelIx), [leader.keypair]);
 
       // Verify invite is cancelled (accepting should fail)
-      const acceptIx = createTeamAcceptInviteInstruction({
+      const acceptIx = await createTeamAcceptInviteInstruction({
         owner: invitee.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -361,13 +366,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team and add member
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -375,7 +380,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -391,13 +396,13 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
 
       // Kick member
-      const kickIx = createTeamKickMemberInstruction({
+      const kickIx = await createTeamKickMemberInstruction({
         kicker: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -419,13 +424,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team and add member
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -433,7 +438,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -449,13 +454,13 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
 
       // Member leaves
-      const leaveIx = createTeamLeaveInstruction({
+      const leaveIx = await createTeamLeaveInstruction({
         owner: member.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -474,13 +479,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -488,7 +493,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -504,13 +509,13 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
 
       // Promote
-      const promoteIx = createTeamPromoteMemberInstruction(
+      const promoteIx = await createTeamPromoteMemberInstruction(
         {
           promoter: leader.publicKey,
           gameEngine: ctx.gameEngine,
@@ -531,13 +536,13 @@ describe('Team System', () => {
       const officer = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team and promote
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -545,7 +550,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -561,7 +566,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: officer.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: officer.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [officer.keypair]
       );
@@ -569,7 +574,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamPromoteMemberInstruction(
+          await createTeamPromoteMemberInstruction(
             {
               promoter: leader.publicKey,
               gameEngine: ctx.gameEngine,
@@ -585,7 +590,7 @@ describe('Team System', () => {
       );
 
       // Demote
-      const demoteIx = createTeamDemoteMemberInstruction(
+      const demoteIx = await createTeamDemoteMemberInstruction(
         {
           demoter: leader.publicKey,
           gameEngine: ctx.gameEngine,
@@ -604,13 +609,13 @@ describe('Team System', () => {
       const newLeader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -618,7 +623,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -634,13 +639,13 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: newLeader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: newLeader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [newLeader.keypair]
       );
 
       // Transfer leadership
-      const transferIx = createTeamTransferLeadershipInstruction({
+      const transferIx = await createTeamTransferLeadershipInstruction({
         leader: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -658,18 +663,18 @@ describe('Team System', () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
       // Leader tries to leave - should fail (must transfer or disband)
-      const leaveIx = createTeamLeaveInstruction({
+      const leaveIx = await createTeamLeaveInstruction({
         owner: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -691,18 +696,18 @@ describe('Team System', () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
       // Disband
-      const disbandIx = createTeamDisbandInstruction({
+      const disbandIx = await createTeamDisbandInstruction({
         leader: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -720,13 +725,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team with member
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -734,7 +739,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -750,13 +755,13 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
 
       // Try to disband - should fail
-      const disbandIx = createTeamDisbandInstruction({
+      const disbandIx = await createTeamDisbandInstruction({
         leader: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -778,17 +783,17 @@ describe('Team System', () => {
       const teamName = uniqueTeamName();
       const motd = 'Welcome to our team!';
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
-      const motdIx = createTeamSetMotdInstruction(
+      const motdIx = await createTeamSetMotdInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
         { motd }
       );
@@ -801,17 +806,17 @@ describe('Team System', () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
-      const settingsIx = createTeamUpdateSettingsInstruction(
+      const settingsIx = await createTeamUpdateSettingsInstruction(
         { member: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
         { settings: 0, minLevelToJoin: 5 }
       );
@@ -825,19 +830,19 @@ describe('Team System', () => {
     it('should deposit to treasury', async () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
-      const depositAmount = new BN(1000);
+      const depositAmount = BigInt(1000);
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
-      const depositIx = createTeamDepositTreasuryInstruction(
+      const depositIx = await createTeamDepositTreasuryInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
         { amount: depositAmount }
       );
@@ -850,12 +855,12 @@ describe('Team System', () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -864,18 +869,18 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamDepositTreasuryInstruction(
+          await createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
-            { amount: new BN(5000) }
+            { amount: BigInt(5000) }
           )
         ),
         [leader.keypair]
       );
 
       // Withdraw
-      const withdrawIx = createTeamWithdrawTreasuryInstruction(
+      const withdrawIx = await createTeamWithdrawTreasuryInstruction(
         { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
-        { amount: new BN(1000) }
+        { amount: BigInt(1000) }
       );
       await sendTransaction(ctx.svm, new Transaction().add(withdrawIx), [leader.keypair]);
     });
@@ -885,13 +890,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -899,7 +904,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -915,7 +920,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
@@ -924,7 +929,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamPromoteMemberInstruction(
+          await createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
             { newRank: 1 }
           )
@@ -936,18 +941,18 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamDepositTreasuryInstruction(
+          await createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
-            { amount: new BN(10000) }
+            { amount: BigInt(10000) }
           )
         ),
         [leader.keypair]
       );
 
       // Member requests withdrawal
-      const requestIx = createTeamTreasuryRequestWithdrawInstruction(
+      const requestIx = await createTeamTreasuryRequestWithdrawInstruction(
         { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
-        { amount: new BN(1000) }
+        { amount: BigInt(1000) }
       );
       await sendTransaction(ctx.svm, new Transaction().add(requestIx), [member.keypair]);
     });
@@ -957,13 +962,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -972,7 +977,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -988,7 +993,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
@@ -997,7 +1002,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamPromoteMemberInstruction(
+          await createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
             { newRank: 1 }
           )
@@ -1009,9 +1014,9 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamDepositTreasuryInstruction(
+          await createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
-            { amount: new BN(10000) }
+            { amount: BigInt(10000) }
           )
         ),
         [leader.keypair]
@@ -1021,16 +1026,16 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamTreasuryRequestWithdrawInstruction(
+          await createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
-            { amount: new BN(1000) }
+            { amount: BigInt(1000) }
           )
         ),
         [member.keypair]
       );
 
       // Approve
-      const approveIx = createTeamTreasuryApproveRequestInstruction({
+      const approveIx = await createTeamTreasuryApproveRequestInstruction({
         approver: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -1048,13 +1053,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -1062,7 +1067,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -1078,7 +1083,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
@@ -1087,7 +1092,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamPromoteMemberInstruction(
+          await createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
             { newRank: 1 }
           )
@@ -1098,9 +1103,9 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamDepositTreasuryInstruction(
+          await createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
-            { amount: new BN(10000) }
+            { amount: BigInt(10000) }
           )
         ),
         [leader.keypair]
@@ -1109,16 +1114,16 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamTreasuryRequestWithdrawInstruction(
+          await createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
-            { amount: new BN(1000) }
+            { amount: BigInt(1000) }
           )
         ),
         [member.keypair]
       );
 
       // Reject
-      const rejectIx = createTeamTreasuryRejectRequestInstruction({
+      const rejectIx = await createTeamTreasuryRejectRequestInstruction({
         rejecter: leader.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -1134,21 +1139,21 @@ describe('Team System', () => {
       const leader = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
-      const settingsIx = createTeamUpdateTreasurySettingsInstruction(
+      const settingsIx = await createTeamUpdateTreasurySettingsInstruction(
         { leader: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
         {
-          instantLimits: [new BN(1000), new BN(500), new BN(250), new BN(100)],
-          dailyCaps: [new BN(5000), new BN(2500), new BN(1000), new BN(500)],
+          instantLimits: [BigInt(1000), BigInt(500), BigInt(250), BigInt(100)],
+          dailyCaps: [BigInt(5000), BigInt(2500), BigInt(1000), BigInt(500)],
           cooldownHours: 24,
         }
       );
@@ -1160,13 +1165,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -1174,7 +1179,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -1190,7 +1195,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
@@ -1199,7 +1204,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamPromoteMemberInstruction(
+          await createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
             { newRank: 1 }
           )
@@ -1211,9 +1216,9 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamDepositTreasuryInstruction(
+          await createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
-            { amount: new BN(10000) }
+            { amount: BigInt(10000) }
           )
         ),
         [leader.keypair]
@@ -1223,21 +1228,21 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamTreasuryRequestWithdrawInstruction(
+          await createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
-            { amount: new BN(1000) }
+            { amount: BigInt(1000) }
           )
         ),
         [member.keypair]
       );
 
       // Verify request exists
-      const [requestPda] = deriveTreasuryRequestPda(teamPda, member.playerPda);
-      let requestAccount = await ctx.svm.getAccount(requestPda);
+      const [requestPda] = await deriveTreasuryRequestPda(teamPda, member.playerPda);
+      let requestAccount = await ctx.svm.getAccount(svmKey(requestPda));
       expect(requestAccount).not.toBeNull();
 
       // Cancel the request
-      const cancelIx = createTeamTreasuryCancelRequestInstruction({
+      const cancelIx = await createTeamTreasuryCancelRequestInstruction({
         owner: member.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -1246,7 +1251,7 @@ describe('Team System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(cancelIx), [member.keypair]);
 
       // Verify request PDA is closed
-      requestAccount = await ctx.svm.getAccount(requestPda);
+      requestAccount = await ctx.svm.getAccount(svmKey(requestPda));
       expect(requestAccount).toBeNull();
     });
 
@@ -1255,13 +1260,13 @@ describe('Team System', () => {
       const member = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Setup team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -1269,7 +1274,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             inviter: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -1285,7 +1290,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
+          await createTeamAcceptInviteInstruction({ owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1, inviteRefund: leader.publicKey, leaderPlayer: leader.playerPda })
         ),
         [member.keypair]
       );
@@ -1294,7 +1299,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamPromoteMemberInstruction(
+          await createTeamPromoteMemberInstruction(
             { promoter: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, promoterSlotIndex: 0, targetSlotIndex: 1 },
             { newRank: 1 }
           )
@@ -1306,11 +1311,11 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamUpdateTreasurySettingsInstruction(
+          await createTeamUpdateTreasurySettingsInstruction(
             { leader: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
             {
-              instantLimits: [new BN(100), new BN(100), new BN(100), new BN(100)],
-              dailyCaps: [new BN(50000), new BN(50000), new BN(50000), new BN(50000)],
+              instantLimits: [BigInt(100), BigInt(100), BigInt(100), BigInt(100)],
+              dailyCaps: [BigInt(50000), BigInt(50000), BigInt(50000), BigInt(50000)],
               cooldownHours: 1,
             }
           )
@@ -1322,9 +1327,9 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamDepositTreasuryInstruction(
+          await createTeamDepositTreasuryInstruction(
             { owner: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId },
-            { amount: new BN(10000) }
+            { amount: BigInt(10000) }
           )
         ),
         [leader.keypair]
@@ -1334,9 +1339,9 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamTreasuryRequestWithdrawInstruction(
+          await createTeamTreasuryRequestWithdrawInstruction(
             { owner: member.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 1 },
-            { amount: new BN(1000) }
+            { amount: BigInt(1000) }
           )
         ),
         [member.keypair]
@@ -1344,13 +1349,13 @@ describe('Team System', () => {
 
       // Get member cash before approve (approve auto-executes transfer)
       const memberBefore = await fetchPlayer(ctx.svm, member.playerPda);
-      const cashBefore = memberBefore!.cashOnHand.toNumber();
+      const cashBefore = Number(memberBefore!.cashOnHand);
 
       // Leader approves (which auto-executes the withdrawal)
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamTreasuryApproveRequestInstruction({
+          await createTeamTreasuryApproveRequestInstruction({
             approver: leader.publicKey,
             gameEngine: ctx.gameEngine,
             team: teamPda,
@@ -1366,7 +1371,7 @@ describe('Team System', () => {
 
       // Verify funds were transferred to member
       const memberAfter = await fetchPlayer(ctx.svm, member.playerPda);
-      expect(memberAfter!.cashOnHand.toNumber()).toBeGreaterThan(cashBefore);
+      expect(Number(memberAfter!.cashOnHand)).toBeGreaterThan(cashBefore);
     });
   });
 
@@ -1378,13 +1383,13 @@ describe('Team System', () => {
       const joiner = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -1393,7 +1398,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamUpdateSettingsInstruction(
+          await createTeamUpdateSettingsInstruction(
             { member: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
             { settings: 1, minLevelToJoin: 1 }
           )
@@ -1402,7 +1407,7 @@ describe('Team System', () => {
       );
 
       // Join
-      const joinIx = createTeamJoinInstruction({
+      const joinIx = await createTeamJoinInstruction({
         owner: joiner.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -1422,13 +1427,13 @@ describe('Team System', () => {
       const joiner = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       // Create team
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
@@ -1437,7 +1442,7 @@ describe('Team System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamUpdateSettingsInstruction(
+          await createTeamUpdateSettingsInstruction(
             { member: leader.publicKey, gameEngine: ctx.gameEngine, team: teamPda, teamId, slotIndex: 0 },
             { settings: 1, minLevelToJoin: 50 }
           )
@@ -1446,7 +1451,7 @@ describe('Team System', () => {
       );
 
       // Join should fail (joiner is level 1)
-      const joinIx = createTeamJoinInstruction({
+      const joinIx = await createTeamJoinInstruction({
         owner: joiner.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,
@@ -1466,19 +1471,19 @@ describe('Team System', () => {
       const joiner = await factory.createPlayer({ initialize: true, createEstate: true });
       const teamName = uniqueTeamName();
       const teamId = uniqueTeamId();
-      const teamPda = getTeamPda(teamId);
+      const teamPda = await getTeamPda(teamId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
+          await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: teamName })
         ),
         [leader.keypair]
       );
 
       // Don't make joinable (default is false)
 
-      const joinIx = createTeamJoinInstruction({
+      const joinIx = await createTeamJoinInstruction({
         owner: joiner.publicKey,
         gameEngine: ctx.gameEngine,
         team: teamPda,

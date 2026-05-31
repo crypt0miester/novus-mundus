@@ -12,9 +12,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { PublicKey as PK } from '@solana/web3.js';
-import BNCtor from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { TravelType, SubscriptionTier } from '../types/enums';
 
@@ -52,20 +50,19 @@ export const COURT_OFFSET = COSMETICS_OFFSET + COSMETICS_SIZE;
 export const MAX_SIZE = COURT_OFFSET + COURT_SIZE;
 
 const NULL_PUBKEY: PublicKey = new PK(new Uint8Array(32));
-const BN0 = new BNCtor(0);
 
 // Rally Stats & Caps
 
 export interface RallyStats {
   currentRalliesJoined: number;
   ralliesCreatedToday: number;
-  lastRallyCreationReset: BN;
-  totalRalliesJoined: BN;
-  totalRalliesCreated: BN;
-  totalRalliesWon: BN;
-  totalRalliesLost: BN;
-  totalRallyLootEarned: BN;
-  totalRallyDamageDealt: BN;
+  lastRallyCreationReset: bigint;
+  totalRalliesJoined: bigint;
+  totalRalliesCreated: bigint;
+  totalRalliesWon: bigint;
+  totalRalliesLost: bigint;
+  totalRallyLootEarned: bigint;
+  totalRallyDamageDealt: bigint;
 }
 
 export interface PlayerRallyCaps {
@@ -77,13 +74,13 @@ function defaultRallyStats(): RallyStats {
   return {
     currentRalliesJoined: 0,
     ralliesCreatedToday: 0,
-    lastRallyCreationReset: BN0.clone(),
-    totalRalliesJoined: BN0.clone(),
-    totalRalliesCreated: BN0.clone(),
-    totalRalliesWon: BN0.clone(),
-    totalRalliesLost: BN0.clone(),
-    totalRallyLootEarned: BN0.clone(),
-    totalRallyDamageDealt: BN0.clone(),
+    lastRallyCreationReset: 0n,
+    totalRalliesJoined: 0n,
+    totalRalliesCreated: 0n,
+    totalRalliesWon: 0n,
+    totalRalliesLost: 0n,
+    totalRallyLootEarned: 0n,
+    totalRallyDamageDealt: 0n,
   };
 }
 
@@ -99,7 +96,7 @@ export interface PlayerCore {
 
   // Identity
   owner: PublicKey;
-  createdAt: BN;
+  createdAt: bigint;
   bump: number;
   version: number;
 
@@ -110,28 +107,28 @@ export interface PlayerCore {
   extensions: number;
 
   // Locked NOVI
-  lockedNovi: BN;
-  lastUpdatedTokensAt: BN;
+  lockedNovi: bigint;
+  lastUpdatedTokensAt: bigint;
 
   // Units
-  defensiveUnit1: BN;
-  defensiveUnit2: BN;
-  defensiveUnit3: BN;
-  operativeUnit1: BN;
-  operativeUnit2: BN;
-  operativeUnit3: BN;
+  defensiveUnit1: bigint;
+  defensiveUnit2: bigint;
+  defensiveUnit3: bigint;
+  operativeUnit1: bigint;
+  operativeUnit2: bigint;
+  operativeUnit3: bigint;
 
   // Equipment
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  armorPieces: BN;
-  produce: BN;
-  vehicles: BN;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armorPieces: bigint;
+  produce: bigint;
+  vehicles: bigint;
 
   // Cash
-  cashOnHand: BN;
-  cashInVault: BN;
+  cashOnHand: bigint;
+  cashInVault: bigint;
 
   // Happiness
   happinessDefensive: number;
@@ -142,51 +139,51 @@ export interface PlayerCore {
   currentLong: number;
   travelingToLat: number;
   travelingToLong: number;
-  arrivalTime: BN;
+  arrivalTime: bigint;
   currentCity: number;
   travelType: TravelType;
   originCity: number;
   destinationCity: number;
-  departureTime: BN;
+  departureTime: bigint;
   travelSpeedLocked: number;
 
   // Subscription
   subscriptionTier: SubscriptionTier;
-  subscriptionEnd: BN;
+  subscriptionEnd: bigint;
 
   // Progression
   level: number;
-  currentXp: BN;
-  reputation: BN;
-  networth: BN;
+  currentXp: bigint;
+  reputation: bigint;
+  networth: bigint;
 
   // Stamina
-  encounterStamina: BN;
-  maxEncounterStamina: BN;
-  lastStaminaUpdate: BN;
+  encounterStamina: bigint;
+  maxEncounterStamina: bigint;
+  lastStaminaUpdate: bigint;
 
   // Event
-  currentEvent: BN;
+  currentEvent: bigint;
 
   // Resources
-  gems: BN;
-  fragments: BN;
+  gems: bigint;
+  fragments: bigint;
 
   // Stats
-  totalAttacks: BN;
-  totalDefenses: BN;
-  totalAttackPower: BN;
-  totalEncounterAttacks: BN;
-  totalLockedNoviAcquired: BN;
-  totalSent: BN;
-  totalReceived: BN;
+  totalAttacks: bigint;
+  totalDefenses: bigint;
+  totalAttackPower: bigint;
+  totalEncounterAttacks: bigint;
+  totalLockedNoviAcquired: bigint;
+  totalSent: bigint;
+  totalReceived: bigint;
 
   // Protection & Flags
-  newPlayerProtectionUntil: BN;
+  newPlayerProtectionUntil: bigint;
   flaggedByGovernance: boolean;
 
   // Loot Counter
-  lootCounter: BN;
+  lootCounter: bigint;
 
   // === SECTION PROJECTIONS (default 0/false/NULL if section not unlocked) ===
 
@@ -209,7 +206,7 @@ export interface PlayerCore {
   hasFragmentDrops: boolean;
   hasGemDrops: boolean;
   researchBuffVersion: number;
-  lastDailyClaim: BN;
+  lastDailyClaim: bigint;
 
   // Heroes
   activeHeroes: PublicKey[];
@@ -234,25 +231,25 @@ export interface PlayerCore {
   heroUnitCapacityBps: number;
   blessedHeroBonusBps: number;
   slotLocationBonus: number[];
-  meditationStartedAt: BN;
+  meditationStartedAt: bigint;
   // Ability state
-  abilityLastUsedAt: BN[];        // per slot
+  abilityLastUsedAt: bigint[];        // per slot
   pendingEffectKind: number;       // 0=none, else AbilityKind discriminant
   pendingEffectStat: number;       // BuffStat for BuffNext
   pendingEffectParam: number;      // bps for BuffNext
-  pendingEffectExpiresAt: BN;      // 0 if not set
+  pendingEffectExpiresAt: bigint;      // 0 if not set
 
   // Team + Reinforcement
   team: PublicKey;
   teamSlotIndex: number;
-  reinforcementDef1: BN;
-  reinforcementDef2: BN;
-  reinforcementDef3: BN;
-  reinforcementMelee: BN;
-  reinforcementRanged: BN;
-  reinforcementSiege: BN;
-  reinforcementOriginalUnits: BN;
-  reinforcementOriginalWeapons: BN;
+  reinforcementDef1: bigint;
+  reinforcementDef2: bigint;
+  reinforcementDef3: bigint;
+  reinforcementMelee: bigint;
+  reinforcementRanged: bigint;
+  reinforcementSiege: bigint;
+  reinforcementOriginalUnits: bigint;
+  reinforcementOriginalWeapons: bigint;
   reinforcementHeroDefenseBps: number;
   reinforcementHeroWeaponEffBps: number;
   reinforcementHeroArmorEffBps: number;
@@ -271,26 +268,26 @@ export interface PlayerCore {
   teleportScrolls: number;
   mysteryKeys: number;
   // Inventory: materials
-  commonMaterials: BN;
-  uncommonMaterials: BN;
-  rareMaterials: BN;
-  epicMaterials: BN;
-  legendaryMaterials: BN;
+  commonMaterials: bigint;
+  uncommonMaterials: bigint;
+  rareMaterials: bigint;
+  epicMaterials: bigint;
+  legendaryMaterials: bigint;
   // Inventory: equipped
   equippedWeaponBonusBps: number;
   equippedArmorBonusBps: number;
   // Inventory: shop state
-  totalShopSpent: BN;
+  totalShopSpent: bigint;
   milestoneTier: number;
   loyaltyStreak: number;
   dailyPurchaseCount: number;
   flashClaimsToday: number;
   lastPurchaseDay: number;
-  lastDailyReset: BN;
+  lastDailyReset: bigint;
   // Inventory: transfer tracking
   dailyTransferCount: number;
-  dailyTransferred: BN;
-  lastTransferReset: BN;
+  dailyTransferred: bigint;
+  lastTransferReset: bigint;
 
   // Rally
   rallyCaps: PlayerRallyCaps;
@@ -303,12 +300,12 @@ export interface PlayerCore {
   equippedBadge: number;
   equippedAttackEffect: number;
   equippedVictoryPose: number;
-  ownedFrames: BN;
-  ownedColors: BN;
-  ownedTitles: BN;
-  ownedBadges: BN;
-  ownedEffects: BN;
-  ownedPoses: BN;
+  ownedFrames: bigint;
+  ownedColors: bigint;
+  ownedTitles: bigint;
+  ownedBadges: bigint;
+  ownedEffects: bigint;
+  ownedPoses: bigint;
 }
 
 export type PlayerAccount = PlayerCore;
@@ -371,10 +368,10 @@ interface ResearchSection {
   hasFragmentDrops: boolean;
   hasGemDrops: boolean;
   researchBuffVersion: number;
-  lastDailyClaim: BN;
+  lastDailyClaim: bigint;
 }
 
-function deserializeResearchSection(buf: Uint8Array | Buffer): ResearchSection {
+function deserializeResearchSection(buf: Uint8Array): ResearchSection {
   const reader = new BufferReader(buf);
   const researchAttackBps = reader.readU16();
   const researchDefenseBps = reader.readU16();
@@ -411,14 +408,14 @@ interface InventorySection {
   staminaPotions: number; xpBoosters: number; lootMagnets: number; shieldTokens: number;
   speedElixirs: number; attackBoosters: number; defenseBoosters: number; collectionBoosters: number;
   rallyHorns: number; teleportScrolls: number; mysteryKeys: number;
-  commonMaterials: BN; uncommonMaterials: BN; rareMaterials: BN; epicMaterials: BN; legendaryMaterials: BN;
+  commonMaterials: bigint; uncommonMaterials: bigint; rareMaterials: bigint; epicMaterials: bigint; legendaryMaterials: bigint;
   equippedWeaponBonusBps: number; equippedArmorBonusBps: number;
-  totalShopSpent: BN; milestoneTier: number; loyaltyStreak: number;
-  dailyPurchaseCount: number; flashClaimsToday: number; lastPurchaseDay: number; lastDailyReset: BN;
-  dailyTransferCount: number; dailyTransferred: BN; lastTransferReset: BN;
+  totalShopSpent: bigint; milestoneTier: number; loyaltyStreak: number;
+  dailyPurchaseCount: number; flashClaimsToday: number; lastPurchaseDay: number; lastDailyReset: bigint;
+  dailyTransferCount: number; dailyTransferred: bigint; lastTransferReset: bigint;
 }
 
-function deserializeInventorySection(buf: Uint8Array | Buffer): InventorySection {
+function deserializeInventorySection(buf: Uint8Array): InventorySection {
   const reader = new BufferReader(buf);
   const staminaPotions = reader.readU16();
   const xpBoosters = reader.readU16();
@@ -468,14 +465,14 @@ function deserializeInventorySection(buf: Uint8Array | Buffer): InventorySection
 interface TeamSection {
   team: PublicKey;
   teamSlotIndex: number;
-  reinforcementDef1: BN; reinforcementDef2: BN; reinforcementDef3: BN;
-  reinforcementMelee: BN; reinforcementRanged: BN; reinforcementSiege: BN;
-  reinforcementOriginalUnits: BN; reinforcementOriginalWeapons: BN;
+  reinforcementDef1: bigint; reinforcementDef2: bigint; reinforcementDef3: bigint;
+  reinforcementMelee: bigint; reinforcementRanged: bigint; reinforcementSiege: bigint;
+  reinforcementOriginalUnits: bigint; reinforcementOriginalWeapons: bigint;
   reinforcementHeroDefenseBps: number; reinforcementHeroWeaponEffBps: number;
   reinforcementHeroArmorEffBps: number; reinforcementSourceCount: number;
 }
 
-function deserializeTeamSection(buf: Uint8Array | Buffer): TeamSection {
+function deserializeTeamSection(buf: Uint8Array): TeamSection {
   const reader = new BufferReader(buf);
   const team = reader.readPubkey();
   const teamSlotIndex = reader.readU16();
@@ -508,7 +505,7 @@ interface RallySection {
   rallyStats: RallyStats;
 }
 
-function deserializeRallySection(buf: Uint8Array | Buffer): RallySection {
+function deserializeRallySection(buf: Uint8Array): RallySection {
   const reader = new BufferReader(buf);
   const rallyCaps = deserializePlayerRallyCaps(reader);
   const rallyStats = deserializeRallyStats(reader);
@@ -529,16 +526,16 @@ interface HeroesSection {
   heroResourceCapacityBps: number; heroUnitCapacityBps: number;
   blessedHeroBonusBps: number;
   slotLocationBonus: number[];
-  meditationStartedAt: BN;
+  meditationStartedAt: bigint;
   // Ability state (new — must match on-chain HeroesSection layout)
-  abilityLastUsedAt: BN[];
+  abilityLastUsedAt: bigint[];
   pendingEffectKind: number;
   pendingEffectStat: number;
   pendingEffectParam: number;
-  pendingEffectExpiresAt: BN;
+  pendingEffectExpiresAt: bigint;
 }
 
-function deserializeHeroesSection(buf: Uint8Array | Buffer): HeroesSection {
+function deserializeHeroesSection(buf: Uint8Array): HeroesSection {
   const reader = new BufferReader(buf);
   const activeHeroes = reader.readPubkeyArray(3);
   const defensiveHeroSlot = reader.readU8();
@@ -601,7 +598,7 @@ function defaultResearchProjection() {
     researchCollectionBonusBps: 0, researchLootMagnetismBps: 0, researchDailyRewardBps: 0,
     hasDailyRewards: false, hasMining: false, hasFishing: false,
     hasFragmentDrops: false, hasGemDrops: false,
-    researchBuffVersion: 0, lastDailyClaim: BN0.clone(),
+    researchBuffVersion: 0, lastDailyClaim: 0n,
   };
 }
 
@@ -617,12 +614,12 @@ function defaultHeroesProjection() {
     heroLootBonusBps: 0, heroSynchronyBonusBps: 0, heroResourceCapacityBps: 0,
     heroUnitCapacityBps: 0, blessedHeroBonusBps: 0,
     slotLocationBonus: [0, 0, 0],
-    meditationStartedAt: BN0.clone(),
-    abilityLastUsedAt: [BN0.clone(), BN0.clone(), BN0.clone()],
+    meditationStartedAt: 0n,
+    abilityLastUsedAt: [0n, 0n, 0n],
     pendingEffectKind: 0,
     pendingEffectStat: 0,
     pendingEffectParam: 0,
-    pendingEffectExpiresAt: BN0.clone(),
+    pendingEffectExpiresAt: 0n,
   };
 }
 
@@ -636,15 +633,15 @@ export interface CosmeticsSection {
   equippedBadge: number;
   equippedAttackEffect: number;
   equippedVictoryPose: number;
-  ownedFrames: BN;
-  ownedColors: BN;
-  ownedTitles: BN;
-  ownedBadges: BN;
-  ownedEffects: BN;
-  ownedPoses: BN;
+  ownedFrames: bigint;
+  ownedColors: bigint;
+  ownedTitles: bigint;
+  ownedBadges: bigint;
+  ownedEffects: bigint;
+  ownedPoses: bigint;
 }
 
-function deserializeCosmeticsSection(buf: Uint8Array | Buffer): CosmeticsSection {
+function deserializeCosmeticsSection(buf: Uint8Array): CosmeticsSection {
   const reader = new BufferReader(buf);
   const equippedAvatarFrame = reader.readU16();
   const equippedNameColor = reader.readU16();
@@ -675,21 +672,21 @@ function defaultCosmeticsProjection() {
     equippedBadge: 0,
     equippedAttackEffect: 0,
     equippedVictoryPose: 0,
-    ownedFrames: BN0.clone(),
-    ownedColors: BN0.clone(),
-    ownedTitles: BN0.clone(),
-    ownedBadges: BN0.clone(),
-    ownedEffects: BN0.clone(),
-    ownedPoses: BN0.clone(),
+    ownedFrames: 0n,
+    ownedColors: 0n,
+    ownedTitles: 0n,
+    ownedBadges: 0n,
+    ownedEffects: 0n,
+    ownedPoses: 0n,
   };
 }
 
 function defaultTeamProjection() {
   return {
     team: NULL_PUBKEY, teamSlotIndex: 0,
-    reinforcementDef1: BN0.clone(), reinforcementDef2: BN0.clone(), reinforcementDef3: BN0.clone(),
-    reinforcementMelee: BN0.clone(), reinforcementRanged: BN0.clone(), reinforcementSiege: BN0.clone(),
-    reinforcementOriginalUnits: BN0.clone(), reinforcementOriginalWeapons: BN0.clone(),
+    reinforcementDef1: 0n, reinforcementDef2: 0n, reinforcementDef3: 0n,
+    reinforcementMelee: 0n, reinforcementRanged: 0n, reinforcementSiege: 0n,
+    reinforcementOriginalUnits: 0n, reinforcementOriginalWeapons: 0n,
     reinforcementHeroDefenseBps: 0, reinforcementHeroWeaponEffBps: 0,
     reinforcementHeroArmorEffBps: 0, reinforcementSourceCount: 0,
   };
@@ -700,13 +697,13 @@ function defaultInventoryProjection() {
     staminaPotions: 0, xpBoosters: 0, lootMagnets: 0, shieldTokens: 0, speedElixirs: 0,
     attackBoosters: 0, defenseBoosters: 0, collectionBoosters: 0, rallyHorns: 0,
     teleportScrolls: 0, mysteryKeys: 0,
-    commonMaterials: BN0.clone(), uncommonMaterials: BN0.clone(), rareMaterials: BN0.clone(),
-    epicMaterials: BN0.clone(), legendaryMaterials: BN0.clone(),
+    commonMaterials: 0n, uncommonMaterials: 0n, rareMaterials: 0n,
+    epicMaterials: 0n, legendaryMaterials: 0n,
     equippedWeaponBonusBps: 0, equippedArmorBonusBps: 0,
-    totalShopSpent: BN0.clone(),
+    totalShopSpent: 0n,
     milestoneTier: 0, loyaltyStreak: 0, dailyPurchaseCount: 0, flashClaimsToday: 0,
-    lastPurchaseDay: 0, lastDailyReset: BN0.clone(),
-    dailyTransferCount: 0, dailyTransferred: BN0.clone(), lastTransferReset: BN0.clone(),
+    lastPurchaseDay: 0, lastDailyReset: 0n,
+    dailyTransferCount: 0, dailyTransferred: 0n, lastTransferReset: 0n,
   };
 }
 
@@ -715,7 +712,7 @@ function defaultRallyProjection() {
 }
 
 /** Deserialize PlayerCore from raw bytes (lean core + appended sections). */
-export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
+export function deserializePlayer(data: Uint8Array): PlayerCore {
   const buf = data instanceof Uint8Array ? data : new Uint8Array(data);
   const reader = new BufferReader(buf);
 
@@ -876,7 +873,7 @@ export function deserializePlayer(data: Uint8Array | Buffer): PlayerCore {
 }
 
 /** Parse PlayerCore from account info */
-export function parsePlayer(accountInfo: AccountInfo<Buffer>): PlayerCore | null {
+export function parsePlayer(accountInfo: AccountInfo<Uint8Array>): PlayerCore | null {
   if (!accountInfo.data || accountInfo.data.length < CORE_SIZE) {
     return null;
   }
@@ -892,18 +889,18 @@ export function hasExtension(player: PlayerCore, ext: number): boolean {
 
 /** Check if player is currently traveling */
 export function isTraveling(player: PlayerCore): boolean {
-  return player.arrivalTime.toNumber() !== -1;
+  return Number(player.arrivalTime) !== -1;
 }
 
 /** Check if player has arrived at destination */
 export function hasArrived(player: PlayerCore, nowSeconds: number): boolean {
-  const arrival = player.arrivalTime.toNumber();
+  const arrival = Number(player.arrivalTime);
   return arrival === -1 || nowSeconds >= arrival;
 }
 
 /** Get effective subscription tier (0 if expired) */
 export function getEffectiveTier(player: PlayerCore, nowSeconds: number): SubscriptionTier {
-  if (player.subscriptionEnd.toNumber() > nowSeconds) {
+  if (Number(player.subscriptionEnd) > nowSeconds) {
     return Math.min(player.subscriptionTier, 3) as SubscriptionTier;
   }
   return SubscriptionTier.Rookie;
@@ -917,7 +914,7 @@ export function getEffectiveTier(player: PlayerCore, nowSeconds: number): Subscr
  * paying Rookie as inactive — gone.
  */
 export function isSubscriptionActive(player: PlayerCore, nowSeconds: number): boolean {
-  return player.subscriptionEnd.toNumber() > nowSeconds;
+  return Number(player.subscriptionEnd) > nowSeconds;
 }
 
 /** Check if player has a team */
@@ -927,37 +924,37 @@ export function hasTeam(player: PlayerCore): boolean {
 
 /** Check if player is meditating */
 export function isHeroMeditating(player: PlayerCore): boolean {
-  return player.meditatingHeroSlot !== 255 && player.meditationStartedAt.toNumber() > 0;
+  return player.meditatingHeroSlot !== 255 && Number(player.meditationStartedAt) > 0;
 }
 
 /** Get total defensive units (own garrison) */
-export function getTotalDefensiveUnits(player: PlayerCore): BN {
-  return player.defensiveUnit1.add(player.defensiveUnit2).add(player.defensiveUnit3);
+export function getTotalDefensiveUnits(player: PlayerCore): bigint {
+  return player.defensiveUnit1 + player.defensiveUnit2 + player.defensiveUnit3;
 }
 
 /** Get total operative units */
-export function getTotalOperativeUnits(player: PlayerCore): BN {
-  return player.operativeUnit1.add(player.operativeUnit2).add(player.operativeUnit3);
+export function getTotalOperativeUnits(player: PlayerCore): bigint {
+  return player.operativeUnit1 + player.operativeUnit2 + player.operativeUnit3;
 }
 
 /** Get total units */
-export function getTotalUnits(player: PlayerCore): BN {
-  return getTotalDefensiveUnits(player).add(getTotalOperativeUnits(player));
+export function getTotalUnits(player: PlayerCore): bigint {
+  return getTotalDefensiveUnits(player) + getTotalOperativeUnits(player);
 }
 
 /** Get total weapons */
-export function getTotalWeapons(player: PlayerCore): BN {
-  return player.meleeWeapons.add(player.rangedWeapons).add(player.siegeWeapons);
+export function getTotalWeapons(player: PlayerCore): bigint {
+  return player.meleeWeapons + player.rangedWeapons + player.siegeWeapons;
 }
 
 /** Get total reinforcement units */
-export function getTotalReinforcementUnits(player: PlayerCore): BN {
-  return player.reinforcementDef1.add(player.reinforcementDef2).add(player.reinforcementDef3);
+export function getTotalReinforcementUnits(player: PlayerCore): bigint {
+  return player.reinforcementDef1 + player.reinforcementDef2 + player.reinforcementDef3;
 }
 
 /** Get total reinforcement weapons */
-export function getTotalReinforcementWeapons(player: PlayerCore): BN {
-  return player.reinforcementMelee.add(player.reinforcementRanged).add(player.reinforcementSiege);
+export function getTotalReinforcementWeapons(player: PlayerCore): bigint {
+  return player.reinforcementMelee + player.reinforcementRanged + player.reinforcementSiege;
 }
 
 /** Check if player has custom name (not default "Player #X") */

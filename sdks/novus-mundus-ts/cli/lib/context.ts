@@ -165,10 +165,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
   return args;
 }
 
-export function loadKeypair(filepath: string): Keypair {
+export async function loadKeypair(filepath: string): Promise<Keypair> {
   const fullPath = path.resolve(filepath);
   if (!fs.existsSync(fullPath)) {
-    const keypair = Keypair.generate();
+    const keypair = await Keypair.generate();
     const dir = path.dirname(fullPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -177,7 +177,7 @@ export function loadKeypair(filepath: string): Keypair {
     return keypair;
   }
   const secretKey = JSON.parse(fs.readFileSync(fullPath, 'utf8'));
-  return Keypair.fromSecretKey(Uint8Array.from(secretKey));
+  return await Keypair.fromSecretKey(Uint8Array.from(secretKey));
 }
 
 export async function ensureFunded(
@@ -185,7 +185,9 @@ export async function ensureFunded(
   pubkey: PublicKey,
   minBalance: number = 10 * LAMPORTS_PER_SOL
 ): Promise<void> {
-  const balance = await connection.getBalance(pubkey);
+  // getBalance returns a bigint under the v3 seam; coerce to number for the
+  // lamport math below (test balances fit comfortably in a JS number).
+  const balance = Number(await connection.getBalance(pubkey));
   if (balance < minBalance) {
     const needed = Math.min(minBalance - balance, 2 * LAMPORTS_PER_SOL);
     const sig = await connection.requestAirdrop(pubkey, needed);
@@ -200,15 +202,15 @@ export async function buildContext(args: ParsedArgs): Promise<CLIContext> {
   const authorityPath = args.authorityPath || path.join(keysDir, 'dao-authority.json');
   const treasuryPath = args.treasuryPath || path.join(keysDir, 'treasury.json');
 
-  const daoAuthority = loadKeypair(authorityPath);
-  const treasury = loadKeypair(treasuryPath);
+  const daoAuthority = await loadKeypair(authorityPath);
+  const treasury = await loadKeypair(treasuryPath);
 
   const rpcUrl = process.env.RPC_URL || RPC_URLS[args.env];
   const connection = new Connection(rpcUrl, 'confirmed');
 
-  const [gameEngine] = deriveGameEnginePda(args.kingdomId);
-  const [noviMint] = deriveNoviMintPda();
-  const [heroCollection] = deriveHeroCollectionPda();
+  const [gameEngine] = await deriveGameEnginePda(args.kingdomId);
+  const [noviMint] = await deriveNoviMintPda();
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const ctx: CLIContext = {
     connection,

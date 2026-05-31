@@ -7,17 +7,17 @@
 import {
   Keypair,
   Transaction,
+  TransactionInstruction,
   PublicKey,
   LAMPORTS_PER_SOL,
   ComputeBudgetProgram,
 } from '@solana/web3.js';
 import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
 import { biomeAt, isPassableBiome } from '../../src/calculators/biome';
-import type { LiteSVM } from './svm';
+import { type LiteSVM, svmKey } from './svm';
 import { TEST_BIOME_SEED } from './setup';
 
 /**
@@ -36,7 +36,7 @@ import { TEST_BIOME_SEED } from './setup';
  * them within PvP attack range; an alternating ±k walk produced
  * non-adjacent neighbours that crossed the threshold.
  */
-function pickIndexedPassableSpawn(
+async function pickIndexedPassableSpawn(
   svm: LiteSVM,
   gameEngine: PublicKey,
   cityId: number,
@@ -44,22 +44,22 @@ function pickIndexedPassableSpawn(
   cityLat: number,
   cityLon: number,
   _n: number,
-): { lat: number; long: number } {
+): Promise<{ lat: number; long: number }> {
   // 5000 cy steps × 11 m ≈ 55 km — far past the test cities' 8000×8000
   // grid (half-width 4000 grid units ≈ 44 km), so practically unbounded.
   const MAX_OFFSET = 5000;
   const cityLatGrid = Math.round(cityLat * 10000);
   const cityLonGrid = Math.round(cityLon * 10000);
   const cx = 0; // 1-D walk: longitude pinned at city centre.
-  const isCellFree = (cy: number): boolean => {
+  const isCellFree = async (cy: number): Promise<boolean> => {
     if (!isPassableBiome(biomeAt(biomeSeed, cx, cy))) return false;
-    const [loc] = deriveLocationPda(
+    const [loc] = await deriveLocationPda(
       gameEngine,
       cityId,
       cityLatGrid + cy,
       cityLonGrid + cx,
     );
-    const acct = svm.getAccount(loc);
+    const acct = svm.getAccount(svmKey(loc));
     // In tests, every persisted LocationAccount is either an active
     // spawn cell, a travel reservation, or a castle footprint cell —
     // all of which the chain will reject on init_player. Skipping any
@@ -67,7 +67,7 @@ function pickIndexedPassableSpawn(
     return acct === null || acct.data.length === 0;
   };
   for (let cy = 0; cy <= MAX_OFFSET; cy++) {
-    if (isCellFree(cy)) {
+    if (await isCellFree(cy)) {
       return { lat: cityLat + cy / 10000, long: cityLon + cx / 10000 };
     }
   }
@@ -86,7 +86,7 @@ function pickIndexedPassableSpawn(
  * cell that already has a `LocationAccount`. Throws if no free cell is
  * found within the radius.
  */
-function findFreeCellNear(
+async function findFreeCellNear(
   svm: LiteSVM,
   gameEngine: PublicKey,
   cityId: number,
@@ -96,13 +96,13 @@ function findFreeCellNear(
   centerLatGrid: number,
   centerLonGrid: number,
   maxDistance: number = 6,
-): { latGrid: number; lonGrid: number } {
+): Promise<{ latGrid: number; lonGrid: number }> {
   const cyCenter = centerLatGrid - cityLatGrid;
   const cxCenter = centerLonGrid - cityLonGrid;
-  const isFree = (cx: number, cy: number): boolean => {
+  const isFree = async (cx: number, cy: number): Promise<boolean> => {
     if (!isPassableBiome(biomeAt(biomeSeed, cx, cy))) return false;
-    const [loc] = deriveLocationPda(gameEngine, cityId, cityLatGrid + cy, cityLonGrid + cx);
-    const acct = svm.getAccount(loc);
+    const [loc] = await deriveLocationPda(gameEngine, cityId, cityLatGrid + cy, cityLonGrid + cx);
+    const acct = svm.getAccount(svmKey(loc));
     return acct === null || acct.data.length === 0;
   };
   for (let r = 1; r <= maxDistance; r++) {
@@ -111,7 +111,7 @@ function findFreeCellNear(
         [cxCenter + dx, cyCenter - r],
         [cxCenter + dx, cyCenter + r],
       ] as const) {
-        if (isFree(ox, oy)) {
+        if (await isFree(ox, oy)) {
           return { latGrid: cityLatGrid + oy, lonGrid: cityLonGrid + ox };
         }
       }
@@ -121,7 +121,7 @@ function findFreeCellNear(
         [cxCenter - r, cyCenter + dy],
         [cxCenter + r, cyCenter + dy],
       ] as const) {
-        if (isFree(ox, oy)) {
+        if (await isFree(ox, oy)) {
           return { latGrid: cityLatGrid + oy, lonGrid: cityLonGrid + ox };
         }
       }
@@ -159,7 +159,7 @@ import {
   createDepositNoviInstruction,
   DEPOSIT_FEE_BPS,
   deriveNoviMintPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   BuildingType,
   derivePlayerPda,
   deriveEstatePda,
@@ -176,6 +176,29 @@ import { CITIES, TEST_GEMS_ITEM, TEST_FRAGMENTS_ITEM } from './setup';
 import { advanceTime } from './time';
 
 import { type TestContext, airdropIfNeeded, sendTx } from './setup';
+
+/**
+ * Rebuild an instruction produced by `@solana/spl-token` (which bundles
+ * web3.js v1) into a web3.js v3 `TransactionInstruction`. The two packages
+ * ship distinct `PublicKey`/`TransactionInstruction` classes, but the wire
+ * shape (`programId`, `keys`, `data`) is identical, so we re-wrap the v1
+ * pubkeys as v3 ones via their raw bytes.
+ */
+function toV3Instruction(ix: {
+  programId: { toBytes(): Uint8Array };
+  keys: { pubkey: { toBytes(): Uint8Array }; isSigner: boolean; isWritable: boolean }[];
+  data: Uint8Array;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programId.toBytes()),
+    keys: ix.keys.map((k) => ({
+      pubkey: new PublicKey(k.pubkey.toBytes()),
+      isSigner: k.isSigner,
+      isWritable: k.isWritable,
+    })),
+    data: Buffer.from(ix.data),
+  });
+}
 
 // Types
 
@@ -225,7 +248,7 @@ function ensurePlayersDir(): void {
   }
 }
 
-function loadOrCreatePlayerKeypair(index: number): Keypair {
+async function loadOrCreatePlayerKeypair(index: number): Promise<Keypair> {
   ensurePlayersDir();
   const filepath = path.join(KEYS_DIR, `player-${index}.json`);
 
@@ -234,7 +257,7 @@ function loadOrCreatePlayerKeypair(index: number): Keypair {
     return Keypair.fromSecretKey(Uint8Array.from(secretKey));
   }
 
-  const keypair = Keypair.generate();
+  const keypair = await Keypair.generate();
   fs.writeFileSync(filepath, JSON.stringify(Array.from(keypair.secretKey)));
   return keypair;
 }
@@ -269,9 +292,9 @@ export class PlayerFactory {
     } = {}
   ): Promise<TestPlayer> {
     const index = this.nextIndex++;
-    const keypair = options.customKeypair || loadOrCreatePlayerKeypair(index);
-    const [playerPda, playerBump] = derivePlayerPda(this.ctx.gameEngine, keypair.publicKey);
-    const [estatePda, estateBump] = deriveEstatePda(playerPda);
+    const keypair = options.customKeypair || (await loadOrCreatePlayerKeypair(index));
+    const [playerPda, playerBump] = await derivePlayerPda(this.ctx.gameEngine, keypair.publicKey);
+    const [estatePda, estateBump] = await deriveEstatePda(playerPda);
 
     // Auto-assign unique city if autoCycleCities is enabled and no explicit cityId
     let cityId: number;
@@ -357,7 +380,7 @@ export class PlayerFactory {
     if (player.initialized) return;
 
     // Check if already initialized on-chain
-    const accountInfo = await this.ctx.svm.getAccount(player.playerPda);
+    const accountInfo = await this.ctx.svm.getAccount(svmKey(player.playerPda));
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.initialized = true;
       return;
@@ -369,7 +392,7 @@ export class PlayerFactory {
     const spawnIndex = this.citySpawnCount.get(player.startingCityId) ?? 0;
     this.citySpawnCount.set(player.startingCityId, spawnIndex + 1);
     const biomeSeed = TEST_BIOME_SEED;
-    const { lat: spawnLat, long: spawnLon } = pickIndexedPassableSpawn(
+    const { lat: spawnLat, long: spawnLon } = await pickIndexedPassableSpawn(
       this.ctx.svm,
       this.ctx.gameEngine,
       player.startingCityId,
@@ -382,13 +405,13 @@ export class PlayerFactory {
     const tx = new Transaction();
 
     // 1. Init user (creates user PDA)
-    tx.add(createInitUserInstruction({
+    tx.add(await createInitUserInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
     }));
 
     // 2. Init player (reads user PDA created above)
-    tx.add(createInitPlayerInstruction({
+    tx.add(await createInitPlayerInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       startingCityId: player.startingCityId,
@@ -397,7 +420,7 @@ export class PlayerFactory {
     }));
 
     // 3. Unlock research (reads player PDA created above)
-    tx.add(createCreateProgressInstruction({
+    tx.add(await createCreateProgressInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
     }));
@@ -415,7 +438,7 @@ export class PlayerFactory {
   async createEstateBatched(player: TestPlayer, includeGems: boolean = false): Promise<void> {
     if (player.hasEstate) return;
 
-    const accountInfo = await this.ctx.svm.getAccount(player.estatePda);
+    const accountInfo = await this.ctx.svm.getAccount(svmKey(player.estatePda));
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.hasEstate = true;
       return;
@@ -424,14 +447,14 @@ export class PlayerFactory {
     const tx = new Transaction();
 
     // 1. Create estate
-    tx.add(createCreateEstateInstruction(
+    tx.add(await createCreateEstateInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
       { cityId: 1 }
     ));
 
     // 2. Buy gems (for building speedups)
     if (includeGems) {
-      tx.add(createPurchaseItemInstruction(
+      tx.add(await createPurchaseItemInstruction(
         {
           buyer: player.publicKey,
           gameEngine: this.ctx.gameEngine,
@@ -456,7 +479,7 @@ export class PlayerFactory {
     }
 
     // Check if already initialized
-    const accountInfo = await this.ctx.svm.getAccount(player.playerPda);
+    const accountInfo = await this.ctx.svm.getAccount(svmKey(player.playerPda));
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.initialized = true;
       return;
@@ -474,7 +497,7 @@ export class PlayerFactory {
     const spawnIndex = this.citySpawnCount.get(player.startingCityId) ?? 0;
     this.citySpawnCount.set(player.startingCityId, spawnIndex + 1);
     const biomeSeed = TEST_BIOME_SEED;
-    const { lat: spawnLat, long: spawnLon } = pickIndexedPassableSpawn(
+    const { lat: spawnLat, long: spawnLon } = await pickIndexedPassableSpawn(
       this.ctx.svm,
       this.ctx.gameEngine,
       player.startingCityId,
@@ -484,7 +507,7 @@ export class PlayerFactory {
       spawnIndex,
     );
 
-    const ix = createInitPlayerInstruction({
+    const ix = await createInitPlayerInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       startingCityId: player.startingCityId,
@@ -501,15 +524,15 @@ export class PlayerFactory {
    * Initialize a user account for the player (subscription/reserved NOVI).
    */
   async initializeUser(player: TestPlayer): Promise<void> {
-    const [userPda] = deriveUserPda(player.publicKey);
+    const [userPda] = await deriveUserPda(player.publicKey);
 
     // Check if already initialized
-    const accountInfo = await this.ctx.svm.getAccount(userPda);
+    const accountInfo = await this.ctx.svm.getAccount(svmKey(userPda));
     if (accountInfo !== null && accountInfo.data.length > 0) {
       return;
     }
 
-    const ix = createInitUserInstruction({
+    const ix = await createInitUserInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
     });
@@ -527,7 +550,7 @@ export class PlayerFactory {
       throw new Error('Player must be initialized before unlocking research');
     }
 
-    const ix = createCreateProgressInstruction({
+    const ix = await createCreateProgressInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
     });
@@ -558,13 +581,13 @@ export class PlayerFactory {
     }
 
     // Check if already exists
-    const accountInfo = await this.ctx.svm.getAccount(player.estatePda);
+    const accountInfo = await this.ctx.svm.getAccount(svmKey(player.estatePda));
     if (accountInfo !== null && accountInfo.data.length > 0) {
       player.hasEstate = true;
       return;
     }
 
-    const ix = createCreateEstateInstruction(
+    const ix = await createCreateEstateInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
       { cityId: 1 }
     );
@@ -578,7 +601,7 @@ export class PlayerFactory {
    * Get player account data.
    */
   async getPlayerAccount(player: TestPlayer): Promise<PlayerAccount | null> {
-    const accountInfo = await this.ctx.svm.getAccount(player.playerPda);
+    const accountInfo = await this.ctx.svm.getAccount(svmKey(player.playerPda));
     if (!accountInfo || accountInfo.data.length === 0) {
       return null;
     }
@@ -591,11 +614,11 @@ export class PlayerFactory {
   async hireUnits(
     player: TestPlayer,
     unitType: number,
-    noviAmount: BN | number
+    noviAmount: bigint | number
   ): Promise<void> {
-    const ix = createHireUnitsInstruction(
+    const ix = await createHireUnitsInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
-      { unitType, noviAmount: new BN(noviAmount) }
+      { unitType, noviAmount: BigInt(noviAmount) }
     );
 
     const tx = new Transaction().add(ix);
@@ -608,11 +631,11 @@ export class PlayerFactory {
   async purchaseEquipment(
     player: TestPlayer,
     equipmentType: number,
-    quantity: BN | number
+    quantity: bigint | number
   ): Promise<void> {
-    const ix = createPurchaseEquipmentInstruction(
+    const ix = await createPurchaseEquipmentInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
-      { equipmentType, quantity: new BN(quantity), payWithCash: false }
+      { equipmentType, quantity: BigInt(quantity), payWithCash: false }
     );
 
     const tx = new Transaction().add(ix);
@@ -632,15 +655,15 @@ export class PlayerFactory {
     destGridLat?: number,
     destGridLong?: number
   ): Promise<void> {
-    const [originLocation] = deriveLocationPda(this.ctx.gameEngine, originCityId, originGridLat, originGridLong);
+    const [originLocation] = await deriveLocationPda(this.ctx.gameEngine, originCityId, originGridLat, originGridLong);
     // Use provided destination grid coords, or default to city center
     const destCity = CITIES[destinationCityId]!;
     const GRID_PRECISION = 10000.0;
     const finalDestGridLat = destGridLat ?? Math.round(destCity.lat * GRID_PRECISION);
     const finalDestGridLong = destGridLong ?? Math.round(destCity.lon * GRID_PRECISION);
-    const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, destinationCityId, finalDestGridLat, finalDestGridLong);
+    const [destinationLocation] = await deriveLocationPda(this.ctx.gameEngine, destinationCityId, finalDestGridLat, finalDestGridLong);
 
-    const ix = createIntercityStartInstruction({
+    const ix = await createIntercityStartInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       originCityId,
@@ -667,9 +690,9 @@ export class PlayerFactory {
     destGridLat: number,
     destGridLong: number
   ): Promise<void> {
-    const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
+    const [destinationLocation] = await deriveLocationPda(this.ctx.gameEngine, destinationCityId, destGridLat, destGridLong);
 
-    const ix = createIntercityCompleteInstruction({
+    const ix = await createIntercityCompleteInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       originCityId,
@@ -696,10 +719,10 @@ export class PlayerFactory {
     // Convert f64 coords to grid: grid = round(coord * 10000)
     const destGridLat = Math.round(destLat * 10000);
     const destGridLong = Math.round(destLong * 10000);
-    const [originLocation] = deriveLocationPda(this.ctx.gameEngine, cityId, originGridLat, originGridLong);
-    const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, cityId, destGridLat, destGridLong);
+    const [originLocation] = await deriveLocationPda(this.ctx.gameEngine, cityId, originGridLat, originGridLong);
+    const [destinationLocation] = await deriveLocationPda(this.ctx.gameEngine, cityId, destGridLat, destGridLong);
 
-    const ix = createIntracityStartInstruction(
+    const ix = await createIntracityStartInstruction(
       {
         owner: player.publicKey,
         gameEngine: this.ctx.gameEngine,
@@ -727,9 +750,9 @@ export class PlayerFactory {
     destGridLat: number,
     destGridLong: number
   ): Promise<void> {
-    const [destinationLocation] = deriveLocationPda(this.ctx.gameEngine, cityId, destGridLat, destGridLong);
+    const [destinationLocation] = await deriveLocationPda(this.ctx.gameEngine, cityId, destGridLat, destGridLong);
 
-    const ix = createIntracityCompleteInstruction({
+    const ix = await createIntracityCompleteInstruction({
       owner: player.publicKey,
       gameEngine: this.ctx.gameEngine,
       cityId,
@@ -769,12 +792,12 @@ export class PlayerFactory {
    */
   async buyGems(player: TestPlayer, purchases: number = 1): Promise<void> {
     // Debug: check player account state before purchase
-    const preInfo = await this.ctx.svm.getAccount(player.playerPda);
+    const preInfo = await this.ctx.svm.getAccount(svmKey(player.playerPda));
     if (preInfo) {
       console.log(`[buyGems] PRE: data_len=${preInfo.data.length} lamports=${preInfo.lamports}`);
     }
 
-    const ix = createPurchaseItemInstruction(
+    const ix = await createPurchaseItemInstruction(
       {
         buyer: player.publicKey,
         gameEngine: this.ctx.gameEngine,
@@ -802,7 +825,7 @@ export class PlayerFactory {
    * Each purchase gives 100 fragments.
    */
   async buyFragments(player: TestPlayer, purchases: number = 1): Promise<void> {
-    const ix = createPurchaseItemInstruction(
+    const ix = await createPurchaseItemInstruction(
       {
         buyer: player.publicKey,
         gameEngine: this.ctx.gameEngine,
@@ -829,7 +852,7 @@ export class PlayerFactory {
     }
 
     // Start research
-    const startIx = createStartResearchInstruction({
+    const startIx = await createStartResearchInstruction({
       gameEngine: this.ctx.gameEngine,
       owner: player.publicKey,
       researchType,
@@ -837,14 +860,14 @@ export class PlayerFactory {
     await sendTx(this.ctx.svm, new Transaction().add(startIx), [player.keypair], this.ctx.config);
 
     // Speedup to completion (0 = complete all remaining)
-    const speedupIx = createSpeedUpResearchInstruction(
+    const speedupIx = await createSpeedUpResearchInstruction(
       { gameEngine: this.ctx.gameEngine, owner: player.publicKey, researchType },
-      { speedUpSeconds: new BN(0) }
+      { speedUpSeconds: 0n }
     );
     await sendTx(this.ctx.svm, new Transaction().add(speedupIx), [player.keypair], this.ctx.config);
 
     // Complete research
-    const completeIx = createCompleteResearchInstruction({
+    const completeIx = await createCompleteResearchInstruction({
       gameEngine: this.ctx.gameEngine,
       payer: player.publicKey,
       playerOwner: player.publicKey,
@@ -858,7 +881,7 @@ export class PlayerFactory {
    * Tier 1 = 50% time remains, Tier 2 = 25% time remains.
    */
   async speedupTravel(player: TestPlayer, tier: 1 | 2 = 2): Promise<void> {
-    const ix = createTravelSpeedupInstruction(
+    const ix = await createTravelSpeedupInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
       { speedupTier: tier }
     );
@@ -892,7 +915,7 @@ export class PlayerFactory {
     }
 
     // Check on-chain estate for existing building
-    const estateInfo = await this.ctx.svm.getAccount(player.estatePda);
+    const estateInfo = await this.ctx.svm.getAccount(svmKey(player.estatePda));
     if (estateInfo && estateInfo.data.length > 0) {
       // Scan building slots (last portion of account data)
       // Each BuildingSlot is 36 bytes: [building_type(u8), status(u8), ...]
@@ -929,21 +952,21 @@ export class PlayerFactory {
     tx1.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
 
     // 1. Build
-    tx1.add(createBuildBuildingInstruction(
+    tx1.add(await createBuildBuildingInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
       { buildingType }
     ));
 
     // 2. Speedup ×7 (tier 2: 25% remains each time)
     for (let i = 0; i < 7; i++) {
-      tx1.add(createBuildingSpeedupInstruction(
+      tx1.add(await createBuildingSpeedupInstruction(
         { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
         { buildingType, speedupTier: 2 }
       ));
     }
 
     // 3. Complete (may fail for longer builds where 7 speedups isn't enough)
-    tx1.add(createCompleteBuildingInstruction(
+    tx1.add(await createCompleteBuildingInstruction(
       { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
       { buildingType }
     ));
@@ -956,7 +979,7 @@ export class PlayerFactory {
         // BuildingSlotFull — buy an extra plot and retry
         console.log(`[buildAndCompleteBuilding] Building slots full, buying extra plot...`);
         const buyPlotTx = new Transaction().add(
-          createBuyPlotInstruction({ owner: player.publicKey, gameEngine: this.ctx.gameEngine })
+          await createBuyPlotInstruction({ owner: player.publicKey, gameEngine: this.ctx.gameEngine })
         );
         await sendTx(this.ctx.svm, buyPlotTx, [player.keypair], this.ctx.config);
         return this.buildAndCompleteBuilding(player, buildingType);
@@ -970,12 +993,12 @@ export class PlayerFactory {
         // Tx A: build + 7×speedup (no complete)
         const txA = new Transaction();
         txA.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-        txA.add(createBuildBuildingInstruction(
+        txA.add(await createBuildBuildingInstruction(
           { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
           { buildingType }
         ));
         for (let i = 0; i < 7; i++) {
-          txA.add(createBuildingSpeedupInstruction(
+          txA.add(await createBuildingSpeedupInstruction(
             { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
             { buildingType, speedupTier: 2 }
           ));
@@ -1028,7 +1051,7 @@ export class PlayerFactory {
       try {
         const completeTx = new Transaction();
         completeTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
-        completeTx.add(createCompleteBuildingInstruction(
+        completeTx.add(await createCompleteBuildingInstruction(
           { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
           { buildingType }
         ));
@@ -1046,7 +1069,7 @@ export class PlayerFactory {
       try {
         const speedupTx = new Transaction();
         speedupTx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 200_000 }));
-        speedupTx.add(createBuildingSpeedupInstruction(
+        speedupTx.add(await createBuildingSpeedupInstruction(
           { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
           { buildingType, speedupTier: 2 }
         ));
@@ -1078,21 +1101,21 @@ export class PlayerFactory {
       tx.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
 
       // 1. Start upgrade
-      tx.add(createUpgradeBuildingInstruction(
+      tx.add(await createUpgradeBuildingInstruction(
         { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
         { buildingType }
       ));
 
       // 2. Speedup ×7 (tier 2: 25% remains each time)
       for (let i = 0; i < 7; i++) {
-        tx.add(createBuildingSpeedupInstruction(
+        tx.add(await createBuildingSpeedupInstruction(
           { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
           { buildingType, speedupTier: 2 }
         ));
       }
 
       // 3. Complete
-      tx.add(createCompleteBuildingInstruction(
+      tx.add(await createCompleteBuildingInstruction(
         { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
         { buildingType }
       ));
@@ -1105,12 +1128,12 @@ export class PlayerFactory {
           // ConstructionNotComplete — split build
           const txA = new Transaction();
           txA.add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }));
-          txA.add(createUpgradeBuildingInstruction(
+          txA.add(await createUpgradeBuildingInstruction(
             { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
             { buildingType }
           ));
           for (let i = 0; i < 7; i++) {
-            txA.add(createBuildingSpeedupInstruction(
+            txA.add(await createBuildingSpeedupInstruction(
               { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
               { buildingType, speedupTier: 2 }
             ));
@@ -1161,14 +1184,16 @@ export class PlayerFactory {
     /* External mints land in the wallet ATA, which must exist before the
      * SPL Token MintTo CPI fires. Idempotent so re-funding is safe. */
     if (purposes.some((p) => isExternal(p.purpose))) {
-      const [noviMint] = deriveNoviMintPda();
-      const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
+      const [noviMint] = await deriveNoviMintPda();
+      const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
       const ataPrep = new Transaction().add(
-        createAssociatedTokenAccountIdempotentInstruction(
-          this.ctx.daoAuthority.publicKey,
-          walletAta,
-          player.publicKey,
-          noviMint,
+        toV3Instruction(
+          createAssociatedTokenAccountIdempotentInstruction(
+            this.ctx.daoAuthority.publicKey as any,
+            walletAta as any,
+            player.publicKey as any,
+            noviMint as any,
+          ),
         ),
       );
       await sendTx(this.ctx.svm, ataPrep, [this.ctx.daoAuthority], this.ctx.config);
@@ -1183,9 +1208,9 @@ export class PlayerFactory {
 
         // Mint (DAO signs). Internal → reserved ATA; external → wallet ATA.
         const mintTx = new Transaction().add(
-          createMintForPrizeInstruction(
+          await createMintForPrizeInstruction(
             { authority: this.ctx.daoAuthority.publicKey, gameEngine: this.ctx.gameEngine, recipientOwner: player.publicKey },
-            { amount: new BN(thisAmount), purpose }
+            { amount: BigInt(thisAmount), purpose }
           )
         );
         await sendTx(this.ctx.svm, mintTx, [this.ctx.daoAuthority], this.ctx.config);
@@ -1199,9 +1224,9 @@ export class PlayerFactory {
           const fee = Math.floor((thisAmount * DEPOSIT_FEE_BPS) / 10_000);
           toConvert = thisAmount - fee;
           const depositTx = new Transaction().add(
-            createDepositNoviInstruction(
+            await createDepositNoviInstruction(
               { owner: player.publicKey },
-              { amount: new BN(thisAmount) },
+              { amount: BigInt(thisAmount) },
             ),
           );
           await sendTx(this.ctx.svm, depositTx, [player.keypair], this.ctx.config);
@@ -1209,9 +1234,9 @@ export class PlayerFactory {
 
         // Convert reserved → locked (player signs)
         const convertTx = new Transaction().add(
-          createReservedToLockedInstruction(
+          await createReservedToLockedInstruction(
             { owner: player.publicKey, gameEngine: this.ctx.gameEngine },
-            { amount: new BN(toConvert) }
+            { amount: BigInt(toConvert) }
           )
         );
         await sendTx(this.ctx.svm, convertTx, [player.keypair], this.ctx.config);
@@ -1256,7 +1281,7 @@ export class PlayerFactory {
     const targetCity = CITIES.find(c => c.id === targetLocation.cityId)!;
     const targetCityLatGrid = Math.round(targetCity.lat * 10000);
     const targetCityLonGrid = Math.round(targetCity.lon * 10000);
-    const dest = findFreeCellNear(
+    const dest = await findFreeCellNear(
       this.ctx.svm,
       this.ctx.gameEngine,
       targetLocation.cityId,

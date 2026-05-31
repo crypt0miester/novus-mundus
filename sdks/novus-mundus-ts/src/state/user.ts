@@ -6,7 +6,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // User Account Interface
@@ -19,23 +18,23 @@ export interface UserAccount {
   /** PDA bump */
   bump: number;
   /** Reserved NOVI balance (withdrawable) */
-  reservedNovi: BN;
+  reservedNovi: bigint;
   /** Timestamp when reserved NOVI was earned */
-  reservedNoviEarnedAt: BN;
+  reservedNoviEarnedAt: bigint;
   /** Total events participated in */
-  totalEventsParticipated: BN;
+  totalEventsParticipated: bigint;
   /** Total events won */
-  totalEventsWon: BN;
+  totalEventsWon: bigint;
   /** Total reserved NOVI earned (lifetime) */
-  totalReservedEarned: BN;
+  totalReservedEarned: bigint;
   /** Last withdrawal timestamp */
-  lastWithdrawal: BN;
+  lastWithdrawal: bigint;
   /** NOVI purchase streak (consecutive days) */
   noviPurchaseStreak: number;
   /** Last NOVI purchase day (day number since epoch) */
   noviLastPurchaseDay: number;
   /** NOVI purchased today (with 1 decimal) */
-  noviPurchasedToday: BN;
+  noviPurchasedToday: bigint;
 }
 
 /** UserAccount size in bytes (repr(C) with account_key discriminator) */
@@ -44,7 +43,7 @@ export const USER_ACCOUNT_SIZE = 152;
 // Deserialization
 
 /** Deserialize UserAccount from raw bytes */
-export function deserializeUser(data: Uint8Array | Buffer): UserAccount {
+export function deserializeUser(data: Uint8Array): UserAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -86,7 +85,7 @@ export function deserializeUser(data: Uint8Array | Buffer): UserAccount {
 }
 
 /** Parse UserAccount from account info */
-export function parseUser(accountInfo: AccountInfo<Buffer>): UserAccount | null {
+export function parseUser(accountInfo: AccountInfo<Uint8Array>): UserAccount | null {
   if (!accountInfo.data || accountInfo.data.length < USER_ACCOUNT_SIZE) {
     return null;
   }

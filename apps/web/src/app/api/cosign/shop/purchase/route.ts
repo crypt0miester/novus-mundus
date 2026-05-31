@@ -9,7 +9,7 @@ import {
   parseShopConfig,
   parseAllowedToken,
   parseGameEngine,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   COMPUTE_BUDGET_PREFIX_IX_COUNT,
 } from "novus-mundus-sdk";
 import { gameEnginePda } from "@/lib/server/chain";
@@ -30,7 +30,7 @@ interface PurchaseBody {
 const isZeroKey = (k: PublicKey): boolean => k.equals(PublicKey.default);
 
 /** A 32-byte Switchboard feed hash, as the program stores it, to hex. */
-const feedHex = (k: PublicKey): string => k.toBuffer().toString("hex");
+const feedHex = (k: PublicKey): string => Buffer.from(k.toBytes()).toString("hex");
 
 /**
  * POST /api/cosign/shop/purchase
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
   const gameEngine = gameEnginePda();
 
   // Shop config — the Switchboard queue + SOL/USD feed hash.
-  const [shopConfigPda] = deriveShopConfigPda(gameEngine);
+  const [shopConfigPda] = await deriveShopConfigPda(gameEngine);
   const shopConfigInfo = await connection.getAccountInfo(shopConfigPda);
   const shopConfig = shopConfigInfo ? parseShopConfig(shopConfigInfo) : null;
   if (!shopConfig) return fail("shop config not found", 500);
@@ -81,7 +81,7 @@ export async function POST(req: Request) {
   }
 
   // Allowed token — must carry a Switchboard TOKEN/USD feed hash.
-  const [allowedTokenPda] = deriveAllowedTokenPda(gameEngine, tokenMint);
+  const [allowedTokenPda] = await deriveAllowedTokenPda(gameEngine, tokenMint);
   const allowedTokenInfo = await connection.getAccountInfo(allowedTokenPda);
   const allowedToken = allowedTokenInfo ? parseAllowedToken(allowedTokenInfo) : null;
   if (!allowedToken) return fail("token is not a registered payment token", 400);
@@ -109,7 +109,7 @@ export async function POST(req: Request) {
   if (!alt) return fail("shop Address Lookup Table not found on-chain", 500);
 
   const switchboardQueue = shopConfig.solSwitchboardQueue;
-  const [oracleQuote] = deriveOracleQuotePda(switchboardQueue);
+  const [oracleQuote] = await deriveOracleQuotePda(switchboardQueue);
 
   try {
     // Final tx layout: [<compute-budget prefix>, ed25519, crank, purchase].
@@ -127,7 +127,7 @@ export async function POST(req: Request) {
       ed25519IxIndex,
     });
 
-    const purchaseIx = createPurchaseItemInstruction(
+    const purchaseIx = await createPurchaseItemInstruction(
       {
         buyer,
         gameEngine,
@@ -136,8 +136,8 @@ export async function POST(req: Request) {
         tokenPayment: {
           allowedToken: allowedTokenPda,
           tokenMint,
-          buyerTokenAta: getAssociatedTokenAddressSync(tokenMint, buyer),
-          treasuryTokenAta: getAssociatedTokenAddressSync(tokenMint, treasury),
+          buyerTokenAta: await getAssociatedTokenAddressAsync(tokenMint, buyer),
+          treasuryTokenAta: await getAssociatedTokenAddressAsync(tokenMint, treasury),
           oracleQuote,
           switchboardQueue,
         },

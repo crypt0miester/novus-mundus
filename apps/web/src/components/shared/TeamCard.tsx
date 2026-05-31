@@ -21,9 +21,9 @@ export function TeamCard({ teamId, team, rank, actions, className, lordlyLabels 
   const memberLabel = lordlyLabels ? "sworn blades" : "members";
   const treasuryLabel = lordlyLabels ? "War-chest" : "Treasury";
   const bannerAge =
-    lordlyLabels && team.createdAt.toNumber() > 0
+    lordlyLabels && Number(team.createdAt) > 0
       ? formatTime(
-          Math.max(0, Math.floor(Date.now() / 1000) - team.createdAt.toNumber()),
+          Math.max(0, Math.floor(Date.now() / 1000) - Number(team.createdAt)),
           "compact",
         )
       : null;
@@ -58,7 +58,7 @@ export function TeamCard({ teamId, team, rank, actions, className, lordlyLabels 
             <div className="text-[10px] text-text-muted">{treasuryLabel}</div>
             <span className="inline-flex items-center justify-end gap-1">
               <GameIcon id="resource-cash" size={14} />
-              <GoldNumber value={team.treasury.toNumber()} size="sm" />
+              <GoldNumber value={Number(team.treasury)} size="sm" />
             </span>
           </div>
           {actions && <div>{actions}</div>}

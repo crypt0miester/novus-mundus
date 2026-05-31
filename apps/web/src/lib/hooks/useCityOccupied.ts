@@ -258,8 +258,8 @@ export function useCityOccupied(cityId: number | null | undefined) {
       if (account.occupantType === 2) {
         const encEntry = encounters.get(account.occupant.toBase58());
         if (!encEntry) continue;
-        if (encEntry.account.health.isZero()) continue;
-        if (encEntry.account.despawnAt.toNumber() <= nowSec) continue;
+        if (encEntry.account.health === 0n) continue;
+        if (Number(encEntry.account.despawnAt) <= nowSec) continue;
       }
       /* Player occupant (type=1) — only keep the cell that matches the
        * player's chain-state `currentLat/Long`. Other cells with the

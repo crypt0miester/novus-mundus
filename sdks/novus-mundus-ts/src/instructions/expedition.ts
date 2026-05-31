@@ -14,7 +14,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -46,11 +45,11 @@ export interface ExpeditionStartParams {
   /** Tier of expedition (0-4, higher = better rewards) */
   tier: number;
   /** Tier 1 operatives to send */
-  operativeUnit1: BN | number | bigint;
+  operativeUnit1: number | bigint;
   /** Tier 2 operatives to send */
-  operativeUnit2: BN | number | bigint;
+  operativeUnit2: number | bigint;
   /** Tier 3 operatives to send */
-  operativeUnit3: BN | number | bigint;
+  operativeUnit3: number | bigint;
 }
 
 /** ~10,000 CU */
@@ -71,13 +70,13 @@ export interface ExpeditionStartParams {
  *
  * Hero provides bonus yield if sent with expedition.
  */
-export function createExpeditionStartInstruction(
+export async function createExpeditionStartInstruction(
   accounts: ExpeditionStartAccounts,
   params: ExpeditionStartParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -142,12 +141,12 @@ export interface ExpeditionStrikeParams {
  * Higher average score = bonus multiplier on final yield.
  * Strikes are optional - base yield is still earned without them.
  */
-export function createExpeditionStrikeInstruction(
+export async function createExpeditionStrikeInstruction(
   accounts: ExpeditionStrikeAccounts,
   params: ExpeditionStrikeParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -200,12 +199,12 @@ export interface ExpeditionClaimAccounts {
  * Returns operatives and hero to player.
  * Closes expedition account (rent refunded).
  */
-export function createExpeditionClaimInstruction(
+export async function createExpeditionClaimInstruction(
   accounts: ExpeditionClaimAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -253,11 +252,11 @@ export interface ExpeditionAbortAccounts {
  * Locked NOVI cost is NOT refunded (burnt as penalty).
  * Closes expedition account (rent refunded).
  */
-export function createExpeditionAbortInstruction(
+export async function createExpeditionAbortInstruction(
   accounts: ExpeditionAbortAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -310,12 +309,12 @@ export interface ExpeditionSpeedupParams {
  *
  * Cost formula: remaining_minutes × gems_per_minute × tier_multiplier
  */
-export function createExpeditionSpeedupInstruction(
+export async function createExpeditionSpeedupInstruction(
   accounts: ExpeditionSpeedupAccounts,
   params: ExpeditionSpeedupParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = deriveExpeditionPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [expedition] = await deriveExpeditionPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

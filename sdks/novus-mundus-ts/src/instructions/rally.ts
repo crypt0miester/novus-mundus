@@ -17,10 +17,9 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
@@ -53,11 +52,11 @@ export interface RallyCreateAccounts {
   /** GameEngine account */
   gameEngine: PublicKey;
   /** Rally ID (unique per creator) */
-  rallyId: BN | number | bigint;
+  rallyId: number | bigint;
   /** Target account (encounter/player/castle PDA) */
   target: PublicKey;
   /** Creator's team ID */
-  teamId: BN | number | bigint;
+  teamId: number | bigint;
   /** Creator's city ID (rally gathers here) */
   rallyCityId: number;
 }
@@ -66,21 +65,21 @@ export interface RallyCreateParams {
   /** Target type (0=player, 1=encounter, 2=castle) */
   targetType: RallyTargetType;
   /** Gather duration in seconds before march starts */
-  gatherDuration: BN | number | bigint;
+  gatherDuration: number | bigint;
   /** Target's city ID */
   targetCityId: number;
   /** Defensive unit tier 1 to commit */
-  defensiveUnit1: BN | number | bigint;
+  defensiveUnit1: number | bigint;
   /** Defensive unit tier 2 to commit */
-  defensiveUnit2: BN | number | bigint;
+  defensiveUnit2: number | bigint;
   /** Defensive unit tier 3 to commit */
-  defensiveUnit3: BN | number | bigint;
+  defensiveUnit3: number | bigint;
   /** Melee weapons to commit */
-  meleeWeapons: BN | number | bigint;
+  meleeWeapons: number | bigint;
   /** Ranged weapons to commit */
-  rangedWeapons: BN | number | bigint;
+  rangedWeapons: number | bigint;
   /** Siege weapons to commit */
-  siegeWeapons: BN | number | bigint;
+  siegeWeapons: number | bigint;
   /** Hero slot index (255=no hero, 0-2=commit hero from slot). Defaults to 255. */
   heroSlotIndex?: number;
   /** Hero NFT mint address (required if heroSlotIndex is set) */
@@ -126,18 +125,16 @@ export interface RallyCreateParams {
  * - siege: u64 (8)
  * - team_id: u64 (8)
  */
-export function createRallyCreateInstruction(
+export async function createRallyCreateInstruction(
   accounts: RallyCreateAccounts,
   params: RallyCreateParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const rallyId = typeof accounts.rallyId === 'number' ? new BN(accounts.rallyId) : new BN(accounts.rallyId.toString());
-  const [rally] = deriveRallyPda(accounts.gameEngine, accounts.owner, rallyId.toNumber());
-  const [participant] = deriveRallyParticipantPda(accounts.gameEngine, accounts.owner, rallyId.toNumber(), accounts.owner);
-  const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
-  const teamId = typeof accounts.teamId === 'number' ? new BN(accounts.teamId) : new BN(accounts.teamId.toString());
-  const [team] = deriveTeamPda(accounts.gameEngine, teamId.toNumber());
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [rally] = await deriveRallyPda(accounts.gameEngine, accounts.owner, accounts.rallyId);
+  const [participant] = await deriveRallyParticipantPda(accounts.gameEngine, accounts.owner, accounts.rallyId, accounts.owner);
+  const [rallyCity] = await deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
+  const [team] = await deriveTeamPda(accounts.gameEngine, accounts.teamId);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -154,7 +151,7 @@ export function createRallyCreateInstruction(
   // Add optional hero accounts when committing a hero
   const heroSlot = params.heroSlotIndex ?? 255;
   if (heroSlot !== 255 && params.heroMint && params.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(params.heroTemplateId);
+    const [heroTemplate] = await deriveHeroTemplatePda(params.heroTemplateId);
     keys.push({ pubkey: params.heroMint, isSigner: false, isWritable: false });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
   }
@@ -209,26 +206,26 @@ export interface RallyJoinAccounts {
   /** Rally creator's wallet (for participant PDA derivation) */
   rallyCreator: PublicKey;
   /** Rally ID (for participant PDA derivation) */
-  rallyId: BN | number | bigint;
+  rallyId: number | bigint;
   /** Joiner's team ID (must match rally's team) */
-  teamId: BN | number | bigint;
+  teamId: number | bigint;
   /** Rally's city ID (where rally is gathering) */
   rallyCityId: number;
 }
 
 export interface RallyJoinParams {
   /** Defensive unit tier 1 to commit */
-  defensiveUnit1: BN | number | bigint;
+  defensiveUnit1: number | bigint;
   /** Defensive unit tier 2 to commit */
-  defensiveUnit2: BN | number | bigint;
+  defensiveUnit2: number | bigint;
   /** Defensive unit tier 3 to commit */
-  defensiveUnit3: BN | number | bigint;
+  defensiveUnit3: number | bigint;
   /** Melee weapons to commit */
-  meleeWeapons: BN | number | bigint;
+  meleeWeapons: number | bigint;
   /** Ranged weapons to commit */
-  rangedWeapons: BN | number | bigint;
+  rangedWeapons: number | bigint;
   /** Siege weapons to commit */
-  siegeWeapons: BN | number | bigint;
+  siegeWeapons: number | bigint;
   /** Hero slot index (255=no hero, 0-2=commit hero from slot). Defaults to 255. */
   heroSlotIndex?: number;
   /** Hero NFT mint address (required if heroSlotIndex is set) */
@@ -266,16 +263,14 @@ export interface RallyJoinParams {
  * - siege: u64 (8)
  * - team_id: u64 (8)
  */
-export function createRallyJoinInstruction(
+export async function createRallyJoinInstruction(
   accounts: RallyJoinAccounts,
   params: RallyJoinParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const rallyId = typeof accounts.rallyId === 'number' ? accounts.rallyId : Number(accounts.rallyId.toString());
-  const [participant] = deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, rallyId, accounts.owner);
-  const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
-  const teamId = typeof accounts.teamId === 'number' ? new BN(accounts.teamId) : new BN(accounts.teamId.toString());
-  const [team] = deriveTeamPda(accounts.gameEngine, teamId.toNumber());
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [participant] = await deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, accounts.rallyId, accounts.owner);
+  const [rallyCity] = await deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
+  const [team] = await deriveTeamPda(accounts.gameEngine, accounts.teamId);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -291,7 +286,7 @@ export function createRallyJoinInstruction(
   // Add optional hero accounts when committing a hero
   const heroSlot = params.heroSlotIndex ?? 255;
   if (heroSlot !== 255 && params.heroMint && params.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(params.heroTemplateId);
+    const [heroTemplate] = await deriveHeroTemplatePda(params.heroTemplateId);
     keys.push({ pubkey: params.heroMint, isSigner: false, isWritable: false });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
   }
@@ -336,7 +331,7 @@ export interface RallyLeaveAccounts {
   /** Rally creator's wallet (for participant PDA derivation) */
   rallyCreator: PublicKey;
   /** Rally ID (for participant PDA derivation) */
-  rallyId: BN | number | bigint;
+  rallyId: number | bigint;
   /** Rally's city ID (rally start location) */
   rallyCityId: number;
   /** Participant's home city ID */
@@ -362,14 +357,13 @@ export interface RallyLeaveAccounts {
  *
  * On-chain data: None
  */
-export function createRallyLeaveInstruction(
+export async function createRallyLeaveInstruction(
   accounts: RallyLeaveAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const rallyId = typeof accounts.rallyId === 'number' ? accounts.rallyId : Number(accounts.rallyId.toString());
-  const [participant] = deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, rallyId, accounts.owner);
-  const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
-  const [homeCity] = deriveCityPda(accounts.gameEngine, accounts.homeCityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [participant] = await deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, accounts.rallyId, accounts.owner);
+  const [rallyCity] = await deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
+  const [homeCity] = await deriveCityPda(accounts.gameEngine, accounts.homeCityId);
 
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },
@@ -400,7 +394,7 @@ export interface RallyCancelAccounts {
   /** Rally to cancel */
   rally: PublicKey;
   /** Rally ID */
-  rallyId: BN | number | bigint;
+  rallyId: number | bigint;
   /** Rally's city ID (where rally is gathering) */
   rallyCityId: number;
 }
@@ -421,13 +415,12 @@ export interface RallyCancelAccounts {
  *
  * On-chain data: None
  */
-export function createRallyCancelInstruction(
+export async function createRallyCancelInstruction(
   accounts: RallyCancelAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const rallyId = typeof accounts.rallyId === 'number' ? accounts.rallyId : Number(accounts.rallyId.toString());
-  const [participant] = deriveRallyParticipantPda(accounts.gameEngine, accounts.owner, rallyId, accounts.owner);
-  const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [participant] = await deriveRallyParticipantPda(accounts.gameEngine, accounts.owner, accounts.rallyId, accounts.owner);
+  const [rallyCity] = await deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
 
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },
@@ -523,7 +516,7 @@ export interface RallyProcessReturnAccounts {
   /** Rally creator's wallet (for participant PDA derivation) */
   rallyCreator: PublicKey;
   /** Rally ID (for participant PDA derivation) */
-  rallyId: BN | number | bigint;
+  rallyId: number | bigint;
   /** Participant's wallet (receives rent refund) */
   participantOwner: PublicKey;
   /** Rally's city ID */
@@ -562,18 +555,17 @@ export interface RallyProcessReturnAccounts {
  *
  * On-chain data: None
  */
-export function createRallyProcessReturnInstruction(
+export async function createRallyProcessReturnInstruction(
   accounts: RallyProcessReturnAccounts
-): TransactionInstruction {
-  const rallyId = typeof accounts.rallyId === 'number' ? accounts.rallyId : Number(accounts.rallyId.toString());
-  const [participant] = deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, rallyId, accounts.participantOwner);
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.participantOwner);
-  const [rallyCity] = deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
-  const [homeCity] = deriveCityPda(accounts.gameEngine, accounts.homeCityId);
+): Promise<TransactionInstruction> {
+  const [participant] = await deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, accounts.rallyId, accounts.participantOwner);
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.participantOwner);
+  const [rallyCity] = await deriveCityPda(accounts.gameEngine, accounts.rallyCityId);
+  const [homeCity] = await deriveCityPda(accounts.gameEngine, accounts.homeCityId);
 
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },
@@ -591,7 +583,7 @@ export function createRallyProcessReturnInstruction(
 
   // Add optional hero accounts when participant had a committed hero
   if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroTemplate] = await deriveHeroTemplatePda(accounts.heroTemplateId);
     // hero_mint is writable in case NFT transfer is needed (all slots full)
     keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
@@ -599,7 +591,7 @@ export function createRallyProcessReturnInstruction(
     // If hero needs to be transferred (all hero slots full on player),
     // include hero_collection and system_program
     if (accounts.heroNeedsTransfer) {
-      const [heroCollection] = deriveHeroCollectionPda();
+      const [heroCollection] = await deriveHeroCollectionPda();
       keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
       keys.push({ pubkey: SystemProgram.programId, isSigner: false, isWritable: false });
     }
@@ -626,7 +618,7 @@ export interface RallySpeedupAccounts {
   /** Rally creator's wallet (for participant PDA derivation) */
   rallyCreator: PublicKey;
   /** Rally ID (for participant PDA derivation) */
-  rallyId: BN | number | bigint;
+  rallyId: number | bigint;
   /** Participant being sped up (wallet address, not PDA) */
   participant: PublicKey;
 }
@@ -664,13 +656,12 @@ export interface RallySpeedupParams {
  * - speedup_type: u8
  * - speedup_tier: u8
  */
-export function createRallySpeedupInstruction(
+export async function createRallySpeedupInstruction(
   accounts: RallySpeedupAccounts,
   params: RallySpeedupParams
-): TransactionInstruction {
-  const [payerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const rallyId = typeof accounts.rallyId === 'number' ? accounts.rallyId : Number(accounts.rallyId.toString());
-  const [participantPda] = deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, rallyId, accounts.participant);
+): Promise<TransactionInstruction> {
+  const [payerPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [participantPda] = await deriveRallyParticipantPda(accounts.gameEngine, accounts.rallyCreator, accounts.rallyId, accounts.participant);
 
   const keys = [
     { pubkey: accounts.rally, isSigner: false, isWritable: true },

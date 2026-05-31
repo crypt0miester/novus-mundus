@@ -12,7 +12,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createInitializeConfigInstruction,
@@ -65,10 +64,10 @@ import {
   readSplTokenAmount,
 } from '../fixtures/svm';
 import { PROGRAM_ID } from '../../src/program';
-import { getAssociatedTokenAddressSync } from '../../src/index';
+import { getAssociatedTokenAddressAsync } from '../../src/index';
 
 /** A keypair's 32-byte pubkey doubles as a Pyth feed id (hex) for tests. */
-const pythFeedId = (pk: PublicKey): string => pk.toBuffer().toString('hex');
+const pythFeedId = (pk: PublicKey): string => Buffer.from(pk.toBytes()).toString('hex');
 import {
   PlayerFactory,
   type TestPlayer,
@@ -115,10 +114,15 @@ async function createShopReadyPlayer(
  */
 async function getNextFlashSaleId(ctx: TestContext): Promise<number> {
   const cfg = await fetchShopConfig(ctx.svm, ctx.gameEngine);
-  return cfg!.nextFlashSaleId.toNumber();
+  return Number(cfg!.nextFlashSaleId);
 }
 
 // Test Suite
+
+// LiteSVM bundles web3.js v1, whose PublicKey is nominally distinct from the v3
+// PublicKey the SDK uses. They are runtime-compatible; cast at the call boundary.
+const svmKey = (pk: PublicKey) =>
+  pk as unknown as Parameters<TestContext['svm']['getAccount']>[0];
 
 describe('Shop System', () => {
   let ctx: TestContext;
@@ -146,7 +150,7 @@ describe('Shop System', () => {
     });
 
     it('should update shop config (DAO)', async () => {
-      const ix = createUpdateConfigInstruction(
+      const ix = await createUpdateConfigInstruction(
         { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
         {} // Use defaults - this updates oracle config
       );
@@ -167,7 +171,7 @@ describe('Shop System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createUpdateConfigInstruction(
+          await createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: player.publicKey },
             {}
           )
@@ -183,7 +187,7 @@ describe('Shop System', () => {
     const TEST_ITEM_ID = 5001;
 
     it('should create shop item (DAO)', async () => {
-      const ix = createCreateItemInstruction(
+      const ix = await createCreateItemInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -196,7 +200,7 @@ describe('Shop System', () => {
           rarity: 1,
           quantityPerPurchase: 1,
           baseStatsBps: 100,
-          priceSolLamports: new BN(1000), // Very cheap for testing
+          priceSolLamports: BigInt(1000), // Very cheap for testing
           isActive: true,
         }
       );
@@ -211,10 +215,10 @@ describe('Shop System', () => {
     });
 
     it('should update shop item (DAO)', async () => {
-      const ix = createUpdateItemInstruction(
+      const ix = await createUpdateItemInstruction(
         { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey, itemId: TEST_ITEM_ID },
         {
-          priceSolLamports: new BN(2000),
+          priceSolLamports: BigInt(2000),
           isActive: true,
         }
       );
@@ -224,14 +228,14 @@ describe('Shop System', () => {
       // Verify item was updated
       const item = await fetchShopItem(ctx.svm, ctx.gameEngine, TEST_ITEM_ID);
       if (item) {
-        assertBnEquals(item.priceSolLamports, new BN(2000));
+        assertBnEquals(item.priceSolLamports, BigInt(2000));
       }
     });
 
     it('should reject item creation by non-DAO', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createCreateItemInstruction(
+      const ix = await createCreateItemInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: player.publicKey,
@@ -244,7 +248,7 @@ describe('Shop System', () => {
           rarity: 1,
           quantityPerPurchase: 1,
           baseStatsBps: 100,
-          priceSolLamports: new BN(1000000),
+          priceSolLamports: BigInt(1000000),
           isActive: true,
         }
       );
@@ -257,7 +261,7 @@ describe('Shop System', () => {
     });
 
     it('should deactivate item (DAO)', async () => {
-      const ix = createUpdateItemInstruction(
+      const ix = await createUpdateItemInstruction(
         { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey, itemId: TEST_ITEM_ID },
         {
           isActive: false,
@@ -273,7 +277,7 @@ describe('Shop System', () => {
       }
 
       // Re-activate for other tests
-      const reactivateIx = createUpdateItemInstruction(
+      const reactivateIx = await createUpdateItemInstruction(
         { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey, itemId: TEST_ITEM_ID },
         { isActive: true }
       );
@@ -287,7 +291,7 @@ describe('Shop System', () => {
     it('should purchase shop item', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
 
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
@@ -302,7 +306,7 @@ describe('Shop System', () => {
     it('should purchase multiple quantity', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
 
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 5 }
       );
@@ -316,7 +320,7 @@ describe('Shop System', () => {
     it('should reject purchase of non-existent item', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
 
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 999999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
@@ -332,7 +336,7 @@ describe('Shop System', () => {
       const player = await createShopReadyPlayer(ctx, factory);
 
       // Zero quantity should fail (InvalidParameter)
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 0 }
       );
@@ -353,7 +357,7 @@ describe('Shop System', () => {
     it('should create bundle (DAO)', async () => {
       const bundleId = TEST_BUNDLE_ID;
 
-      const ix = createCreateBundleInstruction(
+      const ix = await createCreateBundleInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -369,9 +373,9 @@ describe('Shop System', () => {
             { itemId: 9999, quantity: 5 },
             { itemId: 9998, quantity: 5 },
           ],
-          priceSolLamports: new BN(5000), // 5000 lamports
-          availableFrom: new BN(0),
-          availableUntil: new BN(0),
+          priceSolLamports: BigInt(5000), // 5000 lamports
+          availableFrom: BigInt(0),
+          availableUntil: BigInt(0),
           isActive: true,
         }
       );
@@ -380,10 +384,10 @@ describe('Shop System', () => {
     });
 
     it('should update bundle (DAO)', async () => {
-      const ix = createUpdateBundleInstruction(
+      const ix = await createUpdateBundleInstruction(
         { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey, bundleId: TEST_BUNDLE_ID },
         {
-          priceSolLamports: new BN(4000000), // Discount
+          priceSolLamports: BigInt(4000000), // Discount
           isActive: true,
         }
       );
@@ -396,10 +400,10 @@ describe('Shop System', () => {
 
       // Get the shop item PDAs for items in the bundle
       const gameEngine = ctx.gameEngine;
-      const [shopItem1] = deriveShopItemPda(gameEngine, 9999);
-      const [shopItem2] = deriveShopItemPda(gameEngine, 9998);
+      const [shopItem1] = await deriveShopItemPda(gameEngine, 9999);
+      const [shopItem2] = await deriveShopItemPda(gameEngine, 9998);
 
-      const ix = createPurchaseBundleInstruction(
+      const ix = await createPurchaseBundleInstruction(
         {
           gameEngine: ctx.gameEngine,
           buyer: player.publicKey,
@@ -422,7 +426,7 @@ describe('Shop System', () => {
 
       // Create a subscriber-only bundle
       const bundleId = Date.now() % 10000 + 5000;
-      const createIx = createCreateBundleInstruction(
+      const createIx = await createCreateBundleInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -435,9 +439,9 @@ describe('Shop System', () => {
           requiresSubscription: 1, // Requires subscription
           savingsBps: 1000,
           items: [{ itemId: 9999, quantity: 1 }, { itemId: 9998, quantity: 1 }],
-          priceSolLamports: new BN(1000),
-          availableFrom: new BN(0),
-          availableUntil: new BN(0),
+          priceSolLamports: BigInt(1000),
+          availableFrom: BigInt(0),
+          availableUntil: BigInt(0),
           isActive: true,
         }
       );
@@ -445,10 +449,10 @@ describe('Shop System', () => {
 
       // Try to purchase without subscription
       const gameEngine = ctx.gameEngine;
-      const [shopItem1] = deriveShopItemPda(gameEngine, 9999);
-      const [shopItem2] = deriveShopItemPda(gameEngine, 9998);
+      const [shopItem1] = await deriveShopItemPda(gameEngine, 9999);
+      const [shopItem2] = await deriveShopItemPda(gameEngine, 9998);
 
-      const purchaseIx = createPurchaseBundleInstruction(
+      const purchaseIx = await createPurchaseBundleInstruction(
         {
           gameEngine: ctx.gameEngine,
           buyer: player.publicKey,
@@ -473,9 +477,9 @@ describe('Shop System', () => {
     it('should reject purchase of non-existent flash sale', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
 
-      const mockItemAccount = Keypair.generate().publicKey;
+      const mockItemAccount = (await Keypair.generate()).publicKey;
 
-      const ix = createPurchaseFlashSaleInstruction(
+      const ix = await createPurchaseFlashSaleInstruction(
         {
           gameEngine: ctx.gameEngine,
           buyer: player.publicKey,
@@ -500,7 +504,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -511,7 +515,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 1),
+              startsAt: BigInt(onChainNow + 1),
               durationSecs: 3600,
               maxStock: 50,
             },
@@ -524,12 +528,12 @@ describe('Shop System', () => {
       await advanceTime(ctx.svm, 2);
 
       const player = await createShopReadyPlayer(ctx, factory);
-      const [itemPda] = deriveShopItemPda(ctx.gameEngine, 9999);
+      const [itemPda] = await deriveShopItemPda(ctx.gameEngine, 9999);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseFlashSaleInstruction(
+          await createPurchaseFlashSaleInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: player.publicKey,
@@ -551,7 +555,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -562,7 +566,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 10_000), // far in the future
+              startsAt: BigInt(onChainNow + 10_000), // far in the future
               durationSecs: 3600,
               maxStock: 50,
             },
@@ -572,14 +576,14 @@ describe('Shop System', () => {
       );
 
       const player = await createShopReadyPlayer(ctx, factory);
-      const [itemPda] = deriveShopItemPda(ctx.gameEngine, 9999);
+      const [itemPda] = await deriveShopItemPda(ctx.gameEngine, 9999);
 
       // Status is Announced; auto-flip won't trigger (now < starts_at);
       // purchase rejects with SaleNotActive.
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createPurchaseFlashSaleInstruction(
+          await createPurchaseFlashSaleInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: player.publicKey,
@@ -601,7 +605,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -612,7 +616,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 1),
+              startsAt: BigInt(onChainNow + 1),
               durationSecs: 3600, // min duration
               maxStock: 50,
             },
@@ -625,12 +629,12 @@ describe('Shop System', () => {
       await advanceTime(ctx.svm, 3700);
 
       const player = await createShopReadyPlayer(ctx, factory);
-      const [itemPda] = deriveShopItemPda(ctx.gameEngine, 9999);
+      const [itemPda] = await deriveShopItemPda(ctx.gameEngine, 9999);
 
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createPurchaseFlashSaleInstruction(
+          await createPurchaseFlashSaleInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: player.publicKey,
@@ -649,13 +653,13 @@ describe('Shop System', () => {
       const onChainNow = await getCurrentTimestamp(ctx.svm);
       const saleId = await getNextFlashSaleId(ctx);
 
-      const rando = Keypair.generate();
-      ctx.svm.airdrop(rando.publicKey, BigInt(1_000_000_000));
+      const rando = (await Keypair.generate());
+      ctx.svm.airdrop(svmKey(rando.publicKey), BigInt(1_000_000_000));
 
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: rando.publicKey,
               daoAuthority: rando.publicKey, // non-DAO signer
@@ -666,7 +670,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 100),
+              startsAt: BigInt(onChainNow + 100),
               durationSecs: 3600,
               maxStock: 50,
             },
@@ -683,7 +687,7 @@ describe('Shop System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -694,7 +698,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 100),
+              startsAt: BigInt(onChainNow + 100),
               durationSecs: 60, // below min (3600s)
               maxStock: 50,
             },
@@ -708,13 +712,18 @@ describe('Shop System', () => {
   // Allowed Payment Token Tests
 
   describe('Allowed Payment Tokens', () => {
-    const [testTokenMint] = deriveNoviMintPda(); // Use real on-chain NOVI mint (82 bytes)
+    let testTokenMint: PublicKey; // Use real on-chain NOVI mint (82 bytes)
     // A Pyth feed is a bare 32-byte feed id (no account). create_allowed_token
     // just stores it, so these config-only tests need nothing seeded on-chain.
-    const mockPythFeedId = pythFeedId(Keypair.generate().publicKey);
+    let mockPythFeedId: string;
+
+    beforeAll(async () => {
+      [testTokenMint] = await deriveNoviMintPda();
+      mockPythFeedId = pythFeedId((await Keypair.generate()).publicKey);
+    });
 
     it('should create allowed token (DAO)', async () => {
-      const ix = createCreateAllowedTokenInstruction(
+      const ix = await createCreateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -735,13 +744,13 @@ describe('Shop System', () => {
 
       // Verify allowed token was created
       const gameEngine = ctx.gameEngine;
-      const [allowedTokenPda] = deriveAllowedTokenPda(gameEngine, testTokenMint);
-      const accountInfo = await ctx.svm.getAccount(allowedTokenPda);
+      const [allowedTokenPda] = await deriveAllowedTokenPda(gameEngine, testTokenMint);
+      const accountInfo = await ctx.svm.getAccount(svmKey(allowedTokenPda));
       expect(accountInfo).not.toBeNull();
     });
 
     it('should update allowed token (DAO)', async () => {
-      const ixs = createUpdateAllowedTokenInstruction(
+      const ixs = await createUpdateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -760,7 +769,7 @@ describe('Shop System', () => {
 
     it('should update discount on allowed token (DAO)', async () => {
       // Set discount to 500 bps (5%)
-      const ixs = createUpdateAllowedTokenInstruction(
+      const ixs = await createUpdateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -776,7 +785,7 @@ describe('Shop System', () => {
       await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
       // Reset discount to 0
-      const resetIxs = createUpdateAllowedTokenInstruction(
+      const resetIxs = await createUpdateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -791,14 +800,14 @@ describe('Shop System', () => {
 
     it('should close allowed token (DAO)', async () => {
       // Seed a real SPL mint so it passes the data_len == 82 check
-      const tokenToClose = Keypair.generate().publicKey;
+      const tokenToClose = (await Keypair.generate()).publicKey;
       seedSplMint(ctx.svm, tokenToClose, {
         decimals: 9,
         mintAuthority: ctx.daoAuthority.publicKey,
       });
 
       // First create it
-      const createIx = createCreateAllowedTokenInstruction(
+      const createIx = await createCreateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -818,7 +827,7 @@ describe('Shop System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(createIx), [ctx.daoAuthority]);
 
       // Now close it
-      const closeIx = createCloseAllowedTokenInstruction({
+      const closeIx = await createCloseAllowedTokenInstruction({
         gameEngine: ctx.gameEngine,
         daoAuthority: ctx.daoAuthority.publicKey,
         tokenMint: tokenToClose,
@@ -828,16 +837,16 @@ describe('Shop System', () => {
 
       // Verify it was closed
       const gameEngine = ctx.gameEngine;
-      const [allowedTokenPda] = deriveAllowedTokenPda(gameEngine, tokenToClose);
-      const accountInfo = await ctx.svm.getAccount(allowedTokenPda);
+      const [allowedTokenPda] = await deriveAllowedTokenPda(gameEngine, tokenToClose);
+      const accountInfo = await ctx.svm.getAccount(svmKey(allowedTokenPda));
       expect(accountInfo).toBeNull();
     });
 
     it('should reject allowed token creation by non-DAO', async () => {
       const player = await factory.createPlayer({ initialize: true });
-      const nonDaoToken = Keypair.generate().publicKey;
+      const nonDaoToken = (await Keypair.generate()).publicKey;
 
-      const ix = createCreateAllowedTokenInstruction(
+      const ix = await createCreateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: player.publicKey,
@@ -864,7 +873,7 @@ describe('Shop System', () => {
     it('should reject allowed token update by non-DAO', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ixs = createUpdateAllowedTokenInstruction(
+      const ixs = await createUpdateAllowedTokenInstruction(
         {
           gameEngine: ctx.gameEngine,
           daoAuthority: player.publicKey,
@@ -887,7 +896,7 @@ describe('Shop System', () => {
     it('should reject allowed token close by non-DAO', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createCloseAllowedTokenInstruction({
+      const ix = await createCloseAllowedTokenInstruction({
         gameEngine: ctx.gameEngine,
         daoAuthority: player.publicKey,
         tokenMint: testTokenMint,
@@ -906,9 +915,9 @@ describe('Shop System', () => {
   describe('Payments', () => {
     it('should accept SOL payment for item', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
-      const solBefore = (await ctx.svm.getBalance(player.publicKey))!;
+      const solBefore = (await ctx.svm.getBalance(svmKey(player.publicKey)))!;
 
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
@@ -916,15 +925,15 @@ describe('Shop System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify SOL was deducted
-      const solAfter = await ctx.svm.getBalance(player.publicKey);
+      const solAfter = await ctx.svm.getBalance(svmKey(player.publicKey));
       expect(solAfter).toBeLessThan(solBefore);
     });
 
     it('should transfer payment to treasury', async () => {
       const player = await createShopReadyPlayer(ctx, factory);
-      const treasuryBefore = (await ctx.svm.getBalance(ctx.treasury.publicKey))!;
+      const treasuryBefore = (await ctx.svm.getBalance(svmKey(ctx.treasury.publicKey)))!;
 
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
@@ -932,7 +941,7 @@ describe('Shop System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
       // Verify treasury received payment
-      const treasuryAfter = await ctx.svm.getBalance(ctx.treasury.publicKey);
+      const treasuryAfter = await ctx.svm.getBalance(svmKey(ctx.treasury.publicKey));
       expect(treasuryAfter).toBeGreaterThan(treasuryBefore);
     });
 
@@ -946,7 +955,7 @@ describe('Shop System', () => {
 
       // A distinct mint for the payment token (NOVI's allowed-token PDA is
       // already taken by the "Allowed Payment Tokens" describe block).
-      const tokenMintKp = Keypair.generate();
+      const tokenMintKp = (await Keypair.generate());
       const tokenMint = tokenMintKp.publicKey;
       seedSplMint(ctx.svm, tokenMint, {
         decimals: 9,
@@ -957,15 +966,15 @@ describe('Shop System', () => {
       // token). Each keypair's pubkey doubles as the 32-byte feed id; the
       // PriceUpdateV2 accounts are seeded with live prices just before the
       // purchase (below).
-      const solFeed = Keypair.generate().publicKey;
-      const tokenFeed = Keypair.generate().publicKey;
+      const solFeed = (await Keypair.generate()).publicKey;
+      const tokenFeed = (await Keypair.generate()).publicKey;
 
       // Register the SOL feed in shop config (generous staleness so slot
       // drift between setup and purchase never trips the freshness check).
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateConfigInstruction(
+          await createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
             {
               solPythFeed: pythFeedId(solFeed),
@@ -981,7 +990,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateAllowedTokenInstruction(
+          await createCreateAllowedTokenInstruction(
             {
               gameEngine: ctx.gameEngine,
               payer: ctx.daoAuthority.publicKey,
@@ -1003,8 +1012,8 @@ describe('Shop System', () => {
 
       // Buyer + treasury ATAs for the payment token.
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-      const treasuryAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.publicKey);
       const BUYER_START = 1_000_000_000_000n; // 1000 tokens (9 decimals)
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
@@ -1019,20 +1028,20 @@ describe('Shop System', () => {
 
       // Re-seed the feeds with live prices + a fresh pub_slot right before the
       // purchase: SOL/USD = $150, TOKEN/USD = $1 (both at expo -8).
-      seedMockPythFeed(ctx.svm, solFeed, solFeed.toBuffer(), { price: 15_000_000_000, conf: 0, expo: -8 });
-      seedMockPythFeed(ctx.svm, tokenFeed, tokenFeed.toBuffer(), { price: 100_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, solFeed, Buffer.from(solFeed.toBytes()), { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, tokenFeed, Buffer.from(tokenFeed.toBytes()), { price: 100_000_000, conf: 0, expo: -8 });
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseItemInstruction(
+          await createPurchaseItemInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: buyer.publicKey,
               itemId: 9999,
               treasury: ctx.treasury.publicKey,
               tokenPayment: {
-                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                allowedToken: (await deriveAllowedTokenPda(ctx.gameEngine, tokenMint))[0],
                 tokenMint,
                 buyerTokenAta: buyerAta,
                 treasuryTokenAta: treasuryAta,
@@ -1060,21 +1069,21 @@ describe('Shop System', () => {
       // to game_engine.treasury_wallet. Here the buyer passes their OWN token
       // account as treasury_token_ata — i.e. tries to pay themselves. The
       // on-chain owner check must reject it before any transfer settles.
-      const tokenMint = Keypair.generate().publicKey;
+      const tokenMint = (await Keypair.generate()).publicKey;
       seedSplMint(ctx.svm, tokenMint, {
         decimals: 9,
         mintAuthority: ctx.daoAuthority.publicKey,
       });
 
-      const solFeed = Keypair.generate().publicKey;
-      const tokenFeed = Keypair.generate().publicKey;
-      seedMockPythFeed(ctx.svm, solFeed, solFeed.toBuffer(), { price: 15_000_000_000, conf: 0, expo: -8 });
-      seedMockPythFeed(ctx.svm, tokenFeed, tokenFeed.toBuffer(), { price: 100_000_000, conf: 0, expo: -8 });
+      const solFeed = (await Keypair.generate()).publicKey;
+      const tokenFeed = (await Keypair.generate()).publicKey;
+      seedMockPythFeed(ctx.svm, solFeed, Buffer.from(solFeed.toBytes()), { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, tokenFeed, Buffer.from(tokenFeed.toBytes()), { price: 100_000_000, conf: 0, expo: -8 });
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateConfigInstruction(
+          await createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
             { solPythFeed: pythFeedId(solFeed), solMaxStalenessSlots: 1_000_000, solConfidenceThresholdBps: 1000 },
           ),
@@ -1085,7 +1094,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateAllowedTokenInstruction(
+          await createCreateAllowedTokenInstruction(
             {
               gameEngine: ctx.gameEngine,
               payer: ctx.daoAuthority.publicKey,
@@ -1106,7 +1115,7 @@ describe('Shop System', () => {
       );
 
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
       const BUYER_START = 1_000_000_000_000n;
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
@@ -1118,14 +1127,14 @@ describe('Shop System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createPurchaseItemInstruction(
+          await createPurchaseItemInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: buyer.publicKey,
               itemId: 9999,
               treasury: ctx.treasury.publicKey,
               tokenPayment: {
-                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                allowedToken: (await deriveAllowedTokenPda(ctx.gameEngine, tokenMint))[0],
                 tokenMint,
                 buyerTokenAta: buyerAta,
                 treasuryTokenAta: buyerAta, // not the treasury's ATA — must be rejected
@@ -1152,7 +1161,7 @@ describe('Shop System', () => {
       // then reads both feeds. Switchboard feed values are scaled to 10^18.
       const E18 = 10n ** 18n;
 
-      const tokenMint = Keypair.generate().publicKey;
+      const tokenMint = (await Keypair.generate()).publicKey;
       seedSplMint(ctx.svm, tokenMint, {
         decimals: 9,
         mintAuthority: ctx.daoAuthority.publicKey,
@@ -1160,10 +1169,10 @@ describe('Shop System', () => {
 
       // The Switchboard queue, the oracle ed25519 signing key, and the two
       // 32-byte feed ids (SOL/USD in shop config, TOKEN/USD on the token).
-      const switchboardQueue = Keypair.generate().publicKey;
-      const oracleSigningKey = Keypair.generate().publicKey.toBuffer();
-      const solFeedId = Keypair.generate().publicKey;
-      const tokenFeedId = Keypair.generate().publicKey;
+      const switchboardQueue = (await Keypair.generate()).publicKey;
+      const oracleSigningKey = (await Keypair.generate()).publicKey.toBytes();
+      const solFeedId = (await Keypair.generate()).publicKey;
+      const tokenFeedId = (await Keypair.generate()).publicKey;
 
       // Mock queue — registers the oracle key the quote is authorized against.
       seedMockSwitchboardQueue(ctx.svm, switchboardQueue, oracleSigningKey);
@@ -1172,7 +1181,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateConfigInstruction(
+          await createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
             {
               solSwitchboardFeed: solFeedId,
@@ -1189,7 +1198,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateAllowedTokenInstruction(
+          await createCreateAllowedTokenInstruction(
             {
               gameEngine: ctx.gameEngine,
               payer: ctx.daoAuthority.publicKey,
@@ -1210,8 +1219,8 @@ describe('Shop System', () => {
       );
 
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-      const treasuryAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.publicKey);
       const BUYER_START = 1_000_000_000_000n;
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
@@ -1227,27 +1236,27 @@ describe('Shop System', () => {
       // Seed the OracleQuote PDA (as a crank would leave it) carrying
       // SOL/USD = $150 and TOKEN/USD = $1, plus the matching SlotHashes entry.
       // Done right before the purchase so recent_slot tracks the clock.
-      const oracleQuote = seedMockOracleQuote(ctx.svm, {
+      const oracleQuote = await seedMockOracleQuote(ctx.svm, {
         programId: PROGRAM_ID,
         queue: switchboardQueue,
         oracleSigningKey,
         feeds: [
-          { feedId: solFeedId.toBuffer(), value: 150n * E18 },
-          { feedId: tokenFeedId.toBuffer(), value: 1n * E18 },
+          { feedId: solFeedId.toBytes(), value: 150n * E18 },
+          { feedId: tokenFeedId.toBytes(), value: 1n * E18 },
         ],
       });
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseItemInstruction(
+          await createPurchaseItemInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: buyer.publicKey,
               itemId: 9999,
               treasury: ctx.treasury.publicKey,
               tokenPayment: {
-                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                allowedToken: (await deriveAllowedTokenPda(ctx.gameEngine, tokenMint))[0],
                 tokenMint,
                 buyerTokenAta: buyerAta,
                 treasuryTokenAta: treasuryAta,
@@ -1273,7 +1282,7 @@ describe('Shop System', () => {
       // type. A Pyth SOL feed + Switchboard token feed must be rejected.
       const E18 = 10n ** 18n;
 
-      const tokenMintKp = Keypair.generate();
+      const tokenMintKp = (await Keypair.generate());
       const tokenMint = tokenMintKp.publicKey;
       seedSplMint(ctx.svm, tokenMint, {
         decimals: 9,
@@ -1281,15 +1290,15 @@ describe('Shop System', () => {
       });
 
       // SOL feed = Pyth, token feed = Switchboard.
-      const solPythFeed = Keypair.generate().publicKey;
-      const tokenSbFeed = Keypair.generate().publicKey;
+      const solPythFeed = (await Keypair.generate()).publicKey;
+      const tokenSbFeed = (await Keypair.generate()).publicKey;
       seedMockSwitchboardFeed(ctx.svm, tokenSbFeed);
 
       // Config registers the Pyth SOL feed...
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateConfigInstruction(
+          await createUpdateConfigInstruction(
             { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
             {
               solPythFeed: pythFeedId(solPythFeed),
@@ -1305,7 +1314,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateAllowedTokenInstruction(
+          await createCreateAllowedTokenInstruction(
             {
               gameEngine: ctx.gameEngine,
               payer: ctx.daoAuthority.publicKey,
@@ -1326,8 +1335,8 @@ describe('Shop System', () => {
       );
 
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-      const treasuryAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.publicKey);
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
         owner: buyer.publicKey,
@@ -1339,7 +1348,7 @@ describe('Shop System', () => {
         amount: 0n,
       });
 
-      seedMockPythFeed(ctx.svm, solPythFeed, solPythFeed.toBuffer(), { price: 15_000_000_000, conf: 0, expo: -8 });
+      seedMockPythFeed(ctx.svm, solPythFeed, Buffer.from(solPythFeed.toBytes()), { price: 15_000_000_000, conf: 0, expo: -8 });
       seedMockSwitchboardFeed(ctx.svm, tokenSbFeed, { value: 1n * E18 });
 
       // SOL feed is Pyth-owned, token feed is Switchboard-owned → the
@@ -1347,14 +1356,14 @@ describe('Shop System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createPurchaseItemInstruction(
+          await createPurchaseItemInstruction(
             {
               gameEngine: ctx.gameEngine,
               buyer: buyer.publicKey,
               itemId: 9999,
               treasury: ctx.treasury.publicKey,
               tokenPayment: {
-                allowedToken: deriveAllowedTokenPda(ctx.gameEngine, tokenMint)[0],
+                allowedToken: (await deriveAllowedTokenPda(ctx.gameEngine, tokenMint))[0],
                 tokenMint,
                 buyerTokenAta: buyerAta,
                 treasuryTokenAta: treasuryAta,
@@ -1381,7 +1390,7 @@ describe('Shop System', () => {
     });
 
     it('should create a daily deal', async () => {
-      const ix = createCreateDailyDealInstruction(
+      const ix = await createCreateDailyDealInstruction(
         {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -1392,13 +1401,13 @@ describe('Shop System', () => {
 
       await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
-      const [dailyDealPda] = deriveDailyDealPda(ctx.gameEngine, 0);
+      const [dailyDealPda] = await deriveDailyDealPda(ctx.gameEngine, 0);
       const exists = await accountExists(ctx.svm, dailyDealPda);
       expect(exists).toBe(true);
     });
 
     it('should rotate daily deal to new item', async () => {
-      const ix = createRotateDailyDealInstruction(
+      const ix = await createRotateDailyDealInstruction(
         {
           daoAuthority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1410,7 +1419,7 @@ describe('Shop System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
       // Verify the account still exists after rotation
-      const [dailyDealPda] = deriveDailyDealPda(ctx.gameEngine, 0);
+      const [dailyDealPda] = await deriveDailyDealPda(ctx.gameEngine, 0);
       const exists = await accountExists(ctx.svm, dailyDealPda);
       expect(exists).toBe(true);
     });
@@ -1423,7 +1432,7 @@ describe('Shop System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
       const weekNumber = Math.floor(now / 604800);
 
-      const ix = createCreateWeeklySaleInstruction(
+      const ix = await createCreateWeeklySaleInstruction(
         {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -1442,7 +1451,7 @@ describe('Shop System', () => {
 
       await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
-      const [weeklySalePda] = deriveWeeklySalePda(ctx.gameEngine, weekNumber);
+      const [weeklySalePda] = await deriveWeeklySalePda(ctx.gameEngine, weekNumber);
       const exists = await accountExists(ctx.svm, weeklySalePda);
       expect(exists).toBe(true);
     });
@@ -1456,7 +1465,7 @@ describe('Shop System', () => {
       const eventId = 100;
       const now = await getCurrentTimestamp(ctx.svm);
 
-      const createEventIx = createCreateEventInstruction(
+      const createEventIx = await createCreateEventInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
@@ -1477,9 +1486,9 @@ describe('Shop System', () => {
       );
       await sendTransaction(ctx.svm, new Transaction().add(createEventIx), [ctx.daoAuthority]);
 
-      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+      const [eventPda] = await deriveEventPda(ctx.gameEngine, eventId);
 
-      const ix = createCreateSeasonalSaleInstruction(
+      const ix = await createCreateSeasonalSaleInstruction(
         {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -1502,7 +1511,7 @@ describe('Shop System', () => {
 
       await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
-      const [seasonalSalePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+      const [seasonalSalePda] = await deriveSeasonalSalePda(ctx.gameEngine, eventPda);
       const exists = await accountExists(ctx.svm, seasonalSalePda);
       expect(exists).toBe(true);
     });
@@ -1515,7 +1524,7 @@ describe('Shop System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
       const proposalId = 1;
 
-      const ix = createCreateDaoPromotionInstruction(
+      const ix = await createCreateDaoPromotionInstruction(
         {
           payer: ctx.daoAuthority.publicKey,
           daoAuthority: ctx.daoAuthority.publicKey,
@@ -1538,7 +1547,7 @@ describe('Shop System', () => {
 
       await sendTransaction(ctx.svm, new Transaction().add(ix), [ctx.daoAuthority]);
 
-      const [daoPromotionPda] = deriveDaoPromotionPda(ctx.gameEngine, proposalId);
+      const [daoPromotionPda] = await deriveDaoPromotionPda(ctx.gameEngine, proposalId);
       const exists = await accountExists(ctx.svm, daoPromotionPda);
       expect(exists).toBe(true);
     });
@@ -1550,10 +1559,10 @@ describe('Shop System', () => {
     it('should track item stock changes', async () => {
       const gameEngine = ctx.gameEngine;
       const itemBefore = await fetchShopItem(ctx.svm, gameEngine, 1);
-      const stockBefore = itemBefore?.currentGlobalStock?.toNumber() || 0;
+      const stockBefore = Number(itemBefore?.currentGlobalStock) || 0;
 
       const player = await createShopReadyPlayer(ctx, factory);
-      const ix = createPurchaseItemInstruction(
+      const ix = await createPurchaseItemInstruction(
         { gameEngine: ctx.gameEngine, buyer: player.publicKey, itemId: 9999, treasury: ctx.treasury.publicKey },
         { quantity: 1 }
       );
@@ -1563,7 +1572,7 @@ describe('Shop System', () => {
       const itemAfter = await fetchShopItem(ctx.svm, gameEngine, 1);
       if (itemAfter && itemBefore) {
         // Stock should decrease after purchase (if limited stock)
-        const stockAfter = itemAfter.currentGlobalStock.toNumber();
+        const stockAfter = Number(itemAfter.currentGlobalStock);
         expect(stockAfter).toBeLessThanOrEqual(stockBefore);
       }
     });
@@ -1586,7 +1595,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1597,7 +1606,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 10),
+              startsAt: BigInt(onChainNow + 10),
               durationSecs: 3600,
               maxStock: 50,
             },
@@ -1606,15 +1615,15 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [salePda] = deriveFlashSalePda(ctx.gameEngine, saleId);
-      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+      const [salePda] = await deriveFlashSalePda(ctx.gameEngine, saleId);
+      expect(await ctx.svm.getAccount(svmKey(salePda))).not.toBeNull();
 
       // DAO closes immediately (still scheduled). Non-DAO would hit
       // SaleNotActive since the sale hasn't ended; DAO short-circuits that.
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCloseSaleInstruction(
+          await createCloseSaleInstruction(
             {
               authority: ctx.daoAuthority.publicKey,
               gameEngine: ctx.gameEngine,
@@ -1626,7 +1635,7 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+      expect(await ctx.svm.getAccount(svmKey(salePda))).toBeNull();
     });
 
     it('should close a WeeklySale', async () => {
@@ -1638,7 +1647,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateWeeklySaleInstruction(
+          await createCreateWeeklySaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1658,13 +1667,13 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [salePda] = deriveWeeklySalePda(ctx.gameEngine, weekNumber);
-      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+      const [salePda] = await deriveWeeklySalePda(ctx.gameEngine, weekNumber);
+      expect(await ctx.svm.getAccount(svmKey(salePda))).not.toBeNull();
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCloseSaleInstruction(
+          await createCloseSaleInstruction(
             {
               authority: ctx.daoAuthority.publicKey,
               gameEngine: ctx.gameEngine,
@@ -1676,7 +1685,7 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+      expect(await ctx.svm.getAccount(svmKey(salePda))).toBeNull();
     });
 
     it('should close a SeasonalSale', async () => {
@@ -1686,7 +1695,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateEventInstruction(
+          await createCreateEventInstruction(
             { authority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine, eventId },
             {
               name: 'CloseTestEvent',
@@ -1705,12 +1714,12 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+      const [eventPda] = await deriveEventPda(ctx.gameEngine, eventId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateSeasonalSaleInstruction(
+          await createCreateSeasonalSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1731,13 +1740,13 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [salePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
-      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+      const [salePda] = await deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+      expect(await ctx.svm.getAccount(svmKey(salePda))).not.toBeNull();
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCloseSaleInstruction(
+          await createCloseSaleInstruction(
             {
               authority: ctx.daoAuthority.publicKey,
               gameEngine: ctx.gameEngine,
@@ -1749,7 +1758,7 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+      expect(await ctx.svm.getAccount(svmKey(salePda))).toBeNull();
     });
 
     it('should close a DAOPromotion', async () => {
@@ -1759,7 +1768,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateDaoPromotionInstruction(
+          await createCreateDaoPromotionInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1783,13 +1792,13 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [salePda] = deriveDaoPromotionPda(ctx.gameEngine, proposalId);
-      expect(await ctx.svm.getAccount(salePda)).not.toBeNull();
+      const [salePda] = await deriveDaoPromotionPda(ctx.gameEngine, proposalId);
+      expect(await ctx.svm.getAccount(svmKey(salePda))).not.toBeNull();
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCloseSaleInstruction(
+          await createCloseSaleInstruction(
             {
               authority: ctx.daoAuthority.publicKey,
               gameEngine: ctx.gameEngine,
@@ -1801,7 +1810,7 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      expect(await ctx.svm.getAccount(salePda)).toBeNull();
+      expect(await ctx.svm.getAccount(svmKey(salePda))).toBeNull();
     });
 
     it('should reject close by non-DAO when sale is still active', async () => {
@@ -1814,7 +1823,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateFlashSaleInstruction(
+          await createCreateFlashSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1825,7 +1834,7 @@ describe('Shop System', () => {
               itemId: 9999,
               isBundle: false,
               discountBps: 2000,
-              startsAt: new BN(onChainNow + 10),
+              startsAt: BigInt(onChainNow + 10),
               durationSecs: 3600,
               maxStock: 50,
             },
@@ -1834,13 +1843,13 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const rando = Keypair.generate();
-      ctx.svm.airdrop(rando.publicKey, BigInt(1_000_000_000));
+      const rando = (await Keypair.generate());
+      ctx.svm.airdrop(svmKey(rando.publicKey), BigInt(1_000_000_000));
 
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createCloseSaleInstruction(
+          await createCloseSaleInstruction(
             {
               authority: rando.publicKey,
               gameEngine: ctx.gameEngine,
@@ -1864,7 +1873,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateEventInstruction(
+          await createCreateEventInstruction(
             { authority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine, eventId },
             {
               name: 'ActivateTestSeason',
@@ -1883,12 +1892,12 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+      const [eventPda] = await deriveEventPda(ctx.gameEngine, eventId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateSeasonalSaleInstruction(
+          await createCreateSeasonalSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1909,24 +1918,24 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [salePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+      const [salePda] = await deriveSeasonalSalePda(ctx.gameEngine, eventPda);
 
       // Initial status: Scheduled (0)
-      const scheduled = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      const scheduled = deserializeSeasonalSale((await ctx.svm.getAccount(svmKey(salePda)))!.data);
       expect(scheduled.status).toBe(0);
 
       // Try to activate before starts_at — status stays Scheduled (no error, no transition)
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createActivateSaleInstruction(
+          await createActivateSaleInstruction(
             { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
             { saleType: 0, event: eventPda },
           ),
         ),
         [ctx.daoAuthority],
       );
-      const stillScheduled = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      const stillScheduled = deserializeSeasonalSale((await ctx.svm.getAccount(svmKey(salePda)))!.data);
       expect(stillScheduled.status).toBe(0);
 
       // Advance past starts_at and activate → Active
@@ -1934,14 +1943,14 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createActivateSaleInstruction(
+          await createActivateSaleInstruction(
             { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
             { saleType: 0, event: eventPda },
           ),
         ),
         [ctx.daoAuthority],
       );
-      const active = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      const active = deserializeSeasonalSale((await ctx.svm.getAccount(svmKey(salePda)))!.data);
       expect(active.status).toBe(1);
 
       // Advance past ends_at and activate → Ended
@@ -1949,14 +1958,14 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createActivateSaleInstruction(
+          await createActivateSaleInstruction(
             { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
             { saleType: 0, event: eventPda },
           ),
         ),
         [ctx.daoAuthority],
       );
-      const ended = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      const ended = deserializeSeasonalSale((await ctx.svm.getAccount(svmKey(salePda)))!.data);
       expect(ended.status).toBe(2);
     }, 60_000);
 
@@ -1969,7 +1978,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateDaoPromotionInstruction(
+          await createCreateDaoPromotionInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -1993,10 +2002,10 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [promoPda] = deriveDaoPromotionPda(ctx.gameEngine, proposalId);
+      const [promoPda] = await deriveDaoPromotionPda(ctx.gameEngine, proposalId);
 
       // Initial: Approved (0) — same byte slot as Scheduled
-      const approved = deserializeDaoPromotion((await ctx.svm.getAccount(promoPda))!.data);
+      const approved = deserializeDaoPromotion((await ctx.svm.getAccount(svmKey(promoPda)))!.data);
       expect(approved.status).toBe(0);
 
       // Advance past starts_at and activate → Active
@@ -2004,14 +2013,14 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createActivateSaleInstruction(
+          await createActivateSaleInstruction(
             { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
             { saleType: 1, proposalId },
           ),
         ),
         [ctx.daoAuthority],
       );
-      const active = deserializeDaoPromotion((await ctx.svm.getAccount(promoPda))!.data);
+      const active = deserializeDaoPromotion((await ctx.svm.getAccount(svmKey(promoPda)))!.data);
       expect(active.status).toBe(1);
 
       // Advance past ends_at and activate → Ended
@@ -2019,14 +2028,14 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createActivateSaleInstruction(
+          await createActivateSaleInstruction(
             { crank: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
             { saleType: 1, proposalId },
           ),
         ),
         [ctx.daoAuthority],
       );
-      const ended = deserializeDaoPromotion((await ctx.svm.getAccount(promoPda))!.data);
+      const ended = deserializeDaoPromotion((await ctx.svm.getAccount(svmKey(promoPda)))!.data);
       expect(ended.status).toBe(2);
     }, 60_000);
 
@@ -2040,7 +2049,7 @@ describe('Shop System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateEventInstruction(
+          await createCreateEventInstruction(
             { authority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine, eventId },
             {
               name: 'PermissionlessSeason',
@@ -2059,12 +2068,12 @@ describe('Shop System', () => {
         [ctx.daoAuthority],
       );
 
-      const [eventPda] = deriveEventPda(ctx.gameEngine, eventId);
+      const [eventPda] = await deriveEventPda(ctx.gameEngine, eventId);
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateSeasonalSaleInstruction(
+          await createCreateSeasonalSaleInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -2086,13 +2095,13 @@ describe('Shop System', () => {
       );
 
       // Random crank signs the activate call
-      const rando = Keypair.generate();
-      ctx.svm.airdrop(rando.publicKey, BigInt(1_000_000_000));
+      const rando = (await Keypair.generate());
+      ctx.svm.airdrop(svmKey(rando.publicKey), BigInt(1_000_000_000));
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createActivateSaleInstruction(
+          await createActivateSaleInstruction(
             { crank: rando.publicKey, gameEngine: ctx.gameEngine },
             { saleType: 0, event: eventPda },
           ),
@@ -2100,8 +2109,8 @@ describe('Shop System', () => {
         [rando],
       );
 
-      const [salePda] = deriveSeasonalSalePda(ctx.gameEngine, eventPda);
-      const active = deserializeSeasonalSale((await ctx.svm.getAccount(salePda))!.data);
+      const [salePda] = await deriveSeasonalSalePda(ctx.gameEngine, eventPda);
+      const active = deserializeSeasonalSale((await ctx.svm.getAccount(svmKey(salePda)))!.data);
       expect(active.status).toBe(1);
     });
   });

@@ -6,6 +6,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import type { Connection } from '@solana/web3.js';
+import { getProgramDerivedAddress, type Address } from '@solana/addresses';
 import { sha256 } from '@noble/hashes/sha2.js';
 
 // Re-export program IDs from main program module
@@ -118,20 +119,26 @@ export function computeReverseLookupHash(pubkey: PublicKey): Uint8Array {
  * @param tldHouse - TLD House account pubkey
  * @returns [pda, bump]
  */
-export function deriveReverseLookupPda(
+export async function deriveReverseLookupPda(
   nameAccount: PublicKey,
   tldHouse: PublicKey
-): [PublicKey, number] {
+): Promise<[PublicKey, number]> {
   const hashedName = computeReverseLookupHash(nameAccount);
   const nullKey = PublicKey.default;
 
-  return PublicKey.findProgramAddressSync(
-    [hashedName, tldHouse.toBytes(), nullKey.toBytes()],
-    ALT_NAME_SERVICE_PROGRAM_ID
-  );
+  const [addr, bump] = await getProgramDerivedAddress({
+    programAddress: ALT_NAME_SERVICE_PROGRAM_ID.toBase58() as Address,
+    seeds: [hashedName, tldHouse.toBytes(), nullKey.toBytes()],
+  });
+  return [new PublicKey(addr), bump];
 }
 
 // Parsing Functions
+
+/** Build a DataView over a Uint8Array, respecting its byte offset/length. */
+function viewOf(data: Uint8Array): DataView {
+  return new DataView(data.buffer, data.byteOffset, data.byteLength);
+}
 
 /** Name record header size in bytes */
 export const NAME_RECORD_HEADER_SIZE = 96;
@@ -142,7 +149,7 @@ export const NAME_RECORD_HEADER_SIZE = 96;
  * @param data - Account data buffer
  * @returns Parsed header or null if invalid
  */
-export function parseNameRecordHeader(data: Buffer): NameRecordHeader | null {
+export function parseNameRecordHeader(data: Uint8Array): NameRecordHeader | null {
   if (data.length < NAME_RECORD_HEADER_SIZE) {
     return null;
   }
@@ -151,7 +158,7 @@ export function parseNameRecordHeader(data: Buffer): NameRecordHeader | null {
     parentName: new PublicKey(data.subarray(0, 32)),
     owner: new PublicKey(data.subarray(32, 64)),
     nclass: new PublicKey(data.subarray(64, 96)),
-    expiresAt: data.length >= 104 ? Number(data.readBigInt64LE(96)) : 0,
+    expiresAt: data.length >= 104 ? Number(viewOf(data).getBigInt64(96, true)) : 0,
   };
 }
 
@@ -161,7 +168,7 @@ export function parseNameRecordHeader(data: Buffer): NameRecordHeader | null {
  * @param data - Account data buffer
  * @returns Domain name string or null if invalid
  */
-export function extractDomainName(data: Buffer): string | null {
+export function extractDomainName(data: Uint8Array): string | null {
   if (data.length <= NAME_RECORD_HEADER_SIZE) {
     return null;
   }
@@ -187,7 +194,7 @@ export function extractDomainName(data: Buffer): string | null {
  * @param data - Account data buffer
  * @returns Parsed TLD House data or null if invalid
  */
-export function parseTldHouseData(data: Buffer): TldHouseData | null {
+export function parseTldHouseData(data: Uint8Array): TldHouseData | null {
   // TLD House layout:
   // 8 bytes: discriminator
   // 32 bytes: treasury_manager
@@ -205,7 +212,7 @@ export function parseTldHouseData(data: Buffer): TldHouseData | null {
   const authority = new PublicKey(data.subarray(40, 72));
   const tldRegistryPubkey = new PublicKey(data.subarray(72, 104));
 
-  const tldLength = data.readUInt32LE(104);
+  const tldLength = viewOf(data).getUint32(104, true);
   if (data.length < 108 + tldLength) {
     return null;
   }
@@ -272,7 +279,7 @@ export async function fetchDomainInfo(
   const tld = '.' + tldPart;
 
   // Derive TLD House PDA
-  const [tldHouse] = deriveTldHousePda(tld);
+  const [tldHouse] = await deriveTldHousePda(tld);
 
   // Fetch TLD House to get TLD registry
   const tldHouseInfo = await connection.getAccountInfo(tldHouse);
@@ -280,13 +287,13 @@ export async function fetchDomainInfo(
     return null;
   }
 
-  const tldHouseData = parseTldHouseData(Buffer.from(tldHouseInfo.data));
+  const tldHouseData = parseTldHouseData(tldHouseInfo.data);
   if (!tldHouseData) {
     return null;
   }
 
   // Derive name account PDA
-  const [nameAccount] = deriveNameAccountPda(baseName, tldHouseData.tldRegistryPubkey);
+  const [nameAccount] = await deriveNameAccountPda(baseName, tldHouseData.tldRegistryPubkey);
 
   // Fetch name account
   const nameAccountInfo = await connection.getAccountInfo(nameAccount);
@@ -294,7 +301,7 @@ export async function fetchDomainInfo(
     return null;
   }
 
-  const header = parseNameRecordHeader(Buffer.from(nameAccountInfo.data));
+  const header = parseNameRecordHeader(nameAccountInfo.data);
   if (!header) {
     return null;
   }
@@ -325,8 +332,8 @@ export async function fetchMainDomain(
   owner: PublicKey,
   tld: string
 ): Promise<string | null> {
-  const [tldHouse] = deriveTldHousePda(tld);
-  const [mainDomainPda] = deriveMainDomainPda(owner);
+  const [tldHouse] = await deriveTldHousePda(tld);
+  const [mainDomainPda] = await deriveMainDomainPda(owner);
 
   const accountInfo = await connection.getAccountInfo(mainDomainPda);
   if (!accountInfo || !accountInfo.data) {
@@ -335,7 +342,7 @@ export async function fetchMainDomain(
 
   // Main domain account contains the name account pubkey
   // Then we need to reverse lookup to get the name
-  const data = Buffer.from(accountInfo.data);
+  const data = accountInfo.data;
   if (data.length < 40) {
     // 8 (discriminator) + 32 (name account)
     return null;
@@ -344,14 +351,14 @@ export async function fetchMainDomain(
   const nameAccountPubkey = new PublicKey(data.subarray(8, 40));
 
   // Derive reverse lookup
-  const [reversePda] = deriveReverseLookupPda(nameAccountPubkey, tldHouse);
+  const [reversePda] = await deriveReverseLookupPda(nameAccountPubkey, tldHouse);
 
   const reverseInfo = await connection.getAccountInfo(reversePda);
   if (!reverseInfo || !reverseInfo.data) {
     return null;
   }
 
-  const domainName = extractDomainName(Buffer.from(reverseInfo.data));
+  const domainName = extractDomainName(reverseInfo.data);
   if (!domainName) {
     return null;
   }

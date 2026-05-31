@@ -7,7 +7,6 @@
  */
 
 import type { AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Building Template Interface
@@ -20,7 +19,7 @@ export interface BuildingTemplateAccount {
   /** Base construction time in seconds (a level-0 build) */
   baseTimeSeconds: number;
   /** Base NOVI cost (a level-0 build) */
-  baseNoviCost: BN;
+  baseNoviCost: bigint;
   /** Per-level cost growth, in bps of 10_000 (26_180 = x2.618) */
   costGrowthBps: number;
   /** Per-(level/5) time growth, in bps of 10_000 */
@@ -34,7 +33,7 @@ export const BUILDING_TEMPLATE_SIZE = 32;
 // Deserialization
 
 /** Deserialize BuildingTemplate from raw bytes */
-export function deserializeBuildingTemplate(data: Uint8Array | Buffer): BuildingTemplateAccount {
+export function deserializeBuildingTemplate(data: Uint8Array): BuildingTemplateAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -62,7 +61,7 @@ export function deserializeBuildingTemplate(data: Uint8Array | Buffer): Building
 
 /** Parse a BuildingTemplate account, or null if the data is too small. */
 export function parseBuildingTemplate(
-  accountInfo: AccountInfo<Buffer>
+  accountInfo: AccountInfo<Uint8Array>
 ): BuildingTemplateAccount | null {
   if (!accountInfo.data || accountInfo.data.length < BUILDING_TEMPLATE_SIZE) {
     return null;

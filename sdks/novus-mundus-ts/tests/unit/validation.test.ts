@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
-import BN from 'bn.js';
 import {
   valid,
   invalid,
@@ -118,13 +117,13 @@ describe('ValidationResult helpers', () => {
 
 describe('PublicKey validation', () => {
   describe('isValidPubkey', () => {
-    it('should return true for PublicKey instance', () => {
-      const keypair = Keypair.generate();
+    it('should return true for PublicKey instance', async () => {
+      const keypair = await Keypair.generate();
       expect(isValidPubkey(keypair.publicKey)).toBe(true);
     });
 
-    it('should return true for valid base58 string', () => {
-      const keypair = Keypair.generate();
+    it('should return true for valid base58 string', async () => {
+      const keypair = await Keypair.generate();
       expect(isValidPubkey(keypair.publicKey.toBase58())).toBe(true);
     });
 
@@ -140,8 +139,8 @@ describe('PublicKey validation', () => {
   });
 
   describe('validateNotDefaultPubkey', () => {
-    it('should pass for non-default pubkey', () => {
-      const keypair = Keypair.generate();
+    it('should pass for non-default pubkey', async () => {
+      const keypair = await Keypair.generate();
       const result = validateNotDefaultPubkey(keypair.publicKey, 'owner');
       expect(result.valid).toBe(true);
     });
@@ -155,15 +154,15 @@ describe('PublicKey validation', () => {
   });
 
   describe('validateDifferentPubkeys', () => {
-    it('should pass for different pubkeys', () => {
-      const k1 = Keypair.generate().publicKey;
-      const k2 = Keypair.generate().publicKey;
+    it('should pass for different pubkeys', async () => {
+      const k1 = (await Keypair.generate()).publicKey;
+      const k2 = (await Keypair.generate()).publicKey;
       const result = validateDifferentPubkeys(k1, k2, 'sender', 'receiver');
       expect(result.valid).toBe(true);
     });
 
-    it('should fail for same pubkeys', () => {
-      const k = Keypair.generate().publicKey;
+    it('should fail for same pubkeys', async () => {
+      const k = (await Keypair.generate()).publicKey;
       const result = validateDifferentPubkeys(k, k, 'sender', 'receiver');
       expect(result.valid).toBe(false);
       expect(result.errors[0]).toContain('sender');
@@ -187,9 +186,9 @@ describe('Number validation', () => {
       expect(validatePositive(-1, 'amount').valid).toBe(false);
     });
 
-    it('should work with BN', () => {
-      expect(validatePositive(new BN(100), 'amount').valid).toBe(true);
-      expect(validatePositive(new BN(0), 'amount').valid).toBe(false);
+    it('should work with bigint', () => {
+      expect(validatePositive(100n, 'amount').valid).toBe(true);
+      expect(validatePositive(0n, 'amount').valid).toBe(false);
     });
   });
 
@@ -240,24 +239,24 @@ describe('Number validation', () => {
   });
 
   describe('validateMinimumBN', () => {
-    it('should pass for BN >= minimum', () => {
-      expect(validateMinimumBN(new BN(100), new BN(100), 'amount').valid).toBe(true);
-      expect(validateMinimumBN(new BN(200), new BN(100), 'amount').valid).toBe(true);
+    it('should pass for bigint >= minimum', () => {
+      expect(validateMinimumBN(100n, 100n, 'amount').valid).toBe(true);
+      expect(validateMinimumBN(200n, 100n, 'amount').valid).toBe(true);
     });
 
-    it('should fail for BN < minimum', () => {
-      expect(validateMinimumBN(new BN(50), new BN(100), 'amount').valid).toBe(false);
+    it('should fail for bigint < minimum', () => {
+      expect(validateMinimumBN(50n, 100n, 'amount').valid).toBe(false);
     });
   });
 
   describe('validateMaximumBN', () => {
-    it('should pass for BN <= maximum', () => {
-      expect(validateMaximumBN(new BN(100), new BN(100), 'amount').valid).toBe(true);
-      expect(validateMaximumBN(new BN(50), new BN(100), 'amount').valid).toBe(true);
+    it('should pass for bigint <= maximum', () => {
+      expect(validateMaximumBN(100n, 100n, 'amount').valid).toBe(true);
+      expect(validateMaximumBN(50n, 100n, 'amount').valid).toBe(true);
     });
 
-    it('should fail for BN > maximum', () => {
-      expect(validateMaximumBN(new BN(150), new BN(100), 'amount').valid).toBe(false);
+    it('should fail for bigint > maximum', () => {
+      expect(validateMaximumBN(150n, 100n, 'amount').valid).toBe(false);
     });
   });
 });

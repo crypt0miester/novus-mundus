@@ -2,7 +2,6 @@
  * Phase 7 — Dungeon Templates + Leaderboards
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import {
   accountExists,
@@ -36,7 +35,7 @@ export async function initDungeons(ctx: CLIContext): Promise<PhaseStats> {
 
   for (const dungeon of DUNGEONS) {
     // Template
-    const [templatePda] = deriveDungeonTemplatePda(dungeon.templateId);
+    const [templatePda] = await deriveDungeonTemplatePda(dungeon.templateId);
     await createOrSkip(
       ctx,
       `Dungeon Template #${dungeon.templateId} (${dungeon.name})`,
@@ -66,8 +65,8 @@ export async function initDungeons(ctx: CLIContext): Promise<PhaseStats> {
           darknessBaseBps: dungeon.darknessBaseBps,
           darknessPerFloorBps: dungeon.darknessPerFloorBps,
           timeLimitSeconds: dungeon.timeLimitSeconds,
-          baseXpPerRoom: new BN(dungeon.baseXpPerRoom),
-          baseNoviPerFloor: new BN(dungeon.baseNoviPerFloor),
+          baseXpPerRoom: BigInt(dungeon.baseXpPerRoom),
+          baseNoviPerFloor: BigInt(dungeon.baseNoviPerFloor),
           completionBonusBps: dungeon.completionBonusBps,
           rewardScalingBps: dungeon.rewardScalingBps,
         }
@@ -77,7 +76,7 @@ export async function initDungeons(ctx: CLIContext): Promise<PhaseStats> {
     log.info(`    Template ID ${dungeon.templateId} (${dungeon.name})`);
 
     // Current week Leaderboard
-    const [leaderboardPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, dungeon.templateId, currentWeek);
+    const [leaderboardPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, dungeon.templateId, currentWeek);
     await createOrSkip(
       ctx,
       `Leaderboard: Dungeon #${dungeon.templateId} Week ${currentWeek}`,
@@ -91,7 +90,7 @@ export async function initDungeons(ctx: CLIContext): Promise<PhaseStats> {
         {
           templateId: dungeon.templateId,
           weekNumber: currentWeek,
-          prizePool: new BN(1_000_000),
+          prizePool: BigInt(1_000_000),
         }
       ),
       stats
@@ -108,7 +107,7 @@ export async function statusDungeons(ctx: CLIContext): Promise<string> {
 
   let misses = 0;
   for (let id = 0; misses < 5; id++) {
-    const [tPda] = deriveDungeonTemplatePda(id);
+    const [tPda] = await deriveDungeonTemplatePda(id);
     if (await accountExists(ctx.connection, tPda)) {
       templates++;
       misses = 0;
@@ -116,7 +115,7 @@ export async function statusDungeons(ctx: CLIContext): Promise<string> {
       misses++;
       continue;
     }
-    const [lPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, id, week);
+    const [lPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, id, week);
     if (await accountExists(ctx.connection, lPda)) leaderboards++;
   }
 
@@ -134,7 +133,7 @@ export async function detailDungeons(ctx: CLIContext): Promise<string> {
   const discoveredTemplates: { templateId: number; name: string }[] = [];
   let misses = 0;
   for (let id = 0; misses < 5; id++) {
-    const [tPda] = deriveDungeonTemplatePda(id);
+    const [tPda] = await deriveDungeonTemplatePda(id);
     const info = await ctx.connection.getAccountInfo(tPda);
 
     if (!info) {
@@ -189,7 +188,7 @@ export async function detailDungeons(ctx: CLIContext): Promise<string> {
   lines.push(section(`Leaderboards (Week ${week})`));
   const lbRows: string[][] = [];
   for (const t of discoveredTemplates) {
-    const [lPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, t.templateId, week);
+    const [lPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, t.templateId, week);
     const info = await ctx.connection.getAccountInfo(lPda);
     const data = info ? parseDungeonLeaderboard(info) : null;
 

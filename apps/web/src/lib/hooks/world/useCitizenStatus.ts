@@ -11,7 +11,7 @@ export function useCitizenStatus() {
     queryKey: ["world", "citizenStatus", publicKey?.toBase58()],
     queryFn: async () => {
       const result = await client.fetchPlayer(publicKey!);
-      const [playerPda] = derivePlayerPda(client.gameEngine, publicKey!);
+      const [playerPda] = await derivePlayerPda(client.gameEngine, publicKey!);
       return {
         player: result.account,
         playerPda: playerPda.toBase58(),

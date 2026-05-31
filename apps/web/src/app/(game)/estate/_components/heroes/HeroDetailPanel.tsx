@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { ChevronRight } from "lucide-react";
+import { ChevronRight, Hourglass } from "lucide-react";
 import type { PublicKey } from "@solana/web3.js";
 import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { AbilityCard } from "@/components/heroes/AbilityCard";
-import { getBuffStatByAttrKey } from "novus-mundus-sdk";
+import { getBuffStatByAttrKey, hasAbility, formatDurationCompact } from "novus-mundus-sdk";
 import { fragmentCost, IGNORED_ATTRS } from "./helpers";
 import type { HeroData, Selection, TemplateInfo } from "./types";
 
@@ -80,6 +80,16 @@ export function HeroDetailPanel({
       ? { heroMint: hero.address, slotIndex: (selected as { slot: number }).slot }
       : undefined;
 
+  // Friendly view of the on-chain AbCD attribute (the ability's "last used" unix
+  // stamp). Combined with the template cooldown it tells whether the signature
+  // ability is ready. Locked heroes get a live cooldown ring inside AbilityCard,
+  // so this compact chip is for unlocked (in-wallet) heroes with an ability.
+  const abilityLastUsed = attrs.AbCD ? parseInt(attrs.AbCD, 10) : 0;
+  const cooldownSecs = tpl?.abilityCooldownSecs ?? 0;
+  const cdReadyAt = abilityLastUsed > 0 ? abilityLastUsed + cooldownSecs : 0;
+  const cdRemaining = Math.max(0, cdReadyAt - Math.floor(Date.now() / 1000));
+  const showCooldownChip = !!tpl && hasAbility(tpl) && !interactive;
+
   return (
     <>
       <div className="flex items-center justify-between">
@@ -150,6 +160,18 @@ export function HeroDetailPanel({
           </div>
         )}
       </div>
+
+      {showCooldownChip && (
+        <div className="flex items-center justify-between rounded bg-surface px-2 py-1 text-xs">
+          <span className="flex items-center gap-1.5 text-text-secondary">
+            <Hourglass className="h-4 w-4 text-text-gold" aria-hidden />
+            Ability Cooldown
+          </span>
+          <span className="font-mono font-semibold text-text-primary">
+            {cdRemaining > 0 ? `Ready in ${formatDurationCompact(cdRemaining)}` : "Ready"}
+          </span>
+        </div>
+      )}
 
       {tpl && <AbilityCard template={tpl} interactive={interactive} />}
 

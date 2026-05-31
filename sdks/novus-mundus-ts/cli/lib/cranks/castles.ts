@@ -39,7 +39,7 @@ export async function crankCastles(ctx: CLIContext): Promise<PhaseStats> {
   log.info(`  Processing ${CASTLES.length} castles...`);
 
   for (const castle of CASTLES) {
-    const [castlePda] = deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
+    const [castlePda] = await deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
 
     // Step 1: Update status (permissionless, no-op if not time)
     const statusIx = createUpdateCastleStatusInstruction({
@@ -149,7 +149,7 @@ export async function crankCastles(ctx: CLIContext): Promise<PhaseStats> {
     if (courtCount > 0) {
       log.info(`    Cleaning up ${courtCount} court position(s)...`);
       for (let position = 0; position < 5; position++) {
-        const [courtPda] = deriveCourtPda(castlePda, position);
+        const [courtPda] = await deriveCourtPda(castlePda, position);
         const courtExists = await accountExists(ctx.connection, courtPda);
         if (!courtExists) continue;
 

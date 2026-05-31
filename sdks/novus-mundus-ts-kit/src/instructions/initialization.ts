@@ -42,7 +42,7 @@ import {
   deriveCityPda,
   deriveLocationPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Initialize Game Engine
 
@@ -194,7 +194,7 @@ export async function createInitPlayerInstruction(
   const [startingCity] = await deriveCityPda(accounts.gameEngine, accounts.startingCityId);
 
   // Player's NOVI token ATA - owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Quantize city coordinates to grid (must match Rust: round(coord * 10000.0) as i32)
   const GRID_PRECISION = 10000.0;
@@ -268,7 +268,7 @@ export async function createInitUserInstruction(
   const [noviMint] = await deriveNoviMintPda();
 
   // User's NOVI token ATA - owned by UserAccount PDA
-  const userTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const userTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },

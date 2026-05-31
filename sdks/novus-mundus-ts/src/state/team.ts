@@ -8,7 +8,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { TeamMemberRank } from '../types/enums';
 
@@ -33,22 +32,22 @@ export const TeamPermissions = {
 // Team Account Interface
 
 export interface TeamAccount {
-  id: BN;
+  id: bigint;
   leader: PublicKey;
   bump: number;
   disbanded: boolean;
   name: string;
   memberCount: number;
   maxMembers: number;
-  createdAt: BN;
-  lastActivity: BN;
-  treasury: BN;
+  createdAt: bigint;
+  lastActivity: bigint;
+  treasury: bigint;
   settings: number;
   minLevelToJoin: number;
   rolePermissions: number[];
   motd: string;
-  treasuryInstantLimit: BN[];
-  treasuryDailyCap: BN[];
+  treasuryInstantLimit: bigint[];
+  treasuryDailyCap: bigint[];
   treasuryCooldownHours: number;
   /** War-table key version; bumps on every access-loss event (kick/leave/disband). */
   membershipEpoch: number;
@@ -62,13 +61,13 @@ export const TEAM_ACCOUNT_SIZE = 280;
 export interface TeamMemberSlot {
   team: PublicKey;
   player: PublicKey;
-  joinedAt: BN;
+  joinedAt: bigint;
   slotIndex: number;
   bump: number;
   rank: TeamMemberRank;
   /** membership_epoch snapshotted at join (servable key range starts here). */
   joinedAtEpoch: number;
-  treasuryWithdrawnToday: BN;
+  treasuryWithdrawnToday: bigint;
   lastTreasuryDay: number;
 }
 
@@ -82,8 +81,8 @@ export interface TeamInviteAccount {
   invitee: PublicKey;
   bump: number;
   inviter: PublicKey;
-  createdAt: BN;
-  expiresAt: BN;
+  createdAt: bigint;
+  expiresAt: bigint;
 }
 
 /** TeamInviteAccount size in bytes */
@@ -94,9 +93,9 @@ export const TEAM_INVITE_ACCOUNT_SIZE = 136;
 export interface TreasuryRequest {
   team: PublicKey;
   requester: PublicKey;
-  amount: BN;
-  createdAt: BN;
-  executableAt: BN;
+  amount: bigint;
+  createdAt: bigint;
+  executableAt: bigint;
   bump: number;
 }
 
@@ -106,7 +105,7 @@ export const TREASURY_REQUEST_SIZE = 112;
 // Deserialization Functions
 
 /** Deserialize TeamAccount from raw bytes */
-export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
+export function deserializeTeam(data: Uint8Array): TeamAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -174,7 +173,7 @@ export function deserializeTeam(data: Uint8Array | Buffer): TeamAccount {
 }
 
 /** Deserialize TeamMemberSlot from raw bytes */
-export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMemberSlot {
+export function deserializeTeamMemberSlot(data: Uint8Array): TeamMemberSlot {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -206,7 +205,7 @@ export function deserializeTeamMemberSlot(data: Uint8Array | Buffer): TeamMember
 }
 
 /** Deserialize TeamInviteAccount from raw bytes */
-export function deserializeTeamInvite(data: Uint8Array | Buffer): TeamInviteAccount {
+export function deserializeTeamInvite(data: Uint8Array): TeamInviteAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -233,7 +232,7 @@ export function deserializeTeamInvite(data: Uint8Array | Buffer): TeamInviteAcco
 }
 
 /** Deserialize TreasuryRequest from raw bytes */
-export function deserializeTreasuryRequest(data: Uint8Array | Buffer): TreasuryRequest {
+export function deserializeTreasuryRequest(data: Uint8Array): TreasuryRequest {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -260,7 +259,7 @@ export function deserializeTreasuryRequest(data: Uint8Array | Buffer): TreasuryR
 // Parse Functions
 
 /** Parse TeamAccount from account info */
-export function parseTeam(accountInfo: AccountInfo<Buffer>): TeamAccount | null {
+export function parseTeam(accountInfo: AccountInfo<Uint8Array>): TeamAccount | null {
   if (!accountInfo.data || accountInfo.data.length < TEAM_ACCOUNT_SIZE) {
     return null;
   }
@@ -268,7 +267,7 @@ export function parseTeam(accountInfo: AccountInfo<Buffer>): TeamAccount | null 
 }
 
 /** Parse TeamMemberSlot from account info */
-export function parseTeamMemberSlot(accountInfo: AccountInfo<Buffer>): TeamMemberSlot | null {
+export function parseTeamMemberSlot(accountInfo: AccountInfo<Uint8Array>): TeamMemberSlot | null {
   if (!accountInfo.data || accountInfo.data.length < TEAM_MEMBER_SLOT_SIZE) {
     return null;
   }
@@ -276,7 +275,7 @@ export function parseTeamMemberSlot(accountInfo: AccountInfo<Buffer>): TeamMembe
 }
 
 /** Parse TeamInviteAccount from account info */
-export function parseTeamInvite(accountInfo: AccountInfo<Buffer>): TeamInviteAccount | null {
+export function parseTeamInvite(accountInfo: AccountInfo<Uint8Array>): TeamInviteAccount | null {
   if (!accountInfo.data || accountInfo.data.length < TEAM_INVITE_ACCOUNT_SIZE) {
     return null;
   }
@@ -284,7 +283,7 @@ export function parseTeamInvite(accountInfo: AccountInfo<Buffer>): TeamInviteAcc
 }
 
 /** Parse TreasuryRequest from account info */
-export function parseTreasuryRequest(accountInfo: AccountInfo<Buffer>): TreasuryRequest | null {
+export function parseTreasuryRequest(accountInfo: AccountInfo<Uint8Array>): TreasuryRequest | null {
   if (!accountInfo.data || accountInfo.data.length < TREASURY_REQUEST_SIZE) {
     return null;
   }
@@ -316,13 +315,13 @@ export function rankHasPermission(team: TeamAccount, rank: number, perm: number)
 
 /** Check if invite has expired */
 export function isInviteExpired(invite: TeamInviteAccount, nowSeconds: number): boolean {
-  const expiresAt = invite.expiresAt.toNumber();
+  const expiresAt = Number(invite.expiresAt);
   return expiresAt > 0 && nowSeconds >= expiresAt;
 }
 
 /** Check if treasury request is executable */
 export function isTreasuryRequestExecutable(request: TreasuryRequest, nowSeconds: number): boolean {
-  return nowSeconds >= request.executableAt.toNumber();
+  return nowSeconds >= Number(request.executableAt);
 }
 
 /** Check if member is leader */

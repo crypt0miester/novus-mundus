@@ -5,7 +5,6 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
 import type { TeamAccount, TeamMemberSlot, TeamInviteAccount, TreasuryRequest } from '../state/team';
 import {
   isTeamActive,
@@ -197,8 +196,8 @@ export function validateInviteRecipient(invite: TeamInviteAccount, player: Publi
 // Treasury Validation
 
 /** Validate treasury has sufficient funds */
-export function validateTreasuryBalance(team: TeamAccount, amount: BN): ValidationResult {
-  if (team.treasury.lt(amount)) {
+export function validateTreasuryBalance(team: TeamAccount, amount: bigint): ValidationResult {
+  if (team.treasury < amount) {
     return invalid(
       `Insufficient treasury balance: need ${amount.toString()}, have ${team.treasury.toString()}`
     );
@@ -222,7 +221,7 @@ export function validateTreasuryRequestAmount(
   team: TeamAccount,
   request: TreasuryRequest
 ): ValidationResult {
-  if (request.amount.gt(team.treasury)) {
+  if (request.amount > team.treasury) {
     return invalid(
       `Treasury request amount exceeds available balance: ${request.amount.toString()} > ${team.treasury.toString()}`
     );

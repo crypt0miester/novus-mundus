@@ -7,29 +7,20 @@
 
 import { formatNoviAmount, type NovusMundusEvent } from "novus-mundus-sdk";
 
-// Structural BN: the SDK ships its own bn.js types and the web app's root
-// install is a different version, so naming bn.js's `BN` across the module
-// boundary trips TS2345. A minimal shape avoids the duplicate type identity
-// while still describing what we read off event data.
-interface BnLike {
-  toNumber(): number;
-}
-
 // Numeric event-data fields arrive in one of these shapes. Live events (from
-// useTransact) carry BN / number / bigint; events replayed from IndexedDB via
-// the ActivityFeed carry the serialized form, where serializeEventData() in
-// store/events.ts stringifies BN to keep u64 precision across JSON. A decimal
-// string is a faithful value, not an "absent" field; there is still no branch
-// that coerces a missing field to a fake zero. A legitimately-optional field
-// would be modelled `BnNumeric | undefined` and branched on presence at the
-// call site.
-type BnNumeric = number | bigint | string | BnLike;
+// useTransact) carry bigint / number; events replayed from IndexedDB via the
+// ActivityFeed carry the serialized form, where serializeEventData() in
+// store/events.ts stringifies bigint to keep u64 precision across JSON. A
+// decimal string is a faithful value, not an "absent" field; there is still no
+// branch that coerces a missing field to a fake zero. A legitimately-optional
+// field would be modelled `BnNumeric | undefined` and branched on presence at
+// the call site.
+type BnNumeric = number | bigint | string;
 
 function bn(v: BnNumeric): number {
   if (typeof v === "number") return v;
   if (typeof v === "bigint") return Number(v);
-  if (typeof v === "string") return Number(v);
-  return v.toNumber();
+  return Number(v);
 }
 
 function fmt(v: BnNumeric): string {
@@ -53,7 +44,7 @@ interface EventMessage {
 
 export function formatEventMessage(event: NovusMundusEvent): EventMessage | null {
   switch (event.name) {
-    // ── Combat ─────────────────────────────────────────────
+    // Combat ─────────────────────────────────────────────
     case "PlayerAttacked": {
       const d = event.data;
       const target = d.defenderName || addr(d.defender).slice(0, 6);
@@ -83,7 +74,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
       };
     }
 
-    // ── Economy ────────────────────────────────────────────
+    // Economy ────────────────────────────────────────────
     case "ResourcesCollected": {
       const d = event.data;
       const parts = [`$${fmt(d.finalOutput)} output`];
@@ -107,7 +98,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "StaminaPurchased":
       return { title: "Stamina Purchased", message: "Stamina replenished" };
 
-    // ── Progression ────────────────────────────────────────
+    // Progression ────────────────────────────────────────
     case "XpGained": {
       const d = event.data;
       return { title: "XP Gained", message: `+${fmt(d.amount)} XP` };
@@ -121,7 +112,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "SubscriptionPurchased":
       return { title: "Subscription Activated", message: "Premium tier unlocked" };
 
-    // ── Travel ─────────────────────────────────────────────
+    // Travel ─────────────────────────────────────────────
     case "IntercityTravelStarted": {
       const d = event.data;
       return { title: "Traveling", message: `En route to destination` };
@@ -135,7 +126,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "TravelCancelled":
       return { title: "Travel Cancelled", message: "Returned to origin" };
 
-    // ── Estate ─────────────────────────────────────────────
+    // Estate ─────────────────────────────────────────────
     case "EstateCreated":
       return { title: "Estate Founded", message: "Your estate has been established" };
     case "BuildingStarted": {
@@ -152,7 +143,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "EstateDailyClaimed":
       return { title: "Estate Daily Claimed", message: "Daily estate rewards collected" };
 
-    // ── Forge ──────────────────────────────────────────────
+    // Forge
     case "CraftStarted":
       return { title: "Crafting Started", message: "Forge is working..." };
     case "CraftCompleted":
@@ -160,7 +151,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "ItemEquipped":
       return { title: "Item Equipped", message: "Equipment updated" };
 
-    // ── Expedition ─────────────────────────────────────────
+    // Expedition ─────────────────────────────────────────
     case "ExpeditionStarted":
       return { title: "Expedition Launched", message: "Units deployed on expedition" };
     case "ExpeditionClaimed":
@@ -168,13 +159,13 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "ExpeditionAborted":
       return { title: "Expedition Aborted", message: "Units recalled early" };
 
-    // ── Research ───────────────────────────────────────────
+    // Research ───────────────────────────────────────────
     case "ResearchStarted":
       return { title: "Research Started", message: "Research in progress..." };
     case "ResearchCompleted":
       return { title: "Research Complete", message: "New technology unlocked" };
 
-    // ── Hero ───────────────────────────────────────────────
+    // Hero─
     case "HeroMinted":
       return { title: "Hero Minted!", message: "A new hero has joined your roster" };
     case "HeroLeveledUp": {
@@ -186,13 +177,13 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "HeroUnlocked":
       return { title: "Hero Recalled", message: "Hero has been undeployed" };
 
-    // ── Sanctuary ──────────────────────────────────────────
+    // Sanctuary ──────────────────────────────────────────
     case "MeditationStarted":
       return { title: "Meditation Started", message: "Hero is meditating..." };
     case "MeditationClaimed":
       return { title: "Meditation Complete", message: "Hero refreshed" };
 
-    // ── Team ───────────────────────────────────────────────
+    // Team─
     case "TeamCreated":
       return { title: "Team Created", message: "Your team is ready" };
     case "TeamJoined":
@@ -200,13 +191,13 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "TeamLeft":
       return { title: "Left Team", message: "You have left the team" };
 
-    // ── Loot ───────────────────────────────────────────────
+    // Loot─
     case "LootClaimed":
       return { title: "Loot Claimed", message: "Rewards collected" };
     case "EncounterSpawned":
       return { title: "Encounter Spawned", message: "A new encounter has appeared" };
 
-    // ── Dungeon ────────────────────────────────────────────
+    // Dungeon ────────────────────────────────────────────
     case "DungeonEntered":
       return { title: "Dungeon Entered", message: "Descending into the depths..." };
     case "DungeonRoomCleared":
@@ -216,7 +207,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "DungeonFailed":
       return { title: "Dungeon Failed", message: "Better luck next time" };
 
-    // ── Castle ─────────────────────────────────────────────
+    // Castle ─────────────────────────────────────────────
     case "CastleClaimed":
       return { title: "Castle Claimed", message: "You are now the king" };
     case "CastleConquered":
@@ -224,7 +215,7 @@ export function formatEventMessage(event: NovusMundusEvent): EventMessage | null
     case "GarrisonJoined":
       return { title: "Garrison Joined", message: "Defending the castle" };
 
-    // ── Shop ───────────────────────────────────────────────
+    // Shop─
     case "ItemPurchased":
       return { title: "Item Purchased", message: "New item acquired" };
     case "BundlePurchased":

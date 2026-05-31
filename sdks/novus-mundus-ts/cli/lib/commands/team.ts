@@ -73,7 +73,7 @@ export async function handleTeam(ctx: CLIContext, args: ParsedArgs): Promise<voi
 // --public so members can open-join; invite/accept work regardless.
 
 async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = loadKeypairArg(args.extra);
+  const kp = await loadKeypairArg(args.extra);
   if (!kp) {
     log.error('Specify the leader keypair path as the third argument');
     log.info('  novus team create <keypair> --name <s> [--tag <t>] [--team-id <n>] [--public] [--min-level <n>]');
@@ -85,10 +85,8 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.error('Specify --name <team name>');
     return;
   }
-  const tag = getFlag(args.flags, '--tag') || '';
-  const minLevel = parseInt(getFlag(args.flags, '--min-level') || '1', 10);
+  
   const isPublic = args.flags.includes('--public');
-  const settings = isPublic ? TeamSettings.PUBLIC : 0;
 
   // Pick a fresh team id unless one is supplied. Team ids are global, so scan
   // for the first unused id starting from a high base to avoid the populated
@@ -100,12 +98,12 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   } else {
     teamId = 990000;
     for (; teamId < 990500; teamId++) {
-      const [pda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [pda] = await deriveTeamPda(ctx.gameEngine, teamId);
       if (!(await accountExists(ctx.connection, pda))) break;
     }
   }
 
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, kp.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, kp.publicKey);
   const info = await ctx.connection.getAccountInfo(playerPda);
   if (!info) {
     log.error(`No player account for ${kp.publicKey.toBase58()}`);
@@ -119,11 +117,11 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
   const ix = createTeamCreateInstruction(
     { owner: kp.publicKey, gameEngine: ctx.gameEngine, teamId },
-    { name, tag, minLevelToJoin: minLevel, settings },
+    { name },
   );
 
   await sendWithRetry(ctx, ix, [kp], { computeUnits: 30_000 });
-  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
   log.create(`Team "${name}" (#${teamId}) ${teamPda.toBase58()}`);
   log.info(`  Leader: ${kp.publicKey.toBase58()} (slot 0)    Public: ${isPublic}`);
   log.info(`  Invite a member: novus team invite ${args.extra} --team-id ${teamId} --invitee <wallet|keypair>`);
@@ -133,7 +131,7 @@ async function handleCreate(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // specific player. The invitee PDA is derived from their wallet.
 
 async function handleInvite(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const inviter = loadKeypairArg(args.extra);
+  const inviter = await loadKeypairArg(args.extra);
   if (!inviter) {
     log.error('Specify the inviter (leader) keypair path as the third argument');
     log.info('  novus team invite <leaderKeypair> --team-id <id> --invitee <wallet|keypair> [--slot <inviterSlot>]');
@@ -152,16 +150,16 @@ async function handleInvite(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.error('Specify --invitee <wallet pubkey or keypair path>');
     return;
   }
-  const inviteeWallet = resolveWallet(inviteeFlag);
+  const inviteeWallet = await resolveWallet(inviteeFlag);
   if (!inviteeWallet) {
     log.error(`Could not resolve --invitee: ${inviteeFlag}`);
     return;
   }
 
   const inviterSlot = parseInt(getFlag(args.flags, '--slot') || '0', 10);
-  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
-  const [inviteePlayer] = derivePlayerPda(ctx.gameEngine, inviteeWallet);
-  const [leaderPlayer] = derivePlayerPda(ctx.gameEngine, inviter.publicKey);
+  const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
+  const [inviteePlayer] = await derivePlayerPda(ctx.gameEngine, inviteeWallet);
+  const [leaderPlayer] = await derivePlayerPda(ctx.gameEngine, inviter.publicKey);
 
   const ix = createTeamInviteInstruction({
     gameEngine: ctx.gameEngine,
@@ -183,7 +181,7 @@ async function handleInvite(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 // refund); for a fresh team that's the leader.
 
 async function handleAccept(ctx: CLIContext, args: ParsedArgs): Promise<void> {
-  const kp = loadKeypairArg(args.extra);
+  const kp = await loadKeypairArg(args.extra);
   if (!kp) {
     log.error('Specify the invitee keypair path as the third argument');
     log.info('  novus team accept <inviteeKeypair> --team-id <id> --slot <n> --inviter <leaderWallet>');
@@ -209,13 +207,13 @@ async function handleAccept(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.error('Specify --inviter <leader wallet> (invite-rent refund recipient)');
     return;
   }
-  const inviterWallet = resolveWallet(inviterFlag);
+  const inviterWallet = await resolveWallet(inviterFlag);
   if (!inviterWallet) {
     log.error(`Could not resolve --inviter: ${inviterFlag}`);
     return;
   }
-  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
-  const [leaderPlayer] = derivePlayerPda(ctx.gameEngine, inviterWallet);
+  const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
+  const [leaderPlayer] = await derivePlayerPda(ctx.gameEngine, inviterWallet);
 
   const ix = createTeamAcceptInviteInstruction({
     gameEngine: ctx.gameEngine,
@@ -233,21 +231,21 @@ async function handleAccept(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
 // helpers shared by create/invite/accept
 
-function loadKeypairArg(extra: string): Keypair | null {
+async function loadKeypairArg(extra: string): Promise<Keypair | null> {
   if (!extra) return null;
   try {
-    return loadKeypair(extra);
+    return await loadKeypair(extra);
   } catch {
     return null;
   }
 }
 
-function resolveWallet(s: string): PublicKey | null {
+async function resolveWallet(s: string): Promise<PublicKey | null> {
   try {
     return new PublicKey(s);
   } catch {
     try {
-      return loadKeypair(s).publicKey;
+      return (await loadKeypair(s)).publicKey;
     } catch {
       return null;
     }
@@ -298,7 +296,7 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+  const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
   // The join instruction reads the leader's PlayerAccount to size team
   // capacity from the leader's subscription tier. team.leader already
@@ -312,7 +310,7 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
   const freeSlots: number[] = [];
   for (let s = startSlot; s < team.maxMembers; s++) {
-    const [slotPda] = deriveTeamSlotPda(teamPda, s);
+    const [slotPda] = await deriveTeamSlotPda(teamPda, s);
     const info = await ctx.connection.getAccountInfo(slotPda);
     if (!info) freeSlots.push(s);
   }
@@ -335,9 +333,9 @@ async function handleJoin(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     if (joined >= count || freeSlots.length === 0) break;
 
     const secret = JSON.parse(fs.readFileSync(path.join(keysDir, file), 'utf8'));
-    const kp = Keypair.fromSecretKey(Uint8Array.from(secret));
+    const kp = await Keypair.fromSecretKey(Uint8Array.from(secret));
 
-    const [playerPda] = derivePlayerPda(ctx.gameEngine, kp.publicKey);
+    const [playerPda] = await derivePlayerPda(ctx.gameEngine, kp.publicKey);
     const info = await ctx.connection.getAccountInfo(playerPda);
     if (!info) continue;
 

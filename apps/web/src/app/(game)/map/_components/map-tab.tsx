@@ -608,8 +608,8 @@ export function MapTab() {
         const level = e.account.level ?? 0;
         // Encounter HP can exceed 2^53 for boss-tier wilds, so percent
         // math goes through BigInt and lands on a clamped 0–100 number.
-        const hpBig = BigInt(e.account.health.toString());
-        const maxHpBig = BigInt(e.account.maxHealth.toString());
+        const hpBig = e.account.health;
+        const maxHpBig = e.account.maxHealth;
         const hpPct =
           maxHpBig > 0n ? Math.max(0, Math.min(100, Number((hpBig * 100n) / maxHpBig))) : 0;
         return {
@@ -691,10 +691,12 @@ export function MapTab() {
     );
     const baseSpeedKmh = ge.gameplayConfig?.themeTravelSpeedsKmh?.[0] ?? 50;
     const travelTimeSec = calculateIntercityTravelTime(distanceKm, baseSpeedKmh);
+    const baseTeleportCostRaw = ge.gameplayConfig?.teleportBaseCost;
     const baseTeleportCost =
-      deciToNovi(ge.gameplayConfig?.teleportBaseCost?.toNumber?.()) ?? 100_000;
+      baseTeleportCostRaw !== undefined ? deciToNovi(baseTeleportCostRaw) : 100_000;
+    const costPer100kmRaw = ge.gameplayConfig?.teleportCostPer100km;
     const costPer100km =
-      deciToNovi(ge.gameplayConfig?.teleportCostPer100km?.toNumber?.()) ?? 10_000;
+      costPer100kmRaw !== undefined ? deciToNovi(costPer100kmRaw) : 10_000;
     const teleportCost = calculateTeleportCost(distanceKm, baseTeleportCost, costPer100km);
     const tod = getCurrentTimeOfDay(chainNow, origin.longitude);
     const travelMult = getActivityMultiplier(ActivityType.Traveling, tod);
@@ -733,7 +735,7 @@ export function MapTab() {
   const startTravel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
-    const ix = buildIntercityStartIx({
+    const ix = await buildIntercityStartIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       gameAuthority: ge?.authority,
@@ -758,7 +760,7 @@ export function MapTab() {
 
   const completeTravel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const { ix, destinationCityId, destLat, destLong } = buildIntercityCompleteIx({
+    const { ix, destinationCityId, destLat, destLong } = await buildIntercityCompleteIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       player,
@@ -792,7 +794,7 @@ export function MapTab() {
     if (!publicKey || !player) throw new Error("Not ready");
     const origin = currentCityData?.account;
     if (!origin) throw new Error("Origin city not loaded");
-    const ix = buildIntercityCancelIx({
+    const ix = await buildIntercityCancelIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       player,
@@ -811,7 +813,7 @@ export function MapTab() {
   const teleport = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
-    const ix = buildIntercityTeleportIx({
+    const ix = await buildIntercityTeleportIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       player,
@@ -836,7 +838,7 @@ export function MapTab() {
     if (!publicKey) throw new Error("Wallet not connected");
     // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
     const n = Math.max(1, Math.floor(count));
-    const instructions = buildTravelSpeedupIxs({
+    const instructions = await buildTravelSpeedupIxs({
       owner: publicKey,
       gameEngine: client.gameEngine,
       tier: tier as 1 | 2,
@@ -855,7 +857,7 @@ export function MapTab() {
   const startAndSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player || destinationCity == null) throw new Error("Not ready");
     if (!destCell) throw new Error("Pick a landing cell");
-    const startIx = buildIntercityStartIx({
+    const startIx = await buildIntercityStartIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       gameAuthority: ge?.authority,
@@ -864,7 +866,7 @@ export function MapTab() {
       destGridLat: destCell.gridLat,
       destGridLong: destCell.gridLong,
     });
-    const [speedupIx] = buildTravelSpeedupIxs({
+    const [speedupIx] = await buildTravelSpeedupIxs({
       owner: publicKey,
       gameEngine: client.gameEngine,
       tier: tier as 1 | 2,
@@ -943,7 +945,7 @@ export function MapTab() {
     // PDA yet, so it's still in viewedOccupied for a moment.
     if (selectedEntity.occupantType === 2) {
       const enc = viewedEncounters.find((e) => e.pubkey.toBase58() === selectedEntity.pubkey);
-      if (enc?.account.health.isZero()) {
+      if (enc?.account.health === 0n) {
         setSelectedEntity(null);
         return;
       }
@@ -992,7 +994,7 @@ export function MapTab() {
         inRange,
         canStrike: inRange && levelOk && staminaOk,
         reason,
-        maxHealth: enc.account.maxHealth.toNumber(),
+        maxHealth: Number(enc.account.maxHealth),
       };
     }
     /* PvP — no level gate on attack_player today; the program checks range +
@@ -1001,7 +1003,7 @@ export function MapTab() {
     const target = (cityPlayers ?? []).find((p) => p.pubkey.toBase58() === selectedEntity.pubkey);
     if (!target) return null;
     const inRange = selectedEntityDistMeters != null && selectedEntityDistMeters <= pvpRangeMeters;
-    const hasUnits = getTotalDefensiveUnits(player).toNumber() > 0;
+    const hasUnits = getTotalDefensiveUnits(player) > 0n;
     return {
       kind: "pvp" as const,
       inRange,
@@ -1028,7 +1030,7 @@ export function MapTab() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ix = buildIntracityStartIx({
+    const ix = await buildIntracityStartIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       gameAuthority: ge?.authority,
@@ -1086,7 +1088,9 @@ export function MapTab() {
       }
     }
     candidates.sort((a, b) => a.dist - b.dist);
-    const pdas = candidates.map((c) => cellLocationPda(ge, cityId, c.gridLat, c.gridLong));
+    const pdas = await Promise.all(
+      candidates.map((c) => cellLocationPda(ge, cityId, c.gridLat, c.gridLong)),
+    );
     const infos = await client.connection.getMultipleAccountsInfo(pdas);
     const idx = infos.indexOf(null);
     if (idx === -1) throw new Error("All cells around the target are occupied");
@@ -1103,7 +1107,7 @@ export function MapTab() {
     if (!publicKey || !player || !selectedEntity) throw new Error("Not ready");
     const enc = (viewedEncounters ?? []).find((e) => e.pubkey.toBase58() === selectedEntity.pubkey);
     if (!enc) throw new Error("Encounter not found");
-    const ix = buildAttackEncounterIx({
+    const ix = await buildAttackEncounterIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       gameAuthority: ge?.authority,
@@ -1111,7 +1115,7 @@ export function MapTab() {
       encounterPubkey: enc.pubkey,
       encounter: enc.account,
     });
-    const maxHealth = enc.account.maxHealth.toNumber();
+    const maxHealth = Number(enc.account.maxHealth);
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -1129,7 +1133,7 @@ export function MapTab() {
     if (!publicKey || !player || !selectedEntity) throw new Error("Not ready");
     const target = (cityPlayers ?? []).find((p) => p.pubkey.toBase58() === selectedEntity.pubkey);
     if (!target) throw new Error("Target player not found in this city");
-    const ix = buildAttackPlayerIx({
+    const ix = await buildAttackPlayerIx({
       attacker: publicKey,
       gameEngine: client.gameEngine,
       attackerCityId: player.currentCity,
@@ -1155,7 +1159,7 @@ export function MapTab() {
     // Destination is captured for the optimistic store update below — by the
     // time the success callback fires, `player` here is still the pre-tx
     // snapshot, which is what we want.
-    const { ix, destLat, destLong } = buildIntracityCompleteIx({
+    const { ix, destLat, destLong } = await buildIntracityCompleteIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       player,
@@ -1188,7 +1192,7 @@ export function MapTab() {
 
   const cancelIntra = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ix = buildIntracityCancelIx({
+    const ix = await buildIntracityCancelIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       player,
@@ -1211,7 +1215,7 @@ export function MapTab() {
   // instructions one tx can usefully hold (timer-collapse ∧ gem affordability).
   // Travel: T1 leaves 50% of time / 1x cost, T2 leaves 25% / 2x cost.
   const travelGemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
-  const travelGemBalance = player?.gems?.toNumber?.() ?? 0;
+  const travelGemBalance = Number(player?.gems ?? 0n);
   const speedupTiers = [
     {
       tier: 1,
@@ -1289,7 +1293,7 @@ export function MapTab() {
               tiers={speedupTiers}
               onSpeedup={(tier, rp, count) => speedup(tier, rp, count)}
               gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
-              gemBalance={player?.gems?.toNumber?.()}
+              gemBalance={Number(player?.gems ?? 0n)}
             />
           </div>
         )}
@@ -2113,13 +2117,13 @@ export function MapTab() {
         const a = p.account;
         if (!a) return false;
         if (a.travelType !== TravelType.Intracity) return false;
-        if (a.arrivalTime.toNumber() <= 0) return false;
+        if (Number(a.arrivalTime) <= 0) return false;
         return true;
       })
       .map((p) => {
         const a = p.account;
-        const dep = a.departureTime.toNumber();
-        const arr = a.arrivalTime.toNumber();
+        const dep = Number(a.departureTime);
+        const arr = Number(a.arrivalTime);
         const total = arr - dep;
         const pct = total > 0 ? Math.min(100, Math.max(0, ((chainNow - dep) / total) * 100)) : 0;
         // Walker's cosmetic identity travels with the line + marker.
@@ -2263,28 +2267,21 @@ const TIER_NAMES: Record<number, string> = {
 };
 
 /**
- * Display-format a numeric quantity. Accepts `number`, `bigint`, or a
- * BN-like (`{ toString(): string }`) so on-chain u64 values can be passed
- * directly without going through `Number(...)` first — for whale-tier
- * networth (~3.7e17 base units per test 27) that f64 coercion loses ~9
- * significant digits before this function runs. We bucket on the bigint
- * magnitude and only convert to f64 for the formatted tail (which is
+ * Display-format a numeric quantity. Accepts `number` or `bigint` so on-chain
+ * u64 values can be passed directly without going through `Number(...)` first —
+ * for whale-tier networth (~3.7e17 base units per test 27) that f64 coercion
+ * loses ~9 significant digits before this function runs. We bucket on the
+ * bigint magnitude and only convert to f64 for the formatted tail (which is
  * already small enough to round safely).
  */
-function formatCompact(n: number | bigint | { toString(): string }): string {
+function formatCompact(n: number | bigint): string {
   let big: bigint;
   if (typeof n === "bigint") {
     big = n;
-  } else if (typeof n === "number") {
+  } else {
     if (!Number.isFinite(n)) return "—";
     if (Math.abs(n) < 1_000) return n.toLocaleString();
     big = BigInt(Math.trunc(n));
-  } else {
-    try {
-      big = BigInt(n.toString());
-    } catch {
-      return "—";
-    }
   }
   const abs = big < 0n ? -big : big;
   const sign = big < 0n ? "-" : "";
@@ -2509,8 +2506,8 @@ interface CastleSnapshot {
   maxGarrison: number;
   isVacant: boolean;
   hasKing: boolean;
-  claimedAt: { toNumber(): number };
-  contestEndAt: { toNumber(): number };
+  claimedAt: bigint;
+  contestEndAt: bigint;
 }
 
 /* Castle vocabulary (tier name, status name, status narration) lives
@@ -2522,12 +2519,12 @@ interface CastleSnapshot {
 interface EncounterSnapshot {
   level: number;
   rarity: number;
-  health: { toString(): string; gtn?(n: number): boolean };
-  maxHealth: { toString(): string };
+  health: bigint;
+  maxHealth: bigint;
   defense: number;
   attackerCount: number;
-  despawnAt: { toNumber(): number };
-  spawnedAt: { toNumber(): number };
+  despawnAt: bigint;
+  spawnedAt: bigint;
 }
 
 const ENCOUNTER_RARITY_NAMES: Record<number, string> = {
@@ -2565,16 +2562,16 @@ function formatDuration(seconds: number): string {
 interface PlayerSnapshot {
   name: string;
   level: number;
-  reputation: { toString(): string };
-  networth: { toString(): string };
-  lockedNovi: { toString(): string };
+  reputation: bigint;
+  networth: bigint;
+  lockedNovi: bigint;
   subscriptionTier: number;
-  defensiveUnit1: { toString(): string };
-  defensiveUnit2: { toString(): string };
-  defensiveUnit3: { toString(): string };
-  operativeUnit1: { toString(): string };
-  operativeUnit2: { toString(): string };
-  operativeUnit3: { toString(): string };
+  defensiveUnit1: bigint;
+  defensiveUnit2: bigint;
+  defensiveUnit3: bigint;
+  operativeUnit1: bigint;
+  operativeUnit2: bigint;
+  operativeUnit3: bigint;
   owner: { toBase58(): string };
   // Team affiliation — `team` is NULL_PUBKEY when the player is solo,
   // a TeamAccount PDA otherwise.
@@ -2642,18 +2639,18 @@ function EntityPanel({
     ? (ENCOUNTER_RARITY_COLOR[enc.rarity] ?? "rgba(160, 30, 30, 0.95)")
     : "rgba(160, 30, 30, 0.95)";
   /*
-   * Encounter HP can exceed 2^53 for high-rarity bosses; convert via BigInt
-   * so the percentage stays accurate. Display fields below still pass the
-   * BN through `formatCompact` which is bigint-aware now.
+   * Encounter HP can exceed 2^53 for high-rarity bosses; the SDK already
+   * exposes it as bigint so the percentage stays accurate. Display fields
+   * below pass the bigint through `formatCompact`, which is bigint-aware.
    */
-  const encHealthBig = enc ? BigInt(enc.health.toString()) : 0n;
-  const encMaxHealthBig = enc ? BigInt(enc.maxHealth.toString()) : 0n;
+  const encHealthBig = enc ? enc.health : 0n;
+  const encMaxHealthBig = enc ? enc.maxHealth : 0n;
   const encHealthPct =
     encMaxHealthBig > 0n
       ? Math.max(0, Math.min(100, Number((encHealthBig * 10000n) / encMaxHealthBig) / 100))
       : 0;
   const nowSec = Math.floor(Date.now() / 1000);
-  const despawnIn = enc ? enc.despawnAt.toNumber() - nowSec : 0;
+  const despawnIn = enc ? Number(enc.despawnAt) - nowSec : 0;
 
   // Player display name — prefer the on-chain name verbatim (custom or
   // the chain's default `Player #N`); it's always THE player's name, so
@@ -2676,18 +2673,14 @@ function EntityPanel({
    * the f64 rounding happens only inside formatCompact's tail division.
    */
   const defensiveTotal: bigint = account
-    ? BigInt(account.defensiveUnit1.toString()) +
-      BigInt(account.defensiveUnit2.toString()) +
-      BigInt(account.defensiveUnit3.toString())
+    ? account.defensiveUnit1 + account.defensiveUnit2 + account.defensiveUnit3
     : 0n;
   const operativeTotal: bigint = account
-    ? BigInt(account.operativeUnit1.toString()) +
-      BigInt(account.operativeUnit2.toString()) +
-      BigInt(account.operativeUnit3.toString())
+    ? account.operativeUnit1 + account.operativeUnit2 + account.operativeUnit3
     : 0n;
-  const networth: bigint = account ? BigInt(account.networth.toString()) : 0n;
-  const lockedNovi: bigint = account ? BigInt(account.lockedNovi.toString()) : 0n;
-  const reputation: bigint = account ? BigInt(account.reputation.toString()) : 0n;
+  const networth: bigint = account ? account.networth : 0n;
+  const lockedNovi: bigint = account ? account.lockedNovi : 0n;
+  const reputation: bigint = account ? account.reputation : 0n;
 
   // Cosmetic name colour — falls through `var(--ink)` until the player
   // has equipped a colour AND the catalog has the matching entry.

@@ -54,11 +54,12 @@ export async function POST(req: Request) {
     return fail("'relicId' must be one of the offered options");
   }
 
-  const ix = createChooseRelicInstruction(
+  const gameAuthority = await gameAuthorityKeypair();
+  const ix = await createChooseRelicInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: gameAuthority.publicKey,
     },
     {
       templateId: run.dungeonId,

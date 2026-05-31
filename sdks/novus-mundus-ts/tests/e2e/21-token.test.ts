@@ -10,7 +10,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createReservedToLockedInstruction,
@@ -26,7 +25,7 @@ import {
   derivePlayerPda,
   deriveTeamPda,
   deriveNoviMintPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   RESERVED_NOVI_VESTING_PERIOD,
   UnitType,
   CollectionType,
@@ -58,7 +57,7 @@ import {
   getCurrentTimestamp,
   advanceTime,
 } from '../fixtures/time';
-import { readSplTokenAmount } from '../fixtures/svm';
+import { readSplTokenAmount, svmKey } from '../fixtures/svm';
 
 // Test Suite
 
@@ -82,10 +81,10 @@ describe('Token Operations', () => {
     it('should reject conversion when no reserved NOVI', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(1000);
+      const amount = 1000n;
 
       // Players start with 0 reserved NOVI - conversion should fail
-      const ix = createReservedToLockedInstruction(
+      const ix = await createReservedToLockedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount }
       );
@@ -100,9 +99,9 @@ describe('Token Operations', () => {
     it('should reject conversion with insufficient reserved', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const hugeAmount = new BN('999999999999999');
+      const hugeAmount = 999999999999999n;
 
-      const ix = createReservedToLockedInstruction(
+      const ix = await createReservedToLockedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount: hugeAmount }
       );
@@ -117,9 +116,9 @@ describe('Token Operations', () => {
     it('should reject zero conversion', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createReservedToLockedInstruction(
+      const ix = await createReservedToLockedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { amount: new BN(0) }
+        { amount: 0n }
       );
 
       await expectTransactionToFail(
@@ -132,10 +131,10 @@ describe('Token Operations', () => {
     it('should reject conversion with no reserved balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(500);
+      const amount = 500n;
 
       // Players have 0 reserved NOVI by default
-      const ix = createReservedToLockedInstruction(
+      const ix = await createReservedToLockedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount }
       );
@@ -151,9 +150,9 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Verify instruction can be constructed and player state is valid
-      const ix = createReservedToLockedInstruction(
+      const ix = await createReservedToLockedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { amount: new BN(100) }
+        { amount: 100n }
       );
 
       expect(ix).toBeDefined();
@@ -167,10 +166,10 @@ describe('Token Operations', () => {
     it('should reject withdrawal when no reserved NOVI', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(500);
+      const amount = 500n;
 
       // Players start with 0 reserved NOVI
-      const ix = createWithdrawReservedInstruction(
+      const ix = await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount }
       );
@@ -185,9 +184,9 @@ describe('Token Operations', () => {
     it('should reject withdrawal with insufficient reserved', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const hugeAmount = new BN('999999999999999');
+      const hugeAmount = 999999999999999n;
 
-      const ix = createWithdrawReservedInstruction(
+      const ix = await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount: hugeAmount }
       );
@@ -202,9 +201,9 @@ describe('Token Operations', () => {
     it('should reject zero withdrawal', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createWithdrawReservedInstruction(
+      const ix = await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { amount: new BN(0) }
+        { amount: 0n }
       );
 
       await expectTransactionToFail(
@@ -217,9 +216,9 @@ describe('Token Operations', () => {
     it('should reject small withdrawal when no reserved NOVI', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(100);
+      const amount = 100n;
 
-      const ix = createWithdrawReservedInstruction(
+      const ix = await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount }
       );
@@ -235,9 +234,9 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Verify instruction construction and player state
-      const ix = createWithdrawReservedInstruction(
+      const ix = await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { amount: new BN(200) }
+        { amount: 200n }
       );
 
       expect(ix).toBeDefined();
@@ -255,13 +254,13 @@ describe('Token Operations', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createMintForPrizeInstruction(
+          await createMintForPrizeInstruction(
             {
               authority: ctx.daoAuthority.publicKey,
               gameEngine: ctx.gameEngine,
               recipientOwner: player.publicKey,
             },
-            { amount: new BN(AMOUNT), purpose: MintPurpose.Prize },
+            { amount: BigInt(AMOUNT), purpose: MintPurpose.Prize },
           ),
         ),
         [ctx.daoAuthority],
@@ -271,23 +270,23 @@ describe('Token Operations', () => {
       await advanceTime(ctx.svm, RESERVED_NOVI_VESTING_PERIOD + 60);
 
       // The player's wallet NOVI ATA does not exist yet — withdraw must create it.
-      const [noviMint] = deriveNoviMintPda();
-      const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
-      expect(ctx.svm.getAccount(walletAta)).toBeNull();
+      const [noviMint] = await deriveNoviMintPda();
+      const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
+      expect(ctx.svm.getAccount(svmKey(walletAta))).toBeNull();
 
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createWithdrawReservedInstruction(
+          await createWithdrawReservedInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
-            { amount: new BN(AMOUNT) },
+            { amount: BigInt(AMOUNT) },
           ),
         ),
         [player.keypair],
       );
 
       // The wallet ATA now exists and holds the withdrawn NOVI.
-      expect(ctx.svm.getAccount(walletAta)).not.toBeNull();
+      expect(ctx.svm.getAccount(svmKey(walletAta))).not.toBeNull();
       expect(readSplTokenAmount(ctx.svm, walletAta)).toBe(BigInt(AMOUNT));
     });
   });
@@ -298,10 +297,10 @@ describe('Token Operations', () => {
     it('should update locked NOVI balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const delta = new BN(100);
+      const delta = 100n;
 
       // Note: updateLockedNovi is time-based, no amount parameter
-      const ix = createUpdateLockedNoviInstruction(
+      const ix = await createUpdateLockedNoviInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey }
       );
 
@@ -316,7 +315,7 @@ describe('Token Operations', () => {
 
       // Note: updateLockedNovi is time-based, no amount parameter
       // Tokens are generated based on elapsed time and subscription tier
-      const ix = createUpdateLockedNoviInstruction(
+      const ix = await createUpdateLockedNoviInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey }
       );
 
@@ -327,7 +326,7 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // First call (might succeed or not depending on time)
-      const ix = createUpdateLockedNoviInstruction(
+      const ix = await createUpdateLockedNoviInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey }
       );
 
@@ -338,9 +337,9 @@ describe('Token Operations', () => {
     it('should require valid player account', async () => {
       // An uninitialized player has no player account on-chain
       // The instruction will be constructed but reference a non-existent PDA
-      const unauthorized = Keypair.generate();
+      const unauthorized = await Keypair.generate();
 
-      const ix = createUpdateLockedNoviInstruction(
+      const ix = await createUpdateLockedNoviInstruction(
         { gameEngine: ctx.gameEngine, owner: unauthorized.publicKey }
       );
 
@@ -381,9 +380,9 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Try to spend more than available
-      const ix = createVaultTransferInstruction(
+      const ix = await createVaultTransferInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { amount: new BN('999999999999999'), toVault: true }
+        { amount: 999999999999999n, toVault: true }
       );
 
       await expectTransactionToFail(
@@ -557,13 +556,13 @@ describe('Token Operations', () => {
       const sender = await factory.createPlayer({ initialize: true });
       const receiver = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(100);
+      const amount = 100n;
 
       // Transfer requires team membership - without a real team, this fails
       const teamId = 1;
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
-      const ix = createTransferCashInstruction(
+      const ix = await createTransferCashInstruction(
         {
           gameEngine: ctx.gameEngine,
           sender: sender.publicKey,
@@ -585,9 +584,9 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       const teamId = 1;
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
-      const ix = createTransferCashInstruction(
+      const ix = await createTransferCashInstruction(
         {
           gameEngine: ctx.gameEngine,
           sender: player.publicKey,
@@ -595,7 +594,7 @@ describe('Token Operations', () => {
           team: teamPda,
           teamId,
         },
-        { amount: new BN(100) }
+        { amount: 100n }
       );
 
       await expectTransactionToFail(
@@ -610,11 +609,11 @@ describe('Token Operations', () => {
       const receiver = await factory.createPlayer({ initialize: true });
 
       const teamId = 1;
-      const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
-      const hugeAmount = new BN('999999999999999');
+      const hugeAmount = 999999999999999n;
 
-      const ix = createTransferCashInstruction(
+      const ix = await createTransferCashInstruction(
         {
           gameEngine: ctx.gameEngine,
           sender: sender.publicKey,
@@ -639,10 +638,10 @@ describe('Token Operations', () => {
     it('should reject deposit without sufficient balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(100);
+      const amount = 100n;
 
       // Players start with 0 token balance - deposit to vault should fail
-      const ix = createVaultTransferInstruction(
+      const ix = await createVaultTransferInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount, toVault: true }
       );
@@ -657,10 +656,10 @@ describe('Token Operations', () => {
     it('should reject withdrawal without vault balance', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const amount = new BN(100);
+      const amount = 100n;
 
       // Players start with 0 vault balance - withdrawal should fail
-      const ix = createVaultTransferInstruction(
+      const ix = await createVaultTransferInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount, toVault: false }
       );
@@ -714,9 +713,9 @@ describe('Token Operations', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Even tiny amounts fail without reserved balance
-      const tinyAmount = new BN(1);
+      const tinyAmount = 1n;
 
-      const ix = createWithdrawReservedInstruction(
+      const ix = await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { amount: tinyAmount }
       );
@@ -770,7 +769,7 @@ describe('Token Operations', () => {
 
   describe('Token Security', () => {
     it('should prevent unauthorized minting', async () => {
-      const unauthorized = Keypair.generate();
+      const unauthorized = await Keypair.generate();
 
       // Only DAO authority can mint
       // No direct mint instruction available to regular users

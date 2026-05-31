@@ -15,8 +15,8 @@ import {
   EventStatus,
   EventPrizeType,
   deriveEventPda,
-  getAssociatedTokenAddressSync,
-  getAssociatedTokenAddressSyncForPda,
+  getAssociatedTokenAddressAsync,
+  getAssociatedTokenAddressAsyncForPda,
   isNullPubkey,
   createJoinEventInstruction,
   createFinalizeEventInstruction,
@@ -68,9 +68,9 @@ export function EventCard({
   const transact = useTransact();
 
   const nowSec = Math.floor(Date.now() / 1000);
-  const eventId = event.id.toNumber();
-  const startTime = event.startTime.toNumber();
-  const endTime = event.endTime.toNumber();
+  const eventId = Number(event.id);
+  const startTime = Number(event.startTime);
+  const endTime = Number(event.endTime);
   const status = event.status;
   const splash = eventSplashPath(eventId, startTime, endTime);
 
@@ -104,7 +104,7 @@ export function EventCard({
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createJoinEventInstruction({
+    const ix = await createJoinEventInstruction({
       payer: publicKey,
       gameEngine: ge,
       playerOwner: publicKey,
@@ -122,7 +122,7 @@ export function EventCard({
 
   const handleFinalize = async (reportPhase: (p: TxPhase) => void) => {
     const ge = client.gameEngine;
-    const ix = createFinalizeEventInstruction({
+    const ix = await createFinalizeEventInstruction({
       gameEngine: ge,
       eventId,
     });
@@ -152,17 +152,17 @@ export function EventCard({
       if (isNullPubkey(event.prizeTokenMint)) {
         throw new Error("SPL prize event is missing its prize token mint");
       }
-      const [eventPda] = deriveEventPda(ge, eventId);
+      const [eventPda] = await deriveEventPda(ge, eventId);
       extra = {
         prizeTokenMint: event.prizeTokenMint,
         // Event vault: ATA of the prize mint owned by the event PDA (off-curve).
-        eventVault: getAssociatedTokenAddressSyncForPda(event.prizeTokenMint, eventPda),
+        eventVault: await getAssociatedTokenAddressAsyncForPda(event.prizeTokenMint, eventPda),
         // Winner's SPL token account: ATA of the prize mint owned by the winner.
-        winnerSplTokenAccount: getAssociatedTokenAddressSync(event.prizeTokenMint, publicKey),
+        winnerSplTokenAccount: await getAssociatedTokenAddressAsync(event.prizeTokenMint, publicKey),
       };
     }
 
-    const ix = createClaimPrizeInstruction({
+    const ix = await createClaimPrizeInstruction({
       payer: publicKey,
       gameEngine: ge,
       winnerOwner: publicKey,
@@ -179,8 +179,8 @@ export function EventCard({
       .then((r) => r.signature);
   };
 
-  const prizeAmount = event.prizeAmount.toNumber();
-  const prizeRemaining = event.prizeRemaining.toNumber();
+  const prizeAmount = Number(event.prizeAmount);
+  const prizeRemaining = Number(event.prizeRemaining);
   const myEstimatedPrize =
     myRank !== null && prizeAmount > 0
       ? Math.floor((prizeAmount * (PRIZE_BPS[myRank] ?? 0)) / 10000)
@@ -261,7 +261,7 @@ export function EventCard({
             <span className="text-text-secondary">
               Score{" "}
               <span className="font-semibold text-text-primary">
-                {(participation?.score.toNumber() ?? 0).toLocaleString()}
+                {Number(participation?.score ?? 0n).toLocaleString()}
               </span>
             </span>
           </div>
@@ -298,7 +298,7 @@ export function EventCard({
                     {isMe && <span className="text-[10px] uppercase text-text-gold">you</span>}
                   </div>
                   <span className="text-text-secondary">
-                    {entry.score.toNumber().toLocaleString()}
+                    {Number(entry.score).toLocaleString()}
                   </span>
                 </div>
               );

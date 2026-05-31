@@ -26,7 +26,7 @@ import {
   deriveHeroCollectionPda,
   deriveEstatePda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Create Template (Admin)
 
@@ -864,7 +864,7 @@ export async function createClaimLeaderboardPrizeInstruction(
   const [leaderboard] = await deriveDungeonLeaderboardPda(accounts.gameEngine, params.dungeonId, params.weekNumber);
   const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (signer)

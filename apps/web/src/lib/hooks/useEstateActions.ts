@@ -54,7 +54,9 @@ export function useEstateActions() {
   const { data: buildingTemplates } = useQuery({
     queryKey: ["building-templates"],
     queryFn: async () => {
-      const pdas = BUILDING_TYPE_IDS.map((id) => deriveBuildingTemplatePda(id)[0]);
+      const pdas = await Promise.all(
+        BUILDING_TYPE_IDS.map((id) => deriveBuildingTemplatePda(id).then(([pda]) => pda)),
+      );
       const infos = await connection.getMultipleAccountsInfo(pdas);
       const map = new Map<number, BuildingTemplateAccount>();
       infos.forEach((info, i) => {
@@ -73,7 +75,7 @@ export function useEstateActions() {
       const ge = client.gameEngine;
 
       const playerCity = playerData?.account.currentCity;
-      const ix = createCreateEstateInstruction(
+      const ix = await createCreateEstateInstruction(
         { gameEngine: ge, owner: publicKey },
         { cityId: playerCity! },
       );
@@ -98,8 +100,8 @@ export function useEstateActions() {
       const name = BUILDING_FEATURE_MAP.get(buildingType)?.name ?? `Building #${buildingType}`;
 
       const ix = isUpgrade
-        ? createUpgradeBuildingInstruction({ owner: publicKey, gameEngine: ge }, { buildingType })
-        : createBuildBuildingInstruction(
+        ? await createUpgradeBuildingInstruction({ owner: publicKey, gameEngine: ge }, { buildingType })
+        : await createBuildBuildingInstruction(
             {
               gameEngine: ge,
               owner: publicKey,
@@ -131,10 +133,12 @@ export function useEstateActions() {
       const name = BUILDING_FEATURE_MAP.get(buildingType)?.name ?? `Building #${buildingType}`;
       // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
       const n = Math.max(1, Math.floor(count));
-      const instructions = Array.from({ length: n }, () =>
-        createBuildingSpeedupInstruction(
-          { owner: publicKey, gameEngine: ge },
-          { buildingType, speedupTier: tier as 1 | 2 },
+      const instructions = await Promise.all(
+        Array.from({ length: n }, () =>
+          createBuildingSpeedupInstruction(
+            { owner: publicKey, gameEngine: ge },
+            { buildingType, speedupTier: tier as 1 | 2 },
+          ),
         ),
       );
       return transact
@@ -155,7 +159,7 @@ export function useEstateActions() {
       if (!publicKey) throw new Error("Wallet not connected");
       const ge = client.gameEngine;
       const name = BUILDING_FEATURE_MAP.get(buildingType)?.name ?? `Building #${buildingType}`;
-      const ix = createCompleteBuildingInstruction(
+      const ix = await createCompleteBuildingInstruction(
         { owner: publicKey, gameEngine: ge },
         { buildingType },
       );
@@ -175,7 +179,7 @@ export function useEstateActions() {
     async (reportPhase: (p: TxPhase) => void) => {
       if (!publicKey) throw new Error("Wallet not connected");
       const ge = client.gameEngine;
-      const ix = createBuyPlotInstruction({ owner: publicKey, gameEngine: ge });
+      const ix = await createBuyPlotInstruction({ owner: publicKey, gameEngine: ge });
       return transact
         .mutateAsync({
           instructions: [ix],
@@ -200,7 +204,7 @@ export function useEstateActions() {
       const slot = estate ? findBuilding(estate, buildingType) : null;
       const isUpgrade = slot?.status === BuildingStatus.Active;
       const level = isUpgrade ? slot!.level : 0;
-      const base = t.baseNoviCost.toNumber();
+      const base = Number(t.baseNoviCost);
       return {
         baseCost: calculateBuildingCost(base, level, t.costGrowthBps),
         baseTimeHours: calculateBuildingTime(t.baseTimeSeconds, level, t.timeGrowthBps) / 3600,
@@ -224,7 +228,7 @@ export function useEstateActions() {
       if (!t) return null;
       const slot = estate ? findBuilding(estate, buildingType) : null;
       const curLevel = slot?.level ?? 0;
-      const base = t.baseNoviCost.toNumber();
+      const base = Number(t.baseNoviCost);
       const COUNT = 6;
       const start = Math.max(0, Math.min(curLevel, t.maxLevel - COUNT + 1));
       const out: { level: number; cost: number; timeHours: number }[] = [];

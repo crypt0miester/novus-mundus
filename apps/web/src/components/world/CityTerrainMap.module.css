@@ -181,6 +181,13 @@
 .toggle3DPill {
   left: 44px;
 }
+/* View-angle (yaw preset) toggle sits just right of the 2D/3D pill. */
+.anglePill {
+  left: 80px;
+  width: 28px;
+  min-width: 0;
+  padding: 0;
+}
 /* Orbit-toggle (touch only) sits left of the 2D/3D pill. */
 .orbitTogglePill {
   right: 90px;

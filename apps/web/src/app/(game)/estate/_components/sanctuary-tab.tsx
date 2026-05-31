@@ -87,7 +87,7 @@ function MeditationView() {
   const [heroAssets, setHeroAssets] = useState<(ParsedAssetV1 | null)[]>([null, null, null]);
 
   const meditating = player ? isHeroMeditating(player) : false;
-  const meditationStart = player?.meditationStartedAt?.toNumber() ?? 0;
+  const meditationStart = player ? Number(player.meditationStartedAt) : 0;
   const meditatingSlot = player?.meditatingHeroSlot ?? 255;
 
   const traveling = player ? isTraveling(player) : false;
@@ -212,7 +212,7 @@ function MeditationView() {
     }
 
     const ge = client.gameEngine;
-    const ix = createStartMeditationInstruction(
+    const ix = await createStartMeditationInstruction(
       { owner: publicKey, gameEngine: ge, heroMint, heroTemplateId },
       { heroSlot: selectedSlot },
     );
@@ -233,7 +233,7 @@ function MeditationView() {
       throw new Error("Hero data still loading — reopen the Sanctuary and retry");
     }
     const ge = client.gameEngine;
-    const ix = createClaimMeditationInstruction({
+    const ix = await createClaimMeditationInstruction({
       owner: publicKey,
       gameEngine: ge,
       heroMint: meditatingHeroMint,
@@ -252,7 +252,7 @@ function MeditationView() {
   const handleSpeedup = async (tier: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createSpeedupMeditationInstruction(
+    const ix = await createSpeedupMeditationInstruction(
       { owner: publicKey, gameEngine: ge },
       { speedupTier: tier as 1 | 2 },
     );
@@ -275,11 +275,11 @@ function MeditationView() {
       throw new Error("Hero data still loading — reopen the Sanctuary and retry");
     }
     const ge = client.gameEngine;
-    const startIx = createStartMeditationInstruction(
+    const startIx = await createStartMeditationInstruction(
       { owner: publicKey, gameEngine: ge, heroMint, heroTemplateId },
       { heroSlot: selectedSlot },
     );
-    const speedupIx = createSpeedupMeditationInstruction(
+    const speedupIx = await createSpeedupMeditationInstruction(
       { owner: publicKey, gameEngine: ge },
       { speedupTier: tier as 1 | 2 },
     );
@@ -494,14 +494,14 @@ function MeditationView() {
                       <GemAction
                         onClick={(rp) => handleMeditateAndSpeedup(1, rp)}
                         gemCost={3000}
-                        gemBalance={player?.gems?.toNumber?.() ?? 0}
+                        gemBalance={Number(player?.gems ?? 0n)}
                       >
                         Meditate &amp; Speed Up (+1h)
                       </GemAction>
                       <GemAction
                         onClick={(rp) => handleMeditateAndSpeedup(2, rp)}
                         gemCost={18000}
-                        gemBalance={player?.gems?.toNumber?.() ?? 0}
+                        gemBalance={Number(player?.gems ?? 0n)}
                       >
                         Meditate &amp; Speed Up (+6h)
                       </GemAction>
@@ -527,7 +527,7 @@ function MeditationView() {
                   },
                   {
                     label: "Health/Level",
-                    value: gp.healthPerLevel.toNumber().toLocaleString(),
+                    value: Number(gp.healthPerLevel).toLocaleString(),
                   },
                   { label: "Defense/Level", value: gp.defensePerLevel.toString() },
                   { label: "Happiness Synch Max", value: gp.happinessSynchronyMax.toString() },

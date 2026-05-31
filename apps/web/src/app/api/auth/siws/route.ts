@@ -1,8 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import { PublicKey } from "@solana/web3.js";
-import { verifySignIn } from "@solana/wallet-standard-util";
-import type { SolanaSignInInput, SolanaSignInOutput } from "@solana/wallet-standard-features";
+import { ed25519 } from "@noble/curves/ed25519";
 import {
   SESSION_COOKIE,
   SESSION_TTL_MS,
@@ -23,8 +22,81 @@ interface SerializedOutput {
   signature: string;
 }
 
+// Local SIWS shapes. These mirror the @solana/wallet-standard-features
+// `SolanaSignInInput` / `SolanaSignInOutput` surfaces we depend on; the package
+// is not installed (it is a non-resolving transitive of wallet-adapter), so the
+// fields the SIWS message-construction spec defines are declared here directly.
+interface SolanaSignInInput {
+  domain?: string;
+  address?: string;
+  statement?: string;
+  uri?: string;
+  version?: string;
+  chainId?: string;
+  nonce?: string;
+  issuedAt?: string;
+  expirationTime?: string;
+  notBefore?: string;
+  requestId?: string;
+  resources?: readonly string[];
+}
+
+interface SolanaSignInOutput {
+  account: { address: string; publicKey: Uint8Array };
+  signedMessage: Uint8Array;
+  signature: Uint8Array;
+}
+
 function fromBase64(b64: string): Uint8Array {
   return new Uint8Array(Buffer.from(b64, "base64"));
+}
+
+// Reconstruct the canonical Sign-In-With-Solana message text from the input, per
+// the wallet-standard spec. Optional fields are omitted line-by-line; this is a
+// byte-for-byte port of @solana/wallet-standard-util's createSignInMessageText.
+function createSignInMessageText(input: SolanaSignInInput): string {
+  let message = `${input.domain} wants you to sign in with your Solana account:\n`;
+  message += `${input.address}`;
+
+  if (input.statement) message += `\n\n${input.statement}`;
+
+  const fields: string[] = [];
+  if (input.uri) fields.push(`URI: ${input.uri}`);
+  if (input.version) fields.push(`Version: ${input.version}`);
+  if (input.chainId) fields.push(`Chain ID: ${input.chainId}`);
+  if (input.nonce) fields.push(`Nonce: ${input.nonce}`);
+  if (input.issuedAt) fields.push(`Issued At: ${input.issuedAt}`);
+  if (input.expirationTime) fields.push(`Expiration Time: ${input.expirationTime}`);
+  if (input.notBefore) fields.push(`Not Before: ${input.notBefore}`);
+  if (input.requestId) fields.push(`Request ID: ${input.requestId}`);
+  if (input.resources) {
+    fields.push("Resources:");
+    for (const resource of input.resources) fields.push(`- ${resource}`);
+  }
+  if (fields.length) message += `\n\n${fields.join("\n")}`;
+
+  return message;
+}
+
+// Local port of @solana/wallet-standard-util's `verifySignIn` (package not
+// installed). Binds the wallet's signed bytes to the server-validated `input`
+// by reconstructing the expected message and comparing, then checks the ed25519
+// signature over those bytes against the account's public key.
+function verifySignIn(input: SolanaSignInInput, output: SolanaSignInOutput): boolean {
+  // The wallet fills `address` from the signing account when the input omits it,
+  // so the signed bytes carry the account address. Mirror that default before
+  // reconstructing, or the byte comparison rejects legitimate sign-ins.
+  const resolved: SolanaSignInInput = {
+    ...input,
+    address: input.address ?? output.account.address,
+  };
+  const expected = new TextEncoder().encode(createSignInMessageText(resolved));
+  const signed = output.signedMessage;
+  if (expected.length !== signed.length) return false;
+  for (let i = 0; i < expected.length; i += 1) {
+    if (expected[i] !== signed[i]) return false;
+  }
+  return ed25519.verify(output.signature, signed, output.account.publicKey);
 }
 
 /** GET /api/auth/siws — issue a login nonce for the SIWS message. */

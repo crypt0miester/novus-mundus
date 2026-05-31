@@ -58,25 +58,29 @@ export async function POST(req: Request) {
   if (matchOrError instanceof Error) return fail(matchOrError.message, 409);
   const match = matchOrError;
 
-  const challengerPlayer = derivePlayerPda(gameEngine, owner)[0];
-  const defenderPlayer = derivePlayerPda(gameEngine, match.defenderWallet)[0];
-  const [challengerLoadout, defenderLoadout] = await Promise.all([
-    getArenaLoadout(challengerPlayer),
-    getArenaLoadout(defenderPlayer),
-  ]);
+  const challengerPlayer = (await derivePlayerPda(gameEngine, owner))[0];
+  const defenderPlayer = (await derivePlayerPda(gameEngine, match.defenderWallet))[0];
+  const [challengerLoadout, defenderLoadout, gameAuthority, challengerEstate, defenderEstate] =
+    await Promise.all([
+      getArenaLoadout(challengerPlayer),
+      getArenaLoadout(defenderPlayer),
+      gameAuthorityKeypair(),
+      deriveEstatePda(challengerPlayer).then(([pda]) => pda),
+      deriveEstatePda(defenderPlayer).then(([pda]) => pda),
+    ]);
 
-  const ix = createChallengePlayerInstruction(
+  const ix = await createChallengePlayerInstruction(
     {
       challenger: owner,
       gameEngine,
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: gameAuthority.publicKey,
       seasonAuthority: season.account.authority,
       seasonId,
       defenderAuthority: match.defenderWallet,
       challengerHero: heroOf(challengerLoadout),
-      challengerEstate: deriveEstatePda(challengerPlayer)[0],
+      challengerEstate,
       defenderHero: heroOf(defenderLoadout),
-      defenderEstate: deriveEstatePda(defenderPlayer)[0],
+      defenderEstate,
     },
     { matchId: match.matchId, matchTimestamp: match.matchTimestamp },
   );

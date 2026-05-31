@@ -104,7 +104,7 @@ export async function showRally(
 
   log.info(section('Timing'));
   log.info(`  Created: ${formatDate(r.createdAt)}    Gather: ${formatDate(r.gatherAt)}    Execute: ${formatDate(r.executeAt)}`);
-  if (r.marchStartedAt.toNumber() > 0) {
+  if (Number(r.marchStartedAt) > 0) {
     log.info(`  March Started: ${formatDate(r.marchStartedAt)}    Arrive: ${formatDate(r.arriveAt)}`);
   }
 

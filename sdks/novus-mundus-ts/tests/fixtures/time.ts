@@ -5,7 +5,6 @@
  * Uses LiteSVM's deterministic clock manipulation.
  */
 
-import BN from 'bn.js';
 import { type LiteSVM, Clock } from './svm';
 
 // Constants
@@ -216,12 +215,10 @@ export function hasDailyReset(
  * Check if new player protection is active.
  */
 export function isProtectionActive(
-  protectionUntil: BN | number,
+  protectionUntil: bigint | number,
   currentTime: number
 ): boolean {
-  const protectionEnd = typeof protectionUntil === 'number'
-    ? protectionUntil
-    : protectionUntil.toNumber();
+  const protectionEnd = Number(protectionUntil);
   return currentTime < protectionEnd;
 }
 
@@ -229,12 +226,10 @@ export function isProtectionActive(
  * Calculate cooldown remaining.
  */
 export function getCooldownRemaining(
-  cooldownEnd: BN | number,
+  cooldownEnd: bigint | number,
   currentTime: number
 ): number {
-  const endTime = typeof cooldownEnd === 'number'
-    ? cooldownEnd
-    : cooldownEnd.toNumber();
+  const endTime = Number(cooldownEnd);
   return Math.max(0, endTime - currentTime);
 }
 
@@ -242,7 +237,7 @@ export function getCooldownRemaining(
  * Check if action is on cooldown.
  */
 export function isOnCooldown(
-  cooldownEnd: BN | number,
+  cooldownEnd: bigint | number,
   currentTime: number
 ): boolean {
   return getCooldownRemaining(cooldownEnd, currentTime) > 0;

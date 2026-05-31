@@ -44,7 +44,7 @@ export function LeftPanel() {
   const { tier, active } = player
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
-        const end = player.subscriptionEnd.toNumber();
+        const end = Number(player.subscriptionEnd);
         return {
           tier: Math.min(player.subscriptionTier, 3),
           active: end > now,
@@ -59,7 +59,7 @@ export function LeftPanel() {
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const geKey = client.gameEngine;
-    const ix = createUpdateLockedNoviInstruction({
+    const ix = await createUpdateLockedNoviInstruction({
       owner: publicKey,
       gameEngine: geKey,
     });
@@ -163,14 +163,14 @@ export function LeftPanel() {
             <GameIcon id="resource-cash" size={14} />
             Cash
           </span>
-          <GoldNumber value={player.cashOnHand.toNumber()} size="sm" format="compact" />
+          <GoldNumber value={Number(player.cashOnHand)} size="sm" format="compact" />
         </div>
         <div className="flex items-center justify-between text-xs">
           <span className="flex items-center gap-1.5 text-text-muted">
             <GameIcon id="resource-gem" size={14} />
             Gems
           </span>
-          <GoldNumber value={player.gems.toNumber()} size="sm" format="compact" />
+          <GoldNumber value={Number(player.gems)} size="sm" format="compact" />
         </div>
       </div>
 
@@ -217,7 +217,7 @@ export function LeftPanelMobile() {
   const { tier, active } = player
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
-        const end = player.subscriptionEnd.toNumber();
+        const end = Number(player.subscriptionEnd);
         return {
           tier: Math.min(player.subscriptionTier, 3),
           active: end > now,
@@ -251,7 +251,7 @@ export function LeftPanelMobile() {
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const geKey = client.gameEngine;
-    const ix = createUpdateLockedNoviInstruction({
+    const ix = await createUpdateLockedNoviInstruction({
       owner: publicKey,
       gameEngine: geKey,
     });
@@ -326,14 +326,14 @@ export function LeftPanelMobile() {
                 <GameIcon id="resource-cash" size={12} />
                 Cash
               </div>
-              <GoldNumber value={player.cashOnHand.toNumber()} size="sm" format="compact" />
+              <GoldNumber value={Number(player.cashOnHand)} size="sm" format="compact" />
             </div>
             <div>
               <div className="flex items-center gap-1 text-text-muted">
                 <GameIcon id="resource-gem" size={12} />
                 Gems
               </div>
-              <GoldNumber value={player.gems.toNumber()} size="sm" format="compact" />
+              <GoldNumber value={Number(player.gems)} size="sm" format="compact" />
             </div>
             <div>
               <div className="flex items-center gap-1 text-text-muted">

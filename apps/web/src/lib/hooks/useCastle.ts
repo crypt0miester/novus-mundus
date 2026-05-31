@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
+import type { PublicKey } from "@solana/web3.js";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useConnection } from "@solana/wallet-adapter-react";
@@ -21,9 +22,23 @@ export function useCastle(cityId: number | null | undefined, castleId: number | 
   const { connection } = useConnection();
   const [fetchDone, setFetchDone] = useState(false);
 
-  const requestedPubkey = useMemo(() => {
-    if (cityId == null || castleId == null) return null;
-    return deriveCastlePda(client.gameEngine, cityId, castleId)[0];
+  const [requestedPubkey, setRequestedPubkey] = useState<PublicKey | null>(null);
+  useEffect(() => {
+    if (cityId == null || castleId == null) {
+      setRequestedPubkey(null);
+      return;
+    }
+    let cancelled = false;
+    deriveCastlePda(client.gameEngine, cityId, castleId)
+      .then(([pda]) => {
+        if (!cancelled) setRequestedPubkey(pda);
+      })
+      .catch(() => {
+        if (!cancelled) setRequestedPubkey(null);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [cityId, castleId, client]);
 
   useEffect(() => {

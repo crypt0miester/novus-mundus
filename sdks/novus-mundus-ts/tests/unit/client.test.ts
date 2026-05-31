@@ -150,8 +150,8 @@ describe('Client Type Definitions', () => {
     expect(options.aliveOnly).toBe(true);
   });
 
-  it('should export FetchRalliesOptions type', () => {
-    const team = Keypair.generate().publicKey;
+  it('should export FetchRalliesOptions type', async () => {
+    const team = (await Keypair.generate()).publicKey;
     const options: import('../../src/client').FetchRalliesOptions = {
       team,
       activeOnly: true,
@@ -161,8 +161,8 @@ describe('Client Type Definitions', () => {
     expect(options.activeOnly).toBe(true);
   });
 
-  it('should export FetchPlayersOptions type', () => {
-    const team = Keypair.generate().publicKey;
+  it('should export FetchPlayersOptions type', async () => {
+    const team = (await Keypair.generate()).publicKey;
     const options: import('../../src/client').FetchPlayersOptions = {
       cityId: 1,
       team,

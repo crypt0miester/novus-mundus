@@ -5,7 +5,6 @@
  * processors read for cost & time.
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import {
   createOrUpdate,
@@ -32,7 +31,7 @@ function updateInstructions(ctx: CLIContext, t: BuildingTemplateData) {
     buildingType: t.buildingType,
   };
   return [
-    createUpdateBuildingTemplateInstruction(accounts, { field: 'baseNoviCost', value: new BN(t.baseNoviCost) }),
+    createUpdateBuildingTemplateInstruction(accounts, { field: 'baseNoviCost', value: BigInt(t.baseNoviCost) }),
     createUpdateBuildingTemplateInstruction(accounts, { field: 'baseTimeSeconds', value: t.baseTimeSeconds }),
     createUpdateBuildingTemplateInstruction(accounts, { field: 'costGrowthBps', value: t.costGrowthBps }),
     createUpdateBuildingTemplateInstruction(accounts, { field: 'timeGrowthBps', value: t.timeGrowthBps }),
@@ -45,7 +44,7 @@ export async function initBuildings(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const t of BUILDING_TEMPLATES) {
-    const [pda] = deriveBuildingTemplatePda(t.buildingType);
+    const [pda] = await deriveBuildingTemplatePda(t.buildingType);
 
     await createOrUpdate(
       ctx,
@@ -61,7 +60,7 @@ export async function initBuildings(ctx: CLIContext): Promise<PhaseStats> {
           tier: t.tier,
           maxLevel: t.maxLevel,
           baseTimeSeconds: t.baseTimeSeconds,
-          baseNoviCost: new BN(t.baseNoviCost),
+          baseNoviCost: BigInt(t.baseNoviCost),
           costGrowthBps: t.costGrowthBps,
           timeGrowthBps: t.timeGrowthBps,
         }
@@ -78,7 +77,7 @@ export async function updateBuildings(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const t of BUILDING_TEMPLATES) {
-    const [pda] = deriveBuildingTemplatePda(t.buildingType);
+    const [pda] = await deriveBuildingTemplatePda(t.buildingType);
     await updateOnly(
       ctx,
       `Building #${t.buildingType} (${t.name})`,
@@ -92,7 +91,9 @@ export async function updateBuildings(ctx: CLIContext): Promise<PhaseStats> {
 }
 
 export async function statusBuildings(ctx: CLIContext): Promise<string> {
-  const pdas = BUILDING_TEMPLATES.map((t) => deriveBuildingTemplatePda(t.buildingType)[0]);
+  const pdas = await Promise.all(
+    BUILDING_TEMPLATES.map(async (t) => (await deriveBuildingTemplatePda(t.buildingType))[0]),
+  );
   const infos = await ctx.connection.getMultipleAccountsInfo(pdas);
   const count = infos.filter((i) => i !== null).length;
   return `${count}/${BUILDING_TEMPLATES.length} templates`;
@@ -105,7 +106,9 @@ export async function detailBuildings(ctx: CLIContext): Promise<string> {
   const lines: string[] = [];
   lines.push(section(`Building Templates — Kingdom ${ctx.kingdomId}`));
 
-  const pdas = BUILDING_TEMPLATES.map((t) => deriveBuildingTemplatePda(t.buildingType)[0]);
+  const pdas = await Promise.all(
+    BUILDING_TEMPLATES.map(async (t) => (await deriveBuildingTemplatePda(t.buildingType))[0]),
+  );
   const infos = await ctx.connection.getMultipleAccountsInfo(pdas);
   const rows: string[][] = [];
 

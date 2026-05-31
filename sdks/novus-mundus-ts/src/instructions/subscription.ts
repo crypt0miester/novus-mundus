@@ -22,7 +22,7 @@ import {
   deriveShopConfigPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsync, getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Purchase Subscription
 
@@ -103,15 +103,15 @@ export interface PurchaseSubscriptionParams {
  * - Transfer limits
  * - Travel speed bonus
  */
-export function createPurchaseSubscriptionInstruction(
+export async function createPurchaseSubscriptionInstruction(
   accounts: PurchaseSubscriptionAccounts,
   params: PurchaseSubscriptionParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by UserAccount PDA (not PlayerAccount)
-  const userNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const userNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   // Rust account order (10 base accounts):
   // 0. player (writable)
@@ -148,11 +148,11 @@ export function createPurchaseSubscriptionInstruction(
       );
     }
     const tp = accounts.tokenPayment;
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, tp.tokenMint);
-    const buyerAta = tp.buyerTokenAta ?? getAssociatedTokenAddressSync(tp.tokenMint, accounts.owner);
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+    const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, tp.tokenMint);
+    const buyerAta = tp.buyerTokenAta ?? await getAssociatedTokenAddressAsync(tp.tokenMint, accounts.owner);
     const treasuryAta =
-      tp.treasuryTokenAta ?? getAssociatedTokenAddressSync(tp.tokenMint, accounts.treasury);
+      tp.treasuryTokenAta ?? await getAssociatedTokenAddressAsync(tp.tokenMint, accounts.treasury);
 
     keys.push(
       { pubkey: shopConfig, isSigner: false, isWritable: false },           // [10] shop_config
@@ -262,26 +262,23 @@ const SUBSCRIPTION_TIER_SIZE = 256; // repr(C) size including alignment padding
 /**
  * Serialize a SubscriptionTierConfig to bytes.
  */
-function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): Buffer {
+function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): Uint8Array {
   const writer = new BufferWriter(SUBSCRIPTION_TIER_SIZE);
 
   // name: [u8; 16]
-  const nameBytes = Buffer.alloc(16);
-  const nameEncoded = Buffer.from(config.name, 'utf8');
-  nameEncoded.copy(nameBytes, 0, 0, Math.min(nameEncoded.length, 16));
-  writer.writeBytes(nameBytes);
+  writer.writeString(config.name, 16);
 
   // tier_index: u8
   writer.writeU8(config.tierIndex);
   // _padding1: [u8; 7]
-  writer.writeBytes(Buffer.alloc(7));
+  writer.writeZeros(7);
 
   // cost_in_usd_cents: u64
   writer.writeU64(BigInt(config.costInUsdCents));
   // duration_days: u32
   writer.writeU32(config.durationDays);
   // _padding2: [u8; 4]
-  writer.writeBytes(Buffer.alloc(4));
+  writer.writeZeros(4);
 
   // generation_multiplier: u64
   writer.writeU64(BigInt(config.generationMultiplier));
@@ -292,7 +289,7 @@ function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): B
   // synchrony_bonus: u32
   writer.writeU32(config.synchronyBonus);
   // implicit repr(C) alignment padding before next u64
-  writer.writeBytes(Buffer.alloc(4));
+  writer.writeZeros(4);
 
   // Bonuses
   writer.writeU64(BigInt(config.novi));
@@ -315,18 +312,18 @@ function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): B
   // RallyCaps
   writer.writeU8(config.rallyCaps.maxActiveRalliesJoined);
   writer.writeU8(config.rallyCaps.maxRalliesCreatedPerDay);
-  writer.writeBytes(Buffer.alloc(6)); // padding
+  writer.writeZeros(6); // padding
   writer.writeU64(BigInt(config.rallyCaps.maxRallyTroopContribution));
   writer.writeU8(config.rallyCaps.maxRallySize);
-  writer.writeBytes(Buffer.alloc(7)); // padding
+  writer.writeZeros(7); // padding
   writer.writeI64(BigInt(config.rallyCaps.maxRallyDurationSeconds));
 
   // Team and transfer limits
   writer.writeU8(config.maxTeamMembers);
-  writer.writeBytes(Buffer.alloc(7)); // padding
+  writer.writeZeros(7); // padding
   writer.writeU64(BigInt(config.maxDailyTransferAmount));
   writer.writeU8(config.maxDailyTransferCount);
-  writer.writeBytes(Buffer.alloc(3)); // padding
+  writer.writeZeros(3); // padding
   writer.writeU32(config.travelSpeedBonusBps);
 
   return writer.toBuffer();

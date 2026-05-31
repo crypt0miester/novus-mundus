@@ -196,8 +196,8 @@ function BuildingStrip({ buildingId }: { buildingId: number }) {
   const level = slot?.level ?? 0;
   const categoryColor = config ? CATEGORY_COLORS[config.category] : "text-text-muted";
 
-  const startedAt = slot?.constructionStarted?.toNumber?.() ?? 0;
-  const endsAt = slot?.constructionEnds?.toNumber?.() ?? 0;
+  const startedAt = Number(slot?.constructionStarted ?? 0n);
+  const endsAt = Number(slot?.constructionEnds ?? 0n);
   const span = endsAt - startedAt;
   const pct = span > 0 ? Math.min(100, Math.max(0, ((tick - startedAt) / span) * 100)) : 0;
   const remaining = Math.max(0, endsAt - tick);

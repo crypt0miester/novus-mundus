@@ -14,9 +14,7 @@ const KEY_PREFIX = "nm-cairn-snapshot:";
 
 // Structural shapes — the real PlayerCore / EstateAccount satisfy these.
 
-interface Numeric {
-  toNumber(): number;
-}
+type Numeric = bigint;
 interface SlotLike {
   buildingType: number;
   status: number;
@@ -67,7 +65,7 @@ export interface EstateSnapshot {
 
 /** Capture the current state into a snapshot. */
 export function computeSnapshot(player: PlayerLike, estate: EstateLike | null): EstateSnapshot {
-  const n = (v: Numeric) => v.toNumber();
+  const n = (v: Numeric) => Number(v);
   return {
     at: Math.floor(Date.now() / 1000),
     lockedNovi: n(player.lockedNovi),

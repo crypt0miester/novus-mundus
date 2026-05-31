@@ -3,8 +3,16 @@
 import { useCallback } from "react";
 import { PublicKey, VersionedTransaction } from "@solana/web3.js";
 import { useWallet } from "@solana/wallet-adapter-react";
-import type { SolanaSignInInput, SolanaSignInOutput } from "@solana/wallet-standard-features";
 import { useSessionStore } from "@/lib/store/session";
+
+// SIWS types for the Sign-In-With-Solana handshake. The upstream
+// `@solana/wallet-standard-features` package is no longer a direct dependency
+// after the web3.js v3 migration, so we derive the input/output shapes straight
+// from the wallet adapter's own `signIn` method. This keeps `SignIn` exactly
+// assignment-compatible with `useWallet().signIn` and avoids re-importing the
+// removed package.
+type WalletSignIn = NonNullable<ReturnType<typeof useWallet>["signIn"]>;
+type SolanaSignInInput = NonNullable<Parameters<WalletSignIn>[0]>;
 
 /**
  * Client helpers for the game_authority co-sign API (`/api/cosign/*`).
@@ -30,7 +38,7 @@ function bytesToBase64(bytes: Iterable<number>): string {
   return btoa(bin);
 }
 
-type SignIn = (input?: SolanaSignInInput) => Promise<SolanaSignInOutput>;
+type SignIn = WalletSignIn;
 
 // A single in-flight SIWS handshake shared by every caller (the war-table gate
 // click, the Send gesture, and the co-sign 401 retry), so concurrent triggers

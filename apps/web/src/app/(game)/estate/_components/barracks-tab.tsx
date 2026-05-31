@@ -78,7 +78,7 @@ export function BarracksTab() {
   const handleHire = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createHireUnitsInstruction(
+    const ix = await createHireUnitsInstruction(
       { owner: publicKey, gameEngine: ge },
       { unitType: DEFENSIVE_UNITS[hireType]!.unitType, noviAmount: noviToDeci(hireNoviAmount) },
     );
@@ -109,19 +109,19 @@ export function BarracksTab() {
     ? forecastHire(noviToDeci(hireNoviAmount), selectedUnit.unitType, player, ge, now)
     : null;
 
-  const du1 = player.defensiveUnit1?.toNumber?.() ?? 0;
-  const du2 = player.defensiveUnit2?.toNumber?.() ?? 0;
-  const du3 = player.defensiveUnit3?.toNumber?.() ?? 0;
+  const du1 = Number(player.defensiveUnit1 ?? 0n);
+  const du2 = Number(player.defensiveUnit2 ?? 0n);
+  const du3 = Number(player.defensiveUnit3 ?? 0n);
   const defensivePower = calculateDefensivePower(du1, du2, du3);
 
   // Defenders fight at a loss without a weapon, and lose happiness unfed.
   const defUnits = du1 + du2 + du3;
   const weapons =
-    (player.meleeWeapons?.toNumber?.() ?? 0) +
-    (player.rangedWeapons?.toNumber?.() ?? 0) +
-    (player.siegeWeapons?.toNumber?.() ?? 0);
+    (Number(player.meleeWeapons ?? 0n)) +
+    (Number(player.rangedWeapons ?? 0n)) +
+    (Number(player.siegeWeapons ?? 0n));
   const weaponDeficit = calculateWeaponDeficit(defUnits, weapons);
-  const produceDeficit = calculateProduceDeficit(defUnits, player.produce?.toNumber?.() ?? 0);
+  const produceDeficit = calculateProduceDeficit(defUnits, Number(player.produce ?? 0n));
 
   return (
     <FeatureLayout
@@ -164,7 +164,7 @@ export function BarracksTab() {
 
           <div className="grid gap-2 grid-cols-3">
             {DEFENSIVE_UNITS.map((unit, i) => {
-              const count = player[unit.field]?.toNumber?.() ?? 0;
+              const count = Number(player[unit.field] ?? 0n);
               const isSelected = hireType === i;
               const isLocked = !gate.allowed;
               return (

@@ -53,9 +53,9 @@ export function createPostWarTableMessageInstruction(
   }
 
   // data = [scope:u8, ...envelope]
-  const inner = Buffer.alloc(1 + params.envelope.length);
+  const inner = new Uint8Array(1 + params.envelope.length);
   inner[0] = params.scope & 0xff;
-  Buffer.from(params.envelope).copy(inner as Uint8Array, 1);
+  inner.set(params.envelope, 1);
 
   const data = createInstructionData(DISCRIMINATORS.POST_WAR_TABLE_MESSAGE, inner);
 
@@ -79,7 +79,7 @@ export function createPostTeamMessageInstruction(
  * Rally scope: gate_0 = the sender's RallyParticipant PDA, which is keyed on
  * the WALLET, seeds [b"rally_participant", gameEngine, rallyCreator, rallyId, wallet].
  */
-export function createPostRallyMessageInstruction(
+export async function createPostRallyMessageInstruction(
   gameEngine: PublicKey,
   rallyCreator: PublicKey,
   rallyId: number | bigint,
@@ -87,8 +87,8 @@ export function createPostRallyMessageInstruction(
   sender: PublicKey,
   senderPlayer: PublicKey,
   envelope: Uint8Array,
-): TransactionInstruction {
-  const [participant] = deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, sender);
+): Promise<TransactionInstruction> {
+  const [participant] = await deriveRallyParticipantPda(gameEngine, rallyCreator, rallyId, sender);
   return createPostWarTableMessageInstruction(
     { thread: rallyPda, sender, senderPlayer, gateAccounts: [participant] },
     { scope: WtScope.Rally, envelope },
@@ -149,14 +149,14 @@ export function createPostPublicMessageInstruction(
  * The gate accounts include both players' PDAs so the recipient can discover
  * the thread via getSignaturesForAddress (open risk O8).
  */
-export function createPostDmMessageInstruction(
+export async function createPostDmMessageInstruction(
   playerPdaA: PublicKey,
   playerPdaB: PublicKey,
   sender: PublicKey,
   senderPlayer: PublicKey,
   envelope: Uint8Array,
-): TransactionInstruction {
-  const [threadPda] = deriveDmThreadPda(playerPdaA, playerPdaB);
+): Promise<TransactionInstruction> {
+  const [threadPda] = await deriveDmThreadPda(playerPdaA, playerPdaB);
   return createPostWarTableMessageInstruction(
     { thread: threadPda, sender, senderPlayer, gateAccounts: [playerPdaA, playerPdaB] },
     { scope: WtScope.Dm, envelope },

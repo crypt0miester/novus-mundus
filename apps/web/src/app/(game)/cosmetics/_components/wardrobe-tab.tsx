@@ -32,14 +32,11 @@ import { prefersReducedMotion } from "@/lib/utils";
 // flips bit 0. Walk the full 0..63 so an id-0 cosmetic — should one ever ship
 // — is visible in the wardrobe (the Equip button is suppressed for id=0 since
 // equipping id=0 means unequip; the user can still see they own it).
-interface BitMaskLike {
-  testn(bit: number): boolean;
-}
-function ownedIds(mask: BitMaskLike | undefined | null): number[] {
-  if (!mask) return [];
+function ownedIds(mask: bigint | undefined | null): number[] {
+  if (mask === undefined || mask === null) return [];
   const out: number[] = [];
   for (let id = 0; id < 64; id++) {
-    if (mask.testn(id)) out.push(id);
+    if (((mask >> BigInt(id)) & 1n) === 1n) out.push(id);
   }
   return out;
 }
@@ -68,7 +65,7 @@ export function WardrobeTab() {
     if (!cosmeticsUnlocked) {
       throw new Error("Buy a cosmetic from the shop to unlock the wardrobe.");
     }
-    const ix = createEquipCosmeticInstruction({ owner: publicKey, gameEngine: ge }, { kind, id });
+    const ix = await createEquipCosmeticInstruction({ owner: publicKey, gameEngine: ge }, { kind, id });
     return transact
       .mutateAsync({
         instructions: [ix],

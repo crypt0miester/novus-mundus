@@ -30,11 +30,12 @@ export async function POST(req: Request) {
 
   const rolls = rollDungeonAttack(run, template);
 
-  const ix = createAttackInstruction(
+  const gameAuthority = await gameAuthorityKeypair();
+  const ix = await createAttackInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: gameAuthority.publicKey,
     },
     {
       templateId: run.dungeonId,

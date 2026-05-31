@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useShopItems, useDailyDeals } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -24,7 +24,6 @@ import {
   RARITY_LABELS,
   RARITY_COLORS,
   lamportsToSol,
-  buildIdLookup,
   selectShopTile,
   useShopTileRipple,
 } from "./shared";
@@ -48,7 +47,27 @@ export function DailyView() {
   // Tile-ripple grid root. grid-cols-2 md:grid-cols-3 -> read live breakpoint.
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
+  // PDA derivation is async under web3.js v3, so the pubkey -> id lookup is
+  // built off-thread and held in state. Empty until derivation resolves; the
+  // dependent memos re-run when it lands.
+  const [itemIdMap, setItemIdMap] = useState<Map<string, number>>(() => new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const map = new Map<string, number>();
+      const entries = await Promise.all(
+        Array.from({ length: 200 }, async (_unused, i) => {
+          const [pda] = await deriveShopItemPda(ge, i);
+          return [pda.toBase58(), i] as const;
+        }),
+      );
+      for (const [key, id] of entries) map.set(key, id);
+      if (!cancelled) setItemIdMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ge]);
 
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -58,7 +77,7 @@ export function DailyView() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !gameEngine) throw new Error("Not ready");
-    const ix = createPurchaseItemInstruction(
+    const ix = await createPurchaseItemInstruction(
       {
         buyer: publicKey,
         gameEngine: ge,
@@ -110,7 +129,7 @@ export function DailyView() {
       const deal = activeDailyDeals.find((d) => d.slot === effectiveDeal);
       if (!deal) return null;
       const hasStock =
-        deal.item.account.maxGlobalStock.eqn(0) || deal.item.account.currentGlobalStock.gtn(0);
+        deal.item.account.maxGlobalStock === 0n || deal.item.account.currentGlobalStock > 0n;
       return [
         {
           id: `claim-deal-${effectiveDeal}`,
@@ -148,7 +167,7 @@ export function DailyView() {
             {activeDailyDeals.map((deal) => {
               const a = deal.item.account;
               const isSelected = effectiveDeal === deal.slot;
-              const base = a.priceSolLamports.toNumber();
+              const base = Number(a.priceSolLamports);
               const dealLamports = applyBpsPenalty(base, deal.account.discountBps);
               const discountPct = (deal.account.discountBps / 100).toFixed(0);
               return (
@@ -175,7 +194,7 @@ export function DailyView() {
                     <span className="text-text-muted line-through mr-1">{lamportsToSol(base)}</span>
                     <span className="text-text-gold">{lamportsToSol(dealLamports)} SOL</span>
                   </div>
-                  {!a.maxGlobalStock.eqn(0) && a.currentGlobalStock.eqn(0) && (
+                  {a.maxGlobalStock !== 0n && a.currentGlobalStock === 0n && (
                     <div className="text-[10px] text-red-400">Sold Out</div>
                   )}
                 </button>
@@ -191,10 +210,10 @@ export function DailyView() {
             const deal = activeDailyDeals.find((d) => d.slot === effectiveDeal);
             if (!deal) return null;
             const a = deal.item.account;
-            const base = a.priceSolLamports.toNumber();
+            const base = Number(a.priceSolLamports);
             const dealLamports = applyBpsPenalty(base, deal.account.discountBps);
             const discountPct = (deal.account.discountBps / 100).toFixed(0);
-            const hasStock = a.maxGlobalStock.eqn(0) || a.currentGlobalStock.gtn(0);
+            const hasStock = a.maxGlobalStock === 0n || a.currentGlobalStock > 0n;
             return (
               <>
                 <div className="flex items-center justify-between">
@@ -236,11 +255,11 @@ export function DailyView() {
                       {deal.account.purchasesToday.toString()}
                     </span>
                   </div>
-                  {!a.maxGlobalStock.eqn(0) && (
+                  {a.maxGlobalStock !== 0n && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Stock</span>
                       <span
-                        className={`text-text-muted ${a.currentGlobalStock.eqn(0) ? "text-red-400" : ""}`}
+                        className={`text-text-muted ${a.currentGlobalStock === 0n ? "text-red-400" : ""}`}
                       >
                         {a.currentGlobalStock.toString()}/{a.maxGlobalStock.toString()}
                       </span>

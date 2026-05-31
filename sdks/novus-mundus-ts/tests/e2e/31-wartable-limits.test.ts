@@ -11,7 +11,7 @@
 // discovered hard maxima leave room above the adopted WT_MAX_TEXT_BYTES.
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
-import { Keypair, PublicKey, Transaction, ComputeBudgetProgram } from '@solana/web3.js';
+import { Keypair, PublicKey, Transaction, TransactionInstruction, ComputeBudgetProgram, type Blockhash } from '@solana/web3.js';
 
 import {
   EncounterRarity,
@@ -46,7 +46,7 @@ import { type TestContext, beforeAllTests, CITIES } from '../fixtures/setup';
 import { PlayerFactory, type TestPlayer } from '../fixtures/players';
 import { sendTransaction } from '../utils/transactions';
 import { fetchTeam, fetchCity } from '../utils/accounts';
-import { FailedTransactionMetadata } from '../fixtures/svm';
+import { FailedTransactionMetadata, sendSignedTx } from '../fixtures/svm';
 
 setDefaultTimeout(300_000);
 
@@ -158,14 +158,14 @@ describe('War Table message-length limits', () => {
   // ANY failure (serialize throw / send failure / truncated or garbled readback)
   // yields ok=false with a descriptive mode string. Advances the slot + expires
   // the blockhash afterward so repeated identical attempts get unique signatures.
-  function attempt(
+  async function attempt(
     signer: Keypair,
     thread: PublicKey,
     keyVersion: number,
     encrypted: boolean,
     payload: string,
-    buildIx: (envelope: Uint8Array) => { ix: ReturnType<typeof createPostTeamMessageInstruction> },
-  ): AttemptResult {
+    buildIx: (envelope: Uint8Array) => { ix: TransactionInstruction | Promise<TransactionInstruction> },
+  ): Promise<AttemptResult> {
     const expectedBytes = new TextEncoder().encode(payload);
 
     let envelope: Uint8Array;
@@ -177,7 +177,7 @@ describe('War Table message-length limits', () => {
       return { ok: false, mode: `envelope encode threw: ${(e as Error).message}` };
     }
 
-    const { ix } = buildIx(envelope);
+    const ix = await buildIx(envelope).ix;
     // Mirror the production postMessage send path, which prepends ComputeBudget
     // instructions: a unit price whenever the network reports a priority fee
     // (the congested-chain case), plus a unit limit. They add about 52 bytes to
@@ -188,16 +188,17 @@ describe('War Table message-length limits', () => {
       .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 400_000 }))
       .add(ComputeBudgetProgram.setComputeUnitPrice({ microLamports: 1 }))
       .add(ix);
-    tx.recentBlockhash = ctx.svm.latestBlockhash();
+    tx.recentBlockhash = ctx.svm.latestBlockhash() as Blockhash;
     tx.feePayer = signer.publicKey;
 
     // web3.js enforces the 1232-byte tx cap while serializing the message; this
     // happens inside tx.sign() (it serializes to produce the signed payload) and
     // again in tx.serialize(). A too-large tx throws here before the SVM is ever
     // touched. This is the binding factor: tx size, not CU or log truncation.
+    let signedBytes: Uint8Array;
     try {
-      tx.sign(signer);
-      tx.serialize();
+      await tx.sign(signer);
+      signedBytes = await tx.serialize();
     } catch (e) {
       // Advance state so the next attempt is fresh.
       ctx.svm.warpToSlot(ctx.svm.getClock().slot + 1n);
@@ -205,7 +206,7 @@ describe('War Table message-length limits', () => {
       return { ok: false, mode: `tx.serialize threw: ${(e as Error).message}` };
     }
 
-    const result = ctx.svm.sendTransaction(tx);
+    const result = sendSignedTx(ctx.svm, signedBytes);
     if (result instanceof FailedTransactionMetadata) {
       ctx.svm.warpToSlot(ctx.svm.getClock().slot + 1n);
       ctx.svm.expireBlockhash();
@@ -247,20 +248,20 @@ describe('War Table message-length limits', () => {
 
   // Binary-search the largest N in [0, hi] for which `run(N)` succeeds. Returns
   // both the max N and the failure mode observed at max+1.
-  function discoverMax(
+  async function discoverMax(
     label: string,
     hi: number,
-    run: (n: number) => AttemptResult,
-  ): { max: number; failMode: string } {
+    run: (n: number) => Promise<AttemptResult>,
+  ): Promise<{ max: number; failMode: string }> {
     // Sanity: N=0 must succeed (empty payload is always representable).
-    const zero = run(0);
+    const zero = await run(0);
     expect(zero.ok).toBe(true);
 
     let lo = 0;
     let high = hi;
     // Confirm hi fails so the search has a real boundary; if it somehow passes,
     // the answer is hi.
-    const top = run(hi);
+    const top = await run(hi);
     if (top.ok) {
       console.log(`[${label}] N=${hi} (search ceiling) still OK; max >= ${hi}`);
       return { max: hi, failMode: 'none below ceiling' };
@@ -268,13 +269,13 @@ describe('War Table message-length limits', () => {
 
     while (lo < high) {
       const mid = Math.ceil((lo + high) / 2);
-      const r = run(mid);
+      const r = await run(mid);
       if (r.ok) lo = mid;
       else high = mid - 1;
     }
     const max = lo;
     // Re-run max+1 to capture a clean failure-mode string for the report.
-    const overflow = run(max + 1);
+    const overflow = await run(max + 1);
     const failMode = overflow.mode ?? 'unknown';
     return { max, failMode };
   }
@@ -283,19 +284,19 @@ describe('War Table message-length limits', () => {
     const leader = await factory.createPlayer({ initialize: true, createEstate: true });
     const member = await factory.createPlayer({ initialize: true, createEstate: true });
     const teamId = uniqueTeamId();
-    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+    const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: `WTL${teamId}` }),
+        await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: `WTL${teamId}` }),
       ),
       [leader.keypair],
     );
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamInviteInstruction({
+        await createTeamInviteInstruction({
           inviter: leader.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -310,7 +311,7 @@ describe('War Table message-length limits', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamAcceptInviteInstruction({
+        await createTeamAcceptInviteInstruction({
           owner: member.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -332,11 +333,11 @@ describe('War Table message-length limits', () => {
     const gridLat = Math.round(city.lat * GRID_PRECISION);
     const gridLong = Math.round(city.lon * GRID_PRECISION) + gridLatOffset;
     const cityData = await fetchCity(ctx.svm, ctx.gameEngine, cityId);
-    const encounterIndex = cityData!.totalEncountersSpawned.toNumber();
+    const encounterIndex = Number(cityData!.totalEncountersSpawned);
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createSpawnEncounterInstruction(
+        await createSpawnEncounterInstruction(
           {
             gameEngine: ctx.gameEngine,
             payer: ctx.daoAuthority.publicKey,
@@ -351,7 +352,7 @@ describe('War Table message-length limits', () => {
       ),
       [ctx.daoAuthority],
     );
-    const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+    const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
     return encounterPda;
   }
 
@@ -361,8 +362,8 @@ describe('War Table message-length limits', () => {
     // DM (encrypted, 5 accounts -> worst case / smallest budget).
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [dmThread] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
-    const dm = discoverMax('DM', SEARCH_HI, (n) =>
+    const [dmThread] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const dm = await discoverMax('DM', SEARCH_HI, (n) =>
       attempt(alice.keypair, dmThread, 1, true, 'a'.repeat(n), (envelope) => ({
         ix: createPostDmMessageInstruction(alice.playerPda, bob.playerPda, alice.publicKey, alice.playerPda, envelope),
       })),
@@ -370,7 +371,7 @@ describe('War Table message-length limits', () => {
 
     // Team (encrypted, 3 accounts).
     const { leader, teamPda, epoch } = await createTeamWithMember();
-    const team = discoverMax('Team', SEARCH_HI, (n) =>
+    const team = await discoverMax('Team', SEARCH_HI, (n) =>
       attempt(leader.keypair, teamPda, epoch, true, 'a'.repeat(n), (envelope) => ({
         ix: createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope),
       })),
@@ -379,7 +380,7 @@ describe('War Table message-length limits', () => {
     // Encounter (plaintext, 3 accounts, no 16-byte AEAD tag).
     const encounterPda = await spawnEncounter(7, 3);
     const player = await factory.createPlayer({ initialize: true, createEstate: true });
-    const enc = discoverMax('Encounter', SEARCH_HI, (n) =>
+    const enc = await discoverMax('Encounter', SEARCH_HI, (n) =>
       attempt(player.keypair, encounterPda, 0, false, 'a'.repeat(n), (envelope) => ({
         ix: createPostEncounterMessageInstruction(encounterPda, player.publicKey, player.playerPda, envelope),
       })),
@@ -424,12 +425,12 @@ describe('War Table message-length limits', () => {
   it('sends a DM at exactly WT_MAX_TEXT_BYTES and reads it back byte-identical', async () => {
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [dmThread] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const [dmThread] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
 
     const payload = 'a'.repeat(WT_MAX_TEXT_BYTES);
     expect(new TextEncoder().encode(payload).length).toBe(WT_MAX_TEXT_BYTES);
 
-    const r = attempt(alice.keypair, dmThread, 1, true, payload, (envelope) => ({
+    const r = await attempt(alice.keypair, dmThread, 1, true, payload, (envelope) => ({
       ix: createPostDmMessageInstruction(alice.playerPda, bob.playerPda, alice.publicKey, alice.playerPda, envelope),
     }));
     // ok is true only when the tx serialized, the SVM accepted it, and the
@@ -440,7 +441,7 @@ describe('War Table message-length limits', () => {
   it('throws from the SDK at WT_MAX_TEXT_BYTES + 1 without sending', async () => {
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [dmThread] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const [dmThread] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
     const client = makeGuardClient();
 
     const overByOne = 'a'.repeat(WT_MAX_TEXT_BYTES + 1);
@@ -479,7 +480,7 @@ describe('War Table message-length limits', () => {
   it('measures the limit in UTF-8 bytes, not characters (emoji rejected)', async () => {
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [dmThread] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const [dmThread] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
     const client = makeGuardClient();
 
     // A grinning-face emoji is 4 UTF-8 bytes. Repeat enough to land at
@@ -512,9 +513,9 @@ describe('War Table message-length limits', () => {
     // payload and assert it clears WT_MAX_TEXT_BYTES by at least the margin.
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [dmThread] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const [dmThread] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
 
-    const dm = discoverMax('DM-margin', 2000, (n) =>
+    const dm = await discoverMax('DM-margin', 2000, (n) =>
       attempt(alice.keypair, dmThread, 1, true, 'a'.repeat(n), (envelope) => ({
         ix: createPostDmMessageInstruction(alice.playerPda, bob.playerPda, alice.publicKey, alice.playerPda, envelope),
       })),

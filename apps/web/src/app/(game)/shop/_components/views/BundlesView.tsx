@@ -1,6 +1,8 @@
 "use client";
 
 import { useState, useMemo, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
+import type { PublicKey } from "@solana/web3.js";
 import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useShopItems, useBundles } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -19,14 +21,27 @@ import {
   isItemAvailable,
   getItemTypeInfo,
 } from "novus-mundus-sdk";
-import {
-  lamportsToSol,
-  findItemType,
-  buildIdLookup,
-  selectShopTile,
-  useShopTileRipple,
-} from "./shared";
+import { lamportsToSol, findItemType, selectShopTile, useShopTileRipple } from "./shared";
 import { useIsDesktop } from "./useIsDesktop";
+
+// Shared empty Map so the query fallback is referentially stable across renders.
+const EMPTY_ID_MAP: Map<string, number> = new Map();
+
+// Async id->pda lookup. v3 PDA derivers return Promises, so each id's PDA is
+// awaited; the resulting base58 -> id Map mirrors the sync buildIdLookup helper.
+async function buildIdLookupAsync(
+  ge: PublicKey,
+  deriveFn: (ge: PublicKey, id: number) => Promise<[PublicKey, number]>,
+  maxId: number,
+): Promise<Map<string, number>> {
+  const entries = await Promise.all(
+    Array.from({ length: maxId }, async (_, i) => {
+      const [pda] = await deriveFn(ge, i);
+      return [pda.toBase58(), i] as const;
+    }),
+  );
+  return new Map(entries);
+}
 
 export function BundlesView() {
   const { data: items } = useShopItems();
@@ -46,8 +61,19 @@ export function BundlesView() {
   // Tile-ripple grid root. Bundles sit in a fixed grid-cols-2 grid.
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
-  const bundleIdMap = useMemo(() => buildIdLookup(ge, deriveBundlePda, 100), [ge]);
+  // v3 PDA derivation is async, so the id->pda lookups are built off-render in a
+  // query rather than a sync useMemo. Empty Map fallback keeps the enrich memos
+  // safe until the lookups resolve.
+  const { data: itemIdMap = EMPTY_ID_MAP } = useQuery({
+    queryKey: ["bundleViewItemIdMap", ge.toBase58()],
+    queryFn: () => buildIdLookupAsync(ge, deriveShopItemPda, 200),
+    staleTime: Infinity,
+  });
+  const { data: bundleIdMap = EMPTY_ID_MAP } = useQuery({
+    queryKey: ["bundleViewBundleIdMap", ge.toBase58()],
+    queryFn: () => buildIdLookupAsync(ge, deriveBundlePda, 100),
+    staleTime: Infinity,
+  });
 
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -57,8 +83,10 @@ export function BundlesView() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !gameEngine) throw new Error("Not ready");
-    const shopItemAccounts = bundleItems.map((bi) => deriveShopItemPda(ge, bi.itemId)[0]);
-    const ix = createPurchaseBundleInstruction({
+    const shopItemAccounts = await Promise.all(
+      bundleItems.map(async (bi) => (await deriveShopItemPda(ge, bi.itemId))[0]),
+    );
+    const ix = await createPurchaseBundleInstruction({
       buyer: publicKey,
       gameEngine: ge,
       bundleId,
@@ -104,9 +132,9 @@ export function BundlesView() {
       const nowSec = Math.floor(Date.now() / 1000);
       const available =
         bundle.account.isActive &&
-        bundle.account.availableFrom.toNumber() <= nowSec &&
-        (bundle.account.availableUntil.eqn(0) ||
-          bundle.account.availableUntil.toNumber() >= nowSec);
+        Number(bundle.account.availableFrom) <= nowSec &&
+        (bundle.account.availableUntil === 0n ||
+          Number(bundle.account.availableUntil) >= nowSec);
       return [
         {
           id: `buy-bundle-${effectiveBundle}`,
@@ -172,7 +200,7 @@ export function BundlesView() {
                     Tier {b.tier} &middot; {b.itemCount} items
                   </div>
                   <div className="mt-1 text-xs text-text-gold">
-                    {lamportsToSol(b.priceSolLamports.toNumber())} SOL
+                    {lamportsToSol(Number(b.priceSolLamports))} SOL
                   </div>
                 </button>
               );
@@ -187,7 +215,7 @@ export function BundlesView() {
             const bundle = activeBundles.find((b) => b.bundleId === effectiveBundle);
             if (!bundle) return null;
             const b = bundle.account;
-            const solPrice = lamportsToSol(b.priceSolLamports.toNumber());
+            const solPrice = lamportsToSol(Number(b.priceSolLamports));
             return (
               <>
                 <div className="flex items-center justify-between">

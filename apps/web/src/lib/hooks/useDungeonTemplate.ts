@@ -19,7 +19,7 @@ export function useDungeonTemplate(dungeonId: number | null | undefined) {
   return useQuery({
     queryKey: ["dungeonTemplate", dungeonId],
     queryFn: async (): Promise<DungeonTemplateAccount | null> => {
-      const [pda] = deriveDungeonTemplatePda(dungeonId!);
+      const [pda] = await deriveDungeonTemplatePda(dungeonId!);
       const info = await connection.getAccountInfo(pda);
       return info ? parseDungeonTemplate(info) : null;
     },

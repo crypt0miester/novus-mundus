@@ -51,8 +51,8 @@ export async function fetchHero(
   // supplies on-chain tier so a DAO mint-cost change is reflected without
   // redeploying the web app.
   const ge = gameEnginePda();
-  const [playerPda] = derivePlayerPda(ge, asset.owner);
-  const [templatePda] = deriveHeroTemplatePda(templateId);
+  const [playerPda] = await derivePlayerPda(ge, asset.owner);
+  const [templatePda] = await deriveHeroTemplatePda(templateId);
   const [playerInfo, templateInfo] = await connection.getMultipleAccountsInfo(
     [playerPda, templatePda],
     "confirmed",
@@ -62,7 +62,7 @@ export async function fetchHero(
   if (!template) return null;
   // mintCostSol is the field name but stores lamports (cf. on-chain
   // HeroTemplate.mint_cost_sol comment in state/hero.rs).
-  const tier = tierFromMintCost(template.mintCostSol.toNumber());
+  const tier = tierFromMintCost(Number(template.mintCostSol));
 
   // Lock state lives on the owner's PlayerAccount, not the asset itself.
   // Treat a missing player account as "unlocked" — the hero exists but the

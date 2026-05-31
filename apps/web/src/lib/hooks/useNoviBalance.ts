@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useConnection } from "@solana/wallet-adapter-react";
-import { getAssociatedTokenAddressSyncForPda } from "novus-mundus-sdk";
+import { getAssociatedTokenAddressAsyncForPda } from "novus-mundus-sdk";
 import { usePlayer } from "./usePlayer";
 import { useGameEngine } from "./useGameEngine";
 
@@ -14,7 +14,7 @@ import { useGameEngine } from "./useGameEngine";
  * because that's what burns are deducted from.
  *
  * NOTE: the NOVI ATA is owned by the PlayerAccount PDA (not the wallet) — see
- * `getAssociatedTokenAddressSyncForPda`.
+ * `getAssociatedTokenAddressAsyncForPda`.
  *
  * Returns raw (pre-decimal) units. NOVI has 1 decimal — divide by 10 to display.
  */
@@ -43,7 +43,7 @@ export function useNoviBalance(): {
     setLoading(true);
     (async () => {
       try {
-        const ata = getAssociatedTokenAddressSyncForPda(noviMint, playerPda);
+        const ata = await getAssociatedTokenAddressAsyncForPda(noviMint, playerPda);
         const info = await connection.getTokenAccountBalance(ata);
         if (cancelled) return;
         setRaw(Number(info.value.amount));

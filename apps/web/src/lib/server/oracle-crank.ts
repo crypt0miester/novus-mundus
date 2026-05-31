@@ -46,9 +46,9 @@ export async function buildOracleCrankIxs(params: {
     instructionIdx: params.ed25519IxIndex,
   });
 
-  const crankIx = createCrankOracleQuoteInstruction(
+  const crankIx = await createCrankOracleQuoteInstruction(
     {
-      cranker: gameAuthorityKeypair().publicKey,
+      cranker: (await gameAuthorityKeypair()).publicKey,
       gameEngine: params.gameEngine,
       switchboardQueue: params.switchboardQueue,
     },

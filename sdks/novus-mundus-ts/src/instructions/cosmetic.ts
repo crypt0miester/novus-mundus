@@ -44,10 +44,10 @@ export interface EquipCosmeticParams {
  *
  * Discriminator: 322
  */
-export function createEquipCosmeticInstruction(
+export async function createEquipCosmeticInstruction(
   accounts: EquipCosmeticAccounts,
   params: EquipCosmeticParams,
-): TransactionInstruction {
+): Promise<TransactionInstruction> {
   // NaN/non-integer slips both `< 0` and `>= 64` and would serialize to
   // u16 0 (writeU16 bit-ands), which equip.rs treats as the unequip
   // sentinel — silently clearing the slot the caller meant to set.
@@ -56,7 +56,7 @@ export function createEquipCosmeticInstruction(
   if (!Number.isInteger(params.id) || params.id < 0 || params.id >= 64) {
     throw new Error(`Cosmetic id ${params.id} out of range (0–63)`);
   }
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

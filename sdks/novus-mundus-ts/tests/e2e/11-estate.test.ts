@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createCreateEstateInstruction,
@@ -80,7 +79,7 @@ describe('Estate System', () => {
     it('should create new estate', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createCreateEstateInstruction(
+      const ix = await createCreateEstateInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { cityId: 1 }
       );
@@ -89,7 +88,7 @@ describe('Estate System', () => {
       await sendTransaction(ctx.svm, tx, [player.keypair]);
 
       // Verify estate created
-      const [estatePda] = deriveEstatePda(player.playerPda);
+      const [estatePda] = await deriveEstatePda(player.playerPda);
       const estateInfo = await fetchEstateRaw(ctx.svm, player.playerPda);
       expect(estateInfo).not.toBeNull();
     });
@@ -98,7 +97,7 @@ describe('Estate System', () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
       // Try to create again
-      const ix = createCreateEstateInstruction(
+      const ix = await createCreateEstateInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { cityId: 1 }
       );
@@ -116,7 +115,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateEstateInstruction(
+          await createCreateEstateInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { cityId: 1 }
           )
@@ -139,7 +138,7 @@ describe('Estate System', () => {
 
       const buildingType = 0; // First building type (e.g., Barracks)
 
-      const ix = createBuildBuildingInstruction(
+      const ix = await createBuildBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType }
       );
@@ -157,7 +156,7 @@ describe('Estate System', () => {
       });
 
       // Try to build same type again — should fail
-      const ix = createBuildBuildingInstruction(
+      const ix = await createBuildBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: BuildingType.Barracks }
       );
@@ -172,7 +171,7 @@ describe('Estate System', () => {
     it('should reject building invalid type', async () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
-      const ix = createBuildBuildingInstruction(
+      const ix = await createBuildBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: 999 } // Invalid type
       );
@@ -193,7 +192,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createBuildBuildingInstruction(
+          await createBuildBuildingInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { buildingType }
           )
@@ -202,11 +201,11 @@ describe('Estate System', () => {
       );
 
       // Speedup to skip construction time, then complete
-      const speedupIx = createBuildingSpeedupInstruction(
+      const speedupIx = await createBuildingSpeedupInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType, speedupTier: 2 }
       );
-      const completeIx = createCompleteBuildingInstruction(
+      const completeIx = await createCompleteBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType }
       );
@@ -235,18 +234,18 @@ describe('Estate System', () => {
       const buildingType = BuildingType.Barracks;
 
       // Start upgrade
-      const upgradeIx = createUpgradeBuildingInstruction(
+      const upgradeIx = await createUpgradeBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType }
       );
       await sendTransaction(ctx.svm, new Transaction().add(upgradeIx), [player.keypair]);
 
       // Speedup + complete the upgrade
-      const speedupIx = createBuildingSpeedupInstruction(
+      const speedupIx = await createBuildingSpeedupInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType, speedupTier: 2 }
       );
-      const completeIx = createCompleteBuildingInstruction(
+      const completeIx = await createCompleteBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType }
       );
@@ -283,7 +282,7 @@ describe('Estate System', () => {
       }
 
       // Attempting another upgrade after spending most NOVI must fail.
-      const upgradeIx = createUpgradeBuildingInstruction(
+      const upgradeIx = await createUpgradeBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: BuildingType.Barracks },
       );
@@ -303,7 +302,7 @@ describe('Estate System', () => {
       });
 
       // Start barracks upgrade (do NOT speedup or complete - leave it in progress)
-      const upgradeBarracksIx = createUpgradeBuildingInstruction(
+      const upgradeBarracksIx = await createUpgradeBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: BuildingType.Barracks }
       );
@@ -311,7 +310,7 @@ describe('Estate System', () => {
 
       // Try to start academy upgrade while barracks upgrade is in progress
       // The program may reject concurrent upgrades on the same estate
-      const upgradeAcademyIx = createUpgradeBuildingInstruction(
+      const upgradeAcademyIx = await createUpgradeBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: BuildingType.Academy }
       );
@@ -319,7 +318,7 @@ describe('Estate System', () => {
       // Note: If the program allows parallel upgrades on different buildings,
       // this test verifies that starting a second upgrade on the SAME building fails.
       // Barracks is already Upgrading, so trying to upgrade it again should fail.
-      const upgradeBarracksAgainIx = createUpgradeBuildingInstruction(
+      const upgradeBarracksAgainIx = await createUpgradeBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: BuildingType.Barracks }
       );
@@ -374,7 +373,7 @@ describe('Estate System', () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
       // Buy plot - automatically purchases next available plot
-      const ix = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
+      const ix = await createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
 
       await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
@@ -391,17 +390,17 @@ describe('Estate System', () => {
       // Plot 4 costs ~6.85M raw, beyond remaining funds, so the buy fails.
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })),
+        new Transaction().add(await createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })),
         [player.keypair],
       );
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })),
+        new Transaction().add(await createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey })),
         [player.keypair],
       );
 
       // Third buy must reject due to insufficient NOVI for plot 4 cost.
-      const ix = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
+      const ix = await createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(ix),
@@ -418,29 +417,29 @@ describe('Estate System', () => {
       expect(beforePlot2).not.toBeNull();
 
       // Buy plot 2 (costs 1,000,000 raw NOVI = 100k display)
-      const ix2 = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
+      const ix2 = await createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
       await sendTransaction(ctx.svm, new Transaction().add(ix2), [player.keypair]);
 
       const afterPlot2 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(afterPlot2).not.toBeNull();
 
       // Cost of plot 2 = difference in lockedNovi
-      const cost2 = beforePlot2!.data.lockedNovi.sub(afterPlot2!.data.lockedNovi);
+      const cost2 = beforePlot2!.data.lockedNovi - afterPlot2!.data.lockedNovi;
 
       // Buy plot 3 (costs ~2,618,000 raw NOVI = ~262k display - more expensive than plot 2)
       const beforePlot3 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(beforePlot3).not.toBeNull();
 
-      const ix3 = createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
+      const ix3 = await createBuyPlotInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey });
       await sendTransaction(ctx.svm, new Transaction().add(ix3), [player.keypair]);
 
       const afterPlot3 = await snapshotPlayer(ctx.svm, player.playerPda);
       expect(afterPlot3).not.toBeNull();
 
-      const cost3 = beforePlot3!.data.lockedNovi.sub(afterPlot3!.data.lockedNovi);
+      const cost3 = beforePlot3!.data.lockedNovi - afterPlot3!.data.lockedNovi;
 
       // Plot 3 should cost more than plot 2
-      expect(cost3.gt(cost2)).toBe(true);
+      expect(cost3 > cost2).toBe(true);
     });
   });
 
@@ -455,7 +454,7 @@ describe('Estate System', () => {
       });
 
       // Daily activity requires game authority co-signature and building type with score
-      const ix = createDailyActivityInstruction(
+      const ix = await createDailyActivityInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -482,7 +481,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createDailyActivityInstruction(
+          await createDailyActivityInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -496,7 +495,7 @@ describe('Estate System', () => {
       );
 
       // Try again - should fail (already completed today)
-      const ix = createDailyActivityInstruction(
+      const ix = await createDailyActivityInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -526,7 +525,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createDailyActivityInstruction(
+          await createDailyActivityInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -543,7 +542,7 @@ describe('Estate System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createDailyActivityInstruction(
+          await createDailyActivityInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -563,7 +562,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createDailyActivityInstruction(
+          await createDailyActivityInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -589,7 +588,7 @@ describe('Estate System', () => {
         buildings: [BuildingType.Mansion],
       });
 
-      const ix = createDailyClaimInstruction({
+      const ix = await createDailyClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -610,7 +609,7 @@ describe('Estate System', () => {
       expect(before).not.toBeNull();
 
       // Perform daily claim
-      const ix = createDailyClaimInstruction({
+      const ix = await createDailyClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -626,13 +625,13 @@ describe('Estate System', () => {
       const diff = diffPlayerSnapshots(before!, after!);
 
       // At minimum, common materials should increase (base 100 + mansion bonus)
-      expect(after!.data.commonMaterials.gt(before!.data.commonMaterials)).toBe(true);
+      expect(after!.data.commonMaterials > before!.data.commonMaterials).toBe(true);
 
       // Locked NOVI should increase (base 50 + mansion bonus)
-      expect(after!.data.lockedNovi.gt(before!.data.lockedNovi)).toBe(true);
+      expect(after!.data.lockedNovi > before!.data.lockedNovi).toBe(true);
 
       // XP should increase (base 10 + mansion bonus)
-      expect(after!.data.currentXp.gt(before!.data.currentXp)).toBe(true);
+      expect(after!.data.currentXp > before!.data.currentXp).toBe(true);
     });
 
     it('should track claim streak', async () => {
@@ -644,7 +643,7 @@ describe('Estate System', () => {
       });
 
       // Perform daily claim
-      const ix = createDailyClaimInstruction({
+      const ix = await createDailyClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -663,7 +662,7 @@ describe('Estate System', () => {
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
       // Common materials should be > 0 after claim (base reward: 100)
-      expect(account!.commonMaterials.gtn(0)).toBe(true);
+      expect(account!.commonMaterials > 0n).toBe(true);
     });
   });
 
@@ -883,7 +882,7 @@ describe('Estate System', () => {
       expect(before).not.toBeNull();
 
       // Perform daily claim (which grants common materials, NOVI, XP)
-      const ix = createDailyClaimInstruction({
+      const ix = await createDailyClaimInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -894,10 +893,10 @@ describe('Estate System', () => {
       expect(after).not.toBeNull();
 
       // Verify common materials increased (daily claim grants base 100 + mansion/streak bonuses)
-      expect(after!.data.commonMaterials.gt(before!.data.commonMaterials)).toBe(true);
+      expect(after!.data.commonMaterials > before!.data.commonMaterials).toBe(true);
 
       // Verify locked NOVI increased (daily claim grants base 50 + bonuses)
-      expect(after!.data.lockedNovi.gt(before!.data.lockedNovi)).toBe(true);
+      expect(after!.data.lockedNovi > before!.data.lockedNovi).toBe(true);
     });
 
     it('should reflect a building upgrade in the estate account state', async () => {
@@ -937,7 +936,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createDailyClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
+          await createDailyClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
         ),
         [player.keypair],
       );
@@ -946,7 +945,7 @@ describe('Estate System', () => {
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createDailyClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
+          await createDailyClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
         ),
         [player.keypair],
       );
@@ -958,7 +957,7 @@ describe('Estate System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createDailyClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
+          await createDailyClaimInstruction({ gameEngine: ctx.gameEngine, owner: player.publicKey }),
         ),
         [player.keypair],
       );

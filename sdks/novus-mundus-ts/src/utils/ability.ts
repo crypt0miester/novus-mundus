@@ -55,8 +55,11 @@ export const ABILITY_KIND_META: Record<number, AbilityKindMeta> = {
   },
   [AbilityKind.ShieldNext]: {
     kind: AbilityKind.ShieldNext,
+    // Monochrome BMP shield (U+26E8), not the U+1F6E1 color emoji: the emoji
+    // ignores `accentClass` and renders multicolor, clashing with the other
+    // tinted text glyphs. This one inherits the blue accent like its siblings.
     label: "ShieldNext",
-    icon: "🛡",
+    icon: "⛨",
     accentClass: "text-blue-400",
     baseDescription: "Doubles your defense against the next incoming attack.",
   },

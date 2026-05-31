@@ -25,7 +25,7 @@ export async function loadCombatRun(
   if (run.roomType !== RoomType.Combat) {
     return { error: fail("the current room is not a combat room", 409) };
   }
-  if (run.enemyHealth.isZero()) {
+  if (run.enemyHealth === 0n) {
     return { error: fail("the enemy is already defeated", 409) };
   }
   const template = await getDungeonTemplate(run.dungeonId);

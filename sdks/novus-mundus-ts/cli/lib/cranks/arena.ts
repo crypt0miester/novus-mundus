@@ -35,7 +35,7 @@ export async function crankArena(ctx: CLIContext): Promise<PhaseStats> {
   }
 
   for (const account of accounts) {
-    const data = account.account.data;
+    const data = Buffer.from(account.account.data);
 
     // ArenaSeasonAccount layout (approximate):
     //   0-7: discriminator (8)

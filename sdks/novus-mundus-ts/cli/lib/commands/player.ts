@@ -7,7 +7,6 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import type { CLIContext, ParsedArgs } from '../context';
 import { loadKeypair } from '../context';
@@ -29,7 +28,7 @@ import {
   deriveCityPda,
   deriveLocationPda,
   deriveNoviMintPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   deserializePlayer,
 } from '../../../src/index';
 import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
@@ -78,7 +77,7 @@ async function handleBuyGems(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.info('  novus player buy-gems <keypair> [--count <n>]');
     return;
   }
-  const buyer = loadKeypair(keypairPath);
+  const buyer = await loadKeypair(keypairPath);
 
   const countFlag = getFlag(args.flags, '--count');
   const count = countFlag ? parseInt(countFlag, 10) : 1;
@@ -87,7 +86,7 @@ async function handleBuyGems(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, buyer.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, buyer.publicKey);
   if (!await accountExists(ctx.connection, playerPda)) {
     log.error(`Player account not found for ${buyer.publicKey.toBase58()}`);
     return;
@@ -123,13 +122,13 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const recipientOwner = resolvePlayer(args.extra);
+  const recipientOwner = await resolvePlayer(args.extra);
   if (!recipientOwner) {
     log.error('Specify player pubkey or keypair path as third argument');
     return;
   }
 
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, recipientOwner);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, recipientOwner);
   if (!await accountExists(ctx.connection, playerPda)) {
     log.error(`Player account not found for ${recipientOwner.toBase58()}`);
     return;
@@ -162,8 +161,8 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
    * uninitialized destination. Only emitted if any external purpose
    * will run. */
   if (purposes.some((p) => isExternal(p.purpose))) {
-    const [noviMint] = deriveNoviMintPda();
-    const walletAta = getAssociatedTokenAddressSync(noviMint, recipientOwner);
+    const [noviMint] = await deriveNoviMintPda();
+    const walletAta = await getAssociatedTokenAddressAsync(noviMint, recipientOwner);
     const ataPrep = createAssociatedTokenAccountIdempotentInstruction(
       ctx.daoAuthority.publicKey,
       walletAta,
@@ -188,7 +187,7 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
           gameEngine: ctx.gameEngine,
           recipientOwner,
         },
-        { amount: new BN(thisAmount), purpose }
+        { amount: BigInt(thisAmount), purpose }
       );
       await sendWithRetry(ctx, mintIx, [ctx.daoAuthority]);
 
@@ -232,8 +231,8 @@ async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const playerKeypair = loadKeypair(keypairPath);
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
+  const playerKeypair = await loadKeypair(keypairPath);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
 
   const playerInfo = await ctx.connection.getAccountInfo(playerPda);
   if (!playerInfo) {
@@ -261,8 +260,8 @@ async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const destGridLat = Math.round(destCity.lat * GRID_PRECISION);
   const destGridLong = Math.round(destCity.lon * GRID_PRECISION);
 
-  const [originLocation] = deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
-  const [destLocation] = deriveLocationPda(ctx.gameEngine, destCityId, destGridLat, destGridLong);
+  const [originLocation] = await deriveLocationPda(ctx.gameEngine, originCityId, originGridLat, originGridLong);
+  const [destLocation] = await deriveLocationPda(ctx.gameEngine, destCityId, destGridLat, destGridLong);
 
   const ix = createIntercityTeleportInstruction({
     owner: playerKeypair.publicKey,
@@ -296,14 +295,14 @@ async function handleDeposit(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.error('Specify wallet keypair path as third argument (deposit requires signature)');
     return;
   }
-  const wallet = loadKeypair(keypairPath);
+  const wallet = await loadKeypair(keypairPath);
 
   const fee = Math.floor((amount * DEPOSIT_FEE_BPS) / 10_000);
   const credited = amount - fee;
 
   const ix = createDepositNoviInstruction(
     { owner: wallet.publicKey },
-    { amount: new BN(amount) }
+    { amount: BigInt(amount) }
   );
 
   await sendWithRetry(ctx, ix, [wallet]);
@@ -325,7 +324,7 @@ async function handleSweep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.error('Specify wallet keypair path as third argument (sweep requires signature from the PDA owner)');
     return;
   }
-  const wallet = loadKeypair(keypairPath);
+  const wallet = await loadKeypair(keypairPath);
   const kind = kindFlag === 'user' ? SweepKind.User : SweepKind.Player;
 
   const ix = createTreasurySweepUntrackedNoviInstruction(
@@ -351,7 +350,7 @@ async function handleHire(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     log.info('  novus player hire <keypair> --unit-type <0-5> --novi <amount>');
     return;
   }
-  const owner = loadKeypair(keypairPath);
+  const owner = await loadKeypair(keypairPath);
 
   const unitType = parseInt(getFlag(args.flags, '--unit-type') || '0', 10);
   if (isNaN(unitType) || unitType < 0 || unitType > 5) {
@@ -369,7 +368,7 @@ async function handleHire(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const [playerPda] = derivePlayerPda(ctx.gameEngine, owner.publicKey);
+  const [playerPda] = await derivePlayerPda(ctx.gameEngine, owner.publicKey);
   const playerInfo = await ctx.connection.getAccountInfo(playerPda);
   if (!playerInfo) {
     log.error(`Player account not found for ${owner.publicKey.toBase58()}`);
@@ -390,14 +389,14 @@ async function handleHire(ctx: CLIContext, args: ParsedArgs): Promise<void> {
 
 // helpers
 
-function resolvePlayer(extra: string): PublicKey | null {
+async function resolvePlayer(extra: string): Promise<PublicKey | null> {
   if (!extra) return null;
   try {
     return new PublicKey(extra);
   } catch {
     // Not a pubkey, might be a keypair path
     try {
-      const kp = loadKeypair(extra);
+      const kp = await loadKeypair(extra);
       return kp.publicKey;
     } catch {
       return null;

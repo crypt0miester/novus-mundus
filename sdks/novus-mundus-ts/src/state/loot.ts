@@ -6,7 +6,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Loot Source Type
@@ -23,31 +22,31 @@ export interface LootAccount {
   // Identity & Security
   owner: PublicKey;
   creator: PublicKey;
-  lootId: BN;
+  lootId: bigint;
   bump: number;
   sourceType: LootSourceType;
   claimed: boolean;
 
   // Timestamps
-  createdAt: BN;
-  expiresAt: BN;
+  createdAt: bigint;
+  expiresAt: bigint;
 
   // Source metadata
-  sourceId: BN;
-  contribution: BN;
+  sourceId: bigint;
+  contribution: bigint;
   sourceLevel: number;
   sourceRarity: number;
 
   // Physical rewards
-  cash: BN;
-  reservedNovi: BN;
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  produce: BN;
-  vehicles: BN;
-  fragments: BN;
-  gems: BN;
+  cash: bigint;
+  reservedNovi: bigint;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  produce: bigint;
+  vehicles: bigint;
+  fragments: bigint;
+  gems: bigint;
 }
 
 /** LootAccount size in bytes */
@@ -59,7 +58,7 @@ export const LOOT_EXPIRATION_DURATION = 30 * 86400;
 // Deserialization
 
 /** Deserialize LootAccount from raw bytes */
-export function deserializeLoot(data: Uint8Array | Buffer): LootAccount {
+export function deserializeLoot(data: Uint8Array): LootAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -123,7 +122,7 @@ export function deserializeLoot(data: Uint8Array | Buffer): LootAccount {
 }
 
 /** Parse LootAccount from account info */
-export function parseLoot(accountInfo: AccountInfo<Buffer>): LootAccount | null {
+export function parseLoot(accountInfo: AccountInfo<Uint8Array>): LootAccount | null {
   if (!accountInfo.data || accountInfo.data.length < LOOT_ACCOUNT_SIZE) {
     return null;
   }
@@ -135,39 +134,39 @@ export function parseLoot(accountInfo: AccountInfo<Buffer>): LootAccount | null 
 /** Check if loot has any rewards */
 export function lootHasRewards(loot: LootAccount): boolean {
   return (
-    loot.cash.gtn(0) ||
-    loot.reservedNovi.gtn(0) ||
-    loot.meleeWeapons.gtn(0) ||
-    loot.rangedWeapons.gtn(0) ||
-    loot.siegeWeapons.gtn(0) ||
-    loot.produce.gtn(0) ||
-    loot.vehicles.gtn(0) ||
-    loot.fragments.gtn(0) ||
-    loot.gems.gtn(0)
+    loot.cash > 0n ||
+    loot.reservedNovi > 0n ||
+    loot.meleeWeapons > 0n ||
+    loot.rangedWeapons > 0n ||
+    loot.siegeWeapons > 0n ||
+    loot.produce > 0n ||
+    loot.vehicles > 0n ||
+    loot.fragments > 0n ||
+    loot.gems > 0n
   );
 }
 
 /** Get total weapons */
-export function getLootTotalWeapons(loot: LootAccount): BN {
-  return loot.meleeWeapons.add(loot.rangedWeapons).add(loot.siegeWeapons);
+export function getLootTotalWeapons(loot: LootAccount): bigint {
+  return loot.meleeWeapons + loot.rangedWeapons + loot.siegeWeapons;
 }
 
 /** Check if loot has expired */
 export function isLootExpired(loot: LootAccount, nowSeconds: number): boolean {
-  return nowSeconds >= loot.expiresAt.toNumber();
+  return nowSeconds >= Number(loot.expiresAt);
 }
 
 /** Count number of reward types (for UI display) */
 export function countLootRewardTypes(loot: LootAccount): number {
   let count = 0;
-  if (loot.cash.gtn(0)) count++;
-  if (loot.reservedNovi.gtn(0)) count++;
-  if (loot.meleeWeapons.gtn(0)) count++;
-  if (loot.rangedWeapons.gtn(0)) count++;
-  if (loot.siegeWeapons.gtn(0)) count++;
-  if (loot.produce.gtn(0)) count++;
-  if (loot.vehicles.gtn(0)) count++;
-  if (loot.fragments.gtn(0)) count++;
-  if (loot.gems.gtn(0)) count++;
+  if (loot.cash > 0n) count++;
+  if (loot.reservedNovi > 0n) count++;
+  if (loot.meleeWeapons > 0n) count++;
+  if (loot.rangedWeapons > 0n) count++;
+  if (loot.siegeWeapons > 0n) count++;
+  if (loot.produce > 0n) count++;
+  if (loot.vehicles > 0n) count++;
+  if (loot.fragments > 0n) count++;
+  if (loot.gems > 0n) count++;
   return count;
 }

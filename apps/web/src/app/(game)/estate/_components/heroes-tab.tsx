@@ -81,7 +81,7 @@ export function HeroesTab() {
   }, [player]);
 
   const traveling = player ? isTraveling(player) : false;
-  const fragments = player?.fragments?.toNumber?.() ?? 0;
+  const fragments = Number(player?.fragments ?? 0n);
   const emptySlots = player ? player.activeHeroes.filter((h: any) => isNullPubkey(h)).length : 0;
   const filledSlots = 3 - emptySlots;
 
@@ -130,21 +130,24 @@ export function HeroesTab() {
   useEffect(() => {
     if (!connection || !publicKey || heroTemplatesMap.size === 0) return;
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const entries = Array.from(heroTemplatesMap.values()).filter((e) => e.account.enabled);
-    const receiptPdas = entries.map(
-      (e) => deriveHeroMintReceiptPda(playerPda, e.account.templateId)[0],
-    );
-    connection
-      .getMultipleAccountsInfo(receiptPdas)
-      .then((infos) => {
-        const map = new Map<number, boolean>();
-        entries.forEach((e, i) => {
-          map.set(e.account.templateId, infos[i] !== null && infos[i]!.lamports > 0);
-        });
-        setMintReceipts(map);
-      })
-      .catch(() => {});
+    let cancelled = false;
+    (async () => {
+      const [playerPda] = await derivePlayerPda(ge, publicKey);
+      const entries = Array.from(heroTemplatesMap.values()).filter((e) => e.account.enabled);
+      const receiptPdas = await Promise.all(
+        entries.map(async (e) => (await deriveHeroMintReceiptPda(playerPda, e.account.templateId))[0]),
+      );
+      const infos = await connection.getMultipleAccountsInfo(receiptPdas);
+      if (cancelled) return;
+      const map = new Map<number, boolean>();
+      entries.forEach((e, i) => {
+        map.set(e.account.templateId, infos[i] !== null && infos[i]!.lamports > 0);
+      });
+      setMintReceipts(map);
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
   }, [connection, publicKey, heroTemplatesMap, client, refreshKey]);
 
   // Fetch heroes: locked (player PDA's activeHeroes) + unlocked (wallet via getProgramAccounts)
@@ -243,8 +246,8 @@ export function HeroesTab() {
   const handleMint = async (templateId: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !gameEngine) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const heroMintKeypair = Keypair.generate();
-    const ix = createMintHeroInstruction(
+    const heroMintKeypair = await Keypair.generate();
+    const ix = await createMintHeroInstruction(
       {
         minter: publicKey,
         gameEngine: ge,
@@ -275,10 +278,10 @@ export function HeroesTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [heroTemplate] = deriveHeroTemplatePda(templateId);
-    const [estateAccount] = deriveEstatePda(playerPda);
-    const ix = createLockHeroInstruction(
+    const [playerPda] = await derivePlayerPda(ge, publicKey);
+    const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+    const [estateAccount] = await deriveEstatePda(playerPda);
+    const ix = await createLockHeroInstruction(
       { owner: publicKey, gameEngine: ge, heroMint: heroAddress, heroTemplate, estateAccount },
       { slotIndex },
     );
@@ -300,14 +303,14 @@ export function HeroesTab() {
     const heroMint = player.activeHeroes[slotIndex];
     if (!heroMint || isNullPubkey(heroMint)) throw new Error("No hero in slot");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
+    const [playerPda] = await derivePlayerPda(ge, publicKey);
     const heroData = lockedHeroes[slotIndex];
     const templateId = heroData?.asset?.attributes.Template
       ? parseInt(heroData.asset.attributes.Template, 10)
       : 0;
-    const [heroTemplate] = deriveHeroTemplatePda(templateId);
-    const [estateAccount] = deriveEstatePda(playerPda);
-    const ix = createUnlockHeroInstruction(
+    const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+    const [estateAccount] = await deriveEstatePda(playerPda);
+    const ix = await createUnlockHeroInstruction(
       { owner: publicKey, gameEngine: ge, heroMint, heroTemplate, estateAccount },
       { slotIndex },
     );
@@ -327,7 +330,7 @@ export function HeroesTab() {
   const handleAssignDefensive = async (slotIndex: number, reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createAssignDefensiveHeroInstruction(
+    const ix = await createAssignDefensiveHeroInstruction(
       { owner: publicKey, gameEngine: ge },
       { slotIndex },
     );
@@ -351,10 +354,10 @@ export function HeroesTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const [playerPda] = derivePlayerPda(ge, publicKey);
-    const [heroTemplate] = deriveHeroTemplatePda(templateId);
-    const [estateAccount] = deriveEstatePda(playerPda);
-    const ix = createLevelUpHeroInstruction({
+    const [playerPda] = await derivePlayerPda(ge, publicKey);
+    const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+    const [estateAccount] = await deriveEstatePda(playerPda);
+    const ix = await createLevelUpHeroInstruction({
       owner: publicKey,
       gameEngine: ge,
       heroMint,
@@ -381,7 +384,7 @@ export function HeroesTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createBurnHeroInstruction(
+    const ix = await createBurnHeroInstruction(
       { owner: publicKey, gameEngine: ge, heroAsset: heroAddress },
       { templateId },
     );

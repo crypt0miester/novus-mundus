@@ -3,21 +3,25 @@
  *
  * Low-level utilities for serializing instruction data to raw bytes.
  * Compatible with Pinocchio's little-endian u16 discriminator format.
+ *
+ * Operates on Uint8Array (web3.js v3 / browser-safe). u64/i64 values are native
+ * `bigint`, not BN.
  */
 
 import { PublicKey } from '@solana/web3.js';
-import BN from 'bn.js';
 
 /**
  * BufferWriter for sequential byte writes.
- * Preallocates buffer and writes sequentially.
+ * Preallocates a Uint8Array and writes sequentially.
  */
 export class BufferWriter {
-  private buffer: Buffer;
+  private buffer: Uint8Array;
+  private view: DataView;
   private offset = 0;
 
   constructor(size: number) {
-    this.buffer = Buffer.alloc(size);
+    this.buffer = new Uint8Array(size);
+    this.view = new DataView(this.buffer.buffer);
   }
 
   /** Get current offset */
@@ -26,12 +30,12 @@ export class BufferWriter {
   }
 
   /** Get the written portion of the buffer */
-  toBuffer(): Buffer {
+  toBuffer(): Uint8Array {
     return this.buffer.subarray(0, this.offset);
   }
 
   /** Get full allocated buffer (including unwritten zeros) */
-  toFullBuffer(): Buffer {
+  toFullBuffer(): Uint8Array {
     return this.buffer;
   }
 
@@ -78,54 +82,30 @@ export class BufferWriter {
     return this.writeU32(unsigned);
   }
 
-  /** Write u64 from BN or number (little-endian) */
-  writeU64(value: BN | number | bigint): this {
-    let bn: BN;
-    if (typeof value === 'number') {
-      bn = new BN(value);
-    } else if (typeof value === 'bigint') {
-      bn = new BN(value.toString());
-    } else {
-      bn = value;
-    }
-    const bytes = bn.toArrayLike(Buffer, 'le', 8);
-    bytes.copy(this.buffer as Uint8Array, this.offset);
+  /** Write u64 from number or bigint (little-endian) */
+  writeU64(value: number | bigint): this {
+    this.view.setBigUint64(this.offset, BigInt(value), true);
     this.offset += 8;
     return this;
   }
 
-  /** Write i64 from BN or number (little-endian) */
-  writeI64(value: BN | number | bigint): this {
-    let bn: BN;
-    if (typeof value === 'number') {
-      bn = new BN(value);
-    } else if (typeof value === 'bigint') {
-      bn = new BN(value.toString());
-    } else {
-      bn = value;
-    }
-    // Handle negative: add 2^64
-    if (bn.isNeg()) {
-      bn = bn.add(new BN(1).shln(64));
-    }
-    const bytes = bn.toArrayLike(Buffer, 'le', 8);
-    bytes.copy(this.buffer as Uint8Array, this.offset);
+  /** Write i64 from number or bigint (little-endian) */
+  writeI64(value: number | bigint): this {
+    this.view.setBigInt64(this.offset, BigInt(value), true);
     this.offset += 8;
     return this;
   }
 
   /** Write f32 (little-endian) */
   writeF32(value: number): this {
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.offset, 4);
-    view.setFloat32(0, value, true);
+    this.view.setFloat32(this.offset, value, true);
     this.offset += 4;
     return this;
   }
 
   /** Write f64 (little-endian) */
   writeF64(value: number): this {
-    const view = new DataView(this.buffer.buffer, this.buffer.byteOffset + this.offset, 8);
-    view.setFloat64(0, value, true);
+    this.view.setFloat64(this.offset, value, true);
     this.offset += 8;
     return this;
   }
@@ -137,25 +117,23 @@ export class BufferWriter {
 
   /** Write PublicKey (32 bytes) */
   writePubkey(value: PublicKey): this {
-    const bytes = value.toBuffer();
-    bytes.copy(this.buffer as Uint8Array, this.offset);
+    this.buffer.set(value.toBytes(), this.offset);
     this.offset += 32;
     return this;
   }
 
   /** Write raw bytes */
-  writeBytes(bytes: Buffer | Uint8Array): this {
-    const buf = Buffer.isBuffer(bytes) ? bytes : Buffer.from(bytes);
-    buf.copy(this.buffer as Uint8Array, this.offset);
+  writeBytes(bytes: Uint8Array): this {
+    this.buffer.set(bytes, this.offset);
     this.offset += bytes.length;
     return this;
   }
 
   /** Write fixed-size string (padded with zeros) */
   writeString(value: string, maxLength: number): this {
-    const bytes = Buffer.from(value, 'utf8');
+    const bytes = new TextEncoder().encode(value);
     const toWrite = Math.min(bytes.length, maxLength);
-    bytes.copy(this.buffer as Uint8Array, this.offset, 0, toWrite);
+    this.buffer.set(bytes.subarray(0, toWrite), this.offset);
     // Zero-pad remaining
     this.buffer.fill(0, this.offset + toWrite, this.offset + maxLength);
     this.offset += maxLength;
@@ -194,7 +172,7 @@ export class BufferWriter {
   }
 
   /** Write array of u64 */
-  writeU64Array(values: (BN | number | bigint)[]): this {
+  writeU64Array(values: (number | bigint)[]): this {
     for (const v of values) {
       this.writeU64(v);
     }
@@ -215,13 +193,16 @@ export class BufferWriter {
  * @param discriminator - 2-byte little-endian u16 instruction discriminator
  * @param data - Optional additional instruction data
  */
-export function createInstructionData(discriminator: number, data?: Buffer): Buffer {
-  const discriminatorBuf = Buffer.alloc(2);
-  discriminatorBuf.writeUInt16LE(discriminator);
+export function createInstructionData(discriminator: number, data?: Uint8Array): Uint8Array {
+  const discriminatorBuf = new Uint8Array(2);
+  new DataView(discriminatorBuf.buffer).setUint16(0, discriminator, true);
 
   if (!data || data.length === 0) {
     return discriminatorBuf;
   }
 
-  return Buffer.concat([discriminatorBuf, data] as Uint8Array[]);
+  const out = new Uint8Array(discriminatorBuf.length + data.length);
+  out.set(discriminatorBuf, 0);
+  out.set(data, discriminatorBuf.length);
+  return out;
 }

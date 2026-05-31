@@ -41,14 +41,14 @@ function loadKeypair(p: string): Keypair {
 }
 
 async function main() {
-  const playerKp = loadKeypair(
+  const playerKp = await loadKeypair(
     process.argv[2] ??
       path.join(__dirname, "..", "keys", "players", "player-1045.json"),
   );
   const conn = new Connection(RPC, "confirmed");
 
   const [gameEngine] = deriveGameEnginePda(KINGDOM_ID);
-  const treasury = loadKeypair(
+  const treasury = await loadKeypair(
     path.join(__dirname, "..", "keys", "treasury.json"),
   ).publicKey;
   const [playerPda] = derivePlayerPda(gameEngine, playerKp.publicKey);

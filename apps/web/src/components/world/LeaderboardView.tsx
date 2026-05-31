@@ -66,7 +66,7 @@ export function LeaderboardView() {
     const map = new Map<string, { id: number; name: string }>();
     for (const t of teams) {
       map.set(t.pubkey.toBase58(), {
-        id: t.account.id.toNumber(),
+        id: Number(t.account.id),
         name: t.account.name,
       });
     }

@@ -83,28 +83,28 @@ describe('Free-Player Progression — health regression guard', () => {
       expect(acc).not.toBeNull();
 
       // Exact values from PlayerAccount::init_with_city (state/player.rs:563-600).
-      expect(acc!.lockedNovi.toNumber()).toBe(STARTER_LOCKED_NOVI);
-      expect(acc!.defensiveUnit1.toNumber()).toBe(10_000);
-      expect(acc!.defensiveUnit2.toNumber()).toBe(4_000);
-      expect(acc!.defensiveUnit3.toNumber()).toBe(2_000);
-      expect(acc!.operativeUnit1.toNumber()).toBe(10_000);
-      expect(acc!.operativeUnit2.toNumber()).toBe(4_000);
-      expect(acc!.operativeUnit3.toNumber()).toBe(1_000);
-      expect(acc!.meleeWeapons.toNumber()).toBe(8_000);
-      expect(acc!.rangedWeapons.toNumber()).toBe(4_000);
-      expect(acc!.siegeWeapons.toNumber()).toBe(2_000);
-      expect(acc!.cashOnHand.toNumber()).toBe(130_000_000);
-      expect(acc!.gems.toNumber()).toBe(10_000);
+      expect(Number(acc!.lockedNovi)).toBe(STARTER_LOCKED_NOVI);
+      expect(Number(acc!.defensiveUnit1)).toBe(10_000);
+      expect(Number(acc!.defensiveUnit2)).toBe(4_000);
+      expect(Number(acc!.defensiveUnit3)).toBe(2_000);
+      expect(Number(acc!.operativeUnit1)).toBe(10_000);
+      expect(Number(acc!.operativeUnit2)).toBe(4_000);
+      expect(Number(acc!.operativeUnit3)).toBe(1_000);
+      expect(Number(acc!.meleeWeapons)).toBe(8_000);
+      expect(Number(acc!.rangedWeapons)).toBe(4_000);
+      expect(Number(acc!.siegeWeapons)).toBe(2_000);
+      expect(Number(acc!.cashOnHand)).toBe(130_000_000);
+      expect(Number(acc!.gems)).toBe(10_000);
       expect(acc!.level).toBe(1);
-      expect(acc!.currentXp.toNumber()).toBe(0);
-      expect(acc!.maxEncounterStamina.toNumber()).toBe(100);
+      expect(Number(acc!.currentXp)).toBe(0);
+      expect(Number(acc!.maxEncounterStamina)).toBe(100);
 
       const defensive =
-        acc!.defensiveUnit1.toNumber() +
-        acc!.defensiveUnit2.toNumber() +
-        acc!.defensiveUnit3.toNumber();
+        Number(acc!.defensiveUnit1) +
+        Number(acc!.defensiveUnit2) +
+        Number(acc!.defensiveUnit3);
       log.info(`Starter army: ${defensive} defensive units + ` +
-        `${acc!.meleeWeapons.toNumber() + acc!.rangedWeapons.toNumber() + acc!.siegeWeapons.toNumber()} weapons`);
+        `${Number(acc!.meleeWeapons) + Number(acc!.rangedWeapons) + Number(acc!.siegeWeapons)} weapons`);
       expect(defensive).toBe(16_000);
     });
   });
@@ -190,7 +190,7 @@ describe('Free-Player Progression — health regression guard', () => {
         const gridLat = baseLat + off.dLat;
         const gridLong = baseLong + off.dLong;
         try {
-          const ix = createSpawnEncounterInstruction(
+          const ix = await createSpawnEncounterInstruction(
             {
               gameEngine: ctx.gameEngine,
               payer: ctx.daoAuthority.publicKey,
@@ -206,7 +206,7 @@ describe('Free-Player Progression — health regression guard', () => {
         } catch {
           break; // city encounter limit reached — stop, we have enough
         }
-        const [encPda] = deriveEncounterPda(ctx.gameEngine, cityId, index);
+        const [encPda] = await deriveEncounterPda(ctx.gameEngine, cityId, index);
         const enc = await fetchEncounter(ctx.svm, encPda);
         spawned.push({ index, level: enc!.level, gridLat, gridLong });
       }
@@ -232,14 +232,14 @@ describe('Free-Player Progression — health regression guard', () => {
       const stillOutOfRange = spawned.find((s) => diffFromPlayer(s.level) > EXPECTED_LEVEL_DIFF);
       expect(stillOutOfRange).toBeDefined();
 
-      const [playerPda] = derivePlayerPda(ctx.gameEngine, player.publicKey);
+      const [playerPda] = await derivePlayerPda(ctx.gameEngine, player.publicKey);
       const before = await fetchPlayer(ctx.svm, playerPda);
-      const [encPda] = deriveEncounterPda(ctx.gameEngine, cityId, stillOutOfRange!.index);
-      const [lootPda] = deriveLootPda(playerPda, before!.lootCounter.toNumber());
-      const [encLoc] = deriveLocationPda(
+      const [encPda] = await deriveEncounterPda(ctx.gameEngine, cityId, stillOutOfRange!.index);
+      const [lootPda] = await deriveLootPda(playerPda, Number(before!.lootCounter));
+      const [encLoc] = await deriveLocationPda(
         ctx.gameEngine, cityId, stillOutOfRange!.gridLat, stillOutOfRange!.gridLong
       );
-      const ix = createAttackEncounterInstruction(
+      const ix = await createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -293,8 +293,8 @@ describe('Free-Player Progression — health regression guard', () => {
       expect(ge).not.toBeNull();
 
       const rookie = ge!.subscriptionTiers[0]!;
-      const cap = rookie.maxLockedNovi.toNumber();
-      const genPer5min = rookie.generationMultiplier.toNumber();
+      const cap = Number(rookie.maxLockedNovi);
+      const genPer5min = Number(rookie.generationMultiplier);
       log.info(`Rookie tier — max_locked_novi: ${cap.toLocaleString()} units ` +
         `(${(cap / 10).toLocaleString()} display), generation: ${genPer5min}/5min; ` +
         `starter grant: ${STARTER_LOCKED_NOVI.toLocaleString()} units`);

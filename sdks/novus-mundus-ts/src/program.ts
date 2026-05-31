@@ -40,90 +40,95 @@ export const SYSTEM_PROGRAM_ID = new PublicKey(
 );
 
 // PDA Seeds
+//
+// Encoded as Uint8Array (UTF-8) rather than Buffer so the SDK stays
+// browser-safe under web3.js v3. `getProgramDerivedAddress` accepts these
+// directly as seeds.
+const s = (literal: string): Uint8Array => new TextEncoder().encode(literal);
 
 export const SEEDS = {
   // Core accounts
-  GAME_ENGINE: Buffer.from('game_engine'),
-  NOVI_MINT: Buffer.from('novi_mint'),
-  PLAYER: Buffer.from('player'),
-  USER: Buffer.from('user'),
-  CITY: Buffer.from('city'),
+  GAME_ENGINE: s('game_engine'),
+  NOVI_MINT: s('novi_mint'),
+  PLAYER: s('player'),
+  USER: s('user'),
+  CITY: s('city'),
 
   // Team system
-  TEAM: Buffer.from('team'),
-  TEAM_SLOT: Buffer.from('team_slot'),
-  TEAM_INVITE: Buffer.from('team_invite'),
-  TREASURY_REQUEST: Buffer.from('treasury_request'),
+  TEAM: s('team'),
+  TEAM_SLOT: s('team_slot'),
+  TEAM_INVITE: s('team_invite'),
+  TREASURY_REQUEST: s('treasury_request'),
 
   // Location & encounters
-  LOCATION: Buffer.from('location'),
-  ENCOUNTER: Buffer.from('encounter'),
+  LOCATION: s('location'),
+  ENCOUNTER: s('encounter'),
 
   // Rally system
-  RALLY: Buffer.from('rally'),
-  RALLY_PARTICIPANT: Buffer.from('rally_participant'),
+  RALLY: s('rally'),
+  RALLY_PARTICIPANT: s('rally_participant'),
 
   // Reinforcement system
-  REINFORCEMENT: Buffer.from('reinforcement'),
-  GARRISON: Buffer.from('garrison'),
+  REINFORCEMENT: s('reinforcement'),
+  GARRISON: s('garrison'),
 
   // Event system
-  EVENT: Buffer.from('event'),
-  EVENT_PARTICIPATION: Buffer.from('event_participation'),
+  EVENT: s('event'),
+  EVENT_PARTICIPATION: s('event_participation'),
 
   // Progression & loot
-  PROGRESSION: Buffer.from('progression'),
-  LOOT: Buffer.from('loot'),
+  PROGRESSION: s('progression'),
+  LOOT: s('loot'),
 
   // Research system
-  RESEARCH: Buffer.from('research'),
-  RESEARCH_TEMPLATE: Buffer.from('research_template'),
-  BUILDING_TEMPLATE: Buffer.from('building_template'),
+  RESEARCH: s('research'),
+  RESEARCH_TEMPLATE: s('research_template'),
+  BUILDING_TEMPLATE: s('building_template'),
 
   // Hero system
-  HERO_TEMPLATE: Buffer.from('hero_template'),
-  HERO_COLLECTION: Buffer.from('hero_collection'),
-  HERO_MINT_RECEIPT: Buffer.from('hero_mint_receipt'),
+  HERO_TEMPLATE: s('hero_template'),
+  HERO_COLLECTION: s('hero_collection'),
+  HERO_MINT_RECEIPT: s('hero_mint_receipt'),
 
   // Shop system
-  SHOP_CONFIG: Buffer.from('shop_config'),
-  SHOP_ITEM: Buffer.from('shop_item'),
-  BUNDLE: Buffer.from('bundle'),
-  DAILY_DEAL: Buffer.from('daily_deal'),
-  FLASH_SALE: Buffer.from('flash_sale'),
-  WEEKLY_SALE: Buffer.from('weekly_sale'),
-  SEASONAL_SALE: Buffer.from('seasonal_sale'),
-  DAO_PROMOTION: Buffer.from('dao_promo'),
-  PLAYER_PURCHASE: Buffer.from('player_purchase'),
-  INVENTORY: Buffer.from('inventory'),
-  ALLOWED_TOKEN: Buffer.from('allowed_token'),
-  ORACLE_QUOTE: Buffer.from('oracle_quote'),
+  SHOP_CONFIG: s('shop_config'),
+  SHOP_ITEM: s('shop_item'),
+  BUNDLE: s('bundle'),
+  DAILY_DEAL: s('daily_deal'),
+  FLASH_SALE: s('flash_sale'),
+  WEEKLY_SALE: s('weekly_sale'),
+  SEASONAL_SALE: s('seasonal_sale'),
+  DAO_PROMOTION: s('dao_promo'),
+  PLAYER_PURCHASE: s('player_purchase'),
+  INVENTORY: s('inventory'),
+  ALLOWED_TOKEN: s('allowed_token'),
+  ORACLE_QUOTE: s('oracle_quote'),
 
   // Estate system
-  ESTATE: Buffer.from('estate'),
-  CRAFTED_EQUIPMENT: Buffer.from('crafted_equipment'),
+  ESTATE: s('estate'),
+  CRAFTED_EQUIPMENT: s('crafted_equipment'),
 
   // Expedition system
-  EXPEDITION: Buffer.from('expedition'),
+  EXPEDITION: s('expedition'),
 
   // Arena system
-  ARENA_SEASON: Buffer.from('arena_season'),
-  ARENA_PARTICIPANT: Buffer.from('arena_participant'),
-  ARENA_LOADOUT: Buffer.from('arena_loadout'),
+  ARENA_SEASON: s('arena_season'),
+  ARENA_PARTICIPANT: s('arena_participant'),
+  ARENA_LOADOUT: s('arena_loadout'),
 
   // Dungeon system
-  DUNGEON_TEMPLATE: Buffer.from('dungeon_template'),
-  DUNGEON_RUN: Buffer.from('dungeon_run'),
-  DUNGEON_LEADERBOARD: Buffer.from('dungeon_leaderboard'),
+  DUNGEON_TEMPLATE: s('dungeon_template'),
+  DUNGEON_RUN: s('dungeon_run'),
+  DUNGEON_LEADERBOARD: s('dungeon_leaderboard'),
 
   // Castle system
-  CASTLE: Buffer.from('castle'),
-  COURT: Buffer.from('court'),
-  KING_REGISTRY: Buffer.from('king_registry'),
-  TEAM_CASTLE_REWARD: Buffer.from('team_castle_reward'),
+  CASTLE: s('castle'),
+  COURT: s('court'),
+  KING_REGISTRY: s('king_registry'),
+  TEAM_CASTLE_REWARD: s('team_castle_reward'),
 
   // War Table system
-  DM_THREAD: Buffer.from('wt_dm'),
+  DM_THREAD: s('wt_dm'),
 } as const;
 
 // Instruction Discriminators (little-endian u16)

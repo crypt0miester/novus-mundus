@@ -6,7 +6,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { ExpeditionType } from '../types/enums';
 import {
@@ -44,10 +43,10 @@ export interface ExpeditionAccount {
   bump: number;
   score: number;
   cityId: number;
-  startTime: BN;
-  operativeUnit1: BN;
-  operativeUnit2: BN;
-  operativeUnit3: BN;
+  startTime: bigint;
+  operativeUnit1: bigint;
+  operativeUnit2: bigint;
+  operativeUnit3: bigint;
 }
 
 /** ExpeditionAccount size in bytes */
@@ -56,7 +55,7 @@ export const EXPEDITION_ACCOUNT_SIZE = 112;
 // Deserialization
 
 /** Deserialize ExpeditionAccount from raw bytes */
-export function deserializeExpedition(data: Uint8Array | Buffer): ExpeditionAccount {
+export function deserializeExpedition(data: Uint8Array): ExpeditionAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -93,7 +92,7 @@ export function deserializeExpedition(data: Uint8Array | Buffer): ExpeditionAcco
 }
 
 /** Parse ExpeditionAccount from account info */
-export function parseExpedition(accountInfo: AccountInfo<Buffer>): ExpeditionAccount | null {
+export function parseExpedition(accountInfo: AccountInfo<Uint8Array>): ExpeditionAccount | null {
   if (!accountInfo.data || accountInfo.data.length < EXPEDITION_ACCOUNT_SIZE) {
     return null;
   }
@@ -108,8 +107,8 @@ export function expeditionHasHero(expedition: ExpeditionAccount): boolean {
 }
 
 /** Get total operatives locked */
-export function getExpeditionTotalOperatives(expedition: ExpeditionAccount): BN {
-  return expedition.operativeUnit1.add(expedition.operativeUnit2).add(expedition.operativeUnit3);
+export function getExpeditionTotalOperatives(expedition: ExpeditionAccount): bigint {
+  return expedition.operativeUnit1 + expedition.operativeUnit2 + expedition.operativeUnit3;
 }
 
 /** Get expedition duration in seconds */
@@ -123,7 +122,7 @@ export function getExpeditionDurationSeconds(expedition: ExpeditionAccount): num
 
 /** Get expedition end time */
 export function getExpeditionEndTime(expedition: ExpeditionAccount): number {
-  return expedition.startTime.toNumber() + getExpeditionDurationSeconds(expedition);
+  return Number(expedition.startTime) + getExpeditionDurationSeconds(expedition);
 }
 
 /** Check if expedition is complete */
@@ -145,7 +144,7 @@ export function canExpeditionStrike(expedition: ExpeditionAccount): boolean {
 
 /** Get next strike window time */
 export function getExpeditionNextStrikeTime(expedition: ExpeditionAccount): number {
-  return expedition.startTime.toNumber() + expedition.strikes * SECONDS_PER_HOUR;
+  return Number(expedition.startTime) + expedition.strikes * SECONDS_PER_HOUR;
 }
 
 /** Check if strike is ready */

@@ -68,31 +68,21 @@ export function prefersReducedMotion(): boolean {
 }
 
 /**
- * Coerce a BN (or BN-like) to a JS number, clamped to `Number.MAX_SAFE_INTEGER`.
+ * Coerce an on-chain u64 (a `bigint`) to a JS number, clamped to
+ * `Number.MAX_SAFE_INTEGER`.
  *
  * On-chain u64 fields (unit pools, treasuries, lifetime spend) can exceed 2^53
- * for endgame whales; `BN.prototype.toNumber()` throws once that boundary is
- * crossed, which would otherwise crash inputs / displays mid-render. Clamping
- * is the right choice for UI bounds (the cap is "all you have" and the chain
- * does the real arithmetic), but never use this for values that need to round-
- * trip to the chain — pass the BN itself.
+ * for endgame whales; `Number(bigint)` silently loses precision past that
+ * boundary. Clamping is the right choice for UI bounds (the cap is "all you
+ * have" and the chain does the real arithmetic), but never use this for values
+ * that need to round-trip to the chain — pass the bigint itself.
  */
-interface BNLike {
-  toNumber?: () => number;
-  bitLength?: () => number;
-  toString?: (base?: number) => string;
-}
-export function bnToSafeNumber(bn: BNLike | null | undefined): number {
-  if (!bn) return 0;
-  // Fast path: anything that fits in 53 bits is safe.
-  if (typeof bn.bitLength === "function" && bn.bitLength() <= 53) {
-    return bn.toNumber?.() ?? 0;
+export function bnToSafeNumber(value: bigint | number | null | undefined): number {
+  if (value === null || value === undefined) return 0;
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? Math.min(value, Number.MAX_SAFE_INTEGER) : 0;
   }
-  // Past the safe-integer ceiling — clamp without throwing.
-  if (typeof bn.toString === "function") {
-    const s = bn.toString();
-    const asNum = Number(s);
-    return Number.isFinite(asNum) ? Math.min(asNum, Number.MAX_SAFE_INTEGER) : 0;
-  }
-  return 0;
+  // bigint: clamp without losing the sign of overflow.
+  if (value > BigInt(Number.MAX_SAFE_INTEGER)) return Number.MAX_SAFE_INTEGER;
+  return Number(value);
 }

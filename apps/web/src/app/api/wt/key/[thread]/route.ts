@@ -116,7 +116,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
   try {
     const conn = serverConnection();
     const gameEngine = serverClient().gameEngine;
-    const callerPlayerPda = derivePlayerPda(gameEngine, wallet)[0];
+    const callerPlayerPda = (await derivePlayerPda(gameEngine, wallet))[0];
 
     // Encounter and Public are plaintext, membership-free scopes: there is no
     // key to serve.
@@ -132,7 +132,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
       // the served key to a conversation the caller is genuinely part of.
       let pairPda: PublicKey;
       try {
-        pairPda = deriveDmThreadPda(callerPlayerPda, peer)[0];
+        pairPda = (await deriveDmThreadPda(callerPlayerPda, peer))[0];
       } catch {
         return fail("DM thread requires two distinct players", 400);
       }
@@ -160,7 +160,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
         return fail("not a member of this team", 403);
       }
 
-      const slotPda = deriveTeamSlotPda(threadPda, player.teamSlotIndex)[0];
+      const slotPda = (await deriveTeamSlotPda(threadPda, player.teamSlotIndex))[0];
       const slotInfo = await conn.getAccountInfo(slotPda);
       const slot = slotInfo ? parseTeamMemberSlot(slotInfo) : null;
       if (!slot) return fail("not a member of this team", 403);
@@ -176,12 +176,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
       if (!rally) return fail("rally thread not found", 404);
 
       const rallyId = BigInt(rally.id.toString());
-      const participantPda = deriveRallyParticipantPda(
+      const participantPda = (await deriveRallyParticipantPda(
         gameEngine,
         rally.creator,
         rallyId,
         wallet,
-      )[0];
+      ))[0];
       const participantInfo = await conn.getAccountInfo(participantPda);
       const participant = participantInfo ? parseRallyParticipant(participantInfo) : null;
       if (!participant) return fail("not a participant of this rally", 403);
@@ -201,7 +201,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ thread: string 
     const castle = parseCastle(castleInfo);
     if (!castle) return fail("castle thread not found", 404);
 
-    const garrisonPda = deriveGarrisonPda(threadPda, callerPlayerPda)[0];
+    const garrisonPda = (await deriveGarrisonPda(threadPda, callerPlayerPda))[0];
     const garrisonInfo = await conn.getAccountInfo(garrisonPda);
     const garrison = garrisonInfo ? parseGarrisonContribution(garrisonInfo) : null;
     if (garrison) {

@@ -31,7 +31,7 @@ import {
   deriveTeamCastleRewardPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Create Castle (Admin)
 
@@ -413,7 +413,7 @@ export async function createInitiateUpgradeInstruction(
   const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
   const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
   const [noviMint] = await deriveNoviMintPda();
-  const lockedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, kingPlayer);
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, kingPlayer);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -465,7 +465,7 @@ export async function createCancelUpgradeInstruction(
   const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
   const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
     const [noviMint] = await deriveNoviMintPda();
-  const lockedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, kingPlayer);
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, kingPlayer);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -801,9 +801,9 @@ export async function createClaimCastleRewardsInstruction(
   const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
   const [reward] = await deriveTeamCastleRewardPda(castle, player);
     const [noviMint] = await deriveNoviMintPda();
-  const lockedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
   const [user] = await deriveUserPda(accounts.claimant);
-  const reservedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)

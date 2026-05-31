@@ -102,7 +102,7 @@ export function useIncomingThreat(): IncomingThreat {
     if (!isLegendary || !me) return NONE;
 
     const myCity = me.currentCity;
-    const myNetworth = me.networth.toNumber();
+    const myNetworth = Number(me.networth);
     const myTeam = isNullPubkey(me.team) ? null : me.team.toBase58();
     const myOwner = publicKey?.toBase58() ?? null;
     const now = Math.floor(Date.now() / 1000);
@@ -110,11 +110,11 @@ export function useIncomingThreat(): IncomingThreat {
     let travelers = 0;
     for (const { account: p } of players ?? []) {
       if (p.destinationCity !== myCity) continue; // not headed to your gate
-      if (p.arrivalTime.toNumber() <= now) continue; // settled, or already arrived
+      if (Number(p.arrivalTime) <= now) continue; // settled, or already arrived
       if (myOwner && p.owner.toBase58() === myOwner) continue; // that is you
       const theirTeam = isNullPubkey(p.team) ? null : p.team.toBase58();
       if (myTeam && theirTeam === myTeam) continue; // a teammate is no threat
-      if (p.networth.toNumber() < myNetworth) continue; // too small to fear
+      if (Number(p.networth) < myNetworth) continue; // too small to fear
       travelers++;
     }
 

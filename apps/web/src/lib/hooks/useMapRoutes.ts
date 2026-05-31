@@ -52,7 +52,7 @@ export function useMapRoutes(): RealmRoute[] {
     enabled: !!publicKey,
     queryFn: async () => {
       if (!publicKey) return [];
-      const [myPda] = derivePlayerPda(client.gameEngine, publicKey);
+      const [myPda] = await derivePlayerPda(client.gameEngine, publicKey);
       const [sent, received] = await Promise.all([
         client.fetchReinforcementsSent(myPda),
         client.fetchReinforcementsReceived(myPda),

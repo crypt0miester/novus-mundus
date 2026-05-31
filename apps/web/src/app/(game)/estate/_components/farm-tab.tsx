@@ -48,7 +48,7 @@ export function FarmTab() {
   const handleCollect = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createCollectResourcesInstruction(
+    const ix = await createCollectResourcesInstruction(
       { owner: publicKey, gameEngine: ge },
       { noviAmount: noviToDeci(collectNoviAmount), collectionType: COLLECTION_TYPE },
     );
@@ -72,11 +72,11 @@ export function FarmTab() {
   if (!player) return null;
 
   const noviBalance = deciToNovi(player.lockedNovi ?? 0);
-  const produce = player.produce?.toNumber?.() ?? 0;
+  const produce = Number(player.produce ?? 0n);
   const operativeUnits =
-    (player.operativeUnit1?.toNumber?.() ?? 0) +
-    (player.operativeUnit2?.toNumber?.() ?? 0) +
-    (player.operativeUnit3?.toNumber?.() ?? 0);
+    (Number(player.operativeUnit1 ?? 0n)) +
+    (Number(player.operativeUnit2 ?? 0n)) +
+    (Number(player.operativeUnit3 ?? 0n));
   const hasEnough = noviBalance >= collectNoviAmount;
 
   const ge = geData?.account;

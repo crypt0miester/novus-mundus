@@ -33,7 +33,7 @@ async function main(): Promise<void> {
   const connection = new Connection(RPC, 'confirmed');
 
   const daoPath = path.join(__dirname, '../keys/dao-authority.json');
-  const dao = Keypair.fromSecretKey(
+  const dao = await Keypair.fromSecretKey(
     Uint8Array.from(JSON.parse(fs.readFileSync(daoPath, 'utf8'))),
   );
 

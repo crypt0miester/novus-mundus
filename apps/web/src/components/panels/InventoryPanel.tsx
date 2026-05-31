@@ -45,7 +45,7 @@ export function InventoryPanel() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createClaimLootInstruction({
+    const ix = await createClaimLootInstruction({
       loot: lootPubkey,
       gameEngine: client.gameEngine,
       owner: publicKey,
@@ -69,13 +69,15 @@ export function InventoryPanel() {
   const handleClaimAll = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || lootItems.length === 0) throw new Error("No loot");
     const claimed = lootItems.slice(0, 5);
-    const instructions = claimed.map((loot) =>
-      createClaimLootInstruction({
-        loot: loot.pubkey,
-        gameEngine: client.gameEngine,
-        owner: publicKey,
-        creator: loot.account.creator,
-      }),
+    const instructions = await Promise.all(
+      claimed.map((loot) =>
+        createClaimLootInstruction({
+          loot: loot.pubkey,
+          gameEngine: client.gameEngine,
+          owner: publicKey,
+          creator: loot.account.creator,
+        }),
+      ),
     );
     return transact
       .mutateAsync({
@@ -146,12 +148,12 @@ export function InventoryPanel() {
                     <span className="inline-flex items-center gap-1">
                       <span className="text-text-muted">Cash</span>
                       <GameIcon id="resource-cash" size={14} />
-                      <span className="text-text-gold">{loot.account.cash.toNumber()}</span>
+                      <span className="text-text-gold">{Number(loot.account.cash)}</span>
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <span className="text-text-muted">Gems</span>
                       <GameIcon id="resource-gem" size={14} />
-                      <span className="text-text-primary">{loot.account.gems.toNumber()}</span>
+                      <span className="text-text-primary">{Number(loot.account.gems)}</span>
                     </span>
                   </div>
                   <TxButton
@@ -175,10 +177,10 @@ export function InventoryPanel() {
             Equipment
           </h3>
           <WeaponGrid
-            melee={player.meleeWeapons?.toNumber?.() ?? 0}
-            ranged={player.rangedWeapons?.toNumber?.() ?? 0}
-            siege={player.siegeWeapons?.toNumber?.() ?? 0}
-            armor={player.armorPieces?.toNumber?.() ?? 0}
+            melee={Number(player.meleeWeapons ?? 0n)}
+            ranged={Number(player.rangedWeapons ?? 0n)}
+            siege={Number(player.siegeWeapons ?? 0n)}
+            armor={Number(player.armorPieces ?? 0n)}
           />
           {/* Provisions — produce (rations) and drays (transport). Both are
               first-class on-chain resources that ride alongside the army; gear
@@ -189,14 +191,14 @@ export function InventoryPanel() {
                 <div className="text-[10px] uppercase tracking-wider text-text-muted">Produce</div>
                 <div className="text-[11px] text-text-muted">Rations from the ash-fed soil</div>
               </div>
-              <GoldNumber value={player.produce?.toNumber?.() ?? 0} size="sm" />
+              <GoldNumber value={Number(player.produce ?? 0n)} size="sm" />
             </div>
             <div className="flex items-center justify-between rounded-md bg-surface/40 px-2.5 py-1.5">
               <div>
                 <div className="text-[10px] uppercase tracking-wider text-text-muted">Drays</div>
                 <div className="text-[11px] text-text-muted">Wagons, beasts, salvaged engines</div>
               </div>
-              <GoldNumber value={player.vehicles?.toNumber?.() ?? 0} size="sm" />
+              <GoldNumber value={Number(player.vehicles ?? 0n)} size="sm" />
             </div>
           </div>
         </div>
@@ -213,20 +215,20 @@ export function InventoryPanel() {
               <div className="text-[10px] text-text-muted">Fragments</div>
               <span className="inline-flex items-center gap-1">
                 <GameIcon id="resource-fragments" size={14} />
-                <GoldNumber value={player.fragments?.toNumber?.() ?? 0} />
+                <GoldNumber value={Number(player.fragments ?? 0n)} />
               </span>
             </div>
             <div>
               <div className="text-[10px] text-text-muted">Common</div>
-              <GoldNumber value={player.commonMaterials?.toNumber?.() ?? 0} glow={false} />
+              <GoldNumber value={Number(player.commonMaterials ?? 0n)} glow={false} />
             </div>
             <div>
               <div className="text-[10px] text-text-muted">Uncommon</div>
-              <GoldNumber value={player.uncommonMaterials?.toNumber?.() ?? 0} glow={false} />
+              <GoldNumber value={Number(player.uncommonMaterials ?? 0n)} glow={false} />
             </div>
             <div>
               <div className="text-[10px] text-text-muted">Rare</div>
-              <GoldNumber value={player.rareMaterials?.toNumber?.() ?? 0} glow={false} />
+              <GoldNumber value={Number(player.rareMaterials ?? 0n)} glow={false} />
             </div>
           </div>
         </div>

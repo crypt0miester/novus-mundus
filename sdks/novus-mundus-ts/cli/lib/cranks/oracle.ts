@@ -12,7 +12,6 @@
  * crank loop use `scripts/crank-oracle.ts --interval` instead.
  */
 
-import * as sb from '@switchboard-xyz/on-demand';
 import { type CLIContext } from '../context';
 import { log, newStats, type PhaseStats } from '../helpers';
 import { PROGRAM_ID } from '../../../src/program';
@@ -22,8 +21,13 @@ import {
   parseAllowedToken,
   ALLOWED_TOKEN_ACCOUNT_SIZE,
 } from '../../../src/index';
-import { crankOnce } from '../../../scripts/crank-oracle';
 import { PublicKey } from '@solana/web3.js';
+
+// `@switchboard-xyz/on-demand` (and the crank-oracle script that wraps it) run
+// web3.js-v1 top-level code that throws under Bun's runtime. Import both lazily
+// so merely loading the CLI module graph — `novus init`, `create-player`,
+// `validator`, etc. — never evaluates them; they only load when the oracle
+// crank actually reaches the cranking path below.
 
 /** A 32-byte feed-hash key is "unset" when all zero. */
 function isZeroKey(key: PublicKey): boolean {
@@ -33,7 +37,7 @@ function isZeroKey(key: PublicKey): boolean {
 export async function crankOracle(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
-  const [configPda] = deriveShopConfigPda(ctx.gameEngine);
+  const [configPda] = await deriveShopConfigPda(ctx.gameEngine);
   const configInfo = await ctx.connection.getAccountInfo(configPda);
   if (!configInfo) {
     log.error('ShopConfig not found — run `novus init shop` first');
@@ -60,7 +64,7 @@ export async function crankOracle(ctx: CLIContext): Promise<PhaseStats> {
   }
 
   // Dedupe; one OracleQuote carries at most 8 feeds.
-  const feeds = [...new Set(feedKeys.map((k) => k.toBuffer().toString('hex')))];
+  const feeds = [...new Set(feedKeys.map((k) => Buffer.from(k.toBytes()).toString('hex')))];
   if (feeds.length === 0) {
     log.info('  No Switchboard feeds configured — skipping');
     stats.skipped++;
@@ -71,6 +75,11 @@ export async function crankOracle(ctx: CLIContext): Promise<PhaseStats> {
     feeds.length = 8;
   }
   log.info(`  Cranking ${feeds.length} feed(s) on queue ${config.solSwitchboardQueue.toBase58()}`);
+
+  // Lazy-load the web3.js-v1 oracle deps only now that we're committed to
+  // cranking — see the import note at the top of this file.
+  const sb = await import('@switchboard-xyz/on-demand');
+  const { crankOnce } = await import('../../../scripts/crank-oracle');
 
   // `loadEnv` reads ~/.config/solana — cluster + game_authority keypair.
   const env = await sb.AnchorUtils.loadEnv();

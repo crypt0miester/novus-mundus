@@ -104,12 +104,12 @@ async function createMinimalDungeonPlayer(
     return null;
   }
 
-  const heroMint = Keypair.generate();
+  const heroMint = await Keypair.generate();
   try {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createMintHeroInstruction(
+        await createMintHeroInstruction(
           {
             minter: player.publicKey,
             gameEngine: ctx.gameEngine,
@@ -158,7 +158,7 @@ async function tryCompleteDungeon(
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createAttackMultiInstruction(
+            await createAttackMultiInstruction(
               {
                 owner: player.publicKey,
                 gameEngine: ctx.gameEngine,
@@ -192,7 +192,7 @@ async function tryCompleteDungeon(
 
     await sendTransaction(
       ctx.svm,
-      new Transaction().add(createClaimDungeonInstruction(claimAccounts, claimParams)),
+      new Transaction().add(await createClaimDungeonInstruction(claimAccounts, claimParams)),
       [player.keypair],
     );
 
@@ -219,7 +219,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
 
     // Dedicated dungeon template for this file. Small floor count + low boss
     // multiplier so completion is plausible in a finite number of attacks.
-    const templateIx = createCreateDungeonTemplateInstruction(
+    const templateIx = await createCreateDungeonTemplateInstruction(
       {
         daoAuthority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
@@ -276,7 +276,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateLeaderboardInstruction(
+          await createCreateLeaderboardInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -292,7 +292,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
         [ctx.daoAuthority],
       );
 
-      const [lbPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, LB_TEMPLATE_ID, week);
+      const [lbPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, LB_TEMPLATE_ID, week);
       const info = await fetchAccount(ctx.svm, lbPda);
       expect(info).not.toBeNull();
 
@@ -320,7 +320,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateLeaderboardInstruction(
+          await createCreateLeaderboardInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -338,14 +338,14 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
 
       const player = await factory.createPlayer({
         initialize: true,
-        customKeypair: Keypair.generate(),
+        customKeypair: await Keypair.generate(),
       });
 
       // No completion needed — the week-ended check fires before participant lookup.
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createClaimLeaderboardPrizeInstruction(
+          await createClaimLeaderboardPrizeInstruction(
             { gameEngine: ctx.gameEngine, owner: player.publicKey },
             { dungeonId: LB_TEMPLATE_ID, weekNumber: currentWeek },
           ),
@@ -370,7 +370,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateLeaderboardInstruction(
+          await createCreateLeaderboardInstruction(
             {
               payer: ctx.daoAuthority.publicKey,
               daoAuthority: ctx.daoAuthority.publicKey,
@@ -391,14 +391,14 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
 
       const outsider = await factory.createPlayer({
         initialize: true,
-        customKeypair: Keypair.generate(),
+        customKeypair: await Keypair.generate(),
       });
 
       // Outsider never entered/claimed a dungeon → not on leaderboard.
       await expectTransactionToFail(
         ctx.svm,
         new Transaction().add(
-          createClaimLeaderboardPrizeInstruction(
+          await createClaimLeaderboardPrizeInstruction(
             { gameEngine: ctx.gameEngine, owner: outsider.publicKey },
             { dungeonId: LB_TEMPLATE_ID, weekNumber: targetWeek },
           ),
@@ -417,12 +417,12 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       const runWeek = getWeekNumber(now);
 
       // Create leaderboard for the current week so completion attempts can insert.
-      const [lbPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, LB_TEMPLATE_ID, runWeek);
+      const [lbPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, LB_TEMPLATE_ID, runWeek);
       if (!(await accountExists(ctx.svm, lbPda))) {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createCreateLeaderboardInstruction(
+            await createCreateLeaderboardInstruction(
               {
                 payer: ctx.daoAuthority.publicKey,
                 daoAuthority: ctx.daoAuthority.publicKey,
@@ -464,7 +464,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       for (let i = 1; i < lb.entries.length; i++) {
         const prev = lb.entries[i - 1]!.score;
         const curr = lb.entries[i]!.score;
-        expect(prev.gte(curr)).toBe(true);
+        expect(prev >= curr).toBe(true);
       }
 
       // Uniqueness invariant: each player appears at most once.
@@ -490,12 +490,12 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       const now = await getCurrentTimestamp(ctx.svm);
       const dupWeek = getWeekNumber(now) + 1;
 
-      const [lbPda] = deriveDungeonLeaderboardPda(ctx.gameEngine, LB_TEMPLATE_ID, dupWeek);
+      const [lbPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, LB_TEMPLATE_ID, dupWeek);
       if (!(await accountExists(ctx.svm, lbPda))) {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createCreateLeaderboardInstruction(
+            await createCreateLeaderboardInstruction(
               {
                 payer: ctx.daoAuthority.publicKey,
                 daoAuthority: ctx.daoAuthority.publicKey,
@@ -530,7 +530,7 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       // Advance two weeks so dupWeek (= currentWeek+1 at test start) is past.
       await advanceTime(ctx.svm, SECONDS_PER_WEEK * 2);
 
-      const claimIx = createClaimLeaderboardPrizeInstruction(
+      const claimIx = await createClaimLeaderboardPrizeInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { dungeonId: LB_TEMPLATE_ID, weekNumber: dupWeek },
       );

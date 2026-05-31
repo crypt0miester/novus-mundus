@@ -83,7 +83,7 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
     log.info(`--- Player ${playerIndex} (city ${cityId}: ${city.name}) ---`);
 
     const keypairPath = path.join(keysDir, `player-${playerIndex}.json`);
-    const playerKeypair = loadKeypair(keypairPath);
+    const playerKeypair = await loadKeypair(keypairPath);
 
     // Airdrop SOL on localnet
     if (ctx.env === 'localnet') {

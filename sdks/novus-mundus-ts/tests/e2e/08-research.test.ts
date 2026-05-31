@@ -14,7 +14,6 @@ import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bu
 setDefaultTimeout(120_000);
 
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createStartResearchInstruction,
@@ -76,7 +75,7 @@ describe('Research System', () => {
       const player = await createResearchPlayer();
 
       log.step('Starting research type 0 (Battle category)');
-      const ix = createStartResearchInstruction({
+      const ix = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -94,7 +93,7 @@ describe('Research System', () => {
       const player = await createResearchPlayer();
 
       // Start first research
-      const ix1 = createStartResearchInstruction({
+      const ix1 = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -102,7 +101,7 @@ describe('Research System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(ix1), [player.keypair]);
 
       // Try to start second - should fail (already researching)
-      const ix2 = createStartResearchInstruction({
+      const ix2 = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 1,
@@ -121,7 +120,7 @@ describe('Research System', () => {
       const player = await createResearchPlayer();
 
       // Try advanced research without prereqs
-      const ix = createStartResearchInstruction({
+      const ix = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 100, // High-level research requiring prereqs
@@ -139,7 +138,7 @@ describe('Research System', () => {
       log.step('Attempting research with invalid type 31');
       const player = await createResearchPlayer();
 
-      const ix = createStartResearchInstruction({
+      const ix = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 31, // Invalid type (Rust rejects >= 30)
@@ -157,7 +156,7 @@ describe('Research System', () => {
       log.step('Attempting research without estate');
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createStartResearchInstruction({
+      const ix = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -180,7 +179,7 @@ describe('Research System', () => {
       const player = await createResearchPlayer();
 
       // Start research
-      const startIx = createStartResearchInstruction({
+      const startIx = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -190,14 +189,14 @@ describe('Research System', () => {
       // Speedup to completion (0 = complete all remaining)
       // First buy enough gems
       await factory.buyGems(player, 20);
-      const speedupIx = createSpeedUpResearchInstruction(
+      const speedupIx = await createSpeedUpResearchInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, researchType: 0 },
-        { speedUpSeconds: new BN(0) } // 0 = complete all remaining time
+        { speedUpSeconds: 0n } // 0 = complete all remaining time
       );
       await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
 
       // Complete
-      const completeIx = createCompleteResearchInstruction({
+      const completeIx = await createCompleteResearchInstruction({
         gameEngine: ctx.gameEngine,
         payer: player.publicKey,
         playerOwner: player.publicKey,
@@ -212,7 +211,7 @@ describe('Research System', () => {
       const player = await createResearchPlayer();
 
       // Start research
-      const startIx = createStartResearchInstruction({
+      const startIx = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -220,7 +219,7 @@ describe('Research System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(startIx), [player.keypair]);
 
       // Immediate complete should fail
-      const completeIx = createCompleteResearchInstruction({
+      const completeIx = await createCompleteResearchInstruction({
         gameEngine: ctx.gameEngine,
         payer: player.publicKey,
         playerOwner: player.publicKey,
@@ -244,7 +243,7 @@ describe('Research System', () => {
       const player = await createResearchPlayer();
 
       // Start research
-      const startIx = createStartResearchInstruction({
+      const startIx = await createStartResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -252,7 +251,7 @@ describe('Research System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(startIx), [player.keypair]);
 
       // Cancel
-      const cancelIx = createCancelResearchInstruction({
+      const cancelIx = await createCancelResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -265,7 +264,7 @@ describe('Research System', () => {
       log.step('Attempting cancel with no active research');
       const player = await createResearchPlayer();
 
-      const cancelIx = createCancelResearchInstruction({
+      const cancelIx = await createCancelResearchInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         researchType: 0,
@@ -286,7 +285,7 @@ describe('Research System', () => {
       // Start first research
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createStartResearchInstruction({
+        new Transaction().add(await createStartResearchInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           researchType: 0,
@@ -297,7 +296,7 @@ describe('Research System', () => {
       // Cancel
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createCancelResearchInstruction({
+        new Transaction().add(await createCancelResearchInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           researchType: 0,
@@ -308,7 +307,7 @@ describe('Research System', () => {
       // Start same research again (should succeed since cancelled resets state)
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createStartResearchInstruction({
+        new Transaction().add(await createStartResearchInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           researchType: 0,
@@ -329,7 +328,7 @@ describe('Research System', () => {
       // Start research
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createStartResearchInstruction({
+        new Transaction().add(await createStartResearchInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           researchType: 0,
@@ -338,9 +337,9 @@ describe('Research System', () => {
       );
 
       // Speedup (partial)
-      const speedupIx = createSpeedUpResearchInstruction(
+      const speedupIx = await createSpeedUpResearchInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, researchType: 0 },
-        { speedUpSeconds: new BN(60) }
+        { speedUpSeconds: 60n }
       );
       await sendTransaction(ctx.svm, new Transaction().add(speedupIx), [player.keypair]);
       log.txSuccess('research sped up by 60 seconds');
@@ -350,9 +349,9 @@ describe('Research System', () => {
       log.step('Attempting speedup with no active research');
       const player = await createResearchPlayer();
 
-      const speedupIx = createSpeedUpResearchInstruction(
+      const speedupIx = await createSpeedUpResearchInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey, researchType: 0 },
-        { speedUpSeconds: new BN(3600) }
+        { speedUpSeconds: 3600n }
       );
 
       await expectTransactionToFail(
@@ -376,7 +375,7 @@ describe('Research System', () => {
       log.step('Start research type 0');
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createStartResearchInstruction({
+        new Transaction().add(await createStartResearchInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           researchType: 0,
@@ -388,9 +387,9 @@ describe('Research System', () => {
       log.step('Speedup to completion');
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createSpeedUpResearchInstruction(
+        new Transaction().add(await createSpeedUpResearchInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, researchType: 0 },
-          { speedUpSeconds: new BN(0) }
+          { speedUpSeconds: 0n }
         )),
         [player.keypair]
       );
@@ -399,7 +398,7 @@ describe('Research System', () => {
       log.step('Complete research');
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createCompleteResearchInstruction({
+        new Transaction().add(await createCompleteResearchInstruction({
           gameEngine: ctx.gameEngine,
           payer: player.publicKey,
           playerOwner: player.publicKey,
@@ -412,7 +411,7 @@ describe('Research System', () => {
       log.step('Start next research type 0 level 2');
       await sendTransaction(
         ctx.svm,
-        new Transaction().add(createStartResearchInstruction({
+        new Transaction().add(await createStartResearchInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           researchType: 0,

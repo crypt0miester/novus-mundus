@@ -9,7 +9,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 
 // Occupant Type Constants
@@ -35,9 +34,9 @@ export interface LocationAccount {
   bump: number;
   occupantType: number;
   occupant: PublicKey;
-  occupiedSince: BN;
+  occupiedSince: bigint;
   locationCreator: PublicKey;
-  reservedArrivalTime: BN;
+  reservedArrivalTime: bigint;
 }
 
 /** LocationAccount size in bytes (repr(C) layout with alignment padding) */
@@ -46,7 +45,7 @@ export const LOCATION_ACCOUNT_SIZE = 128;
 // Deserialization
 
 /** Deserialize LocationAccount from raw bytes */
-export function deserializeLocation(data: Uint8Array | Buffer): LocationAccount {
+export function deserializeLocation(data: Uint8Array): LocationAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -77,7 +76,7 @@ export function deserializeLocation(data: Uint8Array | Buffer): LocationAccount 
 }
 
 /** Parse LocationAccount from account info */
-export function parseLocation(accountInfo: AccountInfo<Buffer>): LocationAccount | null {
+export function parseLocation(accountInfo: AccountInfo<Uint8Array>): LocationAccount | null {
   if (!accountInfo.data || accountInfo.data.length < LOCATION_ACCOUNT_SIZE) {
     return null;
   }
@@ -103,6 +102,6 @@ export function isEncounterOccupied(location: LocationAccount): boolean {
 
 /** Check if occupant is still traveling (hasn't arrived yet) */
 export function isLocationTraveling(location: LocationAccount): boolean {
-  return location.reservedArrivalTime.toNumber() > 0;
+  return location.reservedArrivalTime > 0n;
 }
 

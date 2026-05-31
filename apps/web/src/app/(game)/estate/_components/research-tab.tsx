@@ -45,7 +45,9 @@ function useResearchTemplates() {
   return useQuery({
     queryKey: ["research-templates"],
     queryFn: async () => {
-      const pdas = Array.from({ length: 30 }, (_, i) => deriveResearchTemplatePda(i)[0]);
+      const pdas = await Promise.all(
+        Array.from({ length: 30 }, async (_, i) => (await deriveResearchTemplatePda(i))[0]),
+      );
       const infos = await connection.getMultipleAccountsInfo(pdas);
       const templates: (ResearchTemplateAccount & { pda: string })[] = [];
       for (let i = 0; i < 30; i++) {
@@ -72,8 +74,8 @@ function useResearchProgress() {
     queryKey: ["research-progress", publicKey?.toBase58()],
     queryFn: async () => {
       if (!publicKey) return null;
-      const [playerPda] = derivePlayerPda(client.gameEngine, publicKey);
-      const [researchPda] = deriveResearchPda(playerPda);
+      const [playerPda] = await derivePlayerPda(client.gameEngine, publicKey);
+      const [researchPda] = await deriveResearchPda(playerPda);
       const info = await connection.getAccountInfo(researchPda);
       if (!info) return { exists: false as const, account: null };
       const account = parseResearchProgress(info);
@@ -131,7 +133,7 @@ export function ResearchTab() {
 
   const handleCreateProgress = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createCreateProgressInstruction({
+    const ix = await createCreateProgressInstruction({
       owner: publicKey,
       gameEngine: client.gameEngine,
     });

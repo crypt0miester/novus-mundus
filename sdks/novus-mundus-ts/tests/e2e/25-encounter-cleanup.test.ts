@@ -54,7 +54,7 @@ describe('Encounter Cleanup', () => {
     const gridLat = Math.round(city.lat * GRID_PRECISION);
     const gridLong = Math.round(city.lon * GRID_PRECISION) + 1;
 
-    const spawnIx = createSpawnEncounterInstruction(
+    const spawnIx = await createSpawnEncounterInstruction(
       {
         gameEngine: ctx.gameEngine,
         payer: ctx.daoAuthority.publicKey,
@@ -68,12 +68,12 @@ describe('Encounter Cleanup', () => {
     );
     await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
-    const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
-    const [locationPda] = deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
+    const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+    const [locationPda] = await deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
     return { gridLat, gridLong, encounterPda, locationPda };
   }
 
-  function cleanupIx(
+  async function cleanupIx(
     cityId: number,
     encounterIndex: number,
     gridLat: number,
@@ -97,14 +97,14 @@ describe('Encounter Cleanup', () => {
     // No time advanced — encounter is still live and attackable.
     await expectTransactionToFail(
       ctx.svm,
-      new Transaction().add(cleanupIx(cityId, 0, gridLat, gridLong)),
+      new Transaction().add(await cleanupIx(cityId, 0, gridLat, gridLong)),
       [ctx.daoAuthority],
       GameError.EncounterStillActive,
       'cleanup before despawn'
     );
 
     // Encounter must still exist.
-    expect(await fetchEncounter(ctx.svm, deriveEncounterPda(ctx.gameEngine, cityId, 0)[0]))
+    expect(await fetchEncounter(ctx.svm, (await deriveEncounterPda(ctx.gameEngine, cityId, 0))[0]))
       .not.toBeNull();
   });
 
@@ -117,13 +117,13 @@ describe('Encounter Cleanup', () => {
 
     await expectTransactionToFail(
       ctx.svm,
-      new Transaction().add(cleanupIx(cityId, 0, gridLat, gridLong)),
+      new Transaction().add(await cleanupIx(cityId, 0, gridLat, gridLong)),
       [ctx.daoAuthority],
       GameError.EncounterStillActive,
       'cleanup within grace window'
     );
 
-    expect(await fetchEncounter(ctx.svm, deriveEncounterPda(ctx.gameEngine, cityId, 0)[0]))
+    expect(await fetchEncounter(ctx.svm, (await deriveEncounterPda(ctx.gameEngine, cityId, 0))[0]))
       .not.toBeNull();
   });
 
@@ -137,7 +137,7 @@ describe('Encounter Cleanup', () => {
 
     const cityAfterSpawn = await fetchCity(ctx.svm, ctx.gameEngine, cityId);
     expect(cityAfterSpawn).not.toBeNull();
-    const activeAfterSpawn = cityAfterSpawn!.activeEncounters.toNumber();
+    const activeAfterSpawn = Number(cityAfterSpawn!.activeEncounters);
     expect(activeAfterSpawn).toBeGreaterThan(0);
 
     // Advance past despawn_at + grace so the encounter becomes eligible.
@@ -145,7 +145,7 @@ describe('Encounter Cleanup', () => {
 
     await sendTransaction(
       ctx.svm,
-      new Transaction().add(cleanupIx(cityId, 0, gridLat, gridLong)),
+      new Transaction().add(await cleanupIx(cityId, 0, gridLat, gridLong)),
       [ctx.daoAuthority]
     );
 
@@ -158,7 +158,7 @@ describe('Encounter Cleanup', () => {
 
     // City active-encounter counter decremented.
     const cityAfterCleanup = await fetchCity(ctx.svm, ctx.gameEngine, cityId);
-    expect(cityAfterCleanup!.activeEncounters.toNumber()).toBe(activeAfterSpawn - 1);
+    expect(Number(cityAfterCleanup!.activeEncounters)).toBe(activeAfterSpawn - 1);
   });
 
   it('cleans up a killed encounter (grid cell already closed by combat)', async () => {
@@ -178,7 +178,7 @@ describe('Encounter Cleanup', () => {
     const gridLat = Math.round(city.lat * GRID_PRECISION);
     const gridLong = Math.round(city.lon * GRID_PRECISION) + 1;
 
-    const spawnIx = createSpawnEncounterInstruction(
+    const spawnIx = await createSpawnEncounterInstruction(
       {
         gameEngine: ctx.gameEngine,
         payer: ctx.daoAuthority.publicKey,
@@ -192,16 +192,16 @@ describe('Encounter Cleanup', () => {
     );
     await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
-    const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, 0);
-    const [locationPda] = deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
+    const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, 0);
+    const [locationPda] = await deriveLocationPda(ctx.gameEngine, cityId, gridLat, gridLong);
 
     const cityAfterSpawn = await fetchCity(ctx.svm, ctx.gameEngine, cityId);
-    const activeAfterSpawn = cityAfterSpawn!.activeEncounters.toNumber();
+    const activeAfterSpawn = Number(cityAfterSpawn!.activeEncounters);
 
     // Kill the encounter — combat closes its grid cell on death.
     const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
-    const [lootPda] = deriveLootPda(player.playerPda, playerBefore!.lootCounter.toNumber());
-    const attackIx = createAttackEncounterInstruction(
+    const [lootPda] = await deriveLootPda(player.playerPda, Number(playerBefore!.lootCounter));
+    const attackIx = await createAttackEncounterInstruction(
       {
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -217,7 +217,7 @@ describe('Encounter Cleanup', () => {
     // Encounter is dead (account still present) and its grid cell is closed.
     const killed = await fetchEncounter(ctx.svm, encounterPda);
     expect(killed).not.toBeNull();
-    expect(killed!.health.toNumber()).toBe(0);
+    expect(Number(killed!.health)).toBe(0);
     expect(await accountExists(ctx.svm, locationPda)).toBe(false);
 
     // Advance past despawn_at + grace, then clean up. The cell is already
@@ -227,7 +227,7 @@ describe('Encounter Cleanup', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createCleanupEncounterInstruction({
+        await createCleanupEncounterInstruction({
           gameEngine: ctx.gameEngine,
           cityId,
           encounterIndex: 0,
@@ -242,7 +242,7 @@ describe('Encounter Cleanup', () => {
     // Encounter account closed, city counter decremented.
     expect(await fetchEncounter(ctx.svm, encounterPda)).toBeNull();
     const cityAfterCleanup = await fetchCity(ctx.svm, ctx.gameEngine, cityId);
-    expect(cityAfterCleanup!.activeEncounters.toNumber()).toBe(activeAfterSpawn - 1);
+    expect(Number(cityAfterCleanup!.activeEncounters)).toBe(activeAfterSpawn - 1);
   });
 
   it('rejects a second cleanup of an already-closed encounter', async () => {
@@ -256,7 +256,7 @@ describe('Encounter Cleanup', () => {
     // silently succeed or double-decrement the city counter.
     await expectTransactionToFail(
       ctx.svm,
-      new Transaction().add(cleanupIx(cityId, 0, gridLat, gridLong)),
+      new Transaction().add(await cleanupIx(cityId, 0, gridLat, gridLong)),
       [ctx.daoAuthority],
       undefined,
       'double cleanup'

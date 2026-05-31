@@ -2,7 +2,11 @@ import { PublicKey } from "@solana/web3.js";
 
 export const MPL_CORE_PROGRAM_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
 
-export const IGNORED_ATTRS = new Set(["Template", "Serial", "Origin"]);
+// Identity + system attributes that are NOT buffs, so the buff list skips them
+// (they render in the footer / a dedicated chip instead). AbCD is the on-chain
+// ability-cooldown stamp (unix ts of the last ability use); the UI surfaces it
+// as a friendly "Ability Cooldown" indicator rather than a raw key:value row.
+export const IGNORED_ATTRS = new Set(["Template", "Serial", "Origin", "AbCD"]);
 
 // Cost helpers — mirror the Rust logic.
 

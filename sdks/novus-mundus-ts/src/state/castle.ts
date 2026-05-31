@@ -9,7 +9,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { CastleTier, CastleStatus, CourtPosition } from '../types/enums';
 
@@ -37,8 +36,8 @@ export interface CastleAccount {
   // Ruler Info
   king: PublicKey;
   team: PublicKey;
-  claimedAt: BN;
-  contestEndAt: BN;
+  claimedAt: bigint;
+  contestEndAt: bigint;
 
   // Garrison Tracking
   garrisonCount: number;
@@ -59,29 +58,29 @@ export interface CastleAccount {
   // Upgrade In Progress
   upgradeType: number;
   upgradeTargetLevel: number;
-  upgradeEndAt: BN;
+  upgradeEndAt: bigint;
 
   // DAO Configuration - Eligibility
   minLevel: number;
   minNetworthMillions: number;
   minTroopsThousands: number;
-  protectionDuration: BN;
+  protectionDuration: bigint;
 
   // DAO Configuration - Reward Rates
   tierMultiplierBps: number;
   kingLootCutBps: number;
-  kingNoviPerDay: BN;
-  kingCashPerDay: BN;
-  courtNoviPerDay: BN;
-  courtCashPerDay: BN;
-  memberNoviPerDay: BN;
-  memberCashPerDay: BN;
+  kingNoviPerDay: bigint;
+  kingCashPerDay: bigint;
+  courtNoviPerDay: bigint;
+  courtCashPerDay: bigint;
+  memberNoviPerDay: bigint;
+  memberCashPerDay: bigint;
 
   // Statistics
   timesClaimed: number;
   successfulDefenses: number;
   failedDefenses: number;
-  totalRewardsDistributed: BN;
+  totalRewardsDistributed: bigint;
 
   // Transition Progress
   transitionGarrisonCleaned: number;
@@ -90,7 +89,7 @@ export interface CastleAccount {
   transitionNewKing: PublicKey;
 
   // Activation
-  activatesAt: BN;
+  activatesAt: bigint;
 
   // War-table key version; bumps on every access-loss event.
   membershipEpoch: number;
@@ -114,8 +113,8 @@ export interface CourtPositionAccount {
   castle: PublicKey;
   holder: PublicKey;
   position: CourtPosition;
-  appointedAt: BN;
-  lastClaimedAt: BN;
+  appointedAt: bigint;
+  lastClaimedAt: bigint;
   bump: number;
 }
 
@@ -124,16 +123,16 @@ export interface CourtPositionAccount {
 export interface GarrisonContributionAccount {
   castle: PublicKey;
   contributor: PublicKey;
-  du1: BN;
-  du2: BN;
-  du3: BN;
-  joinedAt: BN;
-  lastClaimedAt: BN;
+  du1: bigint;
+  du2: bigint;
+  du3: bigint;
+  joinedAt: bigint;
+  lastClaimedAt: bigint;
   bump: number;
   /** Weapons captured from attackers, claimable via claim_garrison_loot. */
-  lootMelee: BN;
-  lootRanged: BN;
-  lootSiege: BN;
+  lootMelee: bigint;
+  lootRanged: bigint;
+  lootSiege: bigint;
   /** True once this contribution's loot has been claimed. */
   lootClaimed: boolean;
   /** castle.membership_epoch snapshotted at join (servable key range starts here). */
@@ -146,13 +145,13 @@ export interface TeamCastleRewardAccount {
   castle: PublicKey;
   team: PublicKey;
   member: PublicKey;
-  lastClaimedAt: BN;
+  lastClaimedAt: bigint;
   bump: number;
 }
 
 // Deserialization
 
-export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
+export function deserializeCastle(data: Uint8Array): CastleAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -312,7 +311,7 @@ export function deserializeCastle(data: Uint8Array | Buffer): CastleAccount {
   };
 }
 
-export function deserializeKingRegistry(data: Uint8Array | Buffer): KingRegistryAccount {
+export function deserializeKingRegistry(data: Uint8Array): KingRegistryAccount {
   const reader = new BufferReader(data);
   reader.readU8(); // account_key
   const king = reader.readPubkey();
@@ -322,7 +321,7 @@ export function deserializeKingRegistry(data: Uint8Array | Buffer): KingRegistry
   return { king, castle, bump };
 }
 
-export function deserializeCourtPosition(data: Uint8Array | Buffer): CourtPositionAccount {
+export function deserializeCourtPosition(data: Uint8Array): CourtPositionAccount {
   const reader = new BufferReader(data);
   reader.readU8(); // account_key
   const castle = reader.readPubkey();
@@ -337,7 +336,7 @@ export function deserializeCourtPosition(data: Uint8Array | Buffer): CourtPositi
   return { castle, holder, position, appointedAt, lastClaimedAt, bump };
 }
 
-export function deserializeGarrisonContribution(data: Uint8Array | Buffer): GarrisonContributionAccount {
+export function deserializeGarrisonContribution(data: Uint8Array): GarrisonContributionAccount {
   const reader = new BufferReader(data);
   reader.readU8(); // account_key
   const castle = reader.readPubkey();
@@ -378,7 +377,7 @@ export function deserializeGarrisonContribution(data: Uint8Array | Buffer): Garr
   };
 }
 
-export function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCastleRewardAccount {
+export function deserializeTeamCastleReward(data: Uint8Array): TeamCastleRewardAccount {
   const reader = new BufferReader(data);
   reader.readU8(); // account_key
   const castle = reader.readPubkey();
@@ -396,7 +395,7 @@ export function deserializeTeamCastleReward(data: Uint8Array | Buffer): TeamCast
 // Parse Functions
 
 /** Parse CastleAccount from account info */
-export function parseCastle(accountInfo: AccountInfo<Buffer>): CastleAccount | null {
+export function parseCastle(accountInfo: AccountInfo<Uint8Array>): CastleAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }
@@ -404,7 +403,7 @@ export function parseCastle(accountInfo: AccountInfo<Buffer>): CastleAccount | n
 }
 
 /** Parse KingRegistryAccount from account info */
-export function parseKingRegistry(accountInfo: AccountInfo<Buffer>): KingRegistryAccount | null {
+export function parseKingRegistry(accountInfo: AccountInfo<Uint8Array>): KingRegistryAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }
@@ -412,7 +411,7 @@ export function parseKingRegistry(accountInfo: AccountInfo<Buffer>): KingRegistr
 }
 
 /** Parse CourtPositionAccount from account info */
-export function parseCourtPosition(accountInfo: AccountInfo<Buffer>): CourtPositionAccount | null {
+export function parseCourtPosition(accountInfo: AccountInfo<Uint8Array>): CourtPositionAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }
@@ -420,7 +419,7 @@ export function parseCourtPosition(accountInfo: AccountInfo<Buffer>): CourtPosit
 }
 
 /** Parse GarrisonContributionAccount from account info */
-export function parseGarrisonContribution(accountInfo: AccountInfo<Buffer>): GarrisonContributionAccount | null {
+export function parseGarrisonContribution(accountInfo: AccountInfo<Uint8Array>): GarrisonContributionAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }
@@ -428,7 +427,7 @@ export function parseGarrisonContribution(accountInfo: AccountInfo<Buffer>): Gar
 }
 
 /** Parse TeamCastleRewardAccount from account info */
-export function parseTeamCastleReward(accountInfo: AccountInfo<Buffer>): TeamCastleRewardAccount | null {
+export function parseTeamCastleReward(accountInfo: AccountInfo<Uint8Array>): TeamCastleRewardAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }

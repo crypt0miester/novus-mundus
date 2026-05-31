@@ -95,11 +95,11 @@ export function RallyComposerPanel({
     setHeroSlot(NO_HERO_SLOT);
   }, [targetPubkey]);
 
-  // Chain stores units/weapons as u64; BN.toNumber() throws past 2^53.
-  // Whales (legendary tier, long sessions) can plausibly accrue beyond
-  // that, and the composer caps inputs via these counts — falling back
+  // Chain stores units/weapons as u64 (bigint); Number() loses precision
+  // past 2^53. Whales (legendary tier, long sessions) can plausibly accrue
+  // beyond that, and the composer caps inputs via these counts — clamping
   // to MAX_SAFE_INTEGER means the input is bounded by Number range
-  // rather than crashing the panel on a stat read.
+  // rather than overflowing the panel on a stat read.
   const ownedUnits: [number, number, number] = [
     bnToSafeNumber(player?.defensiveUnit1),
     bnToSafeNumber(player?.defensiveUnit2),
@@ -147,13 +147,13 @@ export function RallyComposerPanel({
     if (!teamId) throw new Error("You must be on a team to create a rally");
     if (!hasAnyUnit) throw new Error("Commit at least one defensive unit to the rally");
     const hero = heroSlot < 3 ? lockedHeroes[heroSlot] : null;
-    const ix = createRallyCreateInstruction(
+    const ix = await createRallyCreateInstruction(
       {
         owner: publicKey,
         gameEngine: client.gameEngine,
-        rallyId: player.rallyStats.totalRalliesCreated.toNumber(),
+        rallyId: player.rallyStats.totalRalliesCreated,
         target: targetKey,
-        teamId: teamId.toNumber(),
+        teamId,
         rallyCityId: player.currentCity,
       },
       {

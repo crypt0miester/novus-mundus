@@ -200,8 +200,8 @@ export async function buildContext(args: ParsedArgs): Promise<CLIContext> {
   const authorityPath = args.authorityPath || path.join(keysDir, 'dao-authority.json');
   const treasuryPath = args.treasuryPath || path.join(keysDir, 'treasury.json');
 
-  const daoAuthority = loadKeypair(authorityPath);
-  const treasury = loadKeypair(treasuryPath);
+  const daoAuthority = await loadKeypair(authorityPath);
+  const treasury = await loadKeypair(treasuryPath);
 
   const rpcUrl = process.env.RPC_URL || RPC_URLS[args.env];
   const connection = new Connection(rpcUrl, 'confirmed');

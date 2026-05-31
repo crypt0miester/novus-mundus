@@ -39,7 +39,7 @@ async function createHeroReadyPlayer(
   });
   await sendTransaction(
     ctx.svm,
-    new Transaction().add(createBuyPlotInstruction({ owner: player.publicKey, gameEngine: ctx.gameEngine })),
+    new Transaction().add(await createBuyPlotInstruction({ owner: player.publicKey, gameEngine: ctx.gameEngine })),
     [player.keypair],
   );
   await factory.buildAndCompleteBuilding(player, BuildingType.Citadel);
@@ -48,7 +48,7 @@ async function createHeroReadyPlayer(
   await sendTransaction(
     ctx.svm,
     new Transaction().add(
-      createTeamCreateInstruction(
+      await createTeamCreateInstruction(
         { owner: player.publicKey, gameEngine: ctx.gameEngine, teamId },
         { name: `CuTeam${teamId}` },
       ),
@@ -61,12 +61,12 @@ async function createHeroReadyPlayer(
   await sendTransaction(
     ctx.svm,
     new Transaction().add(
-      createRallyCreateInstruction(
+      await createRallyCreateInstruction(
         {
           owner: player.publicKey,
           gameEngine: ctx.gameEngine,
           rallyId,
-          target: Keypair.generate().publicKey,
+          target: (await Keypair.generate()).publicKey,
           teamId,
           rallyCityId: player.startingCityId,
         },
@@ -101,16 +101,16 @@ describe('Hero URI — CU budget after UpdateV1 addition', () => {
     const player = await createHeroReadyPlayer(ctx, factory);
 
     // 1. Mint a hero. The new URI builder runs inside this tx.
-    const heroMintKeypair = Keypair.generate();
+    const heroMintKeypair = await Keypair.generate();
     const heroMint: PublicKey = heroMintKeypair.publicKey;
     const templateId = 1;
-    const [heroTemplate] = deriveHeroTemplatePda(templateId);
-    const [estateAccount] = deriveEstatePda(player.playerPda);
+    const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+    const [estateAccount] = await deriveEstatePda(player.playerPda);
 
     const mintRes = await sendTransactionWithResult(
       ctx.svm,
       new Transaction().add(
-        createMintHeroInstruction(
+        await createMintHeroInstruction(
           {
             gameEngine: ctx.gameEngine,
             minter: player.publicKey,
@@ -129,7 +129,7 @@ describe('Hero URI — CU budget after UpdateV1 addition', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createLockHeroInstruction(
+        await createLockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 },
         ),
@@ -139,7 +139,7 @@ describe('Hero URI — CU budget after UpdateV1 addition', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createUnlockHeroInstruction(
+        await createUnlockHeroInstruction(
           { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint, heroTemplate, estateAccount },
           { slotIndex: 0 },
         ),
@@ -153,7 +153,7 @@ describe('Hero URI — CU budget after UpdateV1 addition', () => {
     const levelRes = await sendTransactionWithResult(
       ctx.svm,
       new Transaction().add(
-        createLevelUpHeroInstruction({
+        await createLevelUpHeroInstruction({
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
           heroMint,

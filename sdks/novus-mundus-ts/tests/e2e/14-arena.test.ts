@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createCreateSeasonInstruction,
@@ -55,6 +54,11 @@ import {
 
 setDefaultTimeout(120_000);
 
+// LiteSVM bundles web3.js v1, whose PublicKey is nominally distinct from the v3
+// PublicKey the SDK uses. They are runtime-compatible; cast at the call boundary.
+const svmKey = (pk: PublicKey) =>
+  pk as unknown as Parameters<TestContext['svm']['getAccount']>[0];
+
 describe('Arena System', () => {
   let ctx: TestContext;
   let factory: PlayerFactory;
@@ -68,16 +72,16 @@ describe('Arena System', () => {
     heroFactory = new HeroFactory(ctx);
 
     // DAO creates arena season 1
-    const createSeasonIx = createCreateSeasonInstruction(
+    const createSeasonIx = await createCreateSeasonInstruction(
       {
         authority: ctx.daoAuthority.publicKey,
         gameEngine: ctx.gameEngine,
         seasonId: SEASON_ID,
       },
       {
-        masterPrizePool: new BN(1_000_000),
-        dailyPrizePool: new BN(100_000),
-        dailyDistributionCap: new BN(50_000),
+        masterPrizePool: BigInt(1_000_000),
+        dailyPrizePool: BigInt(100_000),
+        dailyDistributionCap: BigInt(50_000),
         minLevelRequired: 1,
       }
     );
@@ -99,7 +103,7 @@ describe('Arena System', () => {
     it('should join arena season', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createJoinSeasonInstruction({
+      const ix = await createJoinSeasonInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -125,7 +129,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -136,7 +140,7 @@ describe('Arena System', () => {
       );
 
       // Try again — should fail
-      const ix = createJoinSeasonInstruction({
+      const ix = await createJoinSeasonInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -153,7 +157,7 @@ describe('Arena System', () => {
     it('should reject joining non-existent season', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createJoinSeasonInstruction({
+      const ix = await createJoinSeasonInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -170,16 +174,16 @@ describe('Arena System', () => {
     it('should require minimum level to join', async () => {
       // Create a season with a higher minimum level requirement
       const HIGH_LEVEL_SEASON_ID = 99;
-      const createHighLevelSeasonIx = createCreateSeasonInstruction(
+      const createHighLevelSeasonIx = await createCreateSeasonInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
           seasonId: HIGH_LEVEL_SEASON_ID,
         },
         {
-          masterPrizePool: new BN(1_000_000),
-          dailyPrizePool: new BN(100_000),
-          dailyDistributionCap: new BN(50_000),
+          masterPrizePool: BigInt(1_000_000),
+          dailyPrizePool: BigInt(100_000),
+          dailyDistributionCap: BigInt(50_000),
           minLevelRequired: 5, // Requires level 5
         }
       );
@@ -188,7 +192,7 @@ describe('Arena System', () => {
       // Level-1 player should fail to join
       const player = await factory.createPlayer({ initialize: true });
 
-      const ix = createJoinSeasonInstruction({
+      const ix = await createJoinSeasonInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -209,7 +213,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -246,7 +250,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -259,7 +263,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: defender.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -273,9 +277,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(100), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(100), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [attacker.keypair]
@@ -283,9 +287,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [defender.keypair]
@@ -295,7 +299,7 @@ describe('Arena System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge requires game_authority co-signature
-      const challengeIx = createChallengePlayerInstruction(
+      const challengeIx = await createChallengePlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           challenger: attacker.publicKey,
@@ -308,7 +312,7 @@ describe('Arena System', () => {
           defenderHero: PublicKey.default,
           defenderEstate: PublicKey.default,
         },
-        { matchId: new BN(1), matchTimestamp: new BN(now) }
+        { matchId: BigInt(1), matchTimestamp: BigInt(now) }
       );
 
       await sendTransaction(
@@ -320,7 +324,7 @@ describe('Arena System', () => {
       // Verify battle was recorded
       const season = await fetchArenaSeason(ctx.svm, ctx.gameEngine, SEASON_ID);
       expect(season).not.toBeNull();
-      expect(season!.totalBattles.toNumber()).toBeGreaterThan(0);
+      expect(Number(season!.totalBattles)).toBeGreaterThan(0);
     });
 
     it('should reject challenge to non-participant', async () => {
@@ -331,7 +335,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -344,7 +348,7 @@ describe('Arena System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge non-participant — should fail
-      const challengeIx = createChallengePlayerInstruction(
+      const challengeIx = await createChallengePlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           challenger: attacker.publicKey,
@@ -357,7 +361,7 @@ describe('Arena System', () => {
           defenderHero: PublicKey.default,
           defenderEstate: PublicKey.default,
         },
-        { matchId: new BN(1), matchTimestamp: new BN(now) }
+        { matchId: BigInt(1), matchTimestamp: BigInt(now) }
       );
 
       await expectTransactionToFail(
@@ -377,7 +381,7 @@ describe('Arena System', () => {
 
       // Both join
       const joinTx1 = new Transaction().add(
-        createJoinSeasonInstruction({
+        await createJoinSeasonInstruction({
           gameEngine: ctx.gameEngine,
           owner: attacker.publicKey,
           seasonAuthority: ctx.daoAuthority.publicKey,
@@ -385,7 +389,7 @@ describe('Arena System', () => {
         })
       );
       const joinTx2 = new Transaction().add(
-        createJoinSeasonInstruction({
+        await createJoinSeasonInstruction({
           gameEngine: ctx.gameEngine,
           owner: defender.publicKey,
           seasonAuthority: ctx.daoAuthority.publicKey,
@@ -399,9 +403,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(200), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [attacker.keypair]
@@ -409,9 +413,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [defender.keypair]
@@ -420,7 +424,7 @@ describe('Arena System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge
-      const challengeIx = createChallengePlayerInstruction(
+      const challengeIx = await createChallengePlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           challenger: attacker.publicKey,
@@ -433,7 +437,7 @@ describe('Arena System', () => {
           defenderHero: PublicKey.default,
           defenderEstate: PublicKey.default,
         },
-        { matchId: new BN(1), matchTimestamp: new BN(now) }
+        { matchId: BigInt(1), matchTimestamp: BigInt(now) }
       );
       await sendTransaction(
         ctx.svm,
@@ -466,7 +470,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -478,7 +482,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: defender.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -492,9 +496,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(100), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(100), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [attacker.keypair]
@@ -502,9 +506,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [defender.keypair]
@@ -513,7 +517,7 @@ describe('Arena System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge
-      const challengeIx = createChallengePlayerInstruction(
+      const challengeIx = await createChallengePlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           challenger: attacker.publicKey,
@@ -526,7 +530,7 @@ describe('Arena System', () => {
           defenderHero: PublicKey.default,
           defenderEstate: PublicKey.default,
         },
-        { matchId: new BN(200), matchTimestamp: new BN(now) }
+        { matchId: BigInt(200), matchTimestamp: BigInt(now) }
       );
       await sendTransaction(
         ctx.svm,
@@ -550,7 +554,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -562,7 +566,7 @@ describe('Arena System', () => {
 
       const now = await getCurrentTimestamp(ctx.svm);
 
-      const challengeIx = createChallengePlayerInstruction(
+      const challengeIx = await createChallengePlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           challenger: player.publicKey,
@@ -575,7 +579,7 @@ describe('Arena System', () => {
           defenderHero: PublicKey.default,
           defenderEstate: PublicKey.default,
         },
-        { matchId: new BN(1), matchTimestamp: new BN(now) }
+        { matchId: BigInt(1), matchTimestamp: BigInt(now) }
       );
 
       await expectTransactionToFail(
@@ -596,7 +600,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -607,7 +611,7 @@ describe('Arena System', () => {
       );
 
       // Try to claim daily reward without any battles (need 5 min)
-      const claimIx = createClaimArenaDailyRewardInstruction({
+      const claimIx = await createClaimArenaDailyRewardInstruction({
         gameEngine: ctx.gameEngine,
         playerOwner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -638,7 +642,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -651,7 +655,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: d.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -666,9 +670,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(200), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [attacker.keypair]
@@ -677,9 +681,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: d.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
             )
           ),
           [d.keypair]
@@ -691,7 +695,7 @@ describe('Arena System', () => {
       for (const d of defenders) {
         for (let i = 0; i < 2; i++) {
           const now = await getCurrentTimestamp(ctx.svm);
-          const challengeIx = createChallengePlayerInstruction(
+          const challengeIx = await createChallengePlayerInstruction(
             {
               gameEngine: ctx.gameEngine,
               challenger: attacker.publicKey,
@@ -704,7 +708,7 @@ describe('Arena System', () => {
               defenderHero: PublicKey.default,
               defenderEstate: PublicKey.default,
             },
-            { matchId: new BN(matchId++), matchTimestamp: new BN(now) }
+            { matchId: BigInt(matchId++), matchTimestamp: BigInt(now) }
           );
           await sendTransaction(
             ctx.svm,
@@ -715,7 +719,7 @@ describe('Arena System', () => {
       }
 
       // Now claim daily reward — should succeed with 6 battles
-      const claimIx = createClaimArenaDailyRewardInstruction({
+      const claimIx = await createClaimArenaDailyRewardInstruction({
         gameEngine: ctx.gameEngine,
         playerOwner: attacker.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -743,7 +747,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -759,9 +763,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: p.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(units), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(units), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
             ),
           ),
           [p.keypair],
@@ -777,7 +781,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createChallengePlayerInstruction(
+            await createChallengePlayerInstruction(
               {
                 gameEngine: ctx.gameEngine,
                 challenger: challenger.publicKey,
@@ -790,7 +794,7 @@ describe('Arena System', () => {
                 defenderHero: PublicKey.default,
                 defenderEstate: PublicKey.default,
               },
-              { matchId: new BN(matchId++), matchTimestamp: new BN(now) },
+              { matchId: BigInt(matchId++), matchTimestamp: BigInt(now) },
             ),
           ),
           [challenger.keypair, ctx.daoAuthority],
@@ -803,9 +807,9 @@ describe('Arena System', () => {
       await battle(mid, weak);
       await battle(mid, weak);
 
-      const [strongPart] = deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, strong.playerPda);
-      const [midPart] = deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, mid.playerPda);
-      const [weakPart] = deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, weak.playerPda);
+      const [strongPart] = await deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, strong.playerPda);
+      const [midPart] = await deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, mid.playerPda);
+      const [weakPart] = await deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, weak.playerPda);
       const strongData = await fetchArenaParticipant(ctx.svm, ctx.gameEngine, SEASON_ID, strong.playerPda);
       const midData = await fetchArenaParticipant(ctx.svm, ctx.gameEngine, SEASON_ID, mid.playerPda);
       const weakData = await fetchArenaParticipant(ctx.svm, ctx.gameEngine, SEASON_ID, weak.playerPda);
@@ -836,7 +840,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -849,9 +853,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(300), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(300), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [attacker.keypair],
@@ -860,9 +864,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: o.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
             ),
           ),
           [o.keypair],
@@ -877,7 +881,7 @@ describe('Arena System', () => {
           await sendTransaction(
             ctx.svm,
             new Transaction().add(
-              createChallengePlayerInstruction(
+              await createChallengePlayerInstruction(
                 {
                   gameEngine: ctx.gameEngine,
                   challenger: attacker.publicKey,
@@ -890,7 +894,7 @@ describe('Arena System', () => {
                   defenderHero: PublicKey.default,
                   defenderEstate: PublicKey.default,
                 },
-                { matchId: new BN(mId++), matchTimestamp: new BN(now) },
+                { matchId: BigInt(mId++), matchTimestamp: BigInt(now) },
               ),
             ),
             [attacker.keypair, ctx.daoAuthority],
@@ -903,7 +907,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createClaimArenaDailyRewardInstruction({
+          await createClaimArenaDailyRewardInstruction({
             gameEngine: ctx.gameEngine,
             playerOwner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -921,7 +925,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createClaimArenaDailyRewardInstruction({
+          await createClaimArenaDailyRewardInstruction({
             gameEngine: ctx.gameEngine,
             playerOwner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -947,7 +951,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -958,7 +962,7 @@ describe('Arena System', () => {
       );
 
       // Master reward requires Finalized status — season is Active
-      const claimIx = createClaimMasterRewardInstruction({
+      const claimIx = await createClaimMasterRewardInstruction({
         gameEngine: ctx.gameEngine,
         playerOwner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -979,7 +983,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -990,7 +994,7 @@ describe('Arena System', () => {
       );
 
       // Try to claim master rewards while season is still Active
-      const claimIx = createClaimMasterRewardInstruction({
+      const claimIx = await createClaimMasterRewardInstruction({
         gameEngine: ctx.gameEngine,
         playerOwner: player.publicKey,
         seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1010,9 +1014,9 @@ describe('Arena System', () => {
       const season = await fetchArenaSeason(ctx.svm, ctx.gameEngine, SEASON_ID);
       expect(season).not.toBeNull();
       // end_time = start_time + 7 days
-      expect(season!.endTime.toNumber()).toBe(season!.startTime.toNumber() + 7 * 86_400);
+      expect(Number(season!.endTime)).toBe(Number(season!.startTime) + 7 * 86_400);
       // claim_deadline = end_time + 30 days
-      expect(season!.claimDeadline.toNumber()).toBe(season!.endTime.toNumber() + 30 * 86_400);
+      expect(Number(season!.claimDeadline)).toBe(Number(season!.endTime) + 30 * 86_400);
       expect(season!.status).toBe(1); // ArenaStatus::Active
     });
 
@@ -1023,7 +1027,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1035,8 +1039,8 @@ describe('Arena System', () => {
       }
 
       // Each joiner gets its own participant PDA seeded by (season, player).
-      const [pda1] = deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, p1.playerPda);
-      const [pda2] = deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, p2.playerPda);
+      const [pda1] = await deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, p1.playerPda);
+      const [pda2] = await deriveArenaParticipantPda(ctx.gameEngine, SEASON_ID, p2.playerPda);
       expect(pda1.equals(pda2)).toBe(false);
 
       const part1 = await fetchArenaParticipant(ctx.svm, ctx.gameEngine, SEASON_ID, p1.playerPda);
@@ -1054,7 +1058,7 @@ describe('Arena System', () => {
     it('should reject close before deadline', async () => {
       // Season was just created — claim_deadline is 37 days away
       // Close requires past claim_deadline OR 4+ seasons behind
-      const ix = createCloseSeasonInstruction({
+      const ix = await createCloseSeasonInstruction({
         gameEngine: ctx.gameEngine,
         seasonAuthority: ctx.daoAuthority.publicKey,
         seasonId: SEASON_ID,
@@ -1072,7 +1076,7 @@ describe('Arena System', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Wrong season authority — must match the one stored on season
-      const ix = createCloseSeasonInstruction({
+      const ix = await createCloseSeasonInstruction({
         gameEngine: ctx.gameEngine,
         seasonAuthority: player.publicKey,
         seasonId: SEASON_ID,
@@ -1089,7 +1093,7 @@ describe('Arena System', () => {
     it('should reject close with no matching season account', async () => {
       // Permissionless close on a season_id that was never created.
       const NONEXISTENT_SEASON = 9999;
-      const ix = createCloseSeasonInstruction({
+      const ix = await createCloseSeasonInstruction({
         gameEngine: ctx.gameEngine,
         seasonAuthority: ctx.daoAuthority.publicKey,
         seasonId: NONEXISTENT_SEASON,
@@ -1109,7 +1113,7 @@ describe('Arena System', () => {
       expect(before).not.toBeNull();
 
       // Attempt close before deadline; must fail.
-      const ix = createCloseSeasonInstruction({
+      const ix = await createCloseSeasonInstruction({
         gameEngine: ctx.gameEngine,
         seasonAuthority: ctx.daoAuthority.publicKey,
         seasonId: SEASON_ID,
@@ -1135,7 +1139,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1168,7 +1172,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1183,9 +1187,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: loser.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(1), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(1), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [loser.keypair],
@@ -1194,9 +1198,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: w.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(500), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(500), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
             ),
           ),
           [w.keypair],
@@ -1214,7 +1218,7 @@ describe('Arena System', () => {
             await sendTransaction(
               ctx.svm,
               new Transaction().add(
-                createChallengePlayerInstruction(
+                await createChallengePlayerInstruction(
                   {
                     gameEngine: ctx.gameEngine,
                     challenger: loser.publicKey,
@@ -1227,7 +1231,7 @@ describe('Arena System', () => {
                     defenderHero: PublicKey.default,
                     defenderEstate: PublicKey.default,
                   },
-                  { matchId: new BN(mId++), matchTimestamp: new BN(now) },
+                  { matchId: BigInt(mId++), matchTimestamp: BigInt(now) },
                 ),
               ),
               [loser.keypair, ctx.daoAuthority],
@@ -1261,7 +1265,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: attacker.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1273,7 +1277,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: defender.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1287,9 +1291,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(200), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [attacker.keypair]
@@ -1297,9 +1301,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) }
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) }
           )
         ),
         [defender.keypair]
@@ -1308,7 +1312,7 @@ describe('Arena System', () => {
       const now = await getCurrentTimestamp(ctx.svm);
 
       // Challenge
-      const challengeIx = createChallengePlayerInstruction(
+      const challengeIx = await createChallengePlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           challenger: attacker.publicKey,
@@ -1321,7 +1325,7 @@ describe('Arena System', () => {
           defenderHero: PublicKey.default,
           defenderEstate: PublicKey.default,
         },
-        { matchId: new BN(300), matchTimestamp: new BN(now) }
+        { matchId: BigInt(300), matchTimestamp: BigInt(now) }
       );
       await sendTransaction(
         ctx.svm,
@@ -1353,7 +1357,7 @@ describe('Arena System', () => {
       // leaderboardCount should be > 0 after challenges have occurred
       expect(season!.leaderboardCount).toBeGreaterThan(0);
       // totalBattles should reflect the battles fought
-      expect(season!.totalBattles.toNumber()).toBeGreaterThan(0);
+      expect(Number(season!.totalBattles)).toBeGreaterThan(0);
     });
   });
 
@@ -1372,7 +1376,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1387,9 +1391,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(300), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(300), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [attacker.keypair],
@@ -1397,9 +1401,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(5), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(5), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [defender.keypair],
@@ -1409,7 +1413,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createChallengePlayerInstruction(
+          await createChallengePlayerInstruction(
             {
               gameEngine: ctx.gameEngine,
               challenger: attacker.publicKey,
@@ -1422,7 +1426,7 @@ describe('Arena System', () => {
               defenderHero: PublicKey.default,
               defenderEstate: PublicKey.default,
             },
-            { matchId: new BN(8001), matchTimestamp: new BN(now1) },
+            { matchId: BigInt(8001), matchTimestamp: BigInt(now1) },
           ),
         ),
         [attacker.keypair, ctx.daoAuthority],
@@ -1435,9 +1439,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(5), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(5), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [attacker.keypair],
@@ -1445,9 +1449,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(300), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(300), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [defender.keypair],
@@ -1457,7 +1461,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createChallengePlayerInstruction(
+          await createChallengePlayerInstruction(
             {
               gameEngine: ctx.gameEngine,
               challenger: attacker.publicKey,
@@ -1470,7 +1474,7 @@ describe('Arena System', () => {
               defenderHero: PublicKey.default,
               defenderEstate: PublicKey.default,
             },
-            { matchId: new BN(8002), matchTimestamp: new BN(now2) },
+            { matchId: BigInt(8002), matchTimestamp: BigInt(now2) },
           ),
         ),
         [attacker.keypair, ctx.daoAuthority],
@@ -1489,7 +1493,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createJoinSeasonInstruction({
+          await createJoinSeasonInstruction({
             gameEngine: ctx.gameEngine,
             owner: player.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1500,18 +1504,18 @@ describe('Arena System', () => {
       );
 
       // Update loadout with specific defensive configuration
-      const updateIx = createUpdateLoadoutInstruction(
+      const updateIx = await createUpdateLoadoutInstruction(
         {
           owner: player.publicKey,
           gameEngine: ctx.gameEngine,
         },
         {
           arenaHero: PublicKey.default,
-          defensiveUnits: [new BN(50), new BN(0), new BN(0)],
-          meleeWeapons: new BN(10),
-          rangedWeapons: new BN(5),
-          siegeWeapons: new BN(0),
-          armorPieces: new BN(20),
+          defensiveUnits: [BigInt(50), BigInt(0), BigInt(0)],
+          meleeWeapons: BigInt(10),
+          rangedWeapons: BigInt(5),
+          siegeWeapons: BigInt(0),
+          armorPieces: BigInt(20),
         }
       );
 
@@ -1543,7 +1547,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1558,9 +1562,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: attacker.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: hero.mintPubkey, defensiveUnits: [new BN(200), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: hero.mintPubkey, defensiveUnits: [BigInt(200), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [attacker.keypair],
@@ -1568,9 +1572,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: defender.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [defender.keypair],
@@ -1581,7 +1585,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createChallengePlayerInstruction(
+          await createChallengePlayerInstruction(
             {
               gameEngine: ctx.gameEngine,
               challenger: attacker.publicKey,
@@ -1594,7 +1598,7 @@ describe('Arena System', () => {
               defenderHero: PublicKey.default,
               defenderEstate: PublicKey.default,
             },
-            { matchId: new BN(8500), matchTimestamp: new BN(now) },
+            { matchId: BigInt(8500), matchTimestamp: BigInt(now) },
           ),
         ),
         [attacker.keypair, ctx.daoAuthority],
@@ -1617,16 +1621,16 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCreateSeasonInstruction(
+          await createCreateSeasonInstruction(
             {
               authority: ctx.daoAuthority.publicKey,
               gameEngine: ctx.gameEngine,
               seasonId,
             },
             {
-              masterPrizePool: new BN(1_000_000),
-              dailyPrizePool: new BN(100_000),
-              dailyDistributionCap: new BN(50_000),
+              masterPrizePool: BigInt(1_000_000),
+              dailyPrizePool: BigInt(100_000),
+              dailyDistributionCap: BigInt(50_000),
               minLevelRequired: 1,
             },
           ),
@@ -1648,7 +1652,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1662,9 +1666,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: winner.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(500), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(500), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [winner.keypair],
@@ -1672,9 +1676,9 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createUpdateLoadoutInstruction(
+          await createUpdateLoadoutInstruction(
             { owner: punching.publicKey, gameEngine: ctx.gameEngine },
-            { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
           ),
         ),
         [punching.keypair],
@@ -1690,7 +1694,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1702,9 +1706,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: p.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
             ),
           ),
           [p.keypair],
@@ -1719,7 +1723,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createChallengePlayerInstruction(
+            await createChallengePlayerInstruction(
               {
                 gameEngine: ctx.gameEngine,
                 challenger: winner.publicKey,
@@ -1732,7 +1736,7 @@ describe('Arena System', () => {
                 defenderHero: PublicKey.default,
                 defenderEstate: PublicKey.default,
               },
-              { matchId: new BN(mId++), matchTimestamp: new BN(tNow) },
+              { matchId: BigInt(mId++), matchTimestamp: BigInt(tNow) },
             ),
           ),
           [winner.keypair, ctx.daoAuthority],
@@ -1749,7 +1753,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createClaimMasterRewardInstruction({
+          await createClaimMasterRewardInstruction({
             gameEngine: ctx.gameEngine,
             playerOwner: winner.publicKey,
             seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1784,7 +1788,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createJoinSeasonInstruction({
+            await createJoinSeasonInstruction({
               gameEngine: ctx.gameEngine,
               owner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1798,9 +1802,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: p.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(500), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(500), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
             ),
           ),
           [p.keypair],
@@ -1810,9 +1814,9 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createUpdateLoadoutInstruction(
+            await createUpdateLoadoutInstruction(
               { owner: pb.publicKey, gameEngine: ctx.gameEngine },
-              { arenaHero: PublicKey.default, defensiveUnits: [new BN(10), new BN(0), new BN(0)], meleeWeapons: new BN(0), rangedWeapons: new BN(0), siegeWeapons: new BN(0), armorPieces: new BN(0) },
+              { arenaHero: PublicKey.default, defensiveUnits: [BigInt(10), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
             ),
           ),
           [pb.keypair],
@@ -1828,7 +1832,7 @@ describe('Arena System', () => {
           await sendTransaction(
             ctx.svm,
             new Transaction().add(
-              createChallengePlayerInstruction(
+              await createChallengePlayerInstruction(
                 {
                   gameEngine: ctx.gameEngine,
                   challenger: p.publicKey,
@@ -1841,7 +1845,7 @@ describe('Arena System', () => {
                   defenderHero: PublicKey.default,
                   defenderEstate: PublicKey.default,
                 },
-                { matchId: new BN(mId++), matchTimestamp: new BN(tNow) },
+                { matchId: BigInt(mId++), matchTimestamp: BigInt(tNow) },
               ),
             ),
             [p.keypair, ctx.daoAuthority],
@@ -1860,7 +1864,7 @@ describe('Arena System', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createClaimMasterRewardInstruction({
+            await createClaimMasterRewardInstruction({
               gameEngine: ctx.gameEngine,
               playerOwner: p.publicKey,
               seasonAuthority: ctx.daoAuthority.publicKey,
@@ -1884,7 +1888,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCloseSeasonInstruction({
+          await createCloseSeasonInstruction({
             gameEngine: ctx.gameEngine,
             seasonAuthority: ctx.daoAuthority.publicKey,
             seasonId,
@@ -1901,13 +1905,13 @@ describe('Arena System', () => {
 
     it('should refund close_season rent to the season authority', async () => {
       const seasonId = await createFreshSeason();
-      const [seasonPda] = deriveArenaSeasonPda(ctx.gameEngine, seasonId);
+      const [seasonPda] = await deriveArenaSeasonPda(ctx.gameEngine, seasonId);
 
-      const seasonAccountBefore = ctx.svm.getAccount(seasonPda);
+      const seasonAccountBefore = ctx.svm.getAccount(svmKey(seasonPda));
       expect(seasonAccountBefore).not.toBeNull();
       const seasonLamports = Number(seasonAccountBefore!.lamports);
 
-      const authorityBefore = ctx.svm.getAccount(ctx.daoAuthority.publicKey);
+      const authorityBefore = ctx.svm.getAccount(svmKey(ctx.daoAuthority.publicKey));
       const authBefore = Number(authorityBefore!.lamports);
 
       await advanceTime(ctx.svm, 37 * 86_400 + 1);
@@ -1915,7 +1919,7 @@ describe('Arena System', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createCloseSeasonInstruction({
+          await createCloseSeasonInstruction({
             gameEngine: ctx.gameEngine,
             seasonAuthority: ctx.daoAuthority.publicKey,
             seasonId,
@@ -1925,7 +1929,7 @@ describe('Arena System', () => {
         [ctx.daoAuthority],
       );
 
-      const authorityAfter = ctx.svm.getAccount(ctx.daoAuthority.publicKey);
+      const authorityAfter = ctx.svm.getAccount(svmKey(ctx.daoAuthority.publicKey));
       const authAfter = Number(authorityAfter!.lamports);
       // Authority lamport balance rose by at least the season's rent (minus the fee
       // paid by the closer; close_season is permissionless and the sender pays).

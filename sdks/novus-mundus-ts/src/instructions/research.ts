@@ -13,7 +13,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -23,10 +22,10 @@ import {
   deriveResearchPda,
   deriveResearchTemplatePda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Note: TOKEN_PROGRAM_ID used for start_research
-// Note: getAssociatedTokenAddressSyncForPda used for start_research
+// Note: getAssociatedTokenAddressAsyncForPda used for start_research
 
 // Initialize Template (Admin)
 
@@ -47,7 +46,7 @@ export interface InitializeTemplateParams {
   /** Base time in seconds for level 1 */
   baseTimeSeconds: number;
   /** Base NOVI cost for level 1 */
-  baseCost: BN | number | bigint;
+  baseCost: number | bigint;
   /** Buff type for this research */
   buffType: number;
   /** Buff per level in basis points */
@@ -69,11 +68,11 @@ export interface InitializeTemplateParams {
  * Rust account order: [dao_authority, research_template, game_engine, system_program]
  * Rust instruction data: 22 bytes
  */
-export function createInitializeTemplateInstruction(
+export async function createInitializeTemplateInstruction(
   accounts: InitializeTemplateAccounts,
   params: InitializeTemplateParams
-): TransactionInstruction {
-  const [template] = deriveResearchTemplatePda(params.researchType);
+): Promise<TransactionInstruction> {
+  const [template] = await deriveResearchTemplatePda(params.researchType);
 
   // Rust: [dao_authority, research_template, game_engine, system_program]
   const keys = [
@@ -130,7 +129,7 @@ export interface UpdateTemplateParams {
   /** field 0 — base research time for level 1, in seconds (u32) */
   baseTimeSeconds?: number;
   /** field 1 — base NOVI cost for level 1 (u64) */
-  baseCost?: BN | number | bigint;
+  baseCost?: number | bigint;
   /** field 2 — buff per level, in basis points (u16) */
   buffPerLevelBps?: number;
   /** field 3 — gem cost per minute for speed-ups (u16) */
@@ -156,11 +155,11 @@ export interface UpdateTemplateParams {
  * Rust account order: [dao_authority, research_template, game_engine]
  * Rust instruction data: [field_to_update: u8, ...value]  (~5,000 CU each)
  */
-export function createUpdateTemplateInstruction(
+export async function createUpdateTemplateInstruction(
   accounts: UpdateTemplateAccounts,
   params: UpdateTemplateParams = {}
-): TransactionInstruction[] {
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<TransactionInstruction[]> {
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   // Rust: extract_accounts! exact [dao_authority, research_template, game_engine]
   const keys = [
@@ -245,11 +244,11 @@ export interface CreateProgressAccounts {
  *
  * Creates the player's research progress PDA.
  */
-export function createCreateProgressInstruction(
+export async function createCreateProgressInstruction(
   accounts: CreateProgressAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
 
   // Rust order: [player_owner, research_progress, player_account, payer, system_program]
   const keys = [
@@ -286,16 +285,16 @@ export interface StartResearchAccounts {
  *
  * Requires Academy building and NOVI tokens.
  */
-export function createStartResearchInstruction(
+export async function createStartResearchInstruction(
   accounts: StartResearchAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -340,12 +339,12 @@ export interface CompleteResearchAccounts {
  *
  * Permissionless - anyone can call after research time elapsed.
  */
-export function createCompleteResearchInstruction(
+export async function createCompleteResearchInstruction(
   accounts: CompleteResearchAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: false },
@@ -376,7 +375,7 @@ export interface SpeedUpResearchAccounts {
 
 export interface SpeedUpResearchParams {
   /** Seconds to speed up (0 = complete all remaining) */
-  speedUpSeconds: BN | number | bigint;
+  speedUpSeconds: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -394,13 +393,13 @@ export interface SpeedUpResearchParams {
  * On-chain data (8 bytes):
  * - speed_up_seconds: u64 (0 = complete all remaining)
  */
-export function createSpeedUpResearchInstruction(
+export async function createSpeedUpResearchInstruction(
   accounts: SpeedUpResearchAccounts,
   params: SpeedUpResearchParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -446,12 +445,12 @@ export interface CancelResearchAccounts {
  *
  * On-chain data: None
  */
-export function createCancelResearchInstruction(
+export async function createCancelResearchInstruction(
   accounts: CancelResearchAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(accounts.researchType);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(accounts.researchType);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -500,14 +499,14 @@ export interface AscendParams {
  * On-chain data (1 byte):
  * - research_type: u8 (which research to ascend)
  */
-export function createAscendInstruction(
+export async function createAscendInstruction(
   accounts: AscendAccounts,
   params: AscendParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [research] = deriveResearchPda(player);
-  const [template] = deriveResearchTemplatePda(params.researchType);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [research] = await deriveResearchPda(player);
+  const [template] = await deriveResearchTemplatePda(params.researchType);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

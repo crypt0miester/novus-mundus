@@ -93,12 +93,12 @@ export function PvpDetailPanel({
 
   const estimatedDamage = useMemo(() => {
     if (!player) return null;
-    const defUnits = getTotalDefensiveUnits(player).toNumber();
-    const offUnits = getTotalOperativeUnits(player).toNumber();
+    const defUnits = Number(getTotalDefensiveUnits(player));
+    const offUnits = Number(getTotalOperativeUnits(player));
     const weapons =
-      (player.meleeWeapons?.toNumber?.() ?? 0) +
-      (player.rangedWeapons?.toNumber?.() ?? 0) +
-      (player.siegeWeapons?.toNumber?.() ?? 0);
+      (Number(player.meleeWeapons ?? 0n)) +
+      (Number(player.rangedWeapons ?? 0n)) +
+      (Number(player.siegeWeapons ?? 0n));
     try {
       return calculateDamageOutput(defUnits + offUnits, weapons, false);
     } catch {
@@ -116,7 +116,7 @@ export function PvpDetailPanel({
     prepend: TransactionInstruction[] = [],
   ) => {
     if (!publicKey || !player || !target || !targetKey) throw new Error("No target");
-    const ix = createAttackPlayerInstruction(
+    const ix = await createAttackPlayerInstruction(
       {
         attacker: publicKey,
         gameEngine: client.gameEngine,
@@ -151,18 +151,18 @@ export function PvpDetailPanel({
     shortenAddress(target.account.owner.toBase58());
 
   // Overrun grants its bonus only with a 10k+ host (logic/combat.rs).
-  const attackerUnits = getTotalDefensiveUnits(player).toNumber();
+  const attackerUnits = Number(getTotalDefensiveUnits(player));
   const canOverrun = attackerUnits >= 10000;
 
   const targetDef = calculateDefensivePower(
-    target.account.defensiveUnit1.toNumber(),
-    target.account.defensiveUnit2.toNumber(),
-    target.account.defensiveUnit3.toNumber(),
+    Number(target.account.defensiveUnit1),
+    Number(target.account.defensiveUnit2),
+    Number(target.account.defensiveUnit3),
   );
   const targetOps =
-    target.account.operativeUnit1.toNumber() +
-    target.account.operativeUnit2.toNumber() +
-    target.account.operativeUnit3.toNumber();
+    Number(target.account.operativeUnit1) +
+    Number(target.account.operativeUnit2) +
+    Number(target.account.operativeUnit3);
 
   const morphActions: PanelAction[] | null = playerTraveling
     ? null
@@ -198,13 +198,13 @@ export function PvpDetailPanel({
       <div className="grid grid-cols-2 gap-2">
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-text-muted">Net Worth</div>
-          <GoldNumber value={target.account.networth.toNumber()} size="sm" />
+          <GoldNumber value={Number(target.account.networth)} size="sm" />
         </div>
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
           <div className="text-[10px] text-text-muted">Cash on Hand</div>
           <span className="inline-flex items-center gap-1">
             <GameIcon id="resource-cash" size={14} />
-            <GoldNumber value={target.account.cashOnHand.toNumber()} size="sm" />
+            <GoldNumber value={Number(target.account.cashOnHand)} size="sm" />
           </span>
         </div>
       </div>
@@ -216,14 +216,14 @@ export function PvpDetailPanel({
         </div>
         <UnitGrid
           defense={[
-            target.account.defensiveUnit1.toNumber(),
-            target.account.defensiveUnit2.toNumber(),
-            target.account.defensiveUnit3.toNumber(),
+            Number(target.account.defensiveUnit1),
+            Number(target.account.defensiveUnit2),
+            Number(target.account.defensiveUnit3),
           ]}
           offense={[
-            target.account.operativeUnit1.toNumber(),
-            target.account.operativeUnit2.toNumber(),
-            target.account.operativeUnit3.toNumber(),
+            Number(target.account.operativeUnit1),
+            Number(target.account.operativeUnit2),
+            Number(target.account.operativeUnit3),
           ]}
         />
       </div>

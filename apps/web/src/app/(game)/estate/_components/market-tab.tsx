@@ -82,11 +82,9 @@ const SECTIONS: { key: MarketSection; label: string }[] = [
   { key: "provisions", label: "Provisions" },
 ];
 
-/** BN | number | undefined to number — used everywhere player fields are read. */
+/** bigint | number | undefined to number — used everywhere player fields are read. */
 function toNum(v: unknown): number {
-  if (v && typeof (v as { toNumber?: () => number }).toNumber === "function") {
-    return (v as { toNumber: () => number }).toNumber();
-  }
+  if (typeof v === "bigint") return Number(v);
   return Number(v ?? 0);
 }
 
@@ -136,14 +134,14 @@ export function MarketTab() {
       ec.produceCost,
       ec.vehicleCost,
     ];
-    const costMultiplierBps = ec.costMultiplier?.toNumber?.() ?? 10000;
+    const costMultiplierBps = Number(ec.costMultiplier ?? 10000n);
     const tod = getCurrentTimeOfDay(Math.floor(Date.now() / 1000), longitude);
     const timeMult = getActivityMultiplier(ActivityType.Purchasing, tod);
     const market = findBuilding(estate, BuildingType.Market);
     const discountBps = market && market.level > 0 ? Math.min(market.level * 100, 2000) : 0;
 
     return baseCosts.map((bc) => {
-      const base = bc?.toNumber?.() ?? 0;
+      const base = Number(bc ?? 0n);
       if (base <= 0) return null;
       const adjustedUnit = Math.floor((base * costMultiplierBps) / 10000);
       if (adjustedUnit <= 0) return null;
@@ -193,7 +191,7 @@ export function MarketTab() {
   const handlePurchaseEquipment = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createPurchaseEquipmentInstruction(
+    const ix = await createPurchaseEquipmentInstruction(
       { owner: publicKey, gameEngine: ge },
       {
         equipmentType: EQUIPMENT[equipType]?.type ?? 0,
@@ -214,7 +212,7 @@ export function MarketTab() {
   const handlePurchaseStamina = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createPurchaseStaminaInstruction(
+    const ix = await createPurchaseStaminaInstruction(
       { owner: publicKey, gameEngine: ge },
       { amount: 10 },
     );
@@ -238,8 +236,8 @@ export function MarketTab() {
   if (!player) return null;
 
   const selectedEquip = EQUIPMENT[equipType] ?? null;
-  const noviBalance = player.lockedNovi?.toNumber?.() ?? 0;
-  const cashBalance = player.cashOnHand?.toNumber?.() ?? 0;
+  const noviBalance = Number(player.lockedNovi ?? 0n);
+  const cashBalance = Number(player.cashOnHand ?? 0n);
   const payBalance = equipPayCash ? cashBalance : noviBalance;
 
   // Per-equipment supply state — what the player has on hand, the army's
@@ -406,7 +404,7 @@ export function MarketTab() {
                   <p className="text-xs text-zinc-400">
                     You own{" "}
                     <span className="font-mono tabular-nums text-zinc-100">
-                      {(player[selectedEquip.field]?.toNumber?.() ?? 0).toLocaleString()}
+                      {(Number(player[selectedEquip.field] ?? 0n)).toLocaleString()}
                     </span>
                     {unitPrice != null && (
                       <>
@@ -506,15 +504,15 @@ export function MarketTab() {
                   <div>
                     <div className="text-xs text-text-muted">Current Stamina</div>
                     <GoldNumber
-                      value={player.encounterStamina?.toNumber?.() ?? 0}
-                      suffix={` / ${player.maxEncounterStamina?.toNumber?.() ?? 0}`}
+                      value={Number(player.encounterStamina ?? 0n)}
+                      suffix={` / ${Number(player.maxEncounterStamina ?? 0n)}`}
                     />
                   </div>
                   <div className="text-right text-xs text-text-muted">Regen: 1 per 5 min</div>
                 </div>
                 <StatBar
-                  current={player.encounterStamina?.toNumber?.() ?? 0}
-                  max={player.maxEncounterStamina?.toNumber?.() ?? 100}
+                  current={Number(player.encounterStamina ?? 0n)}
+                  max={Number(player.maxEncounterStamina ?? 100n)}
                   color="gold"
                   showValues={false}
                 />

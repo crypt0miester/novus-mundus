@@ -83,9 +83,9 @@ export function ExpeditionTab() {
   const [expeditionOps, setExpeditionOps] = useState<[number, number, number]>([0, 0, 0]);
   const [expeditionHeroSlot, setExpeditionHeroSlot] = useState(NO_HERO_SLOT);
   const availOps: [number, number, number] = [
-    player?.operativeUnit1?.toNumber?.() ?? 0,
-    player?.operativeUnit2?.toNumber?.() ?? 0,
-    player?.operativeUnit3?.toNumber?.() ?? 0,
+    Number(player?.operativeUnit1 ?? 0n),
+    Number(player?.operativeUnit2 ?? 0n),
+    Number(player?.operativeUnit3 ?? 0n),
   ];
 
   // The player's locked heroes (slots 0-2); one may optionally join the expedition.
@@ -95,8 +95,8 @@ export function ExpeditionTab() {
   const playerTraveling = player ? isTraveling(player) : false;
 
   // Stamina info
-  const playerStamina = player?.encounterStamina?.toNumber?.() ?? 0;
-  const playerMaxStamina = player?.maxEncounterStamina?.toNumber?.() ?? 100;
+  const playerStamina = Number(player?.encounterStamina ?? 0n);
+  const playerMaxStamina = Number(player?.maxEncounterStamina ?? 100n);
   const hasStamina = playerStamina >= EXPEDITION_STAMINA_COST;
 
   // Validate: can start expedition
@@ -156,7 +156,7 @@ export function ExpeditionTab() {
   // expedition processor prices a speedup on the time it removes, with a flat
   // 100 gems/minute rate, so the cap is computed with maxExpeditionSpeedupCount.
   const EXPEDITION_SPEEDUP_GEMS_PER_MINUTE = 100;
-  const expeditionGemBalance = playerData?.account?.gems?.toNumber?.() ?? 0;
+  const expeditionGemBalance = Number(playerData?.account?.gems ?? 0n);
   const speedupTiers = [
     {
       tier: 1,
@@ -227,9 +227,9 @@ export function ExpeditionTab() {
     if (!expedition) return null;
     const tier = expedition.tier ?? 0;
     const ops =
-      (expedition.operativeUnit1?.toNumber?.() ?? 0) +
-      (expedition.operativeUnit2?.toNumber?.() ?? 0) +
-      (expedition.operativeUnit3?.toNumber?.() ?? 0);
+      (Number(expedition.operativeUnit1 ?? 0n)) +
+      (Number(expedition.operativeUnit2 ?? 0n)) +
+      (Number(expedition.operativeUnit3 ?? 0n));
 
     if (expedition.expeditionType === 1) {
       const hours = MINING_DURATION_HOURS[tier] ?? 1;
@@ -261,12 +261,13 @@ export function ExpeditionTab() {
     }
     const ge = client.gameEngine;
     const hero = expeditionHeroSlot < 3 ? lockedHeroes[expeditionHeroSlot] : null;
-    const ix = createExpeditionStartInstruction(
+    const heroCollection = hero ? (await deriveHeroCollectionPda())[0] : undefined;
+    const ix = await createExpeditionStartInstruction(
       {
         owner: publicKey,
         gameEngine: ge,
         heroMint: hero?.mint,
-        heroCollection: hero ? deriveHeroCollectionPda()[0] : undefined,
+        heroCollection,
       },
       {
         expeditionType: selectedType,
@@ -291,11 +292,11 @@ export function ExpeditionTab() {
     const ge = client.gameEngine;
     const expHeroMint =
       expedition && !isNullPubkey(expedition.heroMint) ? expedition.heroMint : null;
-    const ix = createExpeditionClaimInstruction({
+    const ix = await createExpeditionClaimInstruction({
       owner: publicKey,
       gameEngine: ge,
       heroMint: expHeroMint ?? undefined,
-      heroCollection: expHeroMint ? deriveHeroCollectionPda()[0] : undefined,
+      heroCollection: expHeroMint ? (await deriveHeroCollectionPda())[0] : undefined,
     });
     return transact
       .mutateAsync({
@@ -312,11 +313,11 @@ export function ExpeditionTab() {
     const ge = client.gameEngine;
     const expHeroMint =
       expedition && !isNullPubkey(expedition.heroMint) ? expedition.heroMint : null;
-    const ix = createExpeditionAbortInstruction({
+    const ix = await createExpeditionAbortInstruction({
       owner: publicKey,
       gameEngine: ge,
       heroMint: expHeroMint ?? undefined,
-      heroCollection: expHeroMint ? deriveHeroCollectionPda()[0] : undefined,
+      heroCollection: expHeroMint ? (await deriveHeroCollectionPda())[0] : undefined,
     });
     return transact
       .mutateAsync({
@@ -337,10 +338,12 @@ export function ExpeditionTab() {
     const geKey = client.gameEngine;
     // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
     const n = Math.max(1, Math.floor(count));
-    const instructions = Array.from({ length: n }, () =>
-      createExpeditionSpeedupInstruction(
-        { owner: publicKey, gameEngine: geKey },
-        { speedupTier: tier as 1 | 2 },
+    const instructions = await Promise.all(
+      Array.from({ length: n }, () =>
+        createExpeditionSpeedupInstruction(
+          { owner: publicKey, gameEngine: geKey },
+          { speedupTier: tier as 1 | 2 },
+        ),
       ),
     );
     return transact
@@ -360,12 +363,13 @@ export function ExpeditionTab() {
     }
     const ge = client.gameEngine;
     const hero = expeditionHeroSlot < 3 ? lockedHeroes[expeditionHeroSlot] : null;
-    const startIx = createExpeditionStartInstruction(
+    const heroCollection = hero ? (await deriveHeroCollectionPda())[0] : undefined;
+    const startIx = await createExpeditionStartInstruction(
       {
         owner: publicKey,
         gameEngine: ge,
         heroMint: hero?.mint,
-        heroCollection: hero ? deriveHeroCollectionPda()[0] : undefined,
+        heroCollection,
       },
       {
         expeditionType: selectedType,
@@ -375,7 +379,7 @@ export function ExpeditionTab() {
         operativeUnit3: expeditionOps[2],
       },
     );
-    const speedupIx = createExpeditionSpeedupInstruction(
+    const speedupIx = await createExpeditionSpeedupInstruction(
       { owner: publicKey, gameEngine: ge },
       { speedupTier: tier as 1 | 2 },
     );
@@ -426,7 +430,7 @@ export function ExpeditionTab() {
             <div className="text-right">
               <GoldCountdown
                 endsAt={getExpeditionEndTime(expedition)}
-                startedAt={expedition.startTime?.toNumber?.() ?? 0}
+                startedAt={Number(expedition.startTime ?? 0n)}
                 showProgress
                 format="full"
               />
@@ -434,7 +438,7 @@ export function ExpeditionTab() {
           </div>
           <div className="mt-3">
             <StatBar
-              current={Math.max(0, Date.now() / 1000 - (expedition.startTime?.toNumber?.() ?? 0))}
+              current={Math.max(0, Date.now() / 1000 - (Number(expedition.startTime ?? 0n)))}
               max={Math.max(1, getExpeditionDurationSeconds(expedition))}
               color="gold"
               showValues={false}
@@ -501,7 +505,7 @@ export function ExpeditionTab() {
             tiers={speedupTiers}
             onSpeedup={(tier, rp, count) => handleSpeedup(tier, rp, count)}
             gemsPerMinute={100}
-            gemBalance={playerData?.account?.gems?.toNumber?.()}
+            gemBalance={Number(playerData?.account?.gems ?? 0n)}
             className="mt-4"
           />
         </div>
@@ -729,17 +733,17 @@ export function ExpeditionTab() {
                 items={[
                   ...ec.miningNoviCost.map((c, i) => ({
                     label: `Mining Cost T${i}`,
-                    value: c.toNumber().toLocaleString(),
+                    value: Number(c).toLocaleString(),
                     suffix: "NOVI",
                   })),
                   ...ec.fishingNoviCost.map((c, i) => ({
                     label: `Fishing Cost T${i}`,
-                    value: c.toNumber().toLocaleString(),
+                    value: Number(c).toLocaleString(),
                     suffix: "NOVI",
                   })),
                   ...ec.miningFragmentBonus.map((b, i) => ({
                     label: `Mining Frag T${i}`,
-                    value: `+${b.toNumber()}`,
+                    value: `+${Number(b)}`,
                   })),
                   ...ec.miningDurationHours.map((h, i) => ({
                     label: `Mining Dur T${i}`,
@@ -756,15 +760,15 @@ export function ExpeditionTab() {
                   },
                   {
                     label: "Op T1 Mult",
-                    value: bpsToPercent(ec.operativeTier1MultiplierBps.toNumber()),
+                    value: bpsToPercent(Number(ec.operativeTier1MultiplierBps)),
                   },
                   {
                     label: "Op T2 Mult",
-                    value: bpsToPercent(ec.operativeTier2MultiplierBps.toNumber()),
+                    value: bpsToPercent(Number(ec.operativeTier2MultiplierBps)),
                   },
                   {
                     label: "Op T3 Mult",
-                    value: bpsToPercent(ec.operativeTier3MultiplierBps.toNumber()),
+                    value: bpsToPercent(Number(ec.operativeTier3MultiplierBps)),
                   },
                 ]}
               />

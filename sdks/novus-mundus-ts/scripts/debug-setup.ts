@@ -15,7 +15,6 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -35,7 +34,7 @@ import {
   PROGRAM_ID,
   SEEDS,
 } from '../src/index';
-import { getAssociatedTokenAddressSyncForPda } from '../src/utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../src/utils/token';
 
 // Configuration
 
@@ -235,7 +234,7 @@ async function main() {
   console.log('\n--- Step 4: Init Player ---');
   const playerKeypair = Keypair.generate();
   const [playerPda, playerBump] = derivePlayerPda(gameEngine, playerKeypair.publicKey);
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, playerPda);
+  const playerTokenAccount = getAssociatedTokenAddressAsyncForPda(noviMint, playerPda);
   const [spawnLocation] = deriveLocationPda(gameEngine, 1, 0, 0);
 
   log('PLAYER', `Player wallet: ${playerKeypair.publicKey.toBase58()}`);

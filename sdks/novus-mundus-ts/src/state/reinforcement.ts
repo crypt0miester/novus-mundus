@@ -6,7 +6,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { ReinforcementStatus } from '../types/enums';
 
@@ -31,14 +30,14 @@ export interface ReinforcementAccount {
   destinationCity: number;
 
   // Units sent
-  unitsDef1: BN;
-  unitsDef2: BN;
-  unitsDef3: BN;
+  unitsDef1: bigint;
+  unitsDef2: bigint;
+  unitsDef3: bigint;
 
   // Weapons sent
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
 
   // Hero
   hero: PublicKey;
@@ -47,12 +46,12 @@ export interface ReinforcementAccount {
   heroArmorEffBps: number;
 
   // Travel timing
-  sentAt: BN;
+  sentAt: bigint;
   travelDuration: number;
-  arrivesAt: BN;
+  arrivesAt: bigint;
 
   // Return timing
-  returnStartedAt: BN;
+  returnStartedAt: bigint;
   returnDuration: number;
 
   // Wounded tracking (set during recall, transferred to estate on return)
@@ -65,7 +64,7 @@ export interface ReinforcementAccount {
   relievedByDestination: boolean;
 
   // Stats
-  combatsParticipated: BN;
+  combatsParticipated: bigint;
 }
 
 /** ReinforcementAccount size in bytes (repr(C) layout including account_key + game_engine) */
@@ -74,7 +73,7 @@ export const REINFORCEMENT_ACCOUNT_SIZE = 256;
 // Deserialization
 
 /** Deserialize ReinforcementAccount from raw bytes */
-export function deserializeReinforcement(data: Uint8Array | Buffer): ReinforcementAccount {
+export function deserializeReinforcement(data: Uint8Array): ReinforcementAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -166,7 +165,7 @@ export function deserializeReinforcement(data: Uint8Array | Buffer): Reinforceme
 }
 
 /** Parse ReinforcementAccount from account info */
-export function parseReinforcement(accountInfo: AccountInfo<Buffer>): ReinforcementAccount | null {
+export function parseReinforcement(accountInfo: AccountInfo<Uint8Array>): ReinforcementAccount | null {
   if (!accountInfo.data || accountInfo.data.length < REINFORCEMENT_ACCOUNT_SIZE) {
     return null;
   }
@@ -176,13 +175,13 @@ export function parseReinforcement(accountInfo: AccountInfo<Buffer>): Reinforcem
 // Helper Functions
 
 /** Get total units sent */
-export function getReinforcementTotalUnits(r: ReinforcementAccount): BN {
-  return r.unitsDef1.add(r.unitsDef2).add(r.unitsDef3);
+export function getReinforcementTotalUnits(r: ReinforcementAccount): bigint {
+  return r.unitsDef1 + r.unitsDef2 + r.unitsDef3;
 }
 
 /** Get total weapons sent */
-export function getReinforcementTotalWeapons(r: ReinforcementAccount): BN {
-  return r.meleeWeapons.add(r.rangedWeapons).add(r.siegeWeapons);
+export function getReinforcementTotalWeapons(r: ReinforcementAccount): bigint {
+  return r.meleeWeapons + r.rangedWeapons + r.siegeWeapons;
 }
 
 /** Check if reinforcement has hero */
@@ -212,18 +211,18 @@ export function isReinforcementCompleted(r: ReinforcementAccount): boolean {
 
 /** Check if reinforcement has arrived at destination */
 export function hasReinforcementArrived(r: ReinforcementAccount, nowSeconds: number): boolean {
-  return nowSeconds >= r.arrivesAt.toNumber();
+  return nowSeconds >= Number(r.arrivesAt);
 }
 
 /** Check if reinforcement has returned to sender */
 export function hasReinforcementReturned(r: ReinforcementAccount, nowSeconds: number): boolean {
-  if (r.returnStartedAt.toNumber() === 0) {
+  if (Number(r.returnStartedAt) === 0) {
     return false;
   }
-  return nowSeconds >= r.returnStartedAt.toNumber() + r.returnDuration;
+  return nowSeconds >= Number(r.returnStartedAt) + r.returnDuration;
 }
 
 /** Get return completion timestamp */
 export function getReinforcementReturnCompletesAt(r: ReinforcementAccount): number {
-  return r.returnStartedAt.toNumber() + r.returnDuration;
+  return Number(r.returnStartedAt) + r.returnDuration;
 }

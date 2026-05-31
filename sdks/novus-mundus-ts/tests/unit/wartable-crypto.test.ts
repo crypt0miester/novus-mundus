@@ -5,10 +5,10 @@
 // wire shape from WAR_TABLE_IMPL_SPEC sections 1 and 4.
 
 import { describe, it, expect } from 'bun:test';
-import { Keypair, PublicKey, type Connection } from '@solana/web3.js';
+import { PublicKey, type Connection } from '@solana/web3.js';
 import { hmac } from '@noble/hashes/hmac.js';
 import { sha256 } from '@noble/hashes/sha2.js';
-import bs58 from 'bs58';
+import { getBase58Decoder } from '@solana/codecs-strings';
 
 import {
   WT_MAGIC,
@@ -36,7 +36,10 @@ import { LocalHmacKeyProvider } from '../../src/keyprovider/local';
 const K_MASTER = new Uint8Array(32).fill(7);
 
 function randomPubkey(): PublicKey {
-  return Keypair.generate().publicKey;
+  // Keypair.generate() is async in web3.js v3; a random 32-byte PublicKey is
+  // sufficient here (these tests never sign, they only need a unique address)
+  // and keeps randomPubkey() synchronous for the many sync test contexts below.
+  return new PublicKey(crypto.getRandomValues(new Uint8Array(32)));
 }
 
 function zeros(n: number): Uint8Array {
@@ -416,7 +419,7 @@ describe('War Table readThread same-slot collision', () => {
     bytes[0] = lead;
     bytes[1] = (lead + 1) & 0xff;
     bytes[2] = (lead + 2) & 0xff;
-    return bs58.encode(bytes);
+    return getBase58Decoder().decode(bytes);
   }
 
   // A plaintext (Encounter) wt1 envelope carrying `text`, as a Program-data line.

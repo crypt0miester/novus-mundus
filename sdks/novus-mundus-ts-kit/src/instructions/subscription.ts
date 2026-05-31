@@ -19,7 +19,7 @@ import {
   deriveShopConfigPda,
   deriveUserPda,
 } from '../pda';
-import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { ASSOCIATED_TOKEN_PROGRAM_ID, getAssociatedTokenAddressAsync, getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Purchase Subscription
 
@@ -113,7 +113,7 @@ export async function createPurchaseSubscriptionInstruction(
   const [user] = await deriveUserPda(accounts.owner);
   const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by UserAccount PDA (not PlayerAccount)
-  const userNoviAta = await getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const userNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   // Rust account order (10 base accounts):
   // 0. player (writable)
@@ -156,8 +156,8 @@ export async function createPurchaseSubscriptionInstruction(
     const tp = accounts.tokenPayment;
     const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
     const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, tp.tokenMint);
-    const buyerAta = tp.buyerTokenAta ?? await getAssociatedTokenAddressSync(tp.tokenMint, accounts.owner);
-    const treasuryAta = tp.treasuryTokenAta ?? await getAssociatedTokenAddressSync(tp.tokenMint, accounts.treasury);
+    const buyerAta = tp.buyerTokenAta ?? await getAssociatedTokenAddressAsync(tp.tokenMint, accounts.owner);
+    const treasuryAta = tp.treasuryTokenAta ?? await getAssociatedTokenAddressAsync(tp.tokenMint, accounts.treasury);
 
     keys.push(
       { pubkey: shopConfig, isSigner: false, isWritable: false },     /* [10] shop_config */

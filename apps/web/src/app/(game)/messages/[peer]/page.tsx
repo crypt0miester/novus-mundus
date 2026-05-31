@@ -13,7 +13,7 @@
 // the peer avatar + name. Tapping the peer opens PlayerActionsMenu (View on map
 // / View profile); Send message is hidden in dm scope since we are already here.
 
-import { use, useMemo } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { PublicKey } from "@solana/web3.js";
@@ -65,13 +65,27 @@ export default function DmConversationPage({ params }: { params: Promise<{ peer:
   // a clean message here instead of a thrown PublicKey inside the renderer.
   const peerPda = useMemo(() => parsePlayerPda(peer), [peer]);
 
-  const threadPda = useMemo(() => {
-    if (!peerPda || !myPlayerPda) return null;
+  // PDA derivation is async under web3.js v3, so resolve it in an effect and
+  // hold the result in state instead of a synchronous useMemo.
+  const [threadPda, setThreadPda] = useState<PublicKey | null>(null);
+  useEffect(() => {
+    if (!peerPda || !myPlayerPda) {
+      setThreadPda(null);
+      return;
+    }
     const mine = new PublicKey(myPlayerPda);
     // Same player on both operands means there is no conversation to open.
-    if (mine.equals(peerPda)) return null;
-    const [pda] = deriveDmThreadPda(mine, peerPda);
-    return pda;
+    if (mine.equals(peerPda)) {
+      setThreadPda(null);
+      return;
+    }
+    let cancelled = false;
+    deriveDmThreadPda(mine, peerPda).then(([pda]) => {
+      if (!cancelled) setThreadPda(pda);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [peerPda, myPlayerPda]);
 
   if (!peerPda) {

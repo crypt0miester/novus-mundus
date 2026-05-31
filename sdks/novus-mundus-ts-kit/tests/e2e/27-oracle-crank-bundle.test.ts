@@ -40,7 +40,7 @@ import {
   deriveShopItemPda,
   deriveAllowedTokenPda,
   deriveOracleQuotePda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   SLOT_HASHES_SYSVAR,
   INSTRUCTIONS_SYSVAR,
 } from '../../src/index';
@@ -105,8 +105,8 @@ async function buildBundle(): Promise<Bundle> {
   const [shopItem] = await deriveShopItemPda(gameEngine, itemId);
   const [allowedToken] = await deriveAllowedTokenPda(gameEngine, tokenMint);
   const [oracleQuote] = await deriveOracleQuotePda(switchboardQueue);
-  const treasuryTokenAta = await getAssociatedTokenAddressSync(tokenMint, treasury);
-  const buyerTokenAta = await getAssociatedTokenAddressSync(tokenMint, buyer.address);
+  const treasuryTokenAta = await getAssociatedTokenAddressAsync(tokenMint, treasury);
+  const buyerTokenAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.address);
 
   // ed25519 sits at tx index 2: [CUlimit, CUprice, ed25519, crank, purchase].
   const crankIx = await createCrankOracleQuoteInstruction(

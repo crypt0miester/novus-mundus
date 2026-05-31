@@ -130,7 +130,7 @@ async function handleTravel(ctx: CLIContext, args: ParsedArgs): Promise<void> {
     return;
   }
 
-  const playerKeypair = loadKeypair(keypairPath);
+  const playerKeypair = await loadKeypair(keypairPath);
   const [playerPda] = await derivePlayerPda(ctx.gameEngine, playerKeypair.publicKey);
 
   const playerInfo = await ctx.connection.getAccountInfo(playerPda);
@@ -184,7 +184,7 @@ function resolvePlayer(extra: string): PublicKey | null {
   } catch {
     // Not a pubkey, might be a keypair path
     try {
-      const kp = loadKeypair(extra);
+      const kp = await loadKeypair(extra);
       return kp.publicKey;
     } catch {
       return null;

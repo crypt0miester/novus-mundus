@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -98,18 +99,23 @@ export default function SettingsPage() {
     return { domain: currentPlayerName.slice(0, dotIdx), tld: currentPlayerName.slice(dotIdx + 1) };
   }, [currentPlayerName]);
 
-  const userPda = useMemo(() => {
-    if (!publicKey) return null;
-    const [pda] = deriveUserPda(publicKey);
-    return pda;
-  }, [publicKey]);
+  const { data: userPda = null } = useQuery({
+    queryKey: ["userPda", publicKey?.toBase58()],
+    queryFn: async () => {
+      if (!publicKey) return null;
+      const [pda] = await deriveUserPda(publicKey);
+      return pda;
+    },
+    enabled: !!publicKey,
+    staleTime: Infinity,
+  });
 
-  const handleNameSet = (domain: string, tld: string) => {
+  const handleNameSet = async (domain: string, tld: string) => {
     if (!publicKey || !gameEngine) return;
 
     if (parsedCurrentName) {
       // Update: swap old domain for new
-      const ix = createUpdatePlayerNameInstruction({
+      const ix = await createUpdatePlayerNameInstruction({
         owner: publicKey,
         gameEngine,
         tld,
@@ -124,7 +130,7 @@ export default function SettingsPage() {
       });
     } else {
       // First time set
-      const ix = createSetPlayerNameInstruction({
+      const ix = await createSetPlayerNameInstruction({
         owner: publicKey,
         gameEngine,
         tld,
@@ -138,9 +144,9 @@ export default function SettingsPage() {
     }
   };
 
-  const handleNameRemove = () => {
+  const handleNameRemove = async () => {
     if (!publicKey || !gameEngine || !parsedCurrentName) return;
-    const ix = createRemovePlayerNameInstruction({
+    const ix = await createRemovePlayerNameInstruction({
       owner: publicKey,
       gameEngine,
       tld: parsedCurrentName.tld,

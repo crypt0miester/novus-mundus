@@ -482,7 +482,7 @@ export function seedSplMint(
 /**
  * Seed an initialized SPL token account directly (165-byte layout).
  *
- * Use the ATA address (getAssociatedTokenAddressSync) as `tokenAccount` so the
+ * Use the ATA address (getAssociatedTokenAddressAsync) as `tokenAccount` so the
  * on-chain program finds it where it expects. Layout:
  *   0..32    mint
  *   32..64   owner

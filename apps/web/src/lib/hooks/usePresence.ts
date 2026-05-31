@@ -40,8 +40,9 @@ const OFFLINE: PresenceState = { online: false, lastSeen: null };
 // staleTime cannot freeze "online" past the window.
 async function fetchPresence(conn: Connection, pda: string): Promise<PresenceState> {
   const sigs = await conn.getSignaturesForAddress(new PublicKey(pda), { limit: 1 });
-  const blockTime = sigs[0]?.blockTime ?? null;
-  if (blockTime === null) return OFFLINE;
+  const rawBlockTime = sigs[0]?.blockTime;
+  if (rawBlockTime == null) return OFFLINE;
+  const blockTime = Number(rawBlockTime);
   const nowSeconds = Math.floor(Date.now() / 1000);
   return { online: nowSeconds - blockTime < ONLINE_WINDOW_SECONDS, lastSeen: blockTime };
 }

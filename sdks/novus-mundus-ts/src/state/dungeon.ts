@@ -7,7 +7,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Dungeon Enums (local definitions matching Rust state)
@@ -87,8 +86,8 @@ export interface DungeonTemplateAccount {
   timeLimitSeconds: number;
 
   // Reward configuration
-  baseXpPerRoom: BN;
-  baseNoviPerFloor: BN;
+  baseXpPerRoom: bigint;
+  baseNoviPerFloor: bigint;
   completionBonusBps: number;
   rewardScalingBps: number;
 }
@@ -108,8 +107,8 @@ export interface DungeonRunAccount {
   bump: number;
 
   // Enemy state
-  enemyHealth: BN;
-  enemyMaxHealth: BN;
+  enemyHealth: bigint;
+  enemyMaxHealth: bigint;
   enemyPower: number;
   enemyDefense: number;
   isBoss: boolean;
@@ -123,14 +122,14 @@ export interface DungeonRunAccount {
   bossWrath: number;
   bossAbilityActive: boolean;
   bossAbilityCounter: number;
-  bossShield: BN;
+  bossShield: bigint;
 
   // Units [tier1, tier2, tier3]
-  remainingUnits: BN[];
-  originalUnits: BN[];
+  remainingUnits: bigint[];
+  originalUnits: bigint[];
 
   // Weapons [melee, ranged, siege]
-  remainingWeapons: BN[];
+  remainingWeapons: bigint[];
 
   // Relics & synergies
   relicMask: number;
@@ -139,25 +138,25 @@ export interface DungeonRunAccount {
   darknessMitigation: number;
 
   // Pending rewards
-  pendingXp: BN;
-  pendingNovi: BN;
-  pendingGems: BN;
+  pendingXp: bigint;
+  pendingNovi: bigint;
+  pendingGems: bigint;
   pendingMaterials: number;
 
   // Checkpoint rewards
-  checkpointXp: BN;
-  checkpointNovi: BN;
-  checkpointGems: BN;
+  checkpointXp: bigint;
+  checkpointNovi: bigint;
+  checkpointGems: bigint;
 
   // Stats
-  totalDamageDealt: BN;
-  totalDamageTaken: BN;
+  totalDamageDealt: bigint;
+  totalDamageTaken: bigint;
   enemiesKilled: number;
   relicsCollected: number;
   roomsCleared: number;
 
   // Timestamps
-  startedAt: BN;
+  startedAt: bigint;
 
   // Camp buff
   campBonusBps: number;
@@ -178,8 +177,8 @@ export interface DungeonRunAccount {
 
 export interface DungeonLeaderboardEntry {
   player: PublicKey;
-  score: BN;
-  timestamp: BN;
+  score: bigint;
+  timestamp: bigint;
 }
 
 export interface DungeonLeaderboardAccount {
@@ -191,7 +190,7 @@ export interface DungeonLeaderboardAccount {
 
 // Deserialization
 
-export function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTemplateAccount {
+export function deserializeDungeonTemplate(data: Uint8Array): DungeonTemplateAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -267,7 +266,7 @@ export function deserializeDungeonTemplate(data: Uint8Array | Buffer): DungeonTe
   };
 }
 
-export function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAccount {
+export function deserializeDungeonRun(data: Uint8Array): DungeonRunAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -304,17 +303,17 @@ export function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAcco
   const bossShield = reader.readU64();
 
   // Units arrays
-  const remainingUnits: BN[] = [];
+  const remainingUnits: bigint[] = [];
   for (let i = 0; i < 3; i++) {
     remainingUnits.push(reader.readU64());
   }
 
-  const originalUnits: BN[] = [];
+  const originalUnits: bigint[] = [];
   for (let i = 0; i < 3; i++) {
     originalUnits.push(reader.readU64());
   }
 
-  const remainingWeapons: BN[] = [];
+  const remainingWeapons: bigint[] = [];
   for (let i = 0; i < 3; i++) {
     remainingWeapons.push(reader.readU64());
   }
@@ -356,8 +355,8 @@ export function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAcco
   const isEnded = status === DungeonStatus.Completed ||
                   status === DungeonStatus.Failed ||
                   status === DungeonStatus.Fled;
-  const totalUnits = remainingUnits.reduce((a, b) => a.add(b));
-  const isWiped = totalUnits.isZero();
+  const totalUnits = remainingUnits.reduce((a, b) => a + b);
+  const isWiped = totalUnits === 0n;
 
   return {
     player,
@@ -412,7 +411,7 @@ export function deserializeDungeonRun(data: Uint8Array | Buffer): DungeonRunAcco
   };
 }
 
-export function deserializeDungeonLeaderboard(data: Uint8Array | Buffer): DungeonLeaderboardAccount {
+export function deserializeDungeonLeaderboard(data: Uint8Array): DungeonLeaderboardAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -441,7 +440,7 @@ export function deserializeDungeonLeaderboard(data: Uint8Array | Buffer): Dungeo
 // Parse Functions
 
 /** Parse DungeonTemplateAccount from account info */
-export function parseDungeonTemplate(accountInfo: AccountInfo<Buffer>): DungeonTemplateAccount | null {
+export function parseDungeonTemplate(accountInfo: AccountInfo<Uint8Array>): DungeonTemplateAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }
@@ -449,7 +448,7 @@ export function parseDungeonTemplate(accountInfo: AccountInfo<Buffer>): DungeonT
 }
 
 /** Parse DungeonRunAccount from account info */
-export function parseDungeonRun(accountInfo: AccountInfo<Buffer>): DungeonRunAccount | null {
+export function parseDungeonRun(accountInfo: AccountInfo<Uint8Array>): DungeonRunAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }
@@ -457,7 +456,7 @@ export function parseDungeonRun(accountInfo: AccountInfo<Buffer>): DungeonRunAcc
 }
 
 /** Parse DungeonLeaderboardAccount from account info */
-export function parseDungeonLeaderboard(accountInfo: AccountInfo<Buffer>): DungeonLeaderboardAccount | null {
+export function parseDungeonLeaderboard(accountInfo: AccountInfo<Uint8Array>): DungeonLeaderboardAccount | null {
   if (!accountInfo.data || accountInfo.data.length === 0) {
     return null;
   }

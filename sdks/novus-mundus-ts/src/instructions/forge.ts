@@ -22,7 +22,7 @@ import {
   deriveEstatePda,
   deriveCraftedEquipmentPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import { CraftableEquipment, QualityTier } from '../types/enums';
 
 // Initialize Crafted Equipment
@@ -48,12 +48,12 @@ export interface InitializeForgeAccounts {
  * 3. [writable] crafted_equipment: CraftedEquipmentAccount PDA (to be created)
  * 4. [] system_program: System program
  */
-export function createInitializeForgeInstruction(
+export async function createInitializeForgeInstruction(
   accounts: InitializeForgeAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -95,16 +95,16 @@ export interface StartCraftParams {
  * Initiates the craft process. Requires Forge building.
  * Each tier requires multiple "tempering stages".
  */
-export function createStartCraftInstruction(
+export async function createStartCraftInstruction(
   accounts: StartCraftAccounts,
   params: StartCraftParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -145,12 +145,12 @@ export interface StrikeAccounts {
  * Must be called within the active tempering window.
  * Missing a window fails the craft (deterministic, skill-based).
  */
-export function createStrikeInstruction(
+export async function createStrikeInstruction(
   accounts: StrikeAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -188,11 +188,11 @@ export interface AbandonCraftAccounts {
  *
  * Returns partial materials based on progress.
  */
-export function createAbandonCraftInstruction(
+export async function createAbandonCraftInstruction(
   accounts: AbandonCraftAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -235,12 +235,12 @@ export interface EquipParams {
  *
  * Sets the crafted equipment as active for combat.
  */
-export function createEquipInstruction(
+export async function createEquipInstruction(
   accounts: EquipAccounts,
   params: EquipParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [craftedEquipment] = deriveCraftedEquipmentPda(accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [craftedEquipment] = await deriveCraftedEquipmentPda(accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

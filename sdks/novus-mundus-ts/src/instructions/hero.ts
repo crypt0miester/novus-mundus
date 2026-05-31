@@ -15,7 +15,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -53,7 +52,7 @@ export interface CreateTemplateParams {
   /** Hero category */
   category: number;
   /** Mint cost in SOL lamports */
-  mintCostSol: BN | number | bigint;
+  mintCostSol: number | bigint;
   /** Supply cap (0=unlimited) */
   supplyCap: number;
   /** Is template enabled */
@@ -108,11 +107,11 @@ export interface CreateTemplateParams {
  * - [77..81] ability_param2: u32
  * - [81..85] ability_cooldown_secs: u32
  */
-export function createCreateTemplateInstruction(
+export async function createCreateTemplateInstruction(
   accounts: CreateTemplateAccounts,
   params: CreateTemplateParams
-): TransactionInstruction {
-  const [template] = deriveHeroTemplatePda(params.templateId);
+): Promise<TransactionInstruction> {
+  const [template] = await deriveHeroTemplatePda(params.templateId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -128,7 +127,7 @@ export function createCreateTemplateInstruction(
   writer.writeU16(params.templateId);
 
   // [2..34] name: [u8; 32] - fixed size, padded with zeros
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
+  const nameBytes = new TextEncoder().encode(params.name).subarray(0, 32);
   writer.writeBytes(nameBytes);
   writer.writeZeros(32 - nameBytes.length);
 
@@ -205,10 +204,10 @@ export interface CreateCollectionAccounts {
  *
  * On-chain data: None (name/uri hardcoded)
  */
-export function createCreateCollectionInstruction(
+export async function createCreateCollectionInstruction(
   accounts: CreateCollectionAccounts
-): TransactionInstruction {
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<TransactionInstruction> {
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -268,15 +267,15 @@ export interface MintHeroParams {
  * 10. [writable] mint_receipt: HeroMintReceipt PDA (0-byte, created on mint)
  * 11. [] estate_account: EstateAccount PDA (for sanctuary bonus)
  */
-export function createMintHeroInstruction(
+export async function createMintHeroInstruction(
   accounts: MintHeroAccounts,
   params: MintHeroParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.minter);
-  const [template] = deriveHeroTemplatePda(params.templateId);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [mintReceipt] = deriveHeroMintReceiptPda(player, params.templateId);
-  const [estateAccount] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.minter);
+  const [template] = await deriveHeroTemplatePda(params.templateId);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [mintReceipt] = await deriveHeroMintReceiptPda(player, params.templateId);
+  const [estateAccount] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.minter, isSigner: true, isWritable: true },
@@ -346,12 +345,12 @@ export interface LockHeroParams {
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
  */
-export function createLockHeroInstruction(
+export async function createLockHeroInstruction(
   accounts: LockHeroAccounts,
   params: LockHeroParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -418,12 +417,12 @@ export interface UnlockHeroParams {
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
  */
-export function createUnlockHeroInstruction(
+export async function createUnlockHeroInstruction(
   accounts: UnlockHeroAccounts,
   params: UnlockHeroParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -493,11 +492,11 @@ export interface LevelUpHeroAccounts {
  *
  * On-chain data: None (always levels up by 1)
  */
-export function createLevelUpHeroInstruction(
+export async function createLevelUpHeroInstruction(
   accounts: LevelUpHeroAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [heroCollection] = deriveHeroCollectionPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [heroCollection] = await deriveHeroCollectionPda();
 
   // Clock sysvar
   const CLOCK_SYSVAR = new PublicKey('SysvarC1ock11111111111111111111111111111111');
@@ -552,11 +551,11 @@ export interface AssignDefensiveHeroParams {
  * On-chain data (1 byte):
  * - slot_index: u8 (0-2)
  */
-export function createAssignDefensiveHeroInstruction(
+export async function createAssignDefensiveHeroInstruction(
   accounts: AssignDefensiveHeroAccounts,
   params: AssignDefensiveHeroParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -615,14 +614,14 @@ export interface BurnHeroParams {
  * On-chain data (2 bytes):
  * - [0..2] template_id: u16 (little-endian)
  */
-export function createBurnHeroInstruction(
+export async function createBurnHeroInstruction(
   accounts: BurnHeroAccounts,
   params: BurnHeroParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [template] = deriveHeroTemplatePda(params.templateId);
-  const [heroCollection] = deriveHeroCollectionPda();
-  const [mintReceipt] = deriveHeroMintReceiptPda(player, params.templateId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [template] = await deriveHeroTemplatePda(params.templateId);
+  const [heroCollection] = await deriveHeroCollectionPda();
+  const [mintReceipt] = await deriveHeroMintReceiptPda(player, params.templateId);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -678,11 +677,11 @@ export interface UpdateSupplyCapParams {
  * - [0..2] template_id: u16 (little-endian)
  * - [2..6] new_supply_cap: u32 (little-endian)
  */
-export function createUpdateSupplyCapInstruction(
+export async function createUpdateSupplyCapInstruction(
   accounts: UpdateSupplyCapAccounts,
   params: UpdateSupplyCapParams
-): TransactionInstruction {
-  const [template] = deriveHeroTemplatePda(params.templateId);
+): Promise<TransactionInstruction> {
+  const [template] = await deriveHeroTemplatePda(params.templateId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
@@ -727,11 +726,11 @@ export interface UseHeroAbilityParams {
  * (mirrored from the NFT AbCD attribute at lock time), and applies the effect.
  * See `AbilityKind` for the dispatch.
  */
-export function createUseHeroAbilityInstruction(
+export async function createUseHeroAbilityInstruction(
   accounts: UseHeroAbilityAccounts,
   params: UseHeroAbilityParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

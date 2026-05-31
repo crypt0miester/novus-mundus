@@ -47,6 +47,13 @@ import {
   type LogsCallback,
 } from './account';
 
+// State parsers take an `AccountInfo<Uint8Array>`; subscriptions only have the
+// raw data bytes, so wrap them in a minimal AccountInfo (v3: lamports/rentEpoch
+// are bigint). Only `data` is read by the parsers.
+function asAccountInfo(data: Uint8Array) {
+  return { data, executable: false, lamports: 0n, owner: PROGRAM_ID, rentEpoch: 0n };
+}
+
 // Game Account Subscriptions
 
 /**
@@ -59,18 +66,18 @@ import {
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToPlayer(
+export async function subscribeToPlayer(
   connection: Connection,
   gameEngine: PublicKey,
   owner: PublicKey,
   callback: SubscriptionCallback<PlayerCore>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [playerPda] = derivePlayerPda(gameEngine, owner);
+): Promise<SubscriptionHandle> {
+  const [playerPda] = await derivePlayerPda(gameEngine, owner);
   return subscribeToAccountWithParser(
     connection,
     playerPda,
-    (data) => parsePlayer({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parsePlayer(asAccountInfo(data)),
     callback,
     options
   );
@@ -85,17 +92,17 @@ export function subscribeToPlayer(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToUser(
+export async function subscribeToUser(
   connection: Connection,
   owner: PublicKey,
   callback: SubscriptionCallback<UserAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [userPda] = deriveUserPda(owner);
+): Promise<SubscriptionHandle> {
+  const [userPda] = await deriveUserPda(owner);
   return subscribeToAccountWithParser(
     connection,
     userPda,
-    (data) => parseUser({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseUser(asAccountInfo(data)),
     callback,
     options
   );
@@ -111,18 +118,18 @@ export function subscribeToUser(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToTeam(
+export async function subscribeToTeam(
   connection: Connection,
   gameEngine: PublicKey,
   teamId: number,
   callback: SubscriptionCallback<TeamAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [teamPda] = deriveTeamPda(gameEngine, teamId);
+): Promise<SubscriptionHandle> {
+  const [teamPda] = await deriveTeamPda(gameEngine, teamId);
   return subscribeToAccountWithParser(
     connection,
     teamPda,
-    (data) => parseTeam({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseTeam(asAccountInfo(data)),
     callback,
     options
   );
@@ -139,19 +146,19 @@ export function subscribeToTeam(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToRally(
+export async function subscribeToRally(
   connection: Connection,
   gameEngine: PublicKey,
   creator: PublicKey,
   rallyId: number,
   callback: SubscriptionCallback<RallyAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [rallyPda] = deriveRallyPda(gameEngine, creator, rallyId);
+): Promise<SubscriptionHandle> {
+  const [rallyPda] = await deriveRallyPda(gameEngine, creator, rallyId);
   return subscribeToAccountWithParser(
     connection,
     rallyPda,
-    (data) => parseRally({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseRally(asAccountInfo(data)),
     callback,
     options
   );
@@ -168,19 +175,19 @@ export function subscribeToRally(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToReinforcement(
+export async function subscribeToReinforcement(
   connection: Connection,
   gameEngine: PublicKey,
   sender: PublicKey,
   receiver: PublicKey,
   callback: SubscriptionCallback<ReinforcementAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [reinforcementPda] = deriveReinforcementPda(gameEngine, sender, receiver);
+): Promise<SubscriptionHandle> {
+  const [reinforcementPda] = await deriveReinforcementPda(gameEngine, sender, receiver);
   return subscribeToAccountWithParser(
     connection,
     reinforcementPda,
-    (data) => parseReinforcement({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseReinforcement(asAccountInfo(data)),
     callback,
     options
   );
@@ -197,19 +204,19 @@ export function subscribeToReinforcement(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToEncounter(
+export async function subscribeToEncounter(
   connection: Connection,
   gameEngine: PublicKey,
   cityId: number,
   encounterId: number,
   callback: SubscriptionCallback<EncounterAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterId);
+): Promise<SubscriptionHandle> {
+  const [encounterPda] = await deriveEncounterPda(gameEngine, cityId, encounterId);
   return subscribeToAccountWithParser(
     connection,
     encounterPda,
-    (data) => parseEncounter({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseEncounter(asAccountInfo(data)),
     callback,
     options
   );
@@ -224,17 +231,17 @@ export function subscribeToEncounter(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToExpedition(
+export async function subscribeToExpedition(
   connection: Connection,
   owner: PublicKey,
   callback: SubscriptionCallback<ExpeditionAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [expeditionPda] = deriveExpeditionPda(owner);
+): Promise<SubscriptionHandle> {
+  const [expeditionPda] = await deriveExpeditionPda(owner);
   return subscribeToAccountWithParser(
     connection,
     expeditionPda,
-    (data) => parseExpedition({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseExpedition(asAccountInfo(data)),
     callback,
     options
   );
@@ -250,18 +257,18 @@ export function subscribeToExpedition(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToArenaSeason(
+export async function subscribeToArenaSeason(
   connection: Connection,
   gameEngine: PublicKey,
   seasonId: number,
   callback: SubscriptionCallback<ArenaSeasonAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [seasonPda] = deriveArenaSeasonPda(gameEngine, seasonId);
+): Promise<SubscriptionHandle> {
+  const [seasonPda] = await deriveArenaSeasonPda(gameEngine, seasonId);
   return subscribeToAccountWithParser(
     connection,
     seasonPda,
-    (data) => parseArenaSeason({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseArenaSeason(asAccountInfo(data)),
     callback,
     options
   );
@@ -278,19 +285,19 @@ export function subscribeToArenaSeason(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToArenaParticipant(
+export async function subscribeToArenaParticipant(
   connection: Connection,
   gameEngine: PublicKey,
   seasonId: number,
   player: PublicKey,
   callback: SubscriptionCallback<ArenaParticipantAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [arenaParticipantPda] = deriveArenaParticipantPda(gameEngine, seasonId, player);
+): Promise<SubscriptionHandle> {
+  const [arenaParticipantPda] = await deriveArenaParticipantPda(gameEngine, seasonId, player);
   return subscribeToAccountWithParser(
     connection,
     arenaParticipantPda,
-    (data) => parseArenaParticipant({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseArenaParticipant(asAccountInfo(data)),
     callback,
     options
   );
@@ -306,18 +313,18 @@ export function subscribeToArenaParticipant(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToLoot(
+export async function subscribeToLoot(
   connection: Connection,
   playerPda: PublicKey,
   lootId: number | bigint,
   callback: SubscriptionCallback<LootAccount>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [lootPda] = deriveLootPda(playerPda, lootId);
+): Promise<SubscriptionHandle> {
+  const [lootPda] = await deriveLootPda(playerPda, lootId);
   return subscribeToAccountWithParser(
     connection,
     lootPda,
-    (data) => parseLoot({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseLoot(asAccountInfo(data)),
     callback,
     options
   );
@@ -332,17 +339,17 @@ export function subscribeToLoot(
  * @param options - Subscription options
  * @returns Subscription handle
  */
-export function subscribeToGameEngine(
+export async function subscribeToGameEngine(
   connection: Connection,
   kingdomId: number,
   callback: SubscriptionCallback<GameEngine>,
   options: SubscriptionOptions = {}
-): SubscriptionHandle {
-  const [gameEnginePda] = deriveGameEnginePda(kingdomId);
+): Promise<SubscriptionHandle> {
+  const [gameEnginePda] = await deriveGameEnginePda(kingdomId);
   return subscribeToAccountWithParser(
     connection,
     gameEnginePda,
-    (data) => parseGameEngine({ data, executable: false, lamports: 0, owner: PROGRAM_ID }),
+    (data) => parseGameEngine(asAccountInfo(data)),
     callback,
     options
   );
@@ -360,7 +367,7 @@ export function subscribeToGameEngine(
  */
 export function subscribeToAllGameAccounts(
   connection: Connection,
-  callback: (data: { pubkey: PublicKey; accountInfo: AccountInfo<Buffer> }, context: Context) => void,
+  callback: (data: { pubkey: PublicKey; accountInfo: AccountInfo<Uint8Array> }, context: Context) => void,
   options: SubscriptionOptions & {
     filters?: Array<{ memcmp: { offset: number; bytes: string } } | { dataSize: number }>;
   } = {}
@@ -371,9 +378,9 @@ export function subscribeToAllGameAccounts(
     (keyedAccountInfo, context) => {
       callback(
         {
-          pubkey: keyedAccountInfo.accountId,
+          pubkey: new PublicKey(keyedAccountInfo.accountId),
           accountInfo: {
-            data: Buffer.from(keyedAccountInfo.accountInfo.data),
+            data: keyedAccountInfo.accountInfo.data,
             executable: keyedAccountInfo.accountInfo.executable,
             lamports: keyedAccountInfo.accountInfo.lamports,
             owner: keyedAccountInfo.accountInfo.owner,
@@ -496,7 +503,7 @@ export class GameSubscriptionManager {
           return;
         }
 
-        const routed = tryDeserializeAnyAccount(Buffer.from(data));
+        const routed = tryDeserializeAnyAccount(data);
         if (!routed) {
           return;
         }
@@ -506,7 +513,7 @@ export class GameSubscriptionManager {
           return;
         }
 
-        const pubkey = keyedAccountInfo.accountId;
+        const pubkey = new PublicKey(keyedAccountInfo.accountId);
         for (const handler of handlers) {
           try {
             handler(routed.account, pubkey, context);

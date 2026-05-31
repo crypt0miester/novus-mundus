@@ -43,8 +43,8 @@ export function EventsView() {
                 <div className="flex items-center justify-between">
                   <h3 className="text-sm font-semibold text-text-primary">Weekly Sale</h3>
                   <GoldCountdown
-                    endsAt={weekly.endsAt.toNumber()}
-                    startedAt={weekly.startsAt.toNumber()}
+                    endsAt={Number(weekly.endsAt)}
+                    startedAt={Number(weekly.startsAt)}
                     format="compact"
                     size="sm"
                   />
@@ -78,8 +78,8 @@ export function EventsView() {
                     {seasonal.name || "Seasonal Sale"}
                   </h3>
                   <GoldCountdown
-                    endsAt={seasonal.endsAt.toNumber()}
-                    startedAt={seasonal.startsAt.toNumber()}
+                    endsAt={Number(seasonal.endsAt)}
+                    startedAt={Number(seasonal.startsAt)}
                     format="compact"
                     size="sm"
                   />
@@ -127,8 +127,8 @@ export function EventsView() {
                       {d.title || "DAO Promotion"}
                     </h3>
                     <GoldCountdown
-                      endsAt={d.endsAt.toNumber()}
-                      startedAt={d.startsAt.toNumber()}
+                      endsAt={Number(d.endsAt)}
+                      startedAt={Number(d.startsAt)}
                       format="compact"
                       size="sm"
                     />

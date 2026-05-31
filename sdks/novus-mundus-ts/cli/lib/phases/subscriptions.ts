@@ -56,10 +56,10 @@ export async function detailSubscriptions(ctx: CLIContext): Promise<string> {
   const rows: string[][] = tiers.map(t => [
     String(t.tierIndex),
     t.name,
-    formatUsd(t.costInUsdCents.toNumber()),
+    formatUsd(Number(t.costInUsdCents)),
     t.durationDays === 0 ? dim('free') : `${t.durationDays}d`,
-    formatBps(t.generationMultiplier.toNumber()),
-    formatBps(t.dailyRewardMultiplier.toNumber()),
+    formatBps(Number(t.generationMultiplier)),
+    formatBps(Number(t.dailyRewardMultiplier)),
     formatBps(t.synchronyBonus),
     formatNum(t.maxLockedNovi),
     String(t.maxTeamMembers),

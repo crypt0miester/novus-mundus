@@ -93,7 +93,7 @@ export function GarrisonComposerPanel({ cityId, castleId, onClose }: GarrisonCom
     if (!teamId) throw new Error("You must be on a team to garrison");
     if (!hasAnyCommitment) throw new Error("Choose units or weapons to contribute");
     const hero = heroSlot < 3 ? lockedHeroes[heroSlot] : null;
-    const ix = createJoinGarrisonInstruction(
+    const ix = await createJoinGarrisonInstruction(
       {
         owner: publicKey,
         gameEngine: client.gameEngine,

@@ -78,7 +78,7 @@ export function TargetTravel({
   const playerArrived = player ? hasArrived(player, now) : false;
   const travelRemaining =
     player && playerTraveling && !playerArrived
-      ? Math.max(0, player.arrivalTime.toNumber() - now)
+      ? Math.max(0, Number(player.arrivalTime) - now)
       : 0;
 
   // ── Handlers ──
@@ -89,7 +89,7 @@ export function TargetTravel({
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ix = buildIntracityStartIx({
+    const ix = await buildIntracityStartIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       gameAuthority: geData?.account?.authority,
@@ -107,19 +107,21 @@ export function TargetTravel({
       .then((r) => r.signature);
   };
 
-  const buildCompleteIx = () => {
+  const buildCompleteIx = async () => {
     if (!publicKey || !player) throw new Error("Not ready");
-    return buildIntracityCompleteIx({
-      owner: publicKey,
-      gameEngine: client.gameEngine,
-      player,
-    }).ix;
+    return (
+      await buildIntracityCompleteIx({
+        owner: publicKey,
+        gameEngine: client.gameEngine,
+        player,
+      })
+    ).ix;
   };
 
   const handleIntracityComplete = async (reportPhase: (p: TxPhase) => void) => {
     return transact
       .mutateAsync({
-        instructions: [buildCompleteIx()],
+        instructions: [await buildCompleteIx()],
         invalidateKeys: [["player"]],
         successMessage: "Arrived at destination!",
         onPhase: reportPhase,
@@ -129,7 +131,7 @@ export function TargetTravel({
 
   const handleIntracityCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !player) throw new Error("Not ready");
-    const ix = buildIntracityCancelIx({
+    const ix = await buildIntracityCancelIx({
       owner: publicKey,
       gameEngine: client.gameEngine,
       player,
@@ -152,7 +154,7 @@ export function TargetTravel({
     if (!publicKey) throw new Error("Wallet not connected");
     // Hold-to-charge packs `count` speedups into one tx; each reads the live timer.
     const n = Math.max(1, Math.floor(count));
-    const instructions = buildTravelSpeedupIxs({
+    const instructions = await buildTravelSpeedupIxs({
       owner: publicKey,
       gameEngine: client.gameEngine,
       tier: tier as 1 | 2,
@@ -179,14 +181,15 @@ export function TargetTravel({
   // On arrival within range, fold the settle (intracity_complete) into the
   // host panel's attack so both land in a single transaction.
   const canArriveAttack = playerArrived && isIntracity && destInRange && !!onArriveAttack;
-  const handleArriveAttack = (rp: (p: TxPhase) => void) => onArriveAttack!(rp, [buildCompleteIx()]);
+  const handleArriveAttack = async (rp: (p: TxPhase) => void) =>
+    onArriveAttack!(rp, [await buildCompleteIx()]);
 
   // Surface in-transit actions on the mobile morph bar (SpeedupPanel
   // tier cards are display-only there). Mutually exclusive with the
   // host panel's attack actions — each registers `null` when the other
   // is active, so only one morph slot is populated.
   const gemsPerMinute = geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1;
-  const gemBalance = player?.gems?.toNumber?.();
+  const gemBalance = Number(player?.gems ?? 0n);
 
   // Hold-to-charge caps — how many speedup instructions one tx can usefully
   // hold per tier (timer-collapse ∧ gem affordability). Travel has 2 tiers:
@@ -304,8 +307,8 @@ export function TargetTravel({
                 <span className={styles.arrived}>Arrived</span>
               ) : (
                 <GoldCountdown
-                  endsAt={player.arrivalTime.toNumber()}
-                  startedAt={player.departureTime.toNumber()}
+                  endsAt={Number(player.arrivalTime)}
+                  startedAt={Number(player.departureTime)}
                   showProgress
                   format="compact"
                   size="sm"
@@ -344,7 +347,7 @@ export function TargetTravel({
             tiers={speedupTiers}
             onSpeedup={(tier, rp, count) => handleTravelSpeedup(tier, rp, count)}
             gemsPerMinute={geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1}
-            gemBalance={player.gems?.toNumber?.()}
+            gemBalance={Number(player.gems ?? 0n)}
             variant="parchment"
           />
         </div>

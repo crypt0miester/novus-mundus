@@ -39,7 +39,6 @@
 
 import { describe, it, expect, beforeAll, setDefaultTimeout } from 'bun:test';
 import { Transaction, Keypair, LAMPORTS_PER_SOL, ComputeBudgetProgram } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createPurchaseSubscriptionInstruction,
@@ -142,14 +141,14 @@ const lamps = (pk: { toBuffer: () => Buffer } | any): number =>
   Number(ctx.svm.getBalance(pk) ?? 0n);
 
 /** raw NOVI (1 decimal) → human display value. */
-const disp = (raw: number | BN): number =>
-  (typeof raw === 'number' ? raw : raw.toNumber()) / 10;
+const disp = (raw: number | bigint): number =>
+  (typeof raw === 'number' ? raw : Number(raw)) / 10;
 
 const solOf = (lamports: number): string => (lamports / LAMPORTS_PER_SOL).toFixed(4);
 
 const armyOf = (p: any): number =>
-  p.defensiveUnit1.toNumber() + p.defensiveUnit2.toNumber() + p.defensiveUnit3.toNumber() +
-  p.operativeUnit1.toNumber() + p.operativeUnit2.toNumber() + p.operativeUnit3.toNumber();
+  Number(p.defensiveUnit1) + Number(p.defensiveUnit2) + Number(p.defensiveUnit3) +
+  Number(p.operativeUnit1) + Number(p.operativeUnit2) + Number(p.operativeUnit3);
 
 /**
  * Mirror of `purchase_novi` economics. Bulk + subscription + streak bonuses are
@@ -157,12 +156,12 @@ const armyOf = (p: any): number =>
  */
 function noviPreview(ge: any, pkgIndex: number, subTier: number, streakDay: number = 1) {
   const cfg = ge.noviPurchaseConfig;
-  const base = cfg.noviPurchaseAmounts[pkgIndex].toNumber();
+  const base = Number(cfg.noviPurchaseAmounts[pkgIndex]);
   const bulkBps = cfg.noviBulkBonusBps[pkgIndex] ?? 0;
   const subBps = cfg.noviSubBonusBps[subTier] ?? 0;
   const streakBps = cfg.noviStreakBonusBps[Math.max(0, Math.min(streakDay - 1, 6))] ?? 0;
   const bonus = Math.floor((base * (bulkBps + subBps + streakBps)) / 10000);
-  const costLamports = base * cfg.noviBasePriceLamports.toNumber();
+  const costLamports = base * Number(cfg.noviBasePriceLamports);
   return { base, bonus, total: base + bonus, costLamports };
 }
 
@@ -233,7 +232,7 @@ async function stockGems(player: TestPlayer, totalQuantity: number): Promise<voi
  * locked NOVI. `collect_resources` has no cooldown and recomputes
  * `player.networth` (checked u64 math) on every call, so this drives networth
  * upward fast. Networth/cash are read via `Number(bn.toString())` because they
- * can exceed 2^53 (BN.toNumber() would throw). Returns the climb.
+ * can exceed 2^53 (Number(BN) would throw). Returns the climb.
  */
 async function collectCash(
   player: TestPlayer,
@@ -249,7 +248,7 @@ async function collectCash(
   const p0 = await fetchPlayer(ctx.svm, player.playerPda);
   const networthStart = Number(p0!.networth.toString());
   const cashStart = Number(p0!.cashOnHand.toString());
-  const chunk = Math.max(1, Math.floor(p0!.lockedNovi.toNumber() / (times + 2)));
+  const chunk = Math.max(1, Math.floor(Number(p0!.lockedNovi) / (times + 2)));
   let done = 0;
   let overflowed = false;
   for (let i = 0; i < times; i++) {
@@ -260,9 +259,9 @@ async function collectCash(
         new Transaction()
           .add(ComputeBudgetProgram.setComputeUnitLimit({ units: 1_400_000 }))
           .add(
-            createCollectResourcesInstruction(
+            await createCollectResourcesInstruction(
               { owner: player.publicKey, gameEngine: ctx.gameEngine },
-              { noviAmount: new BN(chunk), collectionType: CollectionType.Cash },
+              { noviAmount: BigInt(chunk), collectionType: CollectionType.Cash },
             ),
           ),
         [player.keypair],
@@ -333,8 +332,8 @@ describe('User Journey Economic Study', () => {
   describe('Journey 1 — Free Player', () => {
     it('plays the whole game on the starter grant, spends $0', async () => {
       log.section('Journey 1 — Free Player');
-      const kp = Keypair.generate();
-      ctx.svm.airdrop(kp.publicKey, BigInt(50 * LAMPORTS_PER_SOL));
+      const kp = await Keypair.generate();
+      ctx.svm.airdrop(kp.publicKey as any, BigInt(50 * LAMPORTS_PER_SOL));
       const solBeforeSetup = lamps(kp.publicKey);
 
       const player = await factory.createPlayer({ customKeypair: kp, initialize: true, createEstate: true });
@@ -343,9 +342,9 @@ describe('User Journey Economic Study', () => {
       const starter = await fetchPlayer(ctx.svm, player.playerPda);
       expect(starter).not.toBeNull();
       expect(starter!.subscriptionTier).toBe(0); // Rookie — the free default
-      expect(starter!.lockedNovi.toNumber()).toBe(STARTER_LOCKED_NOVI);
+      expect(Number(starter!.lockedNovi)).toBe(STARTER_LOCKED_NOVI);
       log.info(`Starter grant: ${disp(STARTER_LOCKED_NOVI).toLocaleString()} NOVI, ` +
-        `${starter!.cashOnHand.toNumber().toLocaleString()} cash, ${armyOf(starter!).toLocaleString()} units`);
+        `${Number(starter!.cashOnHand).toLocaleString()} cash, ${armyOf(starter!).toLocaleString()} units`);
 
       // A free player builds a core estate from the starter NOVI alone:
       // home, defensive hiring (Barracks), operative hiring (Camp), research.
@@ -354,17 +353,17 @@ describe('User Journey Economic Study', () => {
 
       // ...then hires both unit lines from what's left of the 1M starter NOVI.
       const afterBuild = await fetchPlayer(ctx.svm, player.playerPda);
-      const hire = await hireSplit(player, [0, 3], Math.floor(afterBuild!.lockedNovi.toNumber() * 0.6));
+      const hire = await hireSplit(player, [0, 3], Math.floor(Number(afterBuild!.lockedNovi) * 0.6));
 
       // A free, level-1 player cannot mint a Paladin — heroes 4 & 5 need
       // player level 5. The attempt reverts before any SOL changes hands.
       let levelGateBlocked = false;
       try {
-        const heroMint = Keypair.generate();
+        const heroMint = await Keypair.generate();
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createMintHeroInstruction(
+            await createMintHeroInstruction(
               { minter: kp.publicKey, gameEngine: ctx.gameEngine, heroMint: heroMint.publicKey, treasury: ctx.treasury.publicKey },
               { templateId: 4 },
             ),
@@ -397,7 +396,7 @@ describe('User Journey Economic Study', () => {
         unitsHired: hire.unitsGained,
         finalLevel: final!.level,
         finalNetworth: Number(final!.networth.toString()),
-        finalLockedNoviRaw: final!.lockedNovi.toNumber(),
+        finalLockedNoviRaw: Number(final!.lockedNovi),
         finalCash: Number(final!.cashOnHand.toString()),
         finalArmy: armyOf(final!),
       };
@@ -420,10 +419,10 @@ describe('User Journey Economic Study', () => {
     it('spends modestly: Expert sub + 4 small NOVI packages + 1 hero', async () => {
       log.section('Journey 2 — Regular Player');
       const ge = await fetchGameEngine(ctx.svm, ctx.kingdomId);
-      const [noviMint] = deriveNoviMintPda();
+      const [noviMint] = await deriveNoviMintPda();
 
-      const kp = Keypair.generate();
-      ctx.svm.airdrop(kp.publicKey, BigInt(80 * LAMPORTS_PER_SOL));
+      const kp = await Keypair.generate();
+      ctx.svm.airdrop(kp.publicKey as any, BigInt(80 * LAMPORTS_PER_SOL));
       const solBeforeSetup = lamps(kp.publicKey);
       const player = await factory.createPlayer({ customKeypair: kp, initialize: true, createEstate: true });
       const solAfterSetup = lamps(kp.publicKey);
@@ -433,7 +432,7 @@ describe('User Journey Economic Study', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseSubscriptionInstruction(
+          await createPurchaseSubscriptionInstruction(
             { owner: kp.publicKey, gameEngine: ctx.gameEngine, paymentAuthority: kp.publicKey, treasury: ctx.treasury.publicKey },
             { paymentType: 0, tier: 1 },
           ),
@@ -451,9 +450,9 @@ describe('User Journey Economic Study', () => {
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createPurchaseNoviInstruction(
+            await createPurchaseNoviInstruction(
               { buyer: kp.publicKey, gameEngine: ctx.gameEngine, treasury: ctx.treasury.publicKey, noviMint },
-              { packageIndex: pkgIndex, maxLamports: new BN(20 * LAMPORTS_PER_SOL) },
+              { packageIndex: pkgIndex, maxLamports: BigInt(20 * LAMPORTS_PER_SOL) },
             ),
           ),
           [kp],
@@ -466,9 +465,9 @@ describe('User Journey Economic Study', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createReservedToLockedInstruction(
+          await createReservedToLockedInstruction(
             { owner: kp.publicKey, gameEngine: ctx.gameEngine },
-            { amount: new BN(purchasedRaw) },
+            { amount: BigInt(purchasedRaw) },
           ),
         ),
         [kp],
@@ -491,17 +490,17 @@ describe('User Journey Economic Study', () => {
 
       // (e) Hire an army from the leftover NOVI.
       const afterBuild = await fetchPlayer(ctx.svm, player.playerPda);
-      const hire = await hireSplit(player, [0, 1, 3], Math.floor(afterBuild!.lockedNovi.toNumber() * 0.8));
+      const hire = await hireSplit(player, [0, 1, 3], Math.floor(Number(afterBuild!.lockedNovi) * 0.8));
 
       // (f) One common hero.
       bal = lamps(kp.publicKey);
       let heroesMinted = 0;
       try {
-        const heroMint = Keypair.generate();
+        const heroMint = await Keypair.generate();
         await sendTransaction(
           ctx.svm,
           new Transaction().add(
-            createMintHeroInstruction(
+            await createMintHeroInstruction(
               { minter: kp.publicKey, gameEngine: ctx.gameEngine, heroMint: heroMint.publicKey, treasury: ctx.treasury.publicKey },
               { templateId: 1 },
             ),
@@ -534,7 +533,7 @@ describe('User Journey Economic Study', () => {
         unitsHired: hire.unitsGained,
         finalLevel: final!.level,
         finalNetworth: Number(final!.networth.toString()),
-        finalLockedNoviRaw: final!.lockedNovi.toNumber(),
+        finalLockedNoviRaw: Number(final!.lockedNovi),
         finalCash: Number(final!.cashOnHand.toString()),
         finalArmy: armyOf(final!),
       };
@@ -553,10 +552,10 @@ describe('User Journey Economic Study', () => {
     it('buys the game: Legendary sub + the biggest NOVI package + heroes + every building', async () => {
       log.section('Journey 3 — Whale Player');
       const ge = await fetchGameEngine(ctx.svm, ctx.kingdomId);
-      const [noviMint] = deriveNoviMintPda();
+      const [noviMint] = await deriveNoviMintPda();
 
-      const kp = Keypair.generate();
-      ctx.svm.airdrop(kp.publicKey, BigInt(300 * LAMPORTS_PER_SOL));
+      const kp = await Keypair.generate();
+      ctx.svm.airdrop(kp.publicKey as any, BigInt(300 * LAMPORTS_PER_SOL));
       const solBeforeSetup = lamps(kp.publicKey);
       const player = await factory.createPlayer({ customKeypair: kp, initialize: true, createEstate: true });
       const solAfterSetup = lamps(kp.publicKey);
@@ -566,7 +565,7 @@ describe('User Journey Economic Study', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseSubscriptionInstruction(
+          await createPurchaseSubscriptionInstruction(
             { owner: kp.publicKey, gameEngine: ctx.gameEngine, paymentAuthority: kp.publicKey, treasury: ctx.treasury.publicKey },
             { paymentType: 0, tier: 3 },
           ),
@@ -580,9 +579,9 @@ describe('User Journey Economic Study', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseNoviInstruction(
+          await createPurchaseNoviInstruction(
             { buyer: kp.publicKey, gameEngine: ctx.gameEngine, treasury: ctx.treasury.publicKey, noviMint },
-            { packageIndex: 4, maxLamports: new BN(200).mul(new BN(LAMPORTS_PER_SOL)) },
+            { packageIndex: 4, maxLamports: (BigInt(200) * BigInt(LAMPORTS_PER_SOL)) },
           ),
         ),
         [kp],
@@ -594,9 +593,9 @@ describe('User Journey Economic Study', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createReservedToLockedInstruction(
+          await createReservedToLockedInstruction(
             { owner: kp.publicKey, gameEngine: ctx.gameEngine },
-            { amount: new BN(purchasedRaw) },
+            { amount: BigInt(purchasedRaw) },
           ),
         ),
         [kp],
@@ -619,7 +618,7 @@ describe('User Journey Economic Study', () => {
 
       // (e) Hire a deep army across every unit type.
       const afterBuild = await fetchPlayer(ctx.svm, player.playerPda);
-      const hire = await hireSplit(player, [0, 1, 2, 3, 4, 5], Math.floor(afterBuild!.lockedNovi.toNumber() * 0.85));
+      const hire = await hireSplit(player, [0, 1, 2, 3, 4, 5], Math.floor(Number(afterBuild!.lockedNovi) * 0.85));
 
       // (f) Mint the full hero stable. Templates 4 & 5 (Paladin, Assassin) need
       //     player level 5 — but building 19 estates and hiring a six-figure
@@ -630,11 +629,11 @@ describe('User Journey Economic Study', () => {
       let heroesMinted = 0;
       for (const templateId of [1, 2, 3, 4, 5, 6]) {
         try {
-          const heroMint = Keypair.generate();
+          const heroMint = await Keypair.generate();
           await sendTransaction(
             ctx.svm,
             new Transaction().add(
-              createMintHeroInstruction(
+              await createMintHeroInstruction(
                 { minter: kp.publicKey, gameEngine: ctx.gameEngine, heroMint: heroMint.publicKey, treasury: ctx.treasury.publicKey },
                 { templateId },
               ),
@@ -673,7 +672,7 @@ describe('User Journey Economic Study', () => {
         unitsHired: hire.unitsGained,
         finalLevel: final!.level,
         finalNetworth: Number(final!.networth.toString()),
-        finalLockedNoviRaw: final!.lockedNovi.toNumber(),
+        finalLockedNoviRaw: Number(final!.lockedNovi),
         finalCash: Number(final!.cashOnHand.toString()),
         finalArmy: armyOf(final!),
       };
@@ -695,14 +694,14 @@ describe('User Journey Economic Study', () => {
     it('spends without limit to buy everything, and probes the networth limit', async () => {
       log.section('Journey 4 — Ultimate Player');
       const ge = (await fetchGameEngine(ctx.svm, ctx.kingdomId))!;
-      const [noviMint] = deriveNoviMintPda();
+      const [noviMint] = await deriveNoviMintPda();
 
       // The ultimate spends without limit to buy everything. Its wallet is
       // funded by the test harness exactly as every journey above is; the SOL
       // it then spends on subscription, NOVI, gems and heroes is a real cost,
       // tallied below.
-      const kp = Keypair.generate();
-      ctx.svm.airdrop(kp.publicKey, BigInt(6000 * LAMPORTS_PER_SOL)); // wallet funding for the journey
+      const kp = await Keypair.generate();
+      ctx.svm.airdrop(kp.publicKey as any, BigInt(6000 * LAMPORTS_PER_SOL)); // wallet funding for the journey
       const solBeforeSetup = lamps(kp.publicKey);
       const player = await factory.createPlayer({ customKeypair: kp, initialize: true, createEstate: true });
       const solSetup = solBeforeSetup - lamps(kp.publicKey);
@@ -712,7 +711,7 @@ describe('User Journey Economic Study', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createPurchaseSubscriptionInstruction(
+          await createPurchaseSubscriptionInstruction(
             { owner: kp.publicKey, gameEngine: ctx.gameEngine, paymentAuthority: kp.publicKey, treasury: ctx.treasury.publicKey },
             { paymentType: 0, tier: 3 },
           ),
@@ -724,8 +723,8 @@ describe('User Journey Economic Study', () => {
       // Buy NOVI through the shop. The Legendary daily cap is 100M raw NOVI/day
       // and the Elite package is 50M raw — two packages a day, then the clock
       // must roll. Infinite SOL cannot buy NOVI faster than the cap.
-      const dailyCapRaw = ge.noviPurchaseConfig.noviSubDailyCap[3]!.toNumber();
-      const eliteBaseRaw = ge.noviPurchaseConfig.noviPurchaseAmounts[4]!.toNumber();
+      const dailyCapRaw = Number(ge.noviPurchaseConfig.noviSubDailyCap[3]!);
+      const eliteBaseRaw = Number(ge.noviPurchaseConfig.noviPurchaseAmounts[4]!);
       const perDay = Math.floor(dailyCapRaw / eliteBaseRaw); // 2 Elite packages = the daily cap
       const BUY_DAYS = 30; // ~30 days of cap-limited buying — a multi-billion-NOVI war chest
       let noviPurchases = 0;
@@ -737,9 +736,9 @@ describe('User Journey Economic Study', () => {
           await sendTransaction(
             ctx.svm,
             new Transaction().add(
-              createPurchaseNoviInstruction(
+              await createPurchaseNoviInstruction(
                 { buyer: kp.publicKey, gameEngine: ctx.gameEngine, treasury: ctx.treasury.publicKey, noviMint },
-                { packageIndex: 4, maxLamports: new BN(200).mul(new BN(LAMPORTS_PER_SOL)) },
+                { packageIndex: 4, maxLamports: (BigInt(200) * BigInt(LAMPORTS_PER_SOL)) },
               ),
             ),
             [kp],
@@ -753,9 +752,9 @@ describe('User Journey Economic Study', () => {
             await sendTransaction(
               ctx.svm,
               new Transaction().add(
-                createPurchaseNoviInstruction(
+                await createPurchaseNoviInstruction(
                   { buyer: kp.publicKey, gameEngine: ctx.gameEngine, treasury: ctx.treasury.publicKey, noviMint },
-                  { packageIndex: 4, maxLamports: new BN(200).mul(new BN(LAMPORTS_PER_SOL)) },
+                  { packageIndex: 4, maxLamports: (BigInt(200) * BigInt(LAMPORTS_PER_SOL)) },
                 ),
               ),
               [kp],
@@ -768,16 +767,16 @@ describe('User Journey Economic Study', () => {
         await advanceTime(ctx.svm, 86400); // roll the clock — a new day resets the cap
       }
       // SOL spent on NOVI is deterministic: each Elite package = base × price.
-      const solNovi = noviPurchases * eliteBaseRaw * ge.noviPurchaseConfig.noviBasePriceLamports.toNumber();
+      const solNovi = noviPurchases * eliteBaseRaw * Number(ge.noviPurchaseConfig.noviBasePriceLamports);
       log.info(`  Bought ${noviPurchases} Elite NOVI packages across ${BUY_DAYS} days (${perDay}/day = the cap).`);
 
       // Convert the purchased reserved NOVI into spendable locked NOVI.
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createReservedToLockedInstruction(
+          await createReservedToLockedInstruction(
             { owner: kp.publicKey, gameEngine: ctx.gameEngine },
-            { amount: new BN(noviPurchasedRaw) },
+            { amount: BigInt(noviPurchasedRaw) },
           ),
         ),
         [kp],
@@ -809,11 +808,11 @@ describe('User Journey Economic Study', () => {
       let heroesMinted = 0;
       for (const templateId of [1, 2, 3, 4, 5, 6]) {
         try {
-          const heroMint = Keypair.generate();
+          const heroMint = await Keypair.generate();
           await sendTransaction(
             ctx.svm,
             new Transaction().add(
-              createMintHeroInstruction(
+              await createMintHeroInstruction(
                 { minter: kp.publicKey, gameEngine: ctx.gameEngine, heroMint: heroMint.publicKey, treasury: ctx.treasury.publicKey },
                 { templateId },
               ),
@@ -830,7 +829,7 @@ describe('User Journey Economic Study', () => {
       // Hire a deep army across every unit line — but leave a NOVI reserve so
       // the cash-collection stress run below has fuel.
       const afterBuild = await fetchPlayer(ctx.svm, player.playerPda);
-      const hire = await hireSplit(player, [0, 1, 2, 3, 4, 5], Math.floor(afterBuild!.lockedNovi.toNumber() * 0.6));
+      const hire = await hireSplit(player, [0, 1, 2, 3, 4, 5], Math.floor(Number(afterBuild!.lockedNovi) * 0.6));
 
       // Collect cash — drive networth toward its u64 ceiling. A deep operative
       // army × a billions-of-NOVI fuel reserve means each collection adds an
@@ -861,7 +860,7 @@ describe('User Journey Economic Study', () => {
         unitsHired: hire.unitsGained,
         finalLevel: final!.level,
         finalNetworth: Number(final!.networth.toString()),
-        finalLockedNoviRaw: final!.lockedNovi.toNumber(),
+        finalLockedNoviRaw: Number(final!.lockedNovi),
         finalCash: Number(final!.cashOnHand.toString()),
         finalArmy: armyOf(final!),
       };
@@ -888,7 +887,7 @@ describe('User Journey Economic Study', () => {
         }
         slowestBuildingSeconds = Math.max(slowestBuildingSeconds, oneBuildingSeconds);
       }
-      const solToBuyMax = (maxNoviRaw * ge.noviPurchaseConfig.noviBasePriceLamports.toNumber()) / LAMPORTS_PER_SOL;
+      const solToBuyMax = (maxNoviRaw * Number(ge.noviPurchaseConfig.noviBasePriceLamports)) / LAMPORTS_PER_SOL;
       const daysToBuyMax = maxNoviRaw / dailyCapRaw;
       const yearsToBuyMax = daysToBuyMax / 365.25;
       const maxGems = Math.ceil(maxBuildSeconds / 60) * gemPerMin;

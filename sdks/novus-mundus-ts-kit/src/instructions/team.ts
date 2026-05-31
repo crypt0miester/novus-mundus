@@ -25,7 +25,7 @@ import {
   deriveTeamInvitePda,
   deriveTreasuryRequestPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Shared instruction-data codecs
 
@@ -88,7 +88,7 @@ export async function createTeamCreateInstruction(
 
   const [leaderSlot] = await deriveTeamSlotPda(team, 0);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },

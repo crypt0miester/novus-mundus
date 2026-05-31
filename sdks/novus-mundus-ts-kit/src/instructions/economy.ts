@@ -25,7 +25,7 @@ import {
   deriveEventPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsync, getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Enums
 
@@ -104,7 +104,7 @@ export async function createHireUnitsInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -173,7 +173,7 @@ export async function createCollectResourcesInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -313,7 +313,7 @@ export async function createPurchaseStaminaInstruction(
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -512,7 +512,7 @@ export async function createUpdateLockedNoviInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -589,7 +589,7 @@ export async function createMintForPrizeInstruction(
   const [recipientUser] = await deriveUserPda(accounts.recipientOwner);
   const [noviMint] = await deriveNoviMintPda();
   // User's NOVI token account is owned by UserAccount PDA
-  const userTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, recipientUser);
+  const userTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, recipientUser);
 
   const keys = [
     { pubkey: accounts.authority, isSigner: true, isWritable: false },

@@ -29,9 +29,9 @@ export function useStamina(player: PlayerCore | null | undefined): StaminaResult
   // anchor `now` to it rather than the device wall clock.
   const chainOffset = useChainTimeOffset();
 
-  const stored = player?.encounterStamina?.toNumber();
-  const lastUpdate = player?.lastStaminaUpdate?.toNumber();
-  const max = player?.maxEncounterStamina?.toNumber();
+  const stored = player ? Number(player.encounterStamina) : undefined;
+  const lastUpdate = player ? Number(player.lastStaminaUpdate) : undefined;
+  const max = player ? Number(player.maxEncounterStamina) : undefined;
   // `PlayerCore.currentLong` is an f64 in degrees (`state/player.rs:104`),
   // NOT the ×10000 grid form (that's `LocationAccount.grid_long`). Pass
   // through directly so stamina regen respects the player's actual timezone.

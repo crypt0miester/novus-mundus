@@ -34,7 +34,7 @@ import {
   deriveAllowedTokenPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda, SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 /**
  * Decode a 32-byte Pyth feed id (64 hex chars, optional `0x` prefix).
@@ -1690,7 +1690,7 @@ export async function createCreateAllowedTokenInstruction(
   params: CreateAllowedTokenParams
 ): Promise<Instruction> {
     const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
-  const treasuryTokenAccount = await getAssociatedTokenAddressSyncForPda(accounts.tokenMint, accounts.treasuryWallet);
+  const treasuryTokenAccount = await getAssociatedTokenAddressAsyncForPda(accounts.tokenMint, accounts.treasuryWallet);
 
   // Rust order (base 9): authority(signer+payer), game_engine, allowed_token,
   // token_mint, system_program, treasury_wallet, treasury_token_account,
@@ -1951,7 +1951,7 @@ export async function createPurchaseNoviInstruction(
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.buyer);
 
   // Reserved token account is owned by UserAccount PDA
-  const reservedTokenAccount = await getAssociatedTokenAddressSyncForPda(accounts.noviMint, user);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(accounts.noviMint, user);
 
   const keys = [
     { pubkey: accounts.buyer, isSigner: true, isWritable: true },

@@ -413,9 +413,9 @@ async function main() {
 
   // Load/create keypairs
   const keysDir = path.join(__dirname, '../keys');
-  const daoAuthority = loadKeypair(path.join(keysDir, 'dao-authority.json'));
-  const treasury = loadKeypair(path.join(keysDir, 'treasury.json'));
-  const testPlayer = loadKeypair(path.join(keysDir, 'test-player.json'));
+  const daoAuthority = await loadKeypair(path.join(keysDir, 'dao-authority.json'));
+  const treasury = await loadKeypair(path.join(keysDir, 'treasury.json'));
+  const testPlayer = await loadKeypair(path.join(keysDir, 'test-player.json'));
 
   console.log(`\nDAO Authority: ${daoAuthority.publicKey.toBase58()}`);
   console.log(`Treasury: ${treasury.publicKey.toBase58()}`);

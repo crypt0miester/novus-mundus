@@ -6,8 +6,14 @@
 
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
-import BN from 'bn.js';
 import { BufferReader, NULL_PUBKEY, isNullPubkey } from '../../src/utils/deserialize';
+
+// Encode a value as a little-endian 8-byte buffer (replaces BN.toArrayLike).
+function u64le(value: bigint): Buffer {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64LE(BigInt.asUintN(64, value), 0);
+  return buf;
+}
 
 describe('BufferReader', () => {
   describe('integer reads', () => {
@@ -61,10 +67,10 @@ describe('BufferReader', () => {
       expect(reader.readI32()).toBe(-1000000);
     });
 
-    it('should read u64 as BN', () => {
+    it('should read u64 as bigint', () => {
       // Zero
       const zeroReader = new BufferReader(Buffer.alloc(8));
-      expect(zeroReader.readU64().toNumber()).toBe(0);
+      expect(Number(zeroReader.readU64())).toBe(0);
 
       // Max u64
       const maxReader = new BufferReader(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
@@ -75,25 +81,25 @@ describe('BufferReader', () => {
       buf.writeUInt32LE(1000000, 0);
       buf.writeUInt32LE(0, 4);
       const reader = new BufferReader(buf);
-      expect(reader.readU64().toNumber()).toBe(1000000);
+      expect(Number(reader.readU64())).toBe(1000000);
     });
 
     it('should read i64 with negative values', () => {
       // -1 (all 0xFF)
       const negOneReader = new BufferReader(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
-      expect(negOneReader.readI64().toNumber()).toBe(-1);
+      expect(Number(negOneReader.readI64())).toBe(-1);
 
       // Positive value
       const buf = Buffer.alloc(8);
-      new BN(1000000).toArrayLike(Buffer, 'le', 8).copy(buf);
+      u64le(1000000n).copy(buf);
       const posReader = new BufferReader(buf);
-      expect(posReader.readI64().toNumber()).toBe(1000000);
+      expect(Number(posReader.readI64())).toBe(1000000);
 
       // Large negative
       const negBuf = Buffer.alloc(8);
-      new BN(-1000000).add(new BN(1).shln(64)).toArrayLike(Buffer, 'le', 8).copy(negBuf);
+      u64le(-1000000n).copy(negBuf);
       const negReader = new BufferReader(negBuf);
-      expect(negReader.readI64().toNumber()).toBe(-1000000);
+      expect(Number(negReader.readI64())).toBe(-1000000);
     });
   });
 
@@ -127,9 +133,9 @@ describe('BufferReader', () => {
       expect(reader.readBool()).toBe(true);
     });
 
-    it('should read PublicKey correctly', () => {
-      const keypair = Keypair.generate();
-      const buf = keypair.publicKey.toBuffer();
+    it('should read PublicKey correctly', async () => {
+      const keypair = await Keypair.generate();
+      const buf = keypair.publicKey.toBytes();
 
       const reader = new BufferReader(buf);
       const pubkey = reader.readPubkey();
@@ -197,26 +203,26 @@ describe('BufferReader', () => {
 
     it('should read u64 array', () => {
       const buf = Buffer.alloc(16);
-      new BN(100).toArrayLike(Buffer, 'le', 8).copy(buf, 0);
-      new BN(200).toArrayLike(Buffer, 'le', 8).copy(buf, 8);
+      u64le(100n).copy(buf, 0);
+      u64le(200n).copy(buf, 8);
 
       const reader = new BufferReader(buf);
       const arr = reader.readU64Array(2);
 
-      expect(arr[0]!.toNumber()).toBe(100);
-      expect(arr[1]!.toNumber()).toBe(200);
+      expect(Number(arr[0]!)).toBe(100);
+      expect(Number(arr[1]!)).toBe(200);
     });
 
     it('should read i64 array', () => {
       const buf = Buffer.alloc(16);
-      new BN(100).toArrayLike(Buffer, 'le', 8).copy(buf, 0);
-      new BN(-100).add(new BN(1).shln(64)).toArrayLike(Buffer, 'le', 8).copy(buf, 8);
+      u64le(100n).copy(buf, 0);
+      u64le(-100n).copy(buf, 8);
 
       const reader = new BufferReader(buf);
       const arr = reader.readI64Array(2);
 
-      expect(arr[0]!.toNumber()).toBe(100);
-      expect(arr[1]!.toNumber()).toBe(-100);
+      expect(Number(arr[0]!)).toBe(100);
+      expect(Number(arr[1]!)).toBe(-100);
     });
 
     it('should read f32 array', () => {
@@ -232,10 +238,10 @@ describe('BufferReader', () => {
       expect(arr[1]).toBeCloseTo(2.5, 5);
     });
 
-    it('should read pubkey array', () => {
-      const k1 = Keypair.generate().publicKey;
-      const k2 = Keypair.generate().publicKey;
-      const buf = Buffer.concat([k1.toBuffer(), k2.toBuffer()]);
+    it('should read pubkey array', async () => {
+      const k1 = (await Keypair.generate()).publicKey;
+      const k2 = (await Keypair.generate()).publicKey;
+      const buf = Buffer.concat([k1.toBytes(), k2.toBytes()]);
 
       const reader = new BufferReader(buf);
       const arr = reader.readPubkeyArray(2);
@@ -311,8 +317,8 @@ describe('BufferReader', () => {
       expect(BufferReader.isNullPubkey(NULL_PUBKEY)).toBe(true);
     });
 
-    it('should correctly identify non-null pubkey', () => {
-      const keypair = Keypair.generate();
+    it('should correctly identify non-null pubkey', async () => {
+      const keypair = await Keypair.generate();
       expect(isNullPubkey(keypair.publicKey)).toBe(false);
       expect(BufferReader.isNullPubkey(keypair.publicKey)).toBe(false);
     });
@@ -331,8 +337,8 @@ describe('roundtrip serialization', () => {
     writer.writeI16(-30000);
     writer.writeU32(0xdeadbeef);
     writer.writeI32(-1000000);
-    writer.writeU64(new BN('9007199254740992'));
-    writer.writeI64(new BN(-1000000));
+    writer.writeU64(9007199254740992n);
+    writer.writeI64(-1000000n);
 
     const reader = new BufferReader(writer.toBuffer());
 
@@ -343,7 +349,7 @@ describe('roundtrip serialization', () => {
     expect(reader.readU32()).toBe(0xdeadbeef);
     expect(reader.readI32()).toBe(-1000000);
     expect(reader.readU64().toString()).toBe('9007199254740992');
-    expect(reader.readI64().toNumber()).toBe(-1000000);
+    expect(Number(reader.readI64())).toBe(-1000000);
   });
 
   it('should roundtrip floats', () => {
@@ -359,10 +365,10 @@ describe('roundtrip serialization', () => {
     expect(reader.readF64()).toBeCloseTo(2.718281828459045, 10);
   });
 
-  it('should roundtrip pubkeys and strings', () => {
+  it('should roundtrip pubkeys and strings', async () => {
     const { BufferWriter } = require('../../src/utils/serialize');
 
-    const keypair = Keypair.generate();
+    const keypair = await Keypair.generate();
     const writer = new BufferWriter(64);
     writer.writePubkey(keypair.publicKey);
     writer.writeString('TestPlayer', 32);

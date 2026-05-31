@@ -14,19 +14,18 @@ import { usePlayer } from "./usePlayer";
 import { useNow } from "./useNow";
 
 /**
- * Read an on-chain unix-second stamp (a `BN`) as a plain number.
+ * Read an on-chain unix-second stamp (a `bigint`) as a plain number.
  *
- * `BN.toNumber()` throws past 2^53 — and `?? 0` can't catch a thrown error.
  * A player account written before a given timestamp field existed decodes
  * arbitrary bytes at that offset, so a stale account can yield a value of any
  * size. A real stamp is only ~2^31; anything implausible (overflowing, or
  * simply not a sane time) reads back as 0, which the cooldown/effect logic
  * already treats as "unused / expired".
  */
-function stampSeconds(v: { toString(): string } | null | undefined): number {
-  // `toString()` never throws; `Number()` of an over-large decimal is merely
-  // imprecise, never an exception — then the range check rejects nonsense.
-  const n = v ? Number(v.toString()) : 0;
+function stampSeconds(v: bigint | null | undefined): number {
+  // `Number(bigint)` never throws; an over-large value is merely imprecise,
+  // then the range check below rejects nonsense.
+  const n = v !== null && v !== undefined ? Number(v) : 0;
   return Number.isFinite(n) && n > 0 && n < 1e11 ? n : 0;
 }
 
@@ -92,8 +91,8 @@ export function useUseAbility() {
       reportPhase?: (phase: any) => void,
     ) => {
       if (!publicKey) throw new Error("Wallet not connected");
-      const [heroTemplate] = deriveHeroTemplatePda(templateId);
-      const ix = createUseHeroAbilityInstruction(
+      const [heroTemplate] = await deriveHeroTemplatePda(templateId);
+      const ix = await createUseHeroAbilityInstruction(
         {
           owner: publicKey,
           gameEngine: client.gameEngine,

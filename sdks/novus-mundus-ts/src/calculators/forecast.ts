@@ -125,7 +125,7 @@ export function synchronyBp(
 
   // Subscription tier bonus — tier 0 once the subscription has lapsed.
   const tier =
-    player.subscriptionEnd.toNumber() > nowSec
+    Number(player.subscriptionEnd) > nowSec
       ? Math.min(player.subscriptionTier, 3)
       : 0;
   bp += ge.subscriptionTiers[tier]?.synchronyBonus ?? 0;
@@ -140,7 +140,7 @@ export function synchronyBp(
   );
 
   // Reputation rank bonus — Novice / Skilled / Veteran / Elite / Legendary.
-  const rep = player.reputation.toNumber();
+  const rep = Number(player.reputation);
   const rank = REPUTATION_RANKS.find(([floor]) => rep >= floor)?.[1] ?? 0;
   bp += gp.reputationSynchronyBonuses[rank] ?? 0;
 
@@ -161,7 +161,7 @@ export function consumeNoviToPower(
   ge: GameEngine,
 ): number {
   const ec = ge.economicConfig;
-  let value = applyBps(novi, ec.noviConsumptionBase.toNumber());
+  let value = applyBps(novi, Number(ec.noviConsumptionBase));
   value = applyBps(value, ec.secondaryMultiplierBase);
   value = applyBps(value, synchrony);
   if (isFibonacci(novi)) value = applyBps(value, ec.fibonacciBonusBase);
@@ -193,7 +193,7 @@ function baseUnitCost(ge: GameEngine, unitType: number): number {
     ec.operativeUnit2Cost,
     ec.operativeUnit3Cost,
   ];
-  return costs[unitType]?.toNumber() ?? 0;
+  return Number(costs[unitType] ?? 0n);
 }
 
 export interface HireForecast {
@@ -220,7 +220,7 @@ export function forecastHire(
 
   const adjusted = applyBps(
     baseUnitCost(ge, unitType),
-    ge.economicConfig.costMultiplier.toNumber(),
+    Number(ge.economicConfig.costMultiplier),
   );
   const powerCost = Math.max(1, adjusted);
 
@@ -267,9 +267,9 @@ export function forecastCollect(
   if (novi <= 0) return { output: 0, isFloor: kind !== "cash" };
   const { power } = powerAtTime(novi, player, ge, nowSec);
 
-  const op1 = player.operativeUnit1.toNumber();
-  const op2 = player.operativeUnit2.toNumber();
-  const op3 = player.operativeUnit3.toNumber();
+  const op1 = Number(player.operativeUnit1);
+  const op2 = Number(player.operativeUnit2);
+  const op3 = Number(player.operativeUnit3);
 
   if (kind === "cash") {
     const unitFactor = op1 * 10 + op2 * 8 + op3 * 5;

@@ -36,10 +36,10 @@ export function usePlayerCastle(): PlayerCastleState {
       return;
     }
     let cancelled = false;
-    const [pda] = deriveKingRegistryPda(publicKey);
-    connection
-      .getAccountInfo(pda)
-      .then((info) => {
+    (async () => {
+      try {
+        const [pda] = await deriveKingRegistryPda(publicKey);
+        const info = await connection.getAccountInfo(pda);
         if (cancelled) return;
         const registry = info ? parseKingRegistry(info) : null;
         const castle = registry?.castle ?? null;
@@ -47,10 +47,10 @@ export function usePlayerCastle(): PlayerCastleState {
         // Surface the held castle to the store so the WS can route rallies
         // aimed at it into incomingRallies (the Cairn's castle-attack warning).
         setMyCastlePda(castle ? castle.toBase58() : null);
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) setState({ ownsCastle: false, castle: null, loading: false });
-      });
+      }
+    })();
     return () => {
       cancelled = true;
     };

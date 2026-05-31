@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useMemo } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
   useWorldTeam,
@@ -33,9 +33,21 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
   // not-found here instead of a NaN flowing into deriveTeamPda / the queryFns.
   const teamId = parseIdParam(id);
 
-  const teamPdaStr = useMemo(() => {
-    if (teamId == null) return undefined;
-    return deriveTeamPda(client.gameEngine, teamId)[0].toBase58();
+  // PDA derivation is async under web3.js v3, so resolve it in an effect and
+  // hold the base58 result in state instead of a synchronous useMemo.
+  const [teamPdaStr, setTeamPdaStr] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    if (teamId == null) {
+      setTeamPdaStr(undefined);
+      return;
+    }
+    let cancelled = false;
+    deriveTeamPda(client.gameEngine, teamId).then(([pda]) => {
+      if (!cancelled) setTeamPdaStr(pda.toBase58());
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [client.gameEngine, teamId]);
 
   const { data: teamResult, isLoading: teamLoading } = useWorldTeam(teamId ?? undefined);
@@ -54,7 +66,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
       map.set(p.pubkey.toBase58(), {
         name: p.account.name || "Unnamed",
         level: p.account.level,
-        networth: p.account.networth.toNumber(),
+        networth: Number(p.account.networth),
         owner: p.account.owner.toBase58(),
       });
     }
@@ -143,7 +155,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   const isPublic = (team.settings & 1) !== 0;
-  const createdDate = new Date(team.createdAt.toNumber() * 1000).toLocaleDateString();
+  const createdDate = new Date(Number(team.createdAt) * 1000).toLocaleDateString();
   const canJoin = citizen.isCitizen && !citizenHasTeam && isPublic;
 
   return (
@@ -170,7 +182,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
               <div className="text-xs text-text-muted">Treasury</div>
               <span className="inline-flex items-center justify-end gap-1">
                 <GameIcon id="resource-cash" size={14} />
-                <GoldNumber value={team.treasury.toNumber()} size="lg" />
+                <GoldNumber value={Number(team.treasury)} size="lg" />
               </span>
             </div>
           </div>
@@ -237,7 +249,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
             </div>
             {sortedMembers.map((m) => {
               const pdata = playerMap.get(m.account.player.toBase58());
-              const joinDate = new Date(m.account.joinedAt.toNumber() * 1000).toLocaleDateString();
+              const joinDate = new Date(Number(m.account.joinedAt) * 1000).toLocaleDateString();
               const rankIndex = Math.min(m.account.rank, 3);
 
               return (

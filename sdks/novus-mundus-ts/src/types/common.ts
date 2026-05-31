@@ -5,7 +5,6 @@
  */
 
 import type { PublicKey } from '@solana/web3.js';
-import type BN from 'bn.js';
 
 // Null Pubkey Constant
 
@@ -40,15 +39,15 @@ export interface CoordinatesWithCity extends Coordinates {
 // Unit Counts
 
 export interface DefensiveUnits {
-  tier1: BN;
-  tier2: BN;
-  tier3: BN;
+  tier1: bigint;
+  tier2: bigint;
+  tier3: bigint;
 }
 
 export interface OperativeUnits {
-  tier1: BN;
-  tier2: BN;
-  tier3: BN;
+  tier1: bigint;
+  tier2: bigint;
+  tier3: bigint;
 }
 
 export interface AllUnits {
@@ -59,14 +58,14 @@ export interface AllUnits {
 // Resources
 
 export interface Resources {
-  lockedNovi: BN;
-  reservedNovi: BN;
-  cash: BN;
-  gems: BN;
-  weapons: BN;
-  produce: BN;
-  vehicles: BN;
-  fragments: BN;
+  lockedNovi: bigint;
+  reservedNovi: bigint;
+  cash: bigint;
+  gems: bigint;
+  weapons: bigint;
+  produce: bigint;
+  vehicles: bigint;
+  fragments: bigint;
 }
 
 // Crafted Equipment
@@ -82,7 +81,7 @@ export interface CraftedEquipment {
 
 export interface HeroStats {
   level: number;
-  xp: BN;
+  xp: bigint;
   attackBuff: number;
   defenseBuff: number;
   critBuff: number;
@@ -93,8 +92,8 @@ export interface HeroStats {
 // Time Ranges
 
 export interface TimeRange {
-  start: BN;
-  end: BN;
+  start: bigint;
+  end: bigint;
 }
 
 // Pagination
@@ -130,8 +129,8 @@ export interface TransactionResult {
 // Price Info
 
 export interface PriceInfo {
-  price: BN;
-  confidence: BN;
+  price: bigint;
+  confidence: bigint;
   exponent: number;
   timestamp: number;
 }
@@ -142,7 +141,7 @@ export interface LeaderboardEntry<T> {
   rank: number;
   pubkey: PublicKey;
   data: T;
-  score: BN;
+  score: bigint;
 }
 
 // Callback Types
@@ -154,18 +153,5 @@ export type AccountChangeCallback<T> = (
 ) => void;
 
 export type ErrorCallback = (error: Error) => void;
-
-// Type Guards
-
-/** Check if a value is a BN instance */
-export function isBN(value: unknown): value is BN {
-  return (
-    value !== null &&
-    typeof value === 'object' &&
-    'toNumber' in value &&
-    'toString' in value &&
-    'toArray' in value
-  );
-}
 
 // isNullPubkey is exported from utils/deserialize.ts

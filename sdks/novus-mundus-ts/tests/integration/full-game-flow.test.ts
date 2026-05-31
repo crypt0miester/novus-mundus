@@ -7,7 +7,6 @@
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
 import { Keypair, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   // Combat
@@ -105,12 +104,12 @@ describe('Full Game Flow Integration', () => {
     members: TestPlayer[],
   ): Promise<{ teamPda: PublicKey; teamId: number }> {
     const teamId = nextTeamId();
-    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+    const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamCreateInstruction(
+        await createTeamCreateInstruction(
           { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
           { name: `IntTeam${teamId % 100000}` },
         ),
@@ -123,7 +122,7 @@ describe('Full Game Flow Integration', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamInviteInstruction({
+          await createTeamInviteInstruction({
             gameEngine: ctx.gameEngine,
             inviter: leader.publicKey,
             team: teamPda,
@@ -139,7 +138,7 @@ describe('Full Game Flow Integration', () => {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createTeamAcceptInviteInstruction({
+          await createTeamAcceptInviteInstruction({
             gameEngine: ctx.gameEngine,
             owner: member.publicKey,
             team: teamPda,
@@ -197,7 +196,7 @@ describe('Full Game Flow Integration', () => {
       // Verify units increased
       const diff = diffPlayerSnapshots(before!, after!);
       expect(diff.changes.defensiveUnit1).toBeDefined();
-      expect(after!.data.defensiveUnit1.gt(before!.data.defensiveUnit1)).toBe(true);
+      expect((after!.data.defensiveUnit1 > before!.data.defensiveUnit1)).toBe(true);
     });
 
     it('should purchase equipment and verify state changes', async () => {
@@ -213,7 +212,7 @@ describe('Full Game Flow Integration', () => {
       expect(after).not.toBeNull();
 
       // Verify weapons increased
-      expect(after!.data.meleeWeapons.gt(before!.data.meleeWeapons)).toBe(true);
+      expect((after!.data.meleeWeapons > before!.data.meleeWeapons)).toBe(true);
     });
   });
 
@@ -231,7 +230,7 @@ describe('Full Game Flow Integration', () => {
       expect(defenderBefore).not.toBeNull();
 
       // Perform attack
-      const attackIx = createAttackPlayerInstruction(
+      const attackIx = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -254,7 +253,7 @@ describe('Full Game Flow Integration', () => {
       expect(defenderAfter).not.toBeNull();
 
       // Attacker should have lost some defensive units in combat (units used to attack)
-      expect(attackerAfter!.data.defensiveUnit1.lt(attackerBefore!.data.defensiveUnit1)).toBe(true);
+      expect((attackerAfter!.data.defensiveUnit1 < attackerBefore!.data.defensiveUnit1)).toBe(true);
     });
 
     it('should build army with multiple unit types', async () => {
@@ -280,14 +279,14 @@ describe('Full Game Flow Integration', () => {
       // Verify final state
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
-      expect(account!.defensiveUnit1.toNumber()).toBeGreaterThan(0);
-      expect(account!.defensiveUnit2.toNumber()).toBeGreaterThan(0);
-      expect(account!.defensiveUnit3.toNumber()).toBeGreaterThan(0);
-      expect(account!.operativeUnit1.toNumber()).toBeGreaterThan(0);
-      expect(account!.operativeUnit2.toNumber()).toBeGreaterThan(0);
-      expect(account!.meleeWeapons.toNumber()).toBeGreaterThan(0);
-      expect(account!.rangedWeapons.toNumber()).toBeGreaterThan(0);
-      expect(account!.armorPieces.toNumber()).toBeGreaterThan(0);
+      expect(Number(account!.defensiveUnit1)).toBeGreaterThan(0);
+      expect(Number(account!.defensiveUnit2)).toBeGreaterThan(0);
+      expect(Number(account!.defensiveUnit3)).toBeGreaterThan(0);
+      expect(Number(account!.operativeUnit1)).toBeGreaterThan(0);
+      expect(Number(account!.operativeUnit2)).toBeGreaterThan(0);
+      expect(Number(account!.meleeWeapons)).toBeGreaterThan(0);
+      expect(Number(account!.rangedWeapons)).toBeGreaterThan(0);
+      expect(Number(account!.armorPieces)).toBeGreaterThan(0);
     });
   });
 
@@ -448,14 +447,14 @@ describe('Full Game Flow Integration', () => {
       expect(before).not.toBeNull();
 
       // Start mining expedition
-      const startIx = createExpeditionStartInstruction(
+      const startIx = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Mining,
           tier: 0,
-          operativeUnit1: new BN(50),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(50),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -469,11 +468,11 @@ describe('Full Game Flow Integration', () => {
       const expedition = await fetchExpedition(ctx.svm, player.publicKey);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Mining);
-      expect(expedition!.operativeUnit1.toNumber()).toBe(50);
+      expect(Number(expedition!.operativeUnit1)).toBe(50);
 
       // Verify operatives deducted
       const after = await snapshotPlayer(ctx.svm, player.playerPda);
-      expect(after!.data.operativeUnit1.lt(before!.data.operativeUnit1)).toBe(true);
+      expect((after!.data.operativeUnit1 < before!.data.operativeUnit1)).toBe(true);
     });
 
     it('should abort an expedition and return operatives', async () => {
@@ -488,14 +487,14 @@ describe('Full Game Flow Integration', () => {
       await factory.hireUnits(player, 3, 100);
 
       // Start expedition
-      const startIx = createExpeditionStartInstruction(
+      const startIx = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         {
           expeditionType: ExpeditionType.Fishing,
           tier: 0,
-          operativeUnit1: new BN(30),
-          operativeUnit2: new BN(0),
-          operativeUnit3: new BN(0),
+          operativeUnit1: BigInt(30),
+          operativeUnit2: BigInt(0),
+          operativeUnit3: BigInt(0),
         }
       );
 
@@ -508,7 +507,7 @@ describe('Full Game Flow Integration', () => {
       const beforeAbort = await snapshotPlayer(ctx.svm, player.playerPda);
 
       // Abort expedition
-      const abortIx = createExpeditionAbortInstruction({
+      const abortIx = await createExpeditionAbortInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
       });
@@ -525,7 +524,7 @@ describe('Full Game Flow Integration', () => {
 
       // Verify operatives returned
       const afterAbort = await snapshotPlayer(ctx.svm, player.playerPda);
-      expect(afterAbort!.data.operativeUnit1.gt(beforeAbort!.data.operativeUnit1)).toBe(true);
+      expect((afterAbort!.data.operativeUnit1 > beforeAbort!.data.operativeUnit1)).toBe(true);
     });
   });
 
@@ -557,7 +556,7 @@ describe('Full Game Flow Integration', () => {
 
       const senderBefore = await snapshotPlayer(ctx.svm, sender.playerPda);
 
-      const sendIx = createSendReinforcementInstruction(
+      const sendIx = await createSendReinforcementInstruction(
         {
           gameEngine: ctx.gameEngine,
           sender: sender.publicKey,
@@ -567,12 +566,12 @@ describe('Full Game Flow Integration', () => {
           teamId,
         },
         {
-          defensiveUnit1: new BN(25),
-          defensiveUnit2: new BN(15),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(10),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(15),
+          defensiveUnit1: BigInt(25),
+          defensiveUnit2: BigInt(15),
+          defensiveUnit3: BigInt(0),
+          meleeWeapons: BigInt(10),
+          rangedWeapons: BigInt(0),
+          siegeWeapons: BigInt(15),
           heroSlot: 255,
         }
       );
@@ -591,12 +590,12 @@ describe('Full Game Flow Integration', () => {
         receiver.publicKey
       );
       expect(reinforcement).not.toBeNull();
-      expect(reinforcement!.unitsDef1.toNumber()).toBe(25);
-      expect(reinforcement!.unitsDef2.toNumber()).toBe(15);
+      expect(Number(reinforcement!.unitsDef1)).toBe(25);
+      expect(Number(reinforcement!.unitsDef2)).toBe(15);
 
       // Verify sender's units deducted
       const senderAfter = await snapshotPlayer(ctx.svm, sender.playerPda);
-      expect(senderAfter!.data.defensiveUnit1.lt(senderBefore!.data.defensiveUnit1)).toBe(true);
+      expect((senderAfter!.data.defensiveUnit1 < senderBefore!.data.defensiveUnit1)).toBe(true);
     });
 
     it('should recall reinforcements', async () => {
@@ -616,7 +615,7 @@ describe('Full Game Flow Integration', () => {
       const { teamId } = await createTeamWithMembers(sender, [receiver]);
       await factory.hireUnits(sender, 0, 100);
 
-      const sendIx = createSendReinforcementInstruction(
+      const sendIx = await createSendReinforcementInstruction(
         {
           gameEngine: ctx.gameEngine,
           sender: sender.publicKey,
@@ -626,12 +625,12 @@ describe('Full Game Flow Integration', () => {
           teamId,
         },
         {
-          defensiveUnit1: new BN(30),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: BigInt(30),
+          defensiveUnit2: BigInt(0),
+          defensiveUnit3: BigInt(0),
+          meleeWeapons: BigInt(0),
+          rangedWeapons: BigInt(0),
+          siegeWeapons: BigInt(0),
           heroSlot: 255,
         }
       );
@@ -643,7 +642,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       // Recall them
-      const recallIx = createRecallReinforcementInstruction({
+      const recallIx = await createRecallReinforcementInstruction({
         gameEngine: ctx.gameEngine,
         sender: sender.publicKey,
         destinationOwner: receiver.publicKey,
@@ -691,7 +690,7 @@ describe('Full Game Flow Integration', () => {
       const targetCityId = 1;
 
       // Create rally
-      const rallyIx = createRallyCreateInstruction(
+      const rallyIx = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -702,14 +701,14 @@ describe('Full Game Flow Integration', () => {
         },
         {
           targetType: RallyTargetType.Player,
-          gatherDuration: new BN(3600),
+          gatherDuration: BigInt(3600),
           targetCityId,
-          defensiveUnit1: new BN(50),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: BigInt(50),
+          defensiveUnit2: BigInt(0),
+          defensiveUnit3: BigInt(0),
+          meleeWeapons: BigInt(0),
+          rangedWeapons: BigInt(0),
+          siegeWeapons: BigInt(0),
         }
       );
 
@@ -720,7 +719,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       // Verify rally created
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, 0);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, 0);
       const rally = await fetchRally(ctx.svm, rallyPda);
       expect(rally).not.toBeNull();
     });
@@ -750,7 +749,7 @@ describe('Full Game Flow Integration', () => {
       const targetCityId = 1;
 
       // Create rally
-      const createIx = createRallyCreateInstruction(
+      const createIx = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -761,14 +760,14 @@ describe('Full Game Flow Integration', () => {
         },
         {
           targetType: RallyTargetType.Player,
-          gatherDuration: new BN(3600),
+          gatherDuration: BigInt(3600),
           targetCityId,
-          defensiveUnit1: new BN(30),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: BigInt(30),
+          defensiveUnit2: BigInt(0),
+          defensiveUnit3: BigInt(0),
+          meleeWeapons: BigInt(0),
+          rangedWeapons: BigInt(0),
+          siegeWeapons: BigInt(0),
         }
       );
 
@@ -778,10 +777,10 @@ describe('Full Game Flow Integration', () => {
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, 1);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, 1);
 
       // Join rally
-      const joinIx = createRallyJoinInstruction(
+      const joinIx = await createRallyJoinInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: joiner.publicKey,
@@ -792,12 +791,12 @@ describe('Full Game Flow Integration', () => {
           rallyCityId: leaderCityId,
         },
         {
-          defensiveUnit1: new BN(40),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: BigInt(40),
+          defensiveUnit2: BigInt(0),
+          defensiveUnit3: BigInt(0),
+          meleeWeapons: BigInt(0),
+          rangedWeapons: BigInt(0),
+          siegeWeapons: BigInt(0),
         }
       );
 
@@ -812,7 +811,7 @@ describe('Full Game Flow Integration', () => {
       expect(rally).not.toBeNull();
 
       // Leave rally
-      const leaveIx = createRallyLeaveInstruction({
+      const leaveIx = await createRallyLeaveInstruction({
         gameEngine: ctx.gameEngine,
         owner: joiner.publicKey,
         rally: rallyPda,
@@ -849,7 +848,7 @@ describe('Full Game Flow Integration', () => {
       const targetCityId = 1;
 
       // Create rally
-      const createIx = createRallyCreateInstruction(
+      const createIx = await createRallyCreateInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: creator.publicKey,
@@ -860,14 +859,14 @@ describe('Full Game Flow Integration', () => {
         },
         {
           targetType: RallyTargetType.Player,
-          gatherDuration: new BN(3600),
+          gatherDuration: BigInt(3600),
           targetCityId,
-          defensiveUnit1: new BN(25),
-          defensiveUnit2: new BN(0),
-          defensiveUnit3: new BN(0),
-          meleeWeapons: new BN(0),
-          rangedWeapons: new BN(0),
-          siegeWeapons: new BN(0),
+          defensiveUnit1: BigInt(25),
+          defensiveUnit2: BigInt(0),
+          defensiveUnit3: BigInt(0),
+          meleeWeapons: BigInt(0),
+          rangedWeapons: BigInt(0),
+          siegeWeapons: BigInt(0),
         }
       );
 
@@ -877,10 +876,10 @@ describe('Full Game Flow Integration', () => {
         [creator.keypair]
       );
 
-      const [rallyPda] = deriveRallyPda(ctx.gameEngine, creator.publicKey, 2);
+      const [rallyPda] = await deriveRallyPda(ctx.gameEngine, creator.publicKey, 2);
 
       // Cancel rally
-      const cancelIx = createRallyCancelInstruction({
+      const cancelIx = await createRallyCancelInstruction({
         gameEngine: ctx.gameEngine,
         owner: creator.publicKey,
         rally: rallyPda,
@@ -915,7 +914,7 @@ describe('Full Game Flow Integration', () => {
       const teamId = Date.now();
 
       // Create team
-      const createIx = createTeamCreateInstruction(
+      const createIx = await createTeamCreateInstruction(
         { gameEngine: ctx.gameEngine, owner: leader.publicKey, teamId },
         { name: `TestTeam${teamId % 10000}` }
       );
@@ -940,7 +939,7 @@ describe('Full Game Flow Integration', () => {
       const player = await factory.createPlayer({ initialize: true });
 
       // Create estate
-      const estateIx = createCreateEstateInstruction(
+      const estateIx = await createCreateEstateInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { cityId: 1 }
       );
@@ -959,7 +958,7 @@ describe('Full Game Flow Integration', () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true });
 
       // Build first building (type 0)
-      const buildIx = createBuildBuildingInstruction(
+      const buildIx = await createBuildBuildingInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
         { buildingType: 0 }
       );
@@ -999,12 +998,12 @@ describe('Full Game Flow Integration', () => {
       await factory.hireUnits(player, 0, 500); // Need units for rally
 
       const rallyId = nextTeamId(); // reuse generator for uniqueness
-      const dummyTarget = Keypair.generate().publicKey;
+      const dummyTarget = (await Keypair.generate()).publicKey;
       const rallyCityId = player.startingCityId;
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createRallyCreateInstruction(
+          await createRallyCreateInstruction(
             {
               gameEngine: ctx.gameEngine,
               owner: player.publicKey,
@@ -1015,14 +1014,14 @@ describe('Full Game Flow Integration', () => {
             },
             {
               targetType: RallyTargetType.Player,
-              gatherDuration: new BN(3600),
+              gatherDuration: BigInt(3600),
               targetCityId: rallyCityId,
-              defensiveUnit1: new BN(1),
-              defensiveUnit2: new BN(0),
-              defensiveUnit3: new BN(0),
-              meleeWeapons: new BN(0),
-              rangedWeapons: new BN(0),
-              siegeWeapons: new BN(0),
+              defensiveUnit1: BigInt(1),
+              defensiveUnit2: BigInt(0),
+              defensiveUnit3: BigInt(0),
+              meleeWeapons: BigInt(0),
+              rangedWeapons: BigInt(0),
+              siegeWeapons: BigInt(0),
             },
           ),
         ),
@@ -1064,10 +1063,10 @@ describe('Full Game Flow Integration', () => {
       // 3. Verify final state
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
-      expect(account!.defensiveUnit1.toNumber()).toBeGreaterThan(0);
-      expect(account!.operativeUnit1.toNumber()).toBeGreaterThan(0);
-      expect(account!.meleeWeapons.toNumber()).toBeGreaterThan(0);
-      expect(account!.armorPieces.toNumber()).toBeGreaterThan(0);
+      expect(Number(account!.defensiveUnit1)).toBeGreaterThan(0);
+      expect(Number(account!.operativeUnit1)).toBeGreaterThan(0);
+      expect(Number(account!.meleeWeapons)).toBeGreaterThan(0);
+      expect(Number(account!.armorPieces)).toBeGreaterThan(0);
     });
 
     it('should support multiple players in same test', async () => {
@@ -1105,8 +1104,8 @@ describe('Full Game Flow Integration', () => {
       const snap3 = await snapshotPlayer(ctx.svm, player.playerPda);
 
       // Verify progressive changes
-      expect(snap2!.data.defensiveUnit1.gt(snap1!.data.defensiveUnit1)).toBe(true);
-      expect(snap3!.data.meleeWeapons.gt(snap2!.data.meleeWeapons)).toBe(true);
+      expect((snap2!.data.defensiveUnit1 > snap1!.data.defensiveUnit1)).toBe(true);
+      expect((snap3!.data.meleeWeapons > snap2!.data.meleeWeapons)).toBe(true);
 
       // Cash should have decreased (spent on units and equipment)
       // Note: This assumes players start with cash - adjust if needed

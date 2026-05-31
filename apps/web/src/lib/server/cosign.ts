@@ -43,7 +43,8 @@ export async function coSign(
   });
   // VersionedTransaction.sign() fills only the slots whose pubkeys it holds —
   // i.e. a partial sign of the game_authority slot. The fee-payer slot stays
-  // empty for the wallet to fill.
-  tx.sign([gameAuthorityKeypair()]);
+  // empty for the wallet to fill. v3: both the keypair load and sign are async.
+  const authority = await gameAuthorityKeypair();
+  await tx.sign([authority]);
   return Buffer.from(tx.serialize()).toString("base64");
 }

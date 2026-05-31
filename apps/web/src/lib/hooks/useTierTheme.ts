@@ -22,7 +22,7 @@ export function useTierTheme() {
 
     if (player) {
       const now = Math.floor(Date.now() / 1000);
-      const end = player.subscriptionEnd.toNumber();
+      const end = Number(player.subscriptionEnd);
       if (end > now) tier = Math.min(player.subscriptionTier, 3);
     }
 

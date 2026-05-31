@@ -34,7 +34,7 @@ export function StatusBar() {
   const { tier, active } = player
     ? (() => {
         const now = Math.floor(Date.now() / 1000);
-        const end = player.subscriptionEnd.toNumber();
+        const end = Number(player.subscriptionEnd);
         return {
           tier: Math.min(player.subscriptionTier, 3),
           active: end > now,
@@ -46,7 +46,7 @@ export function StatusBar() {
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const geKey = client.gameEngine;
-    const ix = createUpdateLockedNoviInstruction({ owner: publicKey, gameEngine: geKey });
+    const ix = await createUpdateLockedNoviInstruction({ owner: publicKey, gameEngine: geKey });
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -83,11 +83,11 @@ export function StatusBar() {
           </div>
           <div className="hidden items-center gap-1 sm:flex">
             <GameIcon id="resource-cash" title="Cash" size={15} />
-            <GoldNumber value={player.cashOnHand.toNumber()} size="sm" format="compact" />
+            <GoldNumber value={Number(player.cashOnHand)} size="sm" format="compact" />
           </div>
           <div className="hidden items-center gap-1 sm:flex">
             <GameIcon id="resource-gem" title="Gems" size={15} />
-            <GoldNumber value={player.gems.toNumber()} size="sm" format="compact" />
+            <GoldNumber value={Number(player.gems)} size="sm" format="compact" />
           </div>
         </div>
 

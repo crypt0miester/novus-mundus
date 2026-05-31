@@ -15,7 +15,21 @@ import {
   type Connection,
   type TransactionInstruction,
 } from '@solana/web3.js';
-import bs58 from 'bs58';
+import { getBase58Encoder, getBase58Decoder } from '@solana/codecs-strings';
+
+// base58 codecs (replace bs58). Note the inverted naming vs the bs58 package:
+//   bs58.decode(b58str) -> bytes   ===  base58Encoder.encode(b58str)
+//   bs58.encode(bytes)  -> b58str  ===  base58Decoder.decode(bytes)
+const base58Encoder = getBase58Encoder();
+const base58Decoder = getBase58Decoder();
+/** Decode a base58 string to raw bytes (was `bs58.decode`). */
+function base58ToBytes(s: string): Uint8Array {
+  return new Uint8Array(base58Encoder.encode(s));
+}
+/** Encode raw bytes as a base58 string (was `bs58.encode`). */
+function bytesToBase58(b: Uint8Array): string {
+  return base58Decoder.decode(b);
+}
 
 import {
   WtScope,
@@ -91,7 +105,7 @@ interface TxLogs {
  */
 export function txDiscFromSignature(signature: string): number {
   try {
-    const bytes = bs58.decode(signature);
+    const bytes = base58ToBytes(signature);
     if (bytes.length < 3) return 0;
     return ((bytes[0]! << 16) | (bytes[1]! << 8) | bytes[2]!) >>> 0;
   } catch {
@@ -160,7 +174,7 @@ function gtfaSignature(item: GtfaItem): string | null {
   if (Array.isArray(tx) && typeof tx[0] === 'string') {
     try {
       const raw = Buffer.from(tx[0], 'base64');
-      if (raw.length >= 1 + 64) return bs58.encode(raw.subarray(1, 1 + 64));
+      if (raw.length >= 1 + 64) return bytesToBase58(new Uint8Array(raw.subarray(1, 1 + 64)));
     } catch {
       // fall through to the parsed form / null
     }
@@ -888,7 +902,8 @@ export class WarTableClient {
     tx.recentBlockhash = (await this.connection.getLatestBlockhash()).blockhash;
 
     const signed = await signTx(tx);
-    const signature = await this.connection.sendRawTransaction(signed.serialize());
+    // web3.js v3: legacy Transaction.serialize() is async.
+    const signature = await this.connection.sendRawTransaction(await signed.serialize());
 
     return {
       signature,
@@ -1267,11 +1282,15 @@ function scopeFromFlags(env: WtEnvelope): WtScope {
   return WtScope.Team;
 }
 
+// web3.js v3: getRecentPrioritizationFees returns prioritizationFee as a bigint
+// (MicroLamports brand) and slot as bigint. Accept the bigint-bearing shape and
+// reduce to a plain number median (per-CU micro-lamport prices are small enough
+// to be exact as numbers).
 function medianPriorityFee(
-  fees: { slot: number; prioritizationFee: number }[],
+  fees: readonly { slot: bigint; prioritizationFee: bigint }[],
 ): number {
   if (fees.length === 0) return 0;
-  const sorted = fees.map((f) => f.prioritizationFee).sort((a, b) => a - b);
+  const sorted = fees.map((f) => Number(f.prioritizationFee)).sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
   if (sorted.length % 2 === 1) return sorted[mid]!;
   return Math.floor((sorted[mid - 1]! + sorted[mid]!) / 2);

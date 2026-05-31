@@ -46,7 +46,7 @@ export async function handleAirdrop(ctx: CLIContext, args: ParsedArgs): Promise<
     return;
   }
 
-  const balanceBefore = await ctx.connection.getBalance(pubkey);
+  const balanceBefore = Number(await ctx.connection.getBalance(pubkey));
 
   try {
     const sig = await ctx.connection.requestAirdrop(
@@ -59,7 +59,7 @@ export async function handleAirdrop(ctx: CLIContext, args: ParsedArgs): Promise<
     return;
   }
 
-  const balanceAfter = await ctx.connection.getBalance(pubkey);
+  const balanceAfter = Number(await ctx.connection.getBalance(pubkey));
 
   log.info(`  ${pubkey.toBase58()}`);
   log.info(`  + ${amount} SOL`);

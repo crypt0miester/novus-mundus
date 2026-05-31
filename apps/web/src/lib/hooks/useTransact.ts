@@ -156,9 +156,11 @@ export function useTransact() {
         throw new Error("Must provide instructions or versionedTx");
       }
 
-      // Partial-sign with any additional keypairs (e.g. hero mint)
+      // Partial-sign with any additional keypairs (e.g. hero mint).
+      // v3: VersionedTransaction.sign is async and takes MessagePartialSigner[]
+      // (Keypair implements KeyPairSigner, so it satisfies that interface).
       if (opts.signers && opts.signers.length > 0) {
-        tx.sign(opts.signers);
+        await tx.sign(opts.signers);
       }
 
       onPhase?.("signing");

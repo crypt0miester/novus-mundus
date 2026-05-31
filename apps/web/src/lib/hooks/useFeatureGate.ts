@@ -319,9 +319,9 @@ function evaluateReq(
     };
   }
   if (req.researchFlag && playerAccount) {
-    // Research flags are stored as BN — check truthy
+    // Research flags are stored as booleans on the player account.
     const val = playerAccount[req.researchFlag];
-    if (!val || (typeof val === "object" && val.toNumber && val.toNumber() === 0) || val === 0) {
+    if (!val) {
       const flagName = req.researchFlag === "hasMining" ? "Mining" : "Fishing";
       return {
         label: `Research ${flagName}`,

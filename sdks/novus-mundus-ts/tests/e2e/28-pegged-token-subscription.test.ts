@@ -26,11 +26,10 @@ import {
   createPurchaseItemInstruction,
   createPurchaseSubscriptionInstruction,
   deriveAllowedTokenPda,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   ShopItemCategory,
   ShopItemRarity,
 } from '../../src/index';
-import BN from 'bn.js';
 
 import { type TestContext, beforeAllTests } from '../fixtures/setup';
 import {
@@ -57,14 +56,14 @@ describe('Pegged-Token Subscription', () => {
     factory = new PlayerFactory(ctx, { autoInit: true, initialBalance: 10 * LAMPORTS_PER_SOL });
 
     // Seed the mock USDC mint with the canonical decimals (6).
-    usdcMint = Keypair.generate();
+    usdcMint = await Keypair.generate();
     seedSplMint(ctx.svm, usdcMint.publicKey, {
       decimals: 6,
       mintAuthority: ctx.daoAuthority.publicKey,
     });
 
     // Whitelist with `peggedToUsd: true` — no Pyth/Switchboard feeds.
-    const treasuryAta = getAssociatedTokenAddressSync(usdcMint.publicKey, ctx.treasury.publicKey);
+    const treasuryAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, ctx.treasury.publicKey);
     // create_allowed_token will create the treasury ATA via CPI; pre-seed it
     // here to keep the LiteSVM CPI surface narrow. Functionally equivalent.
     seedSplTokenAccount(ctx.svm, treasuryAta, {
@@ -76,7 +75,7 @@ describe('Pegged-Token Subscription', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createCreateAllowedTokenInstruction(
+        await createCreateAllowedTokenInstruction(
           {
             gameEngine: ctx.gameEngine,
             payer: ctx.daoAuthority.publicKey,
@@ -104,8 +103,8 @@ describe('Pegged-Token Subscription', () => {
   });
 
   /** Seed a buyer with `amount` USDC base units in their ATA. */
-  function fundBuyer(buyer: TestPlayer, amount: bigint): void {
-    const buyerAta = getAssociatedTokenAddressSync(usdcMint.publicKey, buyer.publicKey);
+  async function fundBuyer(buyer: TestPlayer, amount: bigint): Promise<void> {
+    const buyerAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, buyer.publicKey);
     seedSplTokenAccount(ctx.svm, buyerAta, {
       mint: usdcMint.publicKey,
       owner: buyer.publicKey,
@@ -117,13 +116,13 @@ describe('Pegged-Token Subscription', () => {
     const buyer = await factory.createPlayer({ initialize: true });
     // Fund well over $10 so the test isn't sensitive to the exact starting balance.
     const STARTING_USDC = 1_000_000_000n; // $1,000 USDC (6 dec)
-    fundBuyer(buyer, STARTING_USDC);
+    await fundBuyer(buyer, STARTING_USDC);
 
-    const buyerAta = getAssociatedTokenAddressSync(usdcMint.publicKey, buyer.publicKey);
-    const treasuryAta = getAssociatedTokenAddressSync(usdcMint.publicKey, ctx.treasury.publicKey);
+    const buyerAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, buyer.publicKey);
+    const treasuryAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, ctx.treasury.publicKey);
     const treasuryBefore = readSplTokenAmount(ctx.svm, treasuryAta);
 
-    const ix = createPurchaseSubscriptionInstruction(
+    const ix = await createPurchaseSubscriptionInstruction(
       {
         gameEngine: ctx.gameEngine,
         owner: buyer.publicKey,
@@ -154,17 +153,17 @@ describe('Pegged-Token Subscription', () => {
     const player = await fetchPlayer(ctx.svm, buyer.playerPda);
     if (!player) throw new Error("player PDA missing after subscription purchase");
     expect(player.subscriptionTier).toBe(1);
-    expect(player.subscriptionEnd.gt(new BN(0))).toBe(true);
+    expect(player.subscriptionEnd > 0n).toBe(true);
   });
 
   it('charges exactly $50 USDC for Epic (cost × 10^4)', async () => {
     const buyer = await factory.createPlayer({ initialize: true });
     const STARTING_USDC = 1_000_000_000n; // $1,000 USDC
-    fundBuyer(buyer, STARTING_USDC);
+    await fundBuyer(buyer, STARTING_USDC);
 
-    const buyerAta = getAssociatedTokenAddressSync(usdcMint.publicKey, buyer.publicKey);
+    const buyerAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, buyer.publicKey);
 
-    const ix = createPurchaseSubscriptionInstruction(
+    const ix = await createPurchaseSubscriptionInstruction(
       {
         gameEngine: ctx.gameEngine,
         owner: buyer.publicKey,
@@ -184,11 +183,11 @@ describe('Pegged-Token Subscription', () => {
   it('charges exactly $250 USDC for Legendary', async () => {
     const buyer = await factory.createPlayer({ initialize: true });
     const STARTING_USDC = 1_000_000_000n; // $1,000 USDC — enough for Legendary
-    fundBuyer(buyer, STARTING_USDC);
+    await fundBuyer(buyer, STARTING_USDC);
 
-    const buyerAta = getAssociatedTokenAddressSync(usdcMint.publicKey, buyer.publicKey);
+    const buyerAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, buyer.publicKey);
 
-    const ix = createPurchaseSubscriptionInstruction(
+    const ix = await createPurchaseSubscriptionInstruction(
       {
         gameEngine: ctx.gameEngine,
         owner: buyer.publicKey,
@@ -214,7 +213,7 @@ describe('Pegged-Token Subscription', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createCreateItemInstruction(
+        await createCreateItemInstruction(
           {
             payer: ctx.daoAuthority.publicKey,
             gameEngine: ctx.gameEngine,
@@ -227,7 +226,7 @@ describe('Pegged-Token Subscription', () => {
             rarity: ShopItemRarity.Common,
             quantityPerPurchase: 1,
             baseStatsBps: 0,
-            priceSolLamports: new BN(LAMPORTS_PER_SOL / 10), // 0.1 SOL
+            priceSolLamports: LAMPORTS_PER_SOL / 10, // 0.1 SOL
           },
         ),
       ),
@@ -241,19 +240,19 @@ describe('Pegged-Token Subscription', () => {
       createEstate: true,
       buildings: [BuildingType.Market],
     });
-    fundBuyer(buyer, 1_000_000_000n);
+    await fundBuyer(buyer, 1_000_000_000n);
 
-    const treasuryAta = getAssociatedTokenAddressSync(usdcMint.publicKey, ctx.treasury.publicKey);
-    const buyerAta = getAssociatedTokenAddressSync(usdcMint.publicKey, buyer.publicKey);
+    const treasuryAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, ctx.treasury.publicKey);
+    const buyerAta = await getAssociatedTokenAddressAsync(usdcMint.publicKey, buyer.publicKey);
 
-    const ix = createPurchaseItemInstruction(
+    const ix = await createPurchaseItemInstruction(
       {
         gameEngine: ctx.gameEngine,
         buyer: buyer.publicKey,
         itemId: ITEM_ID,
         treasury: ctx.treasury.publicKey,
         tokenPayment: {
-          allowedToken: deriveAllowedTokenPda(ctx.gameEngine, usdcMint.publicKey)[0],
+          allowedToken: (await deriveAllowedTokenPda(ctx.gameEngine, usdcMint.publicKey))[0],
           tokenMint: usdcMint.publicKey,
           buyerTokenAta: buyerAta,
           treasuryTokenAta: treasuryAta,

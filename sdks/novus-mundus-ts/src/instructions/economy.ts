@@ -16,7 +16,6 @@ import {
   PublicKey,
   TransactionInstruction,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -27,7 +26,7 @@ import {
   deriveEventPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsync, getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Enums
 
@@ -72,7 +71,7 @@ export interface HireUnitsAccounts {
 
 export interface HireUnitsParams {
   unitType: UnitType;
-  noviAmount: BN | number | bigint;
+  noviAmount: number | bigint;
 }
 
 /** ~40,000 CU */
@@ -92,15 +91,15 @@ export interface HireUnitsParams {
  * - Operative Unit 2: Camp Level 5
  * - Operative Unit 3: Camp Level 10
  */
-export function createHireUnitsInstruction(
+export async function createHireUnitsInstruction(
   accounts: HireUnitsAccounts,
   params: HireUnitsParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -114,8 +113,8 @@ export function createHireUnitsInstruction(
 
   // Optional event accounts
   if (accounts.eventId !== undefined) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }
@@ -146,7 +145,7 @@ export interface CollectResourcesAccounts {
 }
 
 export interface CollectResourcesParams {
-  noviAmount: BN | number | bigint;
+  noviAmount: number | bigint;
   collectionType: CollectionType;
 }
 
@@ -160,16 +159,16 @@ export interface CollectResourcesParams {
  * - Dock: Fishing bonus
  * - Farm: Farming bonus (50 bps/level), uses defensive units
  */
-export function createCollectResourcesInstruction(
+export async function createCollectResourcesInstruction(
   accounts: CollectResourcesAccounts,
   params: CollectResourcesParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -184,8 +183,8 @@ export function createCollectResourcesInstruction(
 
   // Optional event accounts
   if (accounts.eventId !== undefined) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }
@@ -217,7 +216,7 @@ export interface PurchaseEquipmentAccounts {
 
 export interface PurchaseEquipmentParams {
   equipmentType: EquipmentType;
-  quantity: BN | number | bigint;
+  quantity: number | bigint;
   payWithCash: boolean;
 }
 
@@ -228,12 +227,12 @@ export interface PurchaseEquipmentParams {
  * Building Bonuses:
  * - Market: 1% discount per level (max 20% at level 20)
  */
-export function createPurchaseEquipmentInstruction(
+export async function createPurchaseEquipmentInstruction(
   accounts: PurchaseEquipmentAccounts,
   params: PurchaseEquipmentParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -244,8 +243,8 @@ export function createPurchaseEquipmentInstruction(
 
   // Optional event accounts
   if (accounts.eventId !== undefined) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }
@@ -275,7 +274,7 @@ export interface PurchaseStaminaAccounts {
 }
 
 export interface PurchaseStaminaParams {
-  amount: BN | number | bigint;
+  amount: number | bigint;
 }
 
 /** ~10,000 CU */
@@ -292,14 +291,14 @@ export interface PurchaseStaminaParams {
  * 4. [signer] owner: Player wallet
  * 5. [] token_program: SPL Token program
  */
-export function createPurchaseStaminaInstruction(
+export async function createPurchaseStaminaInstruction(
   accounts: PurchaseStaminaAccounts,
   params: PurchaseStaminaParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -335,12 +334,12 @@ export interface TransferCashAccounts {
   /** Team account PDA (sender and receiver must be on same team) */
   team: PublicKey;
   /** Team ID for PDA validation */
-  teamId: BN | number | bigint;
+  teamId: number | bigint;
 }
 
 export interface TransferCashParams {
   /** Amount of cash to transfer */
-  amount: BN | number | bigint;
+  amount: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -377,12 +376,12 @@ export interface TransferCashParams {
  * - amount: u64 (8)
  * - team_id: u64 (8)
  */
-export function createTransferCashInstruction(
+export async function createTransferCashInstruction(
   accounts: TransferCashAccounts,
   params: TransferCashParams
-): TransactionInstruction {
-  const [senderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.sender);
-  const [estate] = deriveEstatePda(senderPlayer);
+): Promise<TransactionInstruction> {
+  const [senderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.sender);
+  const [estate] = await deriveEstatePda(senderPlayer);
 
   const keys = [
     { pubkey: accounts.sender, isSigner: true, isWritable: true },
@@ -417,7 +416,7 @@ export interface VaultTransferAccounts {
 }
 
 export interface VaultTransferParams {
-  amount: BN | number | bigint;
+  amount: number | bigint;
   toVault: boolean;
 }
 
@@ -437,12 +436,12 @@ export interface VaultTransferParams {
  * - [0] direction: u8 (0 = deposit: hand→vault, 1 = withdraw: vault→hand)
  * - [1..9] amount: u64 (little-endian)
  */
-export function createVaultTransferInstruction(
+export async function createVaultTransferInstruction(
   accounts: VaultTransferAccounts,
   params: VaultTransferParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -495,15 +494,15 @@ export interface UpdateLockedNoviAccounts {
  * # Instruction Data
  * None
  */
-export function createUpdateLockedNoviInstruction(
+export async function createUpdateLockedNoviInstruction(
   accounts: UpdateLockedNoviAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [estate] = await deriveEstatePda(player);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -555,7 +554,7 @@ export enum MintPurpose {
 }
 
 export interface MintForPrizeParams {
-  amount: BN | number | bigint;
+  amount: number | bigint;
   purpose: MintPurpose;
 }
 
@@ -591,11 +590,11 @@ export interface MintForPrizeParams {
  * - [0..8] amount: u64
  * - [8] purpose: u8
  */
-export function createMintForPrizeInstruction(
+export async function createMintForPrizeInstruction(
   accounts: MintForPrizeAccounts,
   params: MintForPrizeParams
-): TransactionInstruction {
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [noviMint] = await deriveNoviMintPda();
   /* Only Prizes and Events route through a player's `UserAccount` —
    * those are in-game rewards. Marketing / Development / Partnership /
    * Treasury / Liquidity all mint directly to a wallet ATA (team
@@ -604,10 +603,10 @@ export function createMintForPrizeInstruction(
     params.purpose !== MintPurpose.Prize && params.purpose !== MintPurpose.Event;
   const recipientSlot = isExternal
     ? accounts.recipientOwner
-    : deriveUserPda(accounts.recipientOwner)[0];
+    : (await deriveUserPda(accounts.recipientOwner))[0];
   const userTokenAccount = isExternal
-    ? getAssociatedTokenAddressSync(noviMint, accounts.recipientOwner)
-    : getAssociatedTokenAddressSyncForPda(noviMint, recipientSlot);
+    ? await getAssociatedTokenAddressAsync(noviMint, accounts.recipientOwner)
+    : await getAssociatedTokenAddressAsyncForPda(noviMint, recipientSlot);
 
   const keys = [
     { pubkey: accounts.authority, isSigner: true, isWritable: false },

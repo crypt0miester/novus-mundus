@@ -8,7 +8,6 @@
  */
 
 import type { AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Buff Config
@@ -25,7 +24,7 @@ export interface HeroTemplateAccount {
   name: string;
   heroType: number;
   category: number;
-  mintCostSol: BN;
+  mintCostSol: bigint;
   supplyCap: number;
   mintedCount: number;
   enabled: boolean;
@@ -61,7 +60,7 @@ function deserializeHeroBuffConfig(reader: BufferReader): HeroBuffConfig {
 }
 
 /** Deserialize HeroTemplate from raw bytes */
-export function deserializeHeroTemplate(data: Uint8Array | Buffer): HeroTemplateAccount {
+export function deserializeHeroTemplate(data: Uint8Array): HeroTemplateAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -123,7 +122,7 @@ export function deserializeHeroTemplate(data: Uint8Array | Buffer): HeroTemplate
 }
 
 /** Parse HeroTemplate from account info */
-export function parseHeroTemplate(accountInfo: AccountInfo<Buffer>): HeroTemplateAccount | null {
+export function parseHeroTemplate(accountInfo: AccountInfo<Uint8Array>): HeroTemplateAccount | null {
   if (!accountInfo.data || accountInfo.data.length < HERO_TEMPLATE_SIZE) {
     return null;
   }

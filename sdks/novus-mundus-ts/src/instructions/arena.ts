@@ -16,7 +16,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -27,7 +26,7 @@ import {
   deriveArenaParticipantPda,
   deriveArenaLoadoutPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Create Season (Admin)
 
@@ -42,11 +41,11 @@ export interface CreateSeasonAccounts {
 
 export interface CreateSeasonParams {
   /** Master prize pool in NOVI */
-  masterPrizePool: BN | number | bigint;
+  masterPrizePool: number | bigint;
   /** Daily prize pool */
-  dailyPrizePool: BN | number | bigint;
+  dailyPrizePool: number | bigint;
   /** Daily distribution cap */
-  dailyDistributionCap: BN | number | bigint;
+  dailyDistributionCap: number | bigint;
   /** Minimum level required to join */
   minLevelRequired: number;
 }
@@ -59,11 +58,11 @@ export interface CreateSeasonParams {
  * Season ID auto-increments from city's current arena_season_id.
  * Start/end times are calculated from current timestamp + ARENA_SEASON_DURATION.
  */
-export function createCreateSeasonInstruction(
+export async function createCreateSeasonInstruction(
   accounts: CreateSeasonAccounts,
   params: CreateSeasonParams
-): TransactionInstruction {
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+): Promise<TransactionInstruction> {
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
 
   // Rust account order (4 accounts):
   // 0. arena_season (WRITE)
@@ -119,13 +118,13 @@ export interface JoinSeasonAccounts {
  * Creates participant and loadout accounts.
  * Player must meet minimum level requirement.
  */
-export function createJoinSeasonInstruction(
+export async function createJoinSeasonInstruction(
   accounts: JoinSeasonAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const [loadout] = await deriveArenaLoadoutPda(accounts.gameEngine, player);
 
   // Rust account order:
   // 0. arena_season (WRITE)
@@ -169,13 +168,13 @@ export interface UpdateLoadoutParams {
   /** Hero NFT mint (or default/zero pubkey for no hero) */
   arenaHero: PublicKey;
   /** Defensive units [unit1, unit2, unit3] */
-  defensiveUnits: [BN | number | bigint, BN | number | bigint, BN | number | bigint];
+  defensiveUnits: [number | bigint, number | bigint, number | bigint];
   /** Weapons */
-  meleeWeapons: BN | number | bigint;
-  rangedWeapons: BN | number | bigint;
-  siegeWeapons: BN | number | bigint;
+  meleeWeapons: number | bigint;
+  rangedWeapons: number | bigint;
+  siegeWeapons: number | bigint;
   /** Armor */
-  armorPieces: BN | number | bigint;
+  armorPieces: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -185,12 +184,12 @@ export interface UpdateLoadoutParams {
  * Loadout determines combat strength in arena battles.
  * Loadout is per-player, not per-season.
  */
-export function createUpdateLoadoutInstruction(
+export async function createUpdateLoadoutInstruction(
   accounts: UpdateLoadoutAccounts,
   params: UpdateLoadoutParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [loadout] = deriveArenaLoadoutPda(accounts.gameEngine, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [loadout] = await deriveArenaLoadoutPda(accounts.gameEngine, player);
 
   // Rust account order:
   // 0. loadout_account (WRITE)
@@ -253,9 +252,9 @@ export interface ChallengePlayerAccounts {
 
 export interface ChallengePlayerParams {
   /** Unique match ID from matchmaker */
-  matchId: BN | number | bigint;
+  matchId: number | bigint;
   /** When match was assigned */
-  matchTimestamp: BN | number | bigint;
+  matchTimestamp: number | bigint;
 }
 
 /** ~40,000 CU */
@@ -266,17 +265,17 @@ export interface ChallengePlayerParams {
  * ELO-based matchmaking affects point gains/losses.
  * Battle limit: 10 battles per rolling 24h window.
  */
-export function createChallengePlayerInstruction(
+export async function createChallengePlayerInstruction(
   accounts: ChallengePlayerAccounts,
   params: ChallengePlayerParams
-): TransactionInstruction {
-  const [challengerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.challenger);
-  const [defenderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.defenderAuthority);
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [challengerParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, challengerPlayer);
-  const [defenderParticipant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, defenderPlayer);
-  const [challengerLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, challengerPlayer);
-  const [defenderLoadout] = deriveArenaLoadoutPda(accounts.gameEngine, defenderPlayer);
+): Promise<TransactionInstruction> {
+  const [challengerPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.challenger);
+  const [defenderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.defenderAuthority);
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [challengerParticipant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, challengerPlayer);
+  const [defenderParticipant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, defenderPlayer);
+  const [challengerLoadout] = await deriveArenaLoadoutPda(accounts.gameEngine, challengerPlayer);
+  const [defenderLoadout] = await deriveArenaLoadoutPda(accounts.gameEngine, defenderPlayer);
 
   // Rust account order (14 accounts):
   // 0. challenger_authority (SIGNER)
@@ -349,14 +348,14 @@ export interface ClaimArenaDailyRewardAccounts {
  * Based on participation and wins that day.
  * Requires minimum 5 battles in rolling 24h window.
  */
-export function createClaimArenaDailyRewardInstruction(
+export async function createClaimArenaDailyRewardInstruction(
   accounts: ClaimArenaDailyRewardAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [noviMint] = deriveNoviMintPda();
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
   // 0. participant_account (WRITE)
@@ -412,14 +411,14 @@ export interface ClaimMasterRewardAccounts {
  * Only for top 10 leaderboard finishers.
  * Must be claimed within claim deadline.
  */
-export function createClaimMasterRewardInstruction(
+export async function createClaimMasterRewardInstruction(
   accounts: ClaimMasterRewardAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
-  const [noviMint] = deriveNoviMintPda();
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [participant] = deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [participant] = await deriveArenaParticipantPda(accounts.gameEngine, accounts.seasonId, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order (8 accounts):
   // 0. participant_account (WRITE)
@@ -477,11 +476,11 @@ export interface CloseSeasonAccounts {
  * - Season is 4+ behind the city's current arena_season_id
  * Rent is returned to the season authority.
  */
-export function createCloseSeasonInstruction(
+export async function createCloseSeasonInstruction(
   accounts: CloseSeasonAccounts
-): TransactionInstruction {
-  const [season] = deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
-  const [city] = deriveCityPda(accounts.gameEngine, accounts.cityId);
+): Promise<TransactionInstruction> {
+  const [season] = await deriveArenaSeasonPda(accounts.gameEngine, accounts.seasonId);
+  const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
 
   // Rust account order (3 accounts):
   // 0. arena_season (WRITE)

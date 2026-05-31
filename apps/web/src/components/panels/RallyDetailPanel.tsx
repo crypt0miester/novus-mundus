@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { PublicKey } from "@solana/web3.js";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
@@ -131,10 +131,10 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
     enabled: !!publicKey && !!rally,
     queryFn: async () => {
       if (!publicKey || !rally) return null;
-      const [participantPda] = deriveRallyParticipantPda(
+      const [participantPda] = await deriveRallyParticipantPda(
         client.gameEngine,
         rally.creator,
-        rally.id.toNumber(),
+        rally.id,
         publicKey,
       );
       const info = await connection.getAccountInfo(participantPda);
@@ -170,15 +170,21 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
   // The post-time gate account the chain's rally_predicate requires: the
   // caller's RallyParticipant PDA (keyed on the wallet). Passed to the war-table
   // embed so a participant's message clears the membership check on-chain.
-  const participantGate = useMemo(() => {
-    if (!publicKey || !rally) return undefined;
-    const [pda] = deriveRallyParticipantPda(
-      client.gameEngine,
-      rally.creator,
-      rally.id.toNumber(),
-      publicKey,
+  const [participantGate, setParticipantGate] = useState<PublicKey[] | undefined>(undefined);
+  useEffect(() => {
+    if (!publicKey || !rally) {
+      setParticipantGate(undefined);
+      return;
+    }
+    let cancelled = false;
+    deriveRallyParticipantPda(client.gameEngine, rally.creator, rally.id, publicKey).then(
+      ([pda]) => {
+        if (!cancelled) setParticipantGate([pda]);
+      },
     );
-    return [pda];
+    return () => {
+      cancelled = true;
+    };
   }, [publicKey, rally, client.gameEngine]);
 
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
@@ -186,14 +192,14 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
     if (!rally) throw new Error("Rally not loaded");
     if (!teamId) throw new Error("Team not loaded");
     const joinHero = heroSlot < 3 ? lockedHeroes[heroSlot] : null;
-    const ix = createRallyJoinInstruction(
+    const ix = await createRallyJoinInstruction(
       {
         owner: publicKey,
         gameEngine: client.gameEngine,
         rally: rallyKey,
         rallyCreator: rally.creator,
-        rallyId: rally.id.toNumber(),
-        teamId: teamId.toNumber(),
+        rallyId: rally.id,
+        teamId,
         rallyCityId: rally.rallyCity ?? 0,
       },
       {
@@ -227,13 +233,13 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
   const handleMarch = async (reportPhase: (p: TxPhase) => void) => {
     if (!rally) throw new Error("Rally not loaded");
     const ge = client.gameEngine;
-    const [leaderPlayer] = derivePlayerPda(ge, rally.creator);
-    const [leaderEstate] = deriveEstatePda(leaderPlayer);
+    const [leaderPlayer] = await derivePlayerPda(ge, rally.creator);
+    const [leaderEstate] = await deriveEstatePda(leaderPlayer);
     const parts = await client.fetchRallyParticipants(rallyKey, rally);
     const ordered = [...parts].sort(
       (a, b) => Number(b.account.isLeader) - Number(a.account.isLeader),
     );
-    const ix = createRallyExecuteInstruction({
+    const ix = await createRallyExecuteInstruction({
       gameEngine: ge,
       rally: rallyKey,
       target: rally.target,
@@ -256,11 +262,11 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
   const handleCancel = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!rally) throw new Error("Rally not loaded");
-    const ix = createRallyCancelInstruction({
+    const ix = await createRallyCancelInstruction({
       owner: publicKey,
       gameEngine: client.gameEngine,
       rally: rallyKey,
-      rallyId: rally.id.toNumber(),
+      rallyId: rally.id,
       rallyCityId: rally.rallyCity ?? 0,
     });
     return transact
@@ -296,11 +302,11 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
         throw new Error("Loading your committed hero, try again in a moment.");
       }
       instructions.push(
-        createRallyProcessReturnInstruction({
+        await createRallyProcessReturnInstruction({
           gameEngine: client.gameEngine,
           rally: rallyKey,
           rallyCreator: rally.creator,
-          rallyId: rally.id.toNumber(),
+          rallyId: rally.id,
           participantOwner: publicKey,
           rallyCityId: rally.rallyCity ?? 0,
           homeCityId: player?.currentCity ?? 0,
@@ -312,7 +318,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
     }
     if (willClose) {
       instructions.push(
-        createRallyCloseInstruction({
+        await createRallyCloseInstruction({
           rally: rallyKey,
           leaderOwner: rally.creator,
         }),
@@ -343,13 +349,13 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
     (speedupType: RallySpeedupType, label: string) =>
     async (tier: number, reportPhase: (p: TxPhase) => void) => {
       if (!publicKey || !rally) throw new Error("Not ready");
-      const ix = createRallySpeedupInstruction(
+      const ix = await createRallySpeedupInstruction(
         {
           owner: publicKey,
           gameEngine: client.gameEngine,
           rally: rallyKey,
           rallyCreator: rally.creator,
-          rallyId: rally.id.toNumber(),
+          rallyId: rally.id,
           participant: publicKey,
         },
         { speedupType, speedupTier: tier as 1 | 2 },
@@ -378,8 +384,8 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
   // from wall-clock, so a Date.now() gate read "ready" while the chain still
   // rejected Process Return with ReturnNotComplete (7181).
   const nowSec = useChainNow(1000);
-  const gatherAt = rally?.gatherAt?.toNumber?.() ?? 0;
-  const createdAt = rally?.createdAt?.toNumber?.() ?? 0;
+  const gatherAt = Number(rally?.gatherAt ?? 0n);
+  const createdAt = Number(rally?.createdAt ?? 0n);
   const gatherDone = gatherAt > 0 && nowSec >= gatherAt;
   const marchDuration = rally?.marchDuration ?? 0;
   const traveling = player ? isTraveling(player) : false;
@@ -401,13 +407,13 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
   // where you stand — even the leader walks to it. Marching before you arrive is
   // what orphans troops, so the leader can't march until they've arrived; while
   // en route, a Gather speedup gets you there sooner.
-  const myArrivesAt = myParticipant?.arrivesAtRally?.toNumber?.() ?? 0;
+  const myArrivesAt = Number(myParticipant?.arrivesAtRally ?? 0n);
   const myArrived =
     !!myParticipant && (myParticipant.arrivedAtRally || (myArrivesAt > 0 && nowSec >= myArrivesAt));
   const myArrivalRemaining = Math.max(0, myArrivesAt - nowSec);
   const canMarch = isGathering && gatherDone && enoughForMarch && !traveling && myArrived;
   // The army's march-to-target timer, for the March speedup while in flight.
-  const arriveAt = rally?.arriveAt?.toNumber?.() ?? 0;
+  const arriveAt = Number(rally?.arriveAt ?? 0n);
   const marchRemaining = Math.max(0, arriveAt - nowSec);
   const closeable = rally ? canCloseRally(rally) : false;
 
@@ -415,7 +421,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
   // ReturnNotComplete (7181) until return_started_at + return_duration elapses,
   // so gate the action on the timer (and offer a gem speedup to skip the wait)
   // rather than letting the raw error surface.
-  const myReturnStartedAt = myParticipant?.returnStartedAt?.toNumber?.() ?? 0;
+  const myReturnStartedAt = Number(myParticipant?.returnStartedAt ?? 0n);
   const myReturnCompletesAt =
     myReturnStartedAt > 0 ? myReturnStartedAt + (myParticipant?.returnDuration ?? 0) : 0;
   const myReturnRemaining = Math.max(0, myReturnCompletesAt - nowSec);
@@ -573,7 +579,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
               remainingSeconds={myArrivalRemaining}
               onSpeedup={(tier, rp) => handleGatherSpeedup(tier, rp)}
               gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
-              gemBalance={player?.gems?.toNumber?.()}
+              gemBalance={Number(player?.gems ?? 0n)}
             />
           )}
         </div>
@@ -687,8 +693,8 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
                 <span className="text-text-muted">Lv {targetEncounter.account.level}</span>
               </div>
               {(() => {
-                const hp = targetEncounter.account.health?.toNumber?.() ?? 0;
-                const maxHp = targetEncounter.account.maxHealth?.toNumber?.() ?? 0;
+                const hp = Number(targetEncounter.account.health ?? 0n);
+                const maxHp = Number(targetEncounter.account.maxHealth ?? 0n);
                 const pct = maxHp > 0 ? Math.round((hp / maxHp) * 100) : 0;
                 return (
                   <div>
@@ -730,11 +736,11 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-text-muted">Units</div>
-          <GoldNumber value={rally.totalUnits?.toNumber?.() ?? 0} size="sm" />
+          <GoldNumber value={Number(rally.totalUnits ?? 0n)} size="sm" />
         </div>
         <div>
           <div className="text-[10px] uppercase tracking-wider text-text-muted">Power</div>
-          <GoldNumber value={rally.totalPower?.toNumber?.() ?? 0} size="sm" />
+          <GoldNumber value={Number(rally.totalPower ?? 0n)} size="sm" />
         </div>
       </div>
 
@@ -786,7 +792,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
                 remainingSeconds={marchRemaining}
                 onSpeedup={(tier, rp) => handleMarchSpeedup(tier, rp)}
                 gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
-                gemBalance={player?.gems?.toNumber?.()}
+                gemBalance={Number(player?.gems ?? 0n)}
               />
             </div>
           )}
@@ -820,7 +826,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
                 remainingSeconds={myReturnRemaining}
                 onSpeedup={(tier, rp) => handleReturnSpeedup(tier, rp)}
                 gemsPerMinute={ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1}
-                gemBalance={player?.gems?.toNumber?.()}
+                gemBalance={Number(player?.gems ?? 0n)}
               />
             </div>
           )}

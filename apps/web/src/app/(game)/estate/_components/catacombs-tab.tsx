@@ -62,8 +62,8 @@ export function CatacombsTab() {
     queryKey: ["dungeonRun", publicKey?.toBase58()],
     queryFn: async () => {
       const ge = client.gameEngine;
-      const [playerPda] = derivePlayerPda(ge, publicKey!);
-      const [runPda] = deriveDungeonRunPda(playerPda);
+      const [playerPda] = await derivePlayerPda(ge, publicKey!);
+      const [runPda] = await deriveDungeonRunPda(playerPda);
       const info = await connection.getAccountInfo(runPda);
       if (!info) return { pubkey: runPda, account: null, exists: false };
       const parsed = parseDungeonRun(info);
@@ -109,8 +109,8 @@ export function CatacombsTab() {
 
   const playerTraveling = player ? isTraveling(player) : false;
 
-  const playerStamina = player?.encounterStamina?.toNumber?.() ?? 0;
-  const playerMaxStamina = player?.maxEncounterStamina?.toNumber?.() ?? 100;
+  const playerStamina = Number(player?.encounterStamina ?? 0n);
+  const playerMaxStamina = Number(player?.maxEncounterStamina ?? 100n);
 
   const dungeonStaminaCost = selectedTemplate?.staminaCost ?? 0;
   const hasStamina = playerStamina >= dungeonStaminaCost;
@@ -393,32 +393,32 @@ export function CatacombsTab() {
                 items={[
                   {
                     label: "Resume Gem Cost",
-                    value: dc.resumeGemCost.toNumber().toLocaleString(),
+                    value: Number(dc.resumeGemCost).toLocaleString(),
                     highlight: true,
                   },
                   {
                     label: "Unit Power T1",
-                    value: dc.unitPower[0]?.toNumber().toLocaleString() ?? "—",
+                    value: dc.unitPower[0] !== undefined ? Number(dc.unitPower[0]).toLocaleString() : "—",
                   },
                   {
                     label: "Unit Power T2",
-                    value: dc.unitPower[1]?.toNumber().toLocaleString() ?? "—",
+                    value: dc.unitPower[1] !== undefined ? Number(dc.unitPower[1]).toLocaleString() : "—",
                   },
                   {
                     label: "Unit Power T3",
-                    value: dc.unitPower[2]?.toNumber().toLocaleString() ?? "—",
+                    value: dc.unitPower[2] !== undefined ? Number(dc.unitPower[2]).toLocaleString() : "—",
                   },
                   {
                     label: "Unit Health T1",
-                    value: dc.unitHealth[0]?.toNumber().toLocaleString() ?? "—",
+                    value: dc.unitHealth[0] !== undefined ? Number(dc.unitHealth[0]).toLocaleString() : "—",
                   },
                   {
                     label: "Unit Health T2",
-                    value: dc.unitHealth[1]?.toNumber().toLocaleString() ?? "—",
+                    value: dc.unitHealth[1] !== undefined ? Number(dc.unitHealth[1]).toLocaleString() : "—",
                   },
                   {
                     label: "Unit Health T3",
-                    value: dc.unitHealth[2]?.toNumber().toLocaleString() ?? "—",
+                    value: dc.unitHealth[2] !== undefined ? Number(dc.unitHealth[2]).toLocaleString() : "—",
                   },
                   {
                     label: "Treasure Loot Mult",

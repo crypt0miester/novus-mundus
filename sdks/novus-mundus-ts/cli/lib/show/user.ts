@@ -28,9 +28,9 @@ export async function showUser(client: NovusMundusClient, ctx: CLIContext, walle
   // NOVI is stored on-chain with 1 decimal of precision (e.g. 1,080,000 raw =
   // 108,000 NOVI displayed). The token mint has decimals=1. We surface both so
   // the deci-vs-NOVI distinction is unambiguous.
-  const reservedRaw = u.reservedNovi.toNumber();
-  const lifetimeRaw = u.totalReservedEarned.toNumber();
-  const purchasedTodayRaw = u.noviPurchasedToday.toNumber();
+  const reservedRaw = Number(u.reservedNovi);
+  const lifetimeRaw = Number(u.totalReservedEarned);
+  const purchasedTodayRaw = Number(u.noviPurchasedToday);
 
   const _ = ctx;
 
@@ -40,10 +40,10 @@ export async function showUser(client: NovusMundusClient, ctx: CLIContext, walle
   log.info(section('Reserved NOVI'));
   log.info(`  Balance:  ${formatNum(reservedRaw)} raw  ${dim('=')} ${(reservedRaw / 10).toLocaleString()} NOVI`);
   log.info(`  Lifetime: ${formatNum(lifetimeRaw)} raw  ${dim('=')} ${(lifetimeRaw / 10).toLocaleString()} NOVI`);
-  if (u.reservedNoviEarnedAt.toNumber() > 0) {
+  if (Number(u.reservedNoviEarnedAt) > 0) {
     log.info(`  Earned at: ${formatDate(u.reservedNoviEarnedAt)}`);
   }
-  if (u.lastWithdrawal.toNumber() > 0) {
+  if (Number(u.lastWithdrawal) > 0) {
     log.info(`  Last withdrawal: ${formatDate(u.lastWithdrawal)}`);
   }
 

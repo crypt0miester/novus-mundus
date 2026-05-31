@@ -81,20 +81,39 @@ const RALLY_LIVE_MAX_STATUS = 2;
 export function startGameSubscriptions(client: NovusMundusClient, wallet: PublicKey): () => void {
   const store = useAccountStore.getState;
 
-  // Derive the current user's player PDA for WS routing
-  const [myPlayerPda] = derivePlayerPda(client.gameEngine, wallet);
-  const myPlayerKey = myPlayerPda.toBase58();
-  store().setMyPlayerPda(myPlayerKey);
+  // v3 PDA derivation is async, so the wallet-derived routing values (the player
+  // PDA key and the PlayerPurchase reverse-lookup) are resolved in an async init
+  // below. They are mutable closure state read by the WS handlers; both are seeded
+  // before the WebSocket starts, so handlers never observe the pre-derivation gap.
+  let myPlayerKey = "";
+  const playerPurchasePdaToId = new Map<string, number>();
 
-  // Initialize event store from IndexedDB
-  useEventStore.getState().init();
+  // Teardown is collected as init progresses so the synchronously-returned cleanup
+  // can tear down whatever has been created, even if init is still in flight.
+  let cancelled = false;
+  let manager: GameSubscriptionManager | null = null;
+  let logSub: { unsubscribe: () => void } | null = null;
 
-  // ── 1. Initial RPC fetch for core accounts ──────────────────
-  store().setLoading(true);
+  void init();
 
-  // Reverse lookup for this wallet's PlayerPurchase PDAs — reused by both the
-  // initial fetch and the WS handler so the PDA set is derived only once.
-  const playerPurchasePdaToId = derivePlayerPurchaseIndex(wallet);
+  async function init(): Promise<void> {
+    // Derive the current user's player PDA for WS routing
+    const [myPlayerPda] = await derivePlayerPda(client.gameEngine, wallet);
+    if (cancelled) return;
+    myPlayerKey = myPlayerPda.toBase58();
+    store().setMyPlayerPda(myPlayerKey);
+
+    // Initialize event store from IndexedDB
+    useEventStore.getState().init();
+
+    // ── 1. Initial RPC fetch for core accounts ──────────────────
+    store().setLoading(true);
+
+    // Reverse lookup for this wallet's PlayerPurchase PDAs — reused by both the
+    // initial fetch and the WS handler so the PDA set is derived only once.
+    const purchaseIndex = await derivePlayerPurchaseIndex(wallet);
+    if (cancelled) return;
+    for (const [k, v] of purchaseIndex) playerPurchasePdaToId.set(k, v);
 
   /*
    * Each fetch is independent — one failing (RPC blip, account not yet created)
@@ -180,7 +199,7 @@ export function startGameSubscriptions(client: NovusMundusClient, wallet: Public
   });
 
   // ── 2. Program-wide WebSocket ───────────────────────────────
-  const manager = new GameSubscriptionManager(client.connection, client.gameEngine, {
+  manager = new GameSubscriptionManager(client.connection, client.gameEngine, {
     commitment: "confirmed",
   });
 
@@ -480,8 +499,16 @@ export function startGameSubscriptions(client: NovusMundusClient, wallet: Public
 
   manager.start();
 
+  // The async init can be cancelled (cleanup called before it finished); if so,
+  // tear the manager back down rather than leaving a live subscription behind.
+  if (cancelled) {
+    manager.destroy();
+    manager = null;
+    return;
+  }
+
   // ── 3. Log subscription for events + WebSocket confirmation ──
-  const logSub = subscribeToGameLogs(
+  logSub = subscribeToGameLogs(
     client.connection,
     (logsPayload) => {
       // First: try to resolve a pending tx (WebSocket-based confirmation)
@@ -508,8 +535,8 @@ export function startGameSubscriptions(client: NovusMundusClient, wallet: Public
         const d = event.data as unknown as Record<string, unknown>;
         const ts = d.timestamp;
         let timestamp: number;
-        if (ts && typeof ts === "object" && "toNumber" in (ts as object)) {
-          timestamp = (ts as { toNumber: () => number }).toNumber();
+        if (typeof ts === "bigint") {
+          timestamp = Number(ts);
         } else if (typeof ts === "number") {
           timestamp = ts;
         } else {
@@ -536,15 +563,29 @@ export function startGameSubscriptions(client: NovusMundusClient, wallet: Public
         useEventStore.getState().addEvents(relevant);
       }
     },
-    { commitment: "confirmed" },
-  );
+      { commitment: "confirmed" },
+    );
 
-  store().setSubscriptionActive(true);
+    if (cancelled) {
+      logSub.unsubscribe();
+      logSub = null;
+      manager.destroy();
+      manager = null;
+      return;
+    }
+
+    store().setSubscriptionActive(true);
+  }
 
   // ── Cleanup ─────────────────────────────────────────────────
+  // Returned synchronously; tears down whatever init has wired up so far and
+  // flags `cancelled` so an in-flight init unwinds anything it creates after.
   return () => {
-    manager.destroy();
-    logSub.unsubscribe();
+    cancelled = true;
+    manager?.destroy();
+    manager = null;
+    logSub?.unsubscribe();
+    logSub = null;
     store().setSubscriptionActive(false);
   };
 }

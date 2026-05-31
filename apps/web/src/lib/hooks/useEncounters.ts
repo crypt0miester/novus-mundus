@@ -31,8 +31,8 @@ export function useEncounters(cityId: number | null | undefined) {
     return Array.from(encounters.values()).filter(
       (e) =>
         e.account.cityId === cityId &&
-        e.account.health.gtn(0) &&
-        e.account.despawnAt.toNumber() > now,
+        e.account.health > 0n &&
+        Number(e.account.despawnAt) > now,
     );
   }, [encounters, cityId]);
 

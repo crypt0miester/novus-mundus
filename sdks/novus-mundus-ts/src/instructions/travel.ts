@@ -74,13 +74,13 @@ export interface IntercityStartAccounts {
  * - dest_grid_lat: i32
  * - dest_grid_long: i32
  */
-export function createIntercityStartInstruction(
+export async function createIntercityStartInstruction(
   accounts: IntercityStartAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [originCity] = deriveCityPda(accounts.gameEngine, accounts.originCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
-  const [estateAccount] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [originCity] = await deriveCityPda(accounts.gameEngine, accounts.originCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+  const [estateAccount] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -151,12 +151,12 @@ export interface IntercityCompleteAccounts {
  *
  * On-chain data: None
  */
-export function createIntercityCompleteInstruction(
+export async function createIntercityCompleteInstruction(
   accounts: IntercityCompleteAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [originCity] = deriveCityPda(accounts.gameEngine, accounts.originCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [originCity] = await deriveCityPda(accounts.gameEngine, accounts.originCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -220,12 +220,12 @@ export interface IntercityCancelAccounts {
  *
  * On-chain data: None
  */
-export function createIntercityCancelInstruction(
+export async function createIntercityCancelInstruction(
   accounts: IntercityCancelAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [originCity] = deriveCityPda(accounts.gameEngine, accounts.originCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [originCity] = await deriveCityPda(accounts.gameEngine, accounts.originCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
 
   // Rust account order: player, owner, origin_city, destination_city, dest_location,
   //                     dest_creator_refund, return_location, system_program
@@ -290,13 +290,13 @@ export interface IntercityTeleportAccounts {
  * On-chain data (2 bytes):
  * - destination_city_id: u16
  */
-export function createIntercityTeleportInstruction(
+export async function createIntercityTeleportInstruction(
   accounts: IntercityTeleportAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [originCity] = deriveCityPda(accounts.gameEngine, accounts.originCityId);
-  const [destinationCity] = deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
-  const [estateAccount] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [originCity] = await deriveCityPda(accounts.gameEngine, accounts.originCityId);
+  const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
+  const [estateAccount] = await deriveEstatePda(player);
 
   // Rust account order: player, owner, origin_city, destination_city, game_engine,
   //                     origin_location, destination_location, system_program, estate_account, [hero_accounts]
@@ -367,11 +367,11 @@ export interface TravelSpeedupParams {
  * On-chain data (1 byte):
  * - speedup_tier: u8
  */
-export function createTravelSpeedupInstruction(
+export async function createTravelSpeedupInstruction(
   accounts: TravelSpeedupAccounts,
   params: TravelSpeedupParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
   
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -441,13 +441,13 @@ export interface IntracityStartParams {
  * - destination_lat: f64 (8)
  * - destination_long: f64 (8)
  */
-export function createIntracityStartInstruction(
+export async function createIntracityStartInstruction(
   accounts: IntracityStartAccounts,
   params: IntracityStartParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [currentCity] = deriveCityPda(accounts.gameEngine, accounts.cityId);
-  const [estateAccount] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [currentCity] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
+  const [estateAccount] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -508,11 +508,11 @@ export interface IntracityCompleteAccounts {
  *
  * On-chain data: None
  */
-export function createIntracityCompleteInstruction(
+export async function createIntracityCompleteInstruction(
   accounts: IntracityCompleteAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [currentCity] = deriveCityPda(accounts.gameEngine, accounts.cityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [currentCity] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -565,11 +565,11 @@ export interface IntracityCancelAccounts {
  *
  * On-chain data: None
  */
-export function createIntracityCancelInstruction(
+export async function createIntracityCancelInstruction(
   accounts: IntracityCancelAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [currentCity] = deriveCityPda(accounts.gameEngine, accounts.cityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [currentCity] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
 
   // Rust account order: player, owner, current_city, dest_location,
   //                     dest_creator_refund, return_location, system_program

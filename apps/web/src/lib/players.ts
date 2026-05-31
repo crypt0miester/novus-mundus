@@ -34,23 +34,23 @@ export type PlayerSortKey =
 export function playerScore(player: PlayerAccount, key: PlayerSortKey): number {
   switch (key) {
     case "networth":
-      return player.networth.toNumber();
+      return Number(player.networth);
     case "level":
       return player.level;
     case "combat":
       return calculateDefensivePower(
-        player.defensiveUnit1.toNumber(),
-        player.defensiveUnit2.toNumber(),
-        player.defensiveUnit3.toNumber(),
+        Number(player.defensiveUnit1),
+        Number(player.defensiveUnit2),
+        Number(player.defensiveUnit3),
       );
     case "reputation":
-      return player.reputation.toNumber();
+      return Number(player.reputation);
     case "newest":
-      return player.createdAt.toNumber();
+      return Number(player.createdAt);
     case "attacks":
-      return player.totalAttacks.toNumber();
+      return Number(player.totalAttacks);
     case "encounters":
-      return player.totalEncounterAttacks.toNumber();
+      return Number(player.totalEncounterAttacks);
     default: {
       const _exhaustive: never = key;
       return _exhaustive;

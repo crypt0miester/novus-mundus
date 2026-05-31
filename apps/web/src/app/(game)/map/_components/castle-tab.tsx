@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { useUrlIntParam, useUrlPatch } from "@/lib/hooks/useUrlParam";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useCastle } from "@/lib/hooks/useCastle";
+import { useWorldCastles } from "@/lib/hooks/world/useWorldCastles";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import { useLockedHeroes, NO_HERO_SLOT } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
@@ -45,10 +46,15 @@ import {
   createCompleteUpgradeInstruction,
   createRelieveGarrisonInstruction,
   createClaimGarrisonLootInstruction,
+  createClaimCastleRewardsInstruction,
   createAttackCastleInstruction,
   parsePlayer,
+  parseTeamCastleReward,
   derivePlayerPda,
   deriveGarrisonPda,
+  deriveTeamCastleRewardPda,
+  deriveCourtPda,
+  isNullPubkey,
   WarTableScope,
 } from "novus-mundus-sdk";
 import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
@@ -99,6 +105,27 @@ export function CastleTab() {
   }, [searchParams, playerCity]);
   const [castleId, setCastleId] = useUrlIntParam("castleId", 0);
   const { data: castleData } = useCastle(cityId, castleId);
+
+  /* The castles that actually exist in this city. `castleId` is a GLOBAL id
+   * (not a per-city 0/1/2), and the live deployment seeds one castle per city
+   * with an arbitrary id — so the selector must be built from real on-chain
+   * castles, not a hardcoded [0,1,2]. */
+  const { data: allCastles } = useWorldCastles();
+  const cityCastles = useMemo(
+    () =>
+      (allCastles ?? [])
+        .filter((c) => c.account.cityId === cityId)
+        .sort((a, b) => a.account.castleId - b.account.castleId),
+    [allCastles, cityId],
+  );
+  /* Land on a real castle: if the URL/default castleId isn't one of this
+   * city's castles, snap to the first that is. Skips while the list is still
+   * loading so we don't fight a pending fetch. */
+  useEffect(() => {
+    if (cityCastles.length === 0) return;
+    if (cityCastles.some((c) => c.account.castleId === castleId)) return;
+    setCastleId(cityCastles[0]!.account.castleId);
+  }, [cityCastles, castleId, setCastleId]);
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const { connection } = useConnection();
@@ -118,14 +145,14 @@ export function CastleTab() {
   const [garrisonWeapons, setGarrisonWeapons] = useState<[number, number, number]>([0, 0, 0]);
   const [garrisonHeroSlot, setGarrisonHeroSlot] = useState(NO_HERO_SLOT);
   const availUnits: [number, number, number] = [
-    player?.defensiveUnit1?.toNumber?.() ?? 0,
-    player?.defensiveUnit2?.toNumber?.() ?? 0,
-    player?.defensiveUnit3?.toNumber?.() ?? 0,
+    Number(player?.defensiveUnit1 ?? 0n),
+    Number(player?.defensiveUnit2 ?? 0n),
+    Number(player?.defensiveUnit3 ?? 0n),
   ];
   const availWeapons: [number, number, number] = [
-    player?.meleeWeapons?.toNumber?.() ?? 0,
-    player?.rangedWeapons?.toNumber?.() ?? 0,
-    player?.siegeWeapons?.toNumber?.() ?? 0,
+    Number(player?.meleeWeapons ?? 0n),
+    Number(player?.rangedWeapons ?? 0n),
+    Number(player?.siegeWeapons ?? 0n),
   ];
 
   // The player's locked heroes (slots 0-2); one may optionally join the garrison.
@@ -218,11 +245,11 @@ export function CastleTab() {
 
   const claimReqs = useMemo(() => {
     if (!castle || !player) return [];
-    const networthMillions = Math.floor((player.networth?.toNumber?.() ?? 0) / 1_000_000);
+    const networthMillions = Math.floor(Number(player.networth ?? 0n) / 1_000_000);
     const troops =
-      (player.defensiveUnit1?.toNumber?.() ?? 0) +
-      (player.defensiveUnit2?.toNumber?.() ?? 0) +
-      (player.defensiveUnit3?.toNumber?.() ?? 0);
+      Number(player.defensiveUnit1 ?? 0n) +
+      Number(player.defensiveUnit2 ?? 0n) +
+      Number(player.defensiveUnit3 ?? 0n);
     const troopsThousands = Math.floor(troops / 1_000);
     return [
       {
@@ -247,15 +274,20 @@ export function CastleTab() {
   }, [castle, player]);
 
   // Residue from a force-removed king blocks a claim with CastleNotVacant.
-  const claimBlockedByResidue = !!castle && ((castle.garrisonCount ?? 0) > 0 || (castle.courtCount ?? 0) > 0);
+  const claimBlockedByResidue =
+    !!castle && ((castle.garrisonCount ?? 0) > 0 || (castle.courtCount ?? 0) > 0);
   const canClaim = claimReqs.length > 0 && claimReqs.every((r) => r.ok) && !claimBlockedByResidue;
 
-  const attackInfo = useMemo<{ attackable: boolean; reason: string; opensAt: number | null }>(() => {
+  const attackInfo = useMemo<{
+    attackable: boolean;
+    reason: string;
+    opensAt: number | null;
+  }>(() => {
     if (!castle) return { attackable: false, reason: "No castle here.", opensAt: null };
-    const contestEnd = castle.contestEndAt?.toNumber?.() ?? 0;
+    const contestEnd = Number(castle.contestEndAt ?? 0n);
     const watchtowerBps = (castle.watchtowerLevel ?? 0) * 1000;
     const protSecs = Math.floor(
-      ((castle.protectionDuration?.toNumber?.() ?? 0) * (10_000 + watchtowerBps)) / 10_000,
+      (Number(castle.protectionDuration ?? 0n) * (10_000 + watchtowerBps)) / 10_000,
     );
     const protectionEnd = contestEnd + protSecs;
     switch (castle.status) {
@@ -286,9 +318,17 @@ export function CastleTab() {
       case 4: // Transitioning
         return nowSec < contestEnd
           ? { attackable: true, reason: "", opensAt: null }
-          : { attackable: false, reason: "The transition window has closed.", opensAt: null };
+          : {
+              attackable: false,
+              reason: "The transition window has closed.",
+              opensAt: null,
+            };
       default:
-        return { attackable: false, reason: "This seat cannot be contested right now.", opensAt: null };
+        return {
+          attackable: false,
+          reason: "This seat cannot be contested right now.",
+          opensAt: null,
+        };
     }
   }, [castle, nowSec]);
 
@@ -306,16 +346,16 @@ export function CastleTab() {
   const garrisonFull = !!castle && (castle.garrisonCount ?? 0) >= (castle.maxGarrison ?? 0);
   const myGarrison = useMemo(
     () =>
-      publicKey ? garrisonRoster.find((g) => g.ownerWallet?.equals(publicKey)) ?? null : null,
+      publicKey ? (garrisonRoster.find((g) => g.ownerWallet?.equals(publicKey)) ?? null) : null,
     [garrisonRoster, publicKey],
   );
   const inGarrison = !!myGarrison;
   const hasUnclaimedLoot =
     !!myGarrison &&
     !myGarrison.account.lootClaimed &&
-    (myGarrison.account.lootMelee?.toNumber?.() ?? 0) +
-      (myGarrison.account.lootRanged?.toNumber?.() ?? 0) +
-      (myGarrison.account.lootSiege?.toNumber?.() ?? 0) >
+    Number(myGarrison.account.lootMelee ?? 0n) +
+      Number(myGarrison.account.lootRanged ?? 0n) +
+      Number(myGarrison.account.lootSiege ?? 0n) >
       0;
   const noContribution =
     garrisonUnits.every((n) => n === 0) && garrisonWeapons.every((n) => n === 0);
@@ -326,22 +366,123 @@ export function CastleTab() {
    * the embed to anyone else would only render a gate that never resolves. The
    * chain's castle_predicate takes the garrison contribution account as the
    * post gate (empty for the king), derived here from the selected castle. */
-  const myPlayerPda = useMemo(
-    () => (publicKey ? derivePlayerPda(client.gameEngine, publicKey)[0] : null),
-    [publicKey, client.gameEngine],
-  );
+  const [myPlayerPda, setMyPlayerPda] = useState<PublicKey | null>(null);
+  useEffect(() => {
+    if (!publicKey) {
+      setMyPlayerPda(null);
+      return;
+    }
+    let cancelled = false;
+    derivePlayerPda(client.gameEngine, publicKey).then(([pda]) => {
+      if (!cancelled) setMyPlayerPda(pda);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [publicKey, client.gameEngine]);
   const canPostCastle = isKing || inGarrison;
-  const castleGate = useMemo<PublicKey[] | undefined>(() => {
-    if (!castlePda) return undefined;
-    if (isKing) return []; // king branch: no gate account
-    if (inGarrison && myPlayerPda) return [deriveGarrisonPda(castlePda, myPlayerPda)[0]];
-    return undefined;
+  const [castleGate, setCastleGate] = useState<PublicKey[] | undefined>(undefined);
+  useEffect(() => {
+    if (!castlePda) {
+      setCastleGate(undefined);
+      return;
+    }
+    if (isKing) {
+      setCastleGate([]); // king branch: no gate account
+      return;
+    }
+    if (inGarrison && myPlayerPda) {
+      let cancelled = false;
+      deriveGarrisonPda(castlePda, myPlayerPda).then(([pda]) => {
+        if (!cancelled) setCastleGate([pda]);
+      });
+      return () => {
+        cancelled = true;
+      };
+    }
+    setCastleGate(undefined);
   }, [castlePda, isKing, inGarrison, myPlayerPda]);
+
+  /* Daily-rewards eligibility — anyone on the castle's team (king, court, or
+   * member) can claim, per claim_castle_rewards.rs role resolution. The button
+   * is hidden for everyone else. */
+  const eligibleForRewards =
+    !!castle && !!teamKey && !isNullPubkey(castle.team) && castle.team.equals(teamKey);
+
+  /* The player's per-castle reward-accrual account. `lastClaimedAt` drives the
+   * once-per-day cooldown; a missing account means never claimed (the first
+   * claim just seeds accrual). Re-fetches when a tx settles. */
+  const SECONDS_PER_DAY = 86400;
+  const [rewardLastClaim, setRewardLastClaim] = useState<number | null>(null);
+  useEffect(() => {
+    if (!castlePda || !myPlayerPda || !eligibleForRewards) {
+      setRewardLastClaim(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const [rewardPda] = await deriveTeamCastleRewardPda(castlePda, myPlayerPda);
+      const info = await connection.getAccountInfo(rewardPda);
+      const acct = info ? parseTeamCastleReward(info) : null;
+      if (!cancelled) setRewardLastClaim(acct ? Number(acct.lastClaimedAt) : null);
+    })().catch(() => {
+      if (!cancelled) setRewardLastClaim(null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [castlePda, myPlayerPda, eligibleForRewards, connection, transact.isPending]);
+
+  const rewardNowSec = Math.floor(Date.now() / 1000);
+  // Whole days accrued since the last claim (or 0 if never claimed). The chain
+  // caps a single claim at 7 days, so mirror that in the button label.
+  const rewardElapsedDays =
+    rewardLastClaim != null ? Math.floor((rewardNowSec - rewardLastClaim) / SECONDS_PER_DAY) : 0;
+  const rewardClaimDays = Math.min(7, rewardElapsedDays);
+  // Claimable when never-claimed (first claim seeds accrual) OR a full day has
+  // passed. Otherwise show the countdown to the next claim window.
+  const rewardClaimable = eligibleForRewards && (rewardLastClaim == null || rewardElapsedDays >= 1);
+  const rewardNextClaimAt = rewardLastClaim != null ? rewardLastClaim + SECONDS_PER_DAY : 0;
+
+  // Held-since + activation, for the Castle Record card.
+  const heldSinceSec = castle ? Number(castle.claimedAt ?? 0n) : 0;
+  const heldSinceLabel =
+    heldSinceSec > 0 ? new Date(heldSinceSec * 1000).toLocaleDateString() : "—";
+  const activatesAtSec = castle ? Number(castle.activatesAt ?? 0n) : 0;
+  const activatesInFuture = activatesAtSec > rewardNowSec;
+  const activatesLabel =
+    activatesAtSec <= 0 ? "—" : new Date(activatesAtSec * 1000).toLocaleDateString();
+
+  const handleClaimRewards = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !castle) throw new Error("Wallet not connected");
+    // Pass the court-position PDA when claiming as a court member so the
+    // program credits the court rate rather than the lower member rate.
+    let courtPosition: PublicKey | undefined;
+    const courtSeat = courtRoster.find((c) => c.ownerWallet?.equals(publicKey));
+    if (courtSeat && castlePda) {
+      [courtPosition] = await deriveCourtPda(castlePda, courtSeat.position);
+    }
+    const ix = await createClaimCastleRewardsInstruction({
+      claimant: publicKey,
+      gameEngine: client.gameEngine,
+      cityId: castle.cityId,
+      castleId: castle.castleId,
+      ...(courtPosition ? { courtPosition } : {}),
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["player"], ["castle"]],
+        successMessage: "Daily castle rewards claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
 
   const handleClaimVacant = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createClaimVacantCastleInstruction({
+    const ix = await createClaimVacantCastleInstruction({
       castleId,
       cityId,
       gameEngine: ge,
@@ -367,7 +508,7 @@ export function CastleTab() {
     }
     const ge = client.gameEngine;
     const hero = garrisonHeroSlot < 3 ? lockedHeroes[garrisonHeroSlot] : null;
-    const ix = createJoinGarrisonInstruction(
+    const ix = await createJoinGarrisonInstruction(
       { owner: publicKey, gameEngine: ge, cityId, castleId },
       {
         units: garrisonUnits,
@@ -383,7 +524,9 @@ export function CastleTab() {
         invalidateKeys: [["castle"], ["player"]],
         successMessage: hero
           ? `Joined garrison with hero ${hero.name}!`
-          : `Joined garrison with ${garrisonUnits.reduce((a, b) => a + b, 0).toLocaleString()} units!`,
+          : `Joined garrison with ${garrisonUnits
+              .reduce((a, b) => a + b, 0)
+              .toLocaleString()} units!`,
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
@@ -392,7 +535,7 @@ export function CastleTab() {
   const handleLeaveGarrison = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createLeaveGarrisonInstruction({
+    const ix = await createLeaveGarrisonInstruction({
       castleId,
       cityId,
       gameEngine: ge,
@@ -416,7 +559,7 @@ export function CastleTab() {
     if (appointeePubkey.equals(publicKey)) {
       throw new Error("A king cannot appoint himself to his own court");
     }
-    const ix = createAppointCourtInstruction(
+    const ix = await createAppointCourtInstruction(
       {
         king: publicKey,
         appointee: appointeePubkey,
@@ -443,7 +586,7 @@ export function CastleTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createDismissCourtInstruction(
+    const ix = await createDismissCourtInstruction(
       {
         king: publicKey,
         dismissed: dismissedWallet,
@@ -466,7 +609,7 @@ export function CastleTab() {
   const handleResignCourt = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createResignCourtInstruction(
+    const ix = await createResignCourtInstruction(
       {
         courtMember: publicKey,
         gameEngine: ge,
@@ -488,7 +631,7 @@ export function CastleTab() {
   const handleInitiateUpgrade = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createInitiateUpgradeInstruction(
+    const ix = await createInitiateUpgradeInstruction(
       {
         king: publicKey,
         gameEngine: ge,
@@ -510,7 +653,7 @@ export function CastleTab() {
   const handleCancelUpgrade = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createCancelUpgradeInstruction({
+    const ix = await createCancelUpgradeInstruction({
       king: publicKey,
       gameEngine: ge,
       cityId,
@@ -529,7 +672,7 @@ export function CastleTab() {
   const handleCompleteUpgrade = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createCompleteUpgradeInstruction({
+    const ix = await createCompleteUpgradeInstruction({
       payer: publicKey,
       gameEngine: ge,
       cityId,
@@ -551,7 +694,7 @@ export function CastleTab() {
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createRelieveGarrisonInstruction({
+    const ix = await createRelieveGarrisonInstruction({
       king: publicKey,
       garrisonMember: memberWallet,
       gameEngine: ge,
@@ -571,7 +714,7 @@ export function CastleTab() {
   const handleClaimGarrisonLoot = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createClaimGarrisonLootInstruction({
+    const ix = await createClaimGarrisonLootInstruction({
       owner: publicKey,
       gameEngine: ge,
       cityId,
@@ -590,7 +733,7 @@ export function CastleTab() {
   const handleAttackCastle = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createAttackCastleInstruction(
+    const ix = await createAttackCastleInstruction(
       {
         attacker: publicKey,
         gameEngine: ge,
@@ -635,19 +778,24 @@ export function CastleTab() {
        * the entity + pan/zoom the disc onto its cell. */}
       <div className="flex items-center gap-2">
         <div className="flex flex-1 gap-1 rounded-lg bg-surface p-1">
-          {[0, 1, 2].map((id) => (
-            <button
-              key={id}
-              onClick={() => setCastleId(id)}
-              className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                castleId === id
-                  ? "bg-surface-raised text-text-gold"
-                  : "text-text-muted hover:text-text-secondary"
-              }`}
-            >
-              Castle {id}
-            </button>
-          ))}
+          {cityCastles.length === 0 ? (
+            <span className="px-3 py-1.5 text-xs text-text-muted">No castle in this city</span>
+          ) : (
+            cityCastles.map((c) => (
+              <button
+                key={c.account.castleId}
+                type="button"
+                onClick={() => setCastleId(c.account.castleId)}
+                className={`truncate rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  castleId === c.account.castleId
+                    ? "bg-surface-raised text-text-gold"
+                    : "text-text-muted hover:text-text-secondary"
+                }`}
+              >
+                {c.account.name?.trim() || `Castle ${c.account.castleId}`}
+              </button>
+            ))
+          )}
         </div>
         {castlePda && castle && (
           <button
@@ -687,45 +835,165 @@ export function CastleTab() {
               at a clean 16:9 rather than stretching to the stat card height. */}
           <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
             <CastleBanner castle={castle} />
-            <div className="card accent-border">
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-                <div>
-                  <div className="text-xs text-text-muted">Tier</div>
-                  <div className="text-sm font-semibold text-text-gold">
-                    {CASTLE_TIER_NAMES[castle.tier ?? 0]}
+            {/* Right column: the stat block plus the daily-rewards and record
+                cards, stacked beside the banner. */}
+            <div className="space-y-4">
+              <div className="card accent-border">
+                <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+                  <div>
+                    <div className="text-xs text-text-muted">Tier</div>
+                    <div className="text-sm font-semibold text-text-gold">
+                      {CASTLE_TIER_NAMES[castle.tier ?? 0]}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-text-muted">Status</div>
+                    <div className="text-sm font-semibold text-text-primary">
+                      {CASTLE_STATUS_NAMES[castle.status ?? 0]}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-xs text-text-muted">Garrison</div>
+                    <GoldNumber value={castle.garrisonCount ?? 0} size="sm" />
+                  </div>
+                  <div>
+                    <div className="text-xs text-text-muted">Total Rewards</div>
+                    <GoldNumber
+                      value={Number(castle.totalRewardsDistributed ?? 0n)}
+                      prefix="$ "
+                      size="sm"
+                    />
                   </div>
                 </div>
-                <div>
-                  <div className="text-xs text-text-muted">Status</div>
-                  <div className="text-sm font-semibold text-text-primary">
-                    {CASTLE_STATUS_NAMES[castle.status ?? 0]}
+                <p className="mt-3 text-xs italic text-text-muted">
+                  {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
+                    "The condition of the seat is unclear."}
+                </p>
+                {castle.hasKing && (
+                  <div className="mt-3 border-t border-zinc-800 pt-3">
+                    <div className="text-xs text-text-muted">King</div>
+                    <div className="text-sm text-text-primary">
+                      <DomainName pubkey={castle.king} chars={6} />
+                    </div>
                   </div>
+                )}
+              </div>
+
+              {/* Daily Rewards — the castle's daily NOVI + cash payout by role,
+                  plus the gated claim (king / court / garrison member only). */}
+              <div className="card">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Daily Rewards
+                </h3>
+                <div className="space-y-1.5 text-xs">
+                  {[
+                    {
+                      role: "King",
+                      novi: castle.kingNoviPerDay,
+                      cash: castle.kingCashPerDay,
+                    },
+                    {
+                      role: "Court",
+                      novi: castle.courtNoviPerDay,
+                      cash: castle.courtCashPerDay,
+                    },
+                    {
+                      role: "Member",
+                      novi: castle.memberNoviPerDay,
+                      cash: castle.memberCashPerDay,
+                    },
+                  ].map((r) => (
+                    <div
+                      key={r.role}
+                      className="flex items-center justify-between rounded bg-surface px-2 py-1"
+                    >
+                      <span className="text-text-secondary">{r.role}</span>
+                      <span className="flex items-center gap-2 font-mono">
+                        <span className="text-text-gold">
+                          {Number(r.novi ?? 0n).toLocaleString()} NOVI
+                        </span>
+                        <span className="text-text-muted">·</span>
+                        <span className="text-text-primary">
+                          $ {Number(r.cash ?? 0n).toLocaleString()}
+                        </span>
+                      </span>
+                    </div>
+                  ))}
                 </div>
-                <div>
-                  <div className="text-xs text-text-muted">Garrison</div>
-                  <GoldNumber value={castle.garrisonCount ?? 0} size="sm" />
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Total Rewards</div>
-                  <GoldNumber
-                    value={castle.totalRewardsDistributed?.toNumber?.() ?? 0}
-                    prefix="$ "
-                    size="sm"
-                  />
+                {eligibleForRewards &&
+                  (rewardClaimable ? (
+                    <TxButton onClick={handleClaimRewards} className="mt-3 w-full text-xs">
+                      {rewardLastClaim == null
+                        ? "Start Earning"
+                        : `Claim ${rewardClaimDays} day${rewardClaimDays === 1 ? "" : "s"}`}
+                    </TxButton>
+                  ) : (
+                    <div className="mt-3 rounded-lg border border-zinc-800 px-3 py-2">
+                      <GoldCountdown
+                        endsAt={rewardNextClaimAt}
+                        label="Next claim"
+                        format="compact"
+                        size="sm"
+                      />
+                    </div>
+                  ))}
+              </div>
+
+              {/* Castle Record — defense history, economics, and the minor
+                  stats surfaced straight from the castle account. */}
+              <div className="card">
+                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Castle Record
+                </h3>
+                <div className="grid grid-cols-2 gap-x-4 gap-y-2 text-xs sm:grid-cols-3">
+                  <div>
+                    <div className="text-text-muted">Held since</div>
+                    <div className="text-text-primary">{heldSinceLabel}</div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">Defenses</div>
+                    <div className="text-text-primary">
+                      <span className="text-emerald-400">{castle.successfulDefenses ?? 0}W</span>
+                      {" · "}
+                      <span className="text-red-400">{castle.failedDefenses ?? 0}L</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">Times claimed</div>
+                    <div className="text-text-primary">{castle.timesClaimed ?? 0}</div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">King&apos;s loot cut</div>
+                    <div className="text-text-primary">
+                      {bpsToPercent(castle.kingLootCutBps ?? 0)}%
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">Tier bonus</div>
+                    <div className="text-text-primary">
+                      ×{((castle.tierMultiplierBps ?? 0) / 10000).toFixed(2)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">Footprint</div>
+                    <div className="text-text-primary">
+                      {castle.footprintSize ?? 1}×{castle.footprintSize ?? 1}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">Court cooldown</div>
+                    <div className="text-text-primary">
+                      {formatTime(castle.courtAppointmentCooldown ?? 0)}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="text-text-muted">
+                      {activatesInFuture ? "Activates" : "Active since"}
+                    </div>
+                    <div className="text-text-primary">{activatesLabel}</div>
+                  </div>
                 </div>
               </div>
-              <p className="mt-3 text-xs italic text-text-muted">
-                {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
-                  "The condition of the seat is unclear."}
-              </p>
-              {castle.hasKing && (
-                <div className="mt-3 border-t border-zinc-800 pt-3">
-                  <div className="text-xs text-text-muted">King</div>
-                  <div className="text-sm text-text-primary">
-                    <DomainName pubkey={castle.king} chars={6} />
-                  </div>
-                </div>
-              )}
             </div>
           </div>
 
@@ -892,7 +1160,7 @@ export function CastleTab() {
                       {castle.upgradeTargetLevel ?? "?"}
                     </span>
                     <GoldCountdown
-                      endsAt={castle.upgradeEndAt?.toNumber?.() ?? 0}
+                      endsAt={Number(castle.upgradeEndAt ?? 0n)}
                       format="full"
                       label="Completes"
                     />
@@ -930,138 +1198,138 @@ export function CastleTab() {
            * yet in it you contribute to join; once in it you leave or
            * claim captured loot. */}
           {canSeeGarrison && (
-          <div className="card">
-            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Garrison Actions
-            </h3>
-            {inGarrison ? (
-              <div className="space-y-3">
-                <p className="text-xs text-text-secondary">
-                  You stand with this garrison.
-                  {hasUnclaimedLoot
-                    ? " Weapons captured in its defense are waiting for you."
-                    : " There are no captured weapons to claim right now."}
-                </p>
-                <div className="flex flex-wrap gap-3">
-                  <TxButton onClick={handleLeaveGarrison} variant="danger">
-                    Leave Garrison
-                  </TxButton>
-                  <TxButton
-                    onClick={handleClaimGarrisonLoot}
-                    variant="secondary"
-                    disabled={!hasUnclaimedLoot}
-                  >
-                    Claim Garrison Loot
-                  </TxButton>
-                </div>
-              </div>
-            ) : (
-              /* Contribute units & weapons to the castle garrison */
-              <div className="rounded-lg border border-zinc-800 p-3">
-                <h4 className="mb-2 text-xs font-semibold text-text-muted">
-                  Contribute to Garrison
-                </h4>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                  Defensive Units
-                </div>
-                <TripleCountInput
-                  labels={DEFENSIVE_UNIT_LABELS}
-                  icons={DEFENSIVE_UNIT_ICONS}
-                  available={availUnits}
-                  value={garrisonUnits}
-                  onChange={setGarrisonUnits}
-                />
-                <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                  Weapons
-                </div>
-                <TripleCountInput
-                  labels={WEAPON_LABELS}
-                  icons={WEAPON_ICONS}
-                  available={availWeapons}
-                  value={garrisonWeapons}
-                  onChange={setGarrisonWeapons}
-                />
-                <div className="mt-2">
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                    Hero
+            <div className="card">
+              <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Garrison Actions
+              </h3>
+              {inGarrison ? (
+                <div className="space-y-3">
+                  <p className="text-xs text-text-secondary">
+                    You stand with this garrison.
+                    {hasUnclaimedLoot
+                      ? " Weapons captured in its defense are waiting for you."
+                      : " There are no captured weapons to claim right now."}
+                  </p>
+                  <div className="flex flex-wrap gap-3">
+                    <TxButton onClick={handleLeaveGarrison} variant="danger">
+                      Leave Garrison
+                    </TxButton>
+                    <TxButton
+                      onClick={handleClaimGarrisonLoot}
+                      variant="secondary"
+                      disabled={!hasUnclaimedLoot}
+                    >
+                      Claim Garrison Loot
+                    </TxButton>
                   </div>
-                  <select
-                    value={garrisonHeroSlot}
-                    onChange={(e) => setGarrisonHeroSlot(Number(e.target.value))}
-                    className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
-                  >
-                    <option value={NO_HERO_SLOT}>No hero</option>
-                    {lockedHeroes.map((h, i) =>
-                      h ? (
-                        <option key={i} value={i}>
-                          Slot {i}: {h.name}
-                        </option>
-                      ) : null,
+                </div>
+              ) : (
+                /* Contribute units & weapons to the castle garrison */
+                <div className="rounded-lg border border-zinc-800 p-3">
+                  <h4 className="mb-2 text-xs font-semibold text-text-muted">
+                    Contribute to Garrison
+                  </h4>
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    Defensive Units
+                  </div>
+                  <TripleCountInput
+                    labels={DEFENSIVE_UNIT_LABELS}
+                    icons={DEFENSIVE_UNIT_ICONS}
+                    available={availUnits}
+                    value={garrisonUnits}
+                    onChange={setGarrisonUnits}
+                  />
+                  <div className="mt-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                    Weapons
+                  </div>
+                  <TripleCountInput
+                    labels={WEAPON_LABELS}
+                    icons={WEAPON_ICONS}
+                    available={availWeapons}
+                    value={garrisonWeapons}
+                    onChange={setGarrisonWeapons}
+                  />
+                  <div className="mt-2">
+                    <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                      Hero
+                    </div>
+                    <select
+                      value={garrisonHeroSlot}
+                      onChange={(e) => setGarrisonHeroSlot(Number(e.target.value))}
+                      className="mt-1 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
+                    >
+                      <option value={NO_HERO_SLOT}>No hero</option>
+                      {lockedHeroes.map((h, i) =>
+                        h ? (
+                          <option key={i} value={i}>
+                            Slot {i}: {h.name}
+                          </option>
+                        ) : null,
+                      )}
+                    </select>
+                    {lockedHeroes.every((h) => h === null) && (
+                      <p className="mt-1 text-[10px] text-text-muted">
+                        Lock a hero in the Heroes tab to commit one.
+                      </p>
                     )}
-                  </select>
-                  {lockedHeroes.every((h) => h === null) && (
-                    <p className="mt-1 text-[10px] text-text-muted">
-                      Lock a hero in the Heroes tab to commit one.
+                  </div>
+                  {garrisonFull && (
+                    <p className="mt-2 text-xs italic text-text-muted">
+                      The garrison is full ({castle.garrisonCount} / {castle.maxGarrison}). No more
+                      swords can be added until a seat frees.
                     </p>
                   )}
-                </div>
-                {garrisonFull && (
-                  <p className="mt-2 text-xs italic text-text-muted">
-                    The garrison is full ({castle.garrisonCount} / {castle.maxGarrison}). No more
-                    swords can be added until a seat frees.
-                  </p>
-                )}
-                <TxButton
-                  onClick={handleJoinGarrison}
-                  variant="secondary"
-                  className="mt-3 w-full"
-                  disabled={noContribution || garrisonFull}
-                >
-                  Join Garrison
-                </TxButton>
-              </div>
-            )}
-
-            {/* Garrison roster */}
-            <div className="mt-4 space-y-2">
-              <h4 className="text-xs font-semibold text-text-muted">
-                Garrison Members ({garrisonRoster.length})
-              </h4>
-              {garrisonRoster.length === 0 ? (
-                <p className="text-xs text-text-muted">No garrison members.</p>
-              ) : (
-                <div className="space-y-2">
-                  {garrisonRoster.map((g) => {
-                    const totalUnits =
-                      (g.account.du1?.toNumber?.() ?? 0) +
-                      (g.account.du2?.toNumber?.() ?? 0) +
-                      (g.account.du3?.toNumber?.() ?? 0);
-                    return (
-                      <div
-                        key={g.account.contributor.toBase58()}
-                        className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
-                      >
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-sm text-text-primary">
-                            <DomainName pubkey={g.account.contributor} chars={4} />
-                          </span>
-                          <span className="text-xs text-text-muted">{totalUnits} units</span>
-                        </div>
-                        {isKing && g.ownerWallet && (
-                          <TxButton
-                            onClick={(rp) => handleRelieveGarrison(g.ownerWallet!, rp)}
-                            variant="danger"
-                          >
-                            Relieve
-                          </TxButton>
-                        )}
-                      </div>
-                    );
-                  })}
+                  <TxButton
+                    onClick={handleJoinGarrison}
+                    variant="secondary"
+                    className="mt-3 w-full"
+                    disabled={noContribution || garrisonFull}
+                  >
+                    Join Garrison
+                  </TxButton>
                 </div>
               )}
+
+              {/* Garrison roster */}
+              <div className="mt-4 space-y-2">
+                <h4 className="text-xs font-semibold text-text-muted">
+                  Garrison Members ({garrisonRoster.length})
+                </h4>
+                {garrisonRoster.length === 0 ? (
+                  <p className="text-xs text-text-muted">No garrison members.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {garrisonRoster.map((g) => {
+                      const totalUnits =
+                        Number(g.account.du1 ?? 0n) +
+                        Number(g.account.du2 ?? 0n) +
+                        Number(g.account.du3 ?? 0n);
+                      return (
+                        <div
+                          key={g.account.contributor.toBase58()}
+                          className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2"
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="font-mono text-sm text-text-primary">
+                              <DomainName pubkey={g.account.contributor} chars={4} />
+                            </span>
+                            <span className="text-xs text-text-muted">{totalUnits} units</span>
+                          </div>
+                          {isKing && g.ownerWallet && (
+                            <TxButton
+                              onClick={(rp) => handleRelieveGarrison(g.ownerWallet!, rp)}
+                              variant="danger"
+                            >
+                              Relieve
+                            </TxButton>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
           )}
 
           {/* Actions — Vacant seats are claimed (gated on eligibility);
@@ -1109,7 +1377,11 @@ export function CastleTab() {
                   <p className="flex flex-wrap items-center gap-1 text-xs italic text-text-muted">
                     {attackInfo.reason}
                     {attackInfo.opensAt != null && (
-                      <GoldCountdown endsAt={attackInfo.opensAt} format="compact" label="Opens in" />
+                      <GoldCountdown
+                        endsAt={attackInfo.opensAt}
+                        format="compact"
+                        label="Opens in"
+                      />
                     )}
                   </p>
                 )}
@@ -1155,35 +1427,53 @@ export function CastleTab() {
                 items={[
                   {
                     label: "King NOVI/Day",
-                    value: cc.kingNoviPerDay.toNumber().toLocaleString(),
+                    value: Number(cc.kingNoviPerDay).toLocaleString(),
                     highlight: true,
                   },
-                  { label: "King Cash/Day", value: cc.kingCashPerDay.toNumber().toLocaleString() },
+                  {
+                    label: "King Cash/Day",
+                    value: Number(cc.kingCashPerDay).toLocaleString(),
+                  },
                   {
                     label: "Court NOVI/Day",
-                    value: cc.courtNoviPerDay.toNumber().toLocaleString(),
+                    value: Number(cc.courtNoviPerDay).toLocaleString(),
                   },
                   {
                     label: "Court Cash/Day",
-                    value: cc.courtCashPerDay.toNumber().toLocaleString(),
+                    value: Number(cc.courtCashPerDay).toLocaleString(),
                   },
                   {
                     label: "Member NOVI/Day",
-                    value: cc.memberNoviPerDay.toNumber().toLocaleString(),
+                    value: Number(cc.memberNoviPerDay).toLocaleString(),
                   },
                   {
                     label: "Member Cash/Day",
-                    value: cc.memberCashPerDay.toNumber().toLocaleString(),
+                    value: Number(cc.memberCashPerDay).toLocaleString(),
                   },
-                  { label: "King Loot Cut", value: bpsToPercent(cc.kingLootCutBps) },
+                  {
+                    label: "King Loot Cut",
+                    value: bpsToPercent(cc.kingLootCutBps),
+                  },
                   {
                     label: "Protection",
-                    value: formatTime(cc.protectionDuration.toNumber(), "compact"),
+                    value: formatTime(Number(cc.protectionDuration), "compact"),
                   },
-                  { label: "Garrison T0", value: cc.garrisonCapByTier[0]?.toString() ?? "—" },
-                  { label: "Garrison T1", value: cc.garrisonCapByTier[1]?.toString() ?? "—" },
-                  { label: "Garrison T2", value: cc.garrisonCapByTier[2]?.toString() ?? "—" },
-                  { label: "Max Fortification", value: cc.maxFortificationLevel.toString() },
+                  {
+                    label: "Garrison T0",
+                    value: cc.garrisonCapByTier[0]?.toString() ?? "—",
+                  },
+                  {
+                    label: "Garrison T1",
+                    value: cc.garrisonCapByTier[1]?.toString() ?? "—",
+                  },
+                  {
+                    label: "Garrison T2",
+                    value: cc.garrisonCapByTier[2]?.toString() ?? "—",
+                  },
+                  {
+                    label: "Max Fortification",
+                    value: cc.maxFortificationLevel.toString(),
+                  },
                 ]}
               />
             </GameInfoPanel>

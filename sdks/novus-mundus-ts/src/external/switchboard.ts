@@ -10,6 +10,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import type { Connection } from '@solana/web3.js';
+import { bytesStartWith } from '../utils/deserialize';
 
 // Program IDs
 
@@ -27,9 +28,10 @@ export const SWITCHBOARD_ON_DEMAND_PROGRAM_ID_DEVNET = new PublicKey(
 export const SWITCHBOARD_PRECISION = 18;
 
 /** `PullFeedAccountData` Anchor discriminator. */
-const PULL_FEED_DISCRIMINATOR = Buffer.from([
+const PULL_FEED_DISCRIMINATOR = new Uint8Array([
   196, 27, 108, 196, 10, 215, 219, 40,
 ]);
+
 
 // Layout offsets (into account data, including the 8-byte discriminator),
 // derived from `PullFeedAccountData` in switchboard-on-demand v0.11.3.
@@ -82,10 +84,10 @@ export interface SwitchboardFeed {
 
 // i128 reader
 
-/** Read a little-endian signed 128-bit integer from a Buffer. */
-function readI128(data: Buffer, offset: number): bigint {
-  const low = data.readBigUInt64LE(offset);
-  const high = data.readBigInt64LE(offset + 8);
+/** Read a little-endian signed 128-bit integer via a DataView. */
+function readI128(view: DataView, offset: number): bigint {
+  const low = view.getBigUint64(offset, true);
+  const high = view.getBigInt64(offset + 8, true);
   return (high << 64n) | low;
 }
 
@@ -97,29 +99,31 @@ function readI128(data: Buffer, offset: number): bigint {
  * @param data - Raw account data (including the 8-byte discriminator)
  * @returns Parsed feed, or `null` if the data is not a pull feed
  */
-export function parseSwitchboardFeed(data: Buffer): SwitchboardFeed | null {
+export function parseSwitchboardFeed(data: Uint8Array): SwitchboardFeed | null {
   if (data.length < MIN_PULL_FEED_LEN) return null;
-  if (!data.subarray(0, 8).equals(PULL_FEED_DISCRIMINATOR)) return null;
+  if (!bytesStartWith(data, PULL_FEED_DISCRIMINATOR)) return null;
+
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
   // submissions: take_while(slot != 0)
   const submissions: SwitchboardSubmission[] = [];
   for (let i = 0; i < NUM_SUBMISSIONS; i++) {
     const base = OFF_SUBMISSIONS + i * SUBMISSION_SIZE;
-    const slot = data.readBigUInt64LE(base + SUB_OFF_SLOT);
+    const slot = view.getBigUint64(base + SUB_OFF_SLOT, true);
     if (slot === 0n) break;
-    submissions.push({ slot, value: readI128(data, base + SUB_OFF_VALUE) });
+    submissions.push({ slot, value: readI128(view, base + SUB_OFF_VALUE) });
   }
 
   return {
     submissions,
-    resultValue: readI128(data, OFF_RESULT_VALUE),
-    resultStdDev: readI128(data, OFF_RESULT_STD_DEV),
-    resultSlot: data.readBigUInt64LE(OFF_RESULT_SLOT),
+    resultValue: readI128(view, OFF_RESULT_VALUE),
+    resultStdDev: readI128(view, OFF_RESULT_STD_DEV),
+    resultSlot: view.getBigUint64(OFF_RESULT_SLOT, true),
     resultNumSamples: data[OFF_RESULT_NUM_SAMPLES]!,
     minSampleSize: data[OFF_MIN_SAMPLE_SIZE]!,
-    minResponses: data.readUInt32LE(OFF_MIN_RESPONSES),
-    maxStaleness: data.readUInt32LE(OFF_MAX_STALENESS),
-    lastUpdateTimestamp: Number(data.readBigInt64LE(OFF_LAST_UPDATE_TS)),
+    minResponses: view.getUint32(OFF_MIN_RESPONSES, true),
+    maxStaleness: view.getUint32(OFF_MAX_STALENESS, true),
+    lastUpdateTimestamp: Number(view.getBigInt64(OFF_LAST_UPDATE_TS, true)),
   };
 }
 
@@ -226,7 +230,7 @@ export async function fetchSwitchboardFeed(
 ): Promise<SwitchboardFeed | null> {
   const accountInfo = await connection.getAccountInfo(feedAddress);
   if (!accountInfo || !accountInfo.data) return null;
-  return parseSwitchboardFeed(Buffer.from(accountInfo.data));
+  return parseSwitchboardFeed(accountInfo.data);
 }
 
 /**

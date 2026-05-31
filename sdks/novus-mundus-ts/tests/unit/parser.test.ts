@@ -5,7 +5,6 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import BN from 'bn.js';
 import {
   parseInstructionData,
   parseInstructionFromBase64,
@@ -37,7 +36,7 @@ describe('Instruction Parser', () => {
       // Build instruction data: discriminator (2) + unitType (1) + noviAmount (8)
       const writer = new BufferWriter(9);
       writer.writeU8(3); // unitType
-      writer.writeU64(new BN(1000));
+      writer.writeU64(1000n);
       const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
 
       const parsed = parseInstructionData(data);
@@ -49,7 +48,7 @@ describe('Instruction Parser', () => {
 
       const hireData = parsed!.data as HireUnitsData;
       expect(hireData.unitType).toBe(3);
-      expect(hireData.noviAmount.toNumber()).toBe(1000);
+      expect(Number(hireData.noviAmount)).toBe(1000);
     });
 
     it('should parse IntercityStart instruction', () => {
@@ -102,12 +101,12 @@ describe('Instruction Parser', () => {
 
     it('should parse RallyJoin instruction', () => {
       const writer = new BufferWriter(48);
-      writer.writeU64(new BN(100)); // du1
-      writer.writeU64(new BN(200)); // du2
-      writer.writeU64(new BN(300)); // du3
-      writer.writeU64(new BN(50)); // melee
-      writer.writeU64(new BN(60)); // ranged
-      writer.writeU64(new BN(70)); // siege
+      writer.writeU64(100n); // du1
+      writer.writeU64(200n); // du2
+      writer.writeU64(300n); // du3
+      writer.writeU64(50n); // melee
+      writer.writeU64(60n); // ranged
+      writer.writeU64(70n); // siege
       const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, writer.toBuffer());
 
       const parsed = parseInstructionData(data);
@@ -117,12 +116,12 @@ describe('Instruction Parser', () => {
       expect(parsed!.category).toBe('Rally');
 
       const rallyData = parsed!.data as RallyJoinData;
-      expect(rallyData.du1.toNumber()).toBe(100);
-      expect(rallyData.du2.toNumber()).toBe(200);
-      expect(rallyData.du3.toNumber()).toBe(300);
-      expect(rallyData.meleeWeapons.toNumber()).toBe(50);
-      expect(rallyData.rangedWeapons.toNumber()).toBe(60);
-      expect(rallyData.siegeWeapons.toNumber()).toBe(70);
+      expect(Number(rallyData.du1)).toBe(100);
+      expect(Number(rallyData.du2)).toBe(200);
+      expect(Number(rallyData.du3)).toBe(300);
+      expect(Number(rallyData.meleeWeapons)).toBe(50);
+      expect(Number(rallyData.rangedWeapons)).toBe(60);
+      expect(Number(rallyData.siegeWeapons)).toBe(70);
     });
 
     it('should handle instructions with no parameters', () => {
@@ -152,9 +151,9 @@ describe('Instruction Parser', () => {
     it('should parse base64-encoded instruction', () => {
       const writer = new BufferWriter(9);
       writer.writeU8(2);
-      writer.writeU64(new BN(500));
+      writer.writeU64(500n);
       const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
-      const base64 = data.toString('base64');
+      const base64 = Buffer.from(data).toString('base64');
 
       const parsed = parseInstructionFromBase64(base64);
 
@@ -238,7 +237,7 @@ describe('Instruction Parser', () => {
 
     it('should categorize Rally instructions', () => {
       const writer = new BufferWriter(48);
-      for (let i = 0; i < 6; i++) writer.writeU64(new BN(0));
+      for (let i = 0; i < 6; i++) writer.writeU64(0n);
       const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, writer.toBuffer());
       const parsed = parseInstructionData(data);
       expect(parsed!.category).toBe('Rally');
@@ -249,7 +248,7 @@ describe('Instruction Parser', () => {
 describe('Instruction Roundtrip', () => {
   it('should roundtrip HireUnits data', () => {
     const originalUnitType = 3;
-    const originalAmount = new BN(12345);
+    const originalAmount = 12345n;
 
     // Create instruction
     const writer = new BufferWriter(9);
@@ -262,7 +261,7 @@ describe('Instruction Roundtrip', () => {
     const hireData = parsed!.data as HireUnitsData;
 
     expect(hireData.unitType).toBe(originalUnitType);
-    expect(hireData.noviAmount.eq(originalAmount)).toBe(true);
+    expect(hireData.noviAmount === originalAmount).toBe(true);
   });
 
   it('should roundtrip negative coordinates', () => {

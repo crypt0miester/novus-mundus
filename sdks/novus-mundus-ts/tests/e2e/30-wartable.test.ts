@@ -8,9 +8,7 @@
 // off-chain decode + decrypt path.
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
-import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
-import bs58 from 'bs58';
+import { Keypair, PublicKey, Transaction, type Blockhash } from '@solana/web3.js';
 
 import {
   createInitGameEngineInstruction,
@@ -71,7 +69,7 @@ import { BuildingType } from '../../src/index';
 import { sendTransaction, expectTransactionToFail } from '../utils/transactions';
 import { fetchTeam, fetchTeamMemberSlot, fetchRally, fetchPlayer, fetchCastleRaw, fetchCity } from '../utils/accounts';
 import { deserializeCastle } from '../../src/state/castle';
-import { FailedTransactionMetadata } from '../fixtures/svm';
+import { FailedTransactionMetadata, svmKey, sendSignedTx } from '../fixtures/svm';
 
 setDefaultTimeout(120_000);
 
@@ -98,11 +96,12 @@ describe('War Table', () => {
   }
 
   // Send a transaction and return its log lines on success.
-  function sendAndGetLogs(tx: Transaction, signers: Keypair[]): string[] {
-    tx.recentBlockhash = ctx.svm.latestBlockhash();
+  async function sendAndGetLogs(tx: Transaction, signers: Keypair[]): Promise<string[]> {
+    tx.recentBlockhash = ctx.svm.latestBlockhash() as Blockhash;
     tx.feePayer = signers[0]!.publicKey;
-    tx.sign(...signers);
-    const result = ctx.svm.sendTransaction(tx);
+    await tx.sign(...signers);
+    const signedBytes = await tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+    const result = sendSignedTx(ctx.svm, signedBytes);
     if (result instanceof FailedTransactionMetadata) {
       throw new Error(`tx failed: ${result.toString()}`);
     }
@@ -207,16 +206,16 @@ describe('War Table', () => {
   }
 
   // Post an encrypted team message, advance the slot, and return its ReadMessage.
-  function postTeamMessage(
+  async function postTeamMessage(
     leader: TestPlayer,
     teamPda: PublicKey,
     epoch: number,
     body: { kind: WtKind; payload: string; parentId?: Uint8Array },
-  ): ReadMessage {
+  ): Promise<ReadMessage> {
     const slot = ctx.svm.getClock().slot;
     const envelope = buildEncryptedEnvelope(teamPda, leader.publicKey, epoch, body);
-    const logs = sendAndGetLogs(
-      new Transaction().add(createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope)),
+    const logs = await sendAndGetLogs(
+      new Transaction().add(await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope)),
       [leader.keypair],
     );
     const read = decodeTeamMessage(logs, teamPda, epoch, slot, 0);
@@ -235,19 +234,19 @@ describe('War Table', () => {
     const leader = await factory.createPlayer({ initialize: true, createEstate: true });
     const member = await factory.createPlayer({ initialize: true, createEstate: true });
     const teamId = uniqueTeamId();
-    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+    const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
 
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: `WT${teamId}` }),
+        await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: `WT${teamId}` }),
       ),
       [leader.keypair],
     );
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamInviteInstruction({
+        await createTeamInviteInstruction({
           inviter: leader.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -262,7 +261,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamAcceptInviteInstruction({
+        await createTeamAcceptInviteInstruction({
           owner: member.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -287,11 +286,11 @@ describe('War Table', () => {
 
     const text = 'rally the house at the north gate';
     const envelope = buildEncryptedEnvelope(teamPda, leader.publicKey, epoch, { kind: WtKind.Text, payload: text });
-    const ix = createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
+    const ix = await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
 
-    const before = ctx.svm.getAccount(teamPda);
-    const logs = sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
-    const after = ctx.svm.getAccount(teamPda);
+    const before = ctx.svm.getAccount(svmKey(teamPda));
+    const logs = await sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
+    const after = ctx.svm.getAccount(svmKey(teamPda));
 
     // The thread account is unchanged (log-only instruction).
     expect(Buffer.from(before!.data).equals(Buffer.from(after!.data))).toBe(true);
@@ -314,7 +313,7 @@ describe('War Table', () => {
     const outsider = await factory.createPlayer({ initialize: true, createEstate: true });
 
     const envelope = buildEncryptedEnvelope(teamPda, outsider.publicKey, epoch, { kind: WtKind.Text, payload: 'let me in' });
-    const ix = createPostTeamMessageInstruction(teamPda, outsider.publicKey, outsider.playerPda, envelope);
+    const ix = await createPostTeamMessageInstruction(teamPda, outsider.publicKey, outsider.playerPda, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [outsider.keypair], GameError.WtNotInScope);
   });
 
@@ -324,9 +323,9 @@ describe('War Table', () => {
     const team = await fetchTeam(ctx.svm, teamPda);
     const epoch = team!.membershipEpoch;
     // Encode the envelope with a WRONG thread pda baked into bytes 4..36.
-    const wrongThread = Keypair.generate().publicKey;
+    const wrongThread = (await Keypair.generate()).publicKey;
     const envelope = buildEncryptedEnvelope(wrongThread, leader.publicKey, epoch, { kind: WtKind.Text, payload: 'oops' });
-    const ix = createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
+    const ix = await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [leader.keypair], GameError.WtThreadPdaMismatch);
   });
 
@@ -336,9 +335,9 @@ describe('War Table', () => {
     const team = await fetchTeam(ctx.svm, teamPda);
     const epoch = team!.membershipEpoch;
     // Bake a wrong sender wallet into bytes 36..68.
-    const wrongSender = Keypair.generate().publicKey;
+    const wrongSender = (await Keypair.generate()).publicKey;
     const envelope = buildEncryptedEnvelope(teamPda, wrongSender, epoch, { kind: WtKind.Text, payload: 'spoof' });
-    const ix = createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
+    const ix = await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [leader.keypair], GameError.WtSenderMismatch);
   });
 
@@ -348,7 +347,7 @@ describe('War Table', () => {
     const team = await fetchTeam(ctx.svm, teamPda);
     const wrongEpoch = team!.membershipEpoch + 5;
     const envelope = buildEncryptedEnvelope(teamPda, leader.publicKey, wrongEpoch, { kind: WtKind.Text, payload: 'stale' });
-    const ix = createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
+    const ix = await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [leader.keypair], GameError.WtKeyVersionMismatch);
   });
 
@@ -373,7 +372,7 @@ describe('War Table', () => {
       bodyNonce: new Uint8Array(WT_NONCE_LEN),
       body: bodyBytes,
     });
-    const ix = createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
+    const ix = await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [leader.keypair], GameError.WtEncryptedFlagRequired);
   });
 
@@ -386,7 +385,7 @@ describe('War Table', () => {
     const leaderSlot = await fetchTeamMemberSlot(ctx.svm, teamPda, 0);
     expect(leaderSlot!.joinedAtEpoch).toBe(0);
 
-    const kickIx = createTeamKickMemberInstruction({
+    const kickIx = await createTeamKickMemberInstruction({
       kicker: leader.publicKey,
       gameEngine: ctx.gameEngine,
       team: teamPda,
@@ -412,7 +411,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamKickMemberInstruction({
+        await createTeamKickMemberInstruction({
           kicker: leader.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -434,7 +433,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamInviteInstruction({
+        await createTeamInviteInstruction({
           inviter: leader.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -449,7 +448,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamAcceptInviteInstruction({
+        await createTeamAcceptInviteInstruction({
           owner: newMember.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -470,10 +469,10 @@ describe('War Table', () => {
 
   // 8. DM symmetry
   it('8. deriveDmThreadPda is symmetric over the two player PDAs', async () => {
-    const a = Keypair.generate().publicKey;
-    const b = Keypair.generate().publicKey;
-    const [pdaAB] = deriveDmThreadPda(a, b);
-    const [pdaBA] = deriveDmThreadPda(b, a);
+    const a = (await Keypair.generate()).publicKey;
+    const b = (await Keypair.generate()).publicKey;
+    const [pdaAB] = await deriveDmThreadPda(a, b);
+    const [pdaBA] = await deriveDmThreadPda(b, a);
     expect(pdaAB.equals(pdaBA)).toBe(true);
     expect(() => deriveDmThreadPda(a, a)).toThrow();
   });
@@ -482,18 +481,18 @@ describe('War Table', () => {
   it('9. DM participant posts an encrypted message at keyVersion 1', async () => {
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [threadPda] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const [threadPda] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
 
     const text = 'meet me at the docks at dusk';
     const envelope = buildEncryptedEnvelope(threadPda, alice.publicKey, 1, { kind: WtKind.Text, payload: text });
-    const ix = createPostDmMessageInstruction(
+    const ix = await createPostDmMessageInstruction(
       alice.playerPda,
       bob.playerPda,
       alice.publicKey,
       alice.playerPda,
       envelope,
     );
-    const logs = sendAndGetLogs(new Transaction().add(ix), [alice.keypair]);
+    const logs = await sendAndGetLogs(new Transaction().add(ix), [alice.keypair]);
     const blobs = wt1Blobs(logs);
     expect(blobs.length).toBe(1);
     const env = decodeEnvelope(blobs[0]!);
@@ -508,11 +507,11 @@ describe('War Table', () => {
     const alice = await factory.createPlayer({ initialize: true, createEstate: true });
     const bob = await factory.createPlayer({ initialize: true, createEstate: true });
     const carol = await factory.createPlayer({ initialize: true, createEstate: true });
-    const [threadPda] = deriveDmThreadPda(alice.playerPda, bob.playerPda);
+    const [threadPda] = await deriveDmThreadPda(alice.playerPda, bob.playerPda);
 
     // Carol (not a participant) signs against the alice/bob thread.
     const envC = buildEncryptedEnvelope(threadPda, carol.publicKey, 1, { kind: WtKind.Text, payload: 'eavesdrop' });
-    const ixC = createPostWarTableMessageInstruction(
+    const ixC = await createPostWarTableMessageInstruction(
       { thread: threadPda, sender: carol.publicKey, senderPlayer: carol.playerPda, gateAccounts: [alice.playerPda, bob.playerPda] },
       { scope: WtScope.Dm, envelope: envC },
     );
@@ -520,7 +519,7 @@ describe('War Table', () => {
 
     // Alice posts with keyVersion 2 (must be 1).
     const envBad = buildEncryptedEnvelope(threadPda, alice.publicKey, 2, { kind: WtKind.Text, payload: 'wrong version' });
-    const ixBad = createPostDmMessageInstruction(alice.playerPda, bob.playerPda, alice.publicKey, alice.playerPda, envBad);
+    const ixBad = await createPostDmMessageInstruction(alice.playerPda, bob.playerPda, alice.publicKey, alice.playerPda, envBad);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ixBad), [alice.keypair], GameError.WtKeyVersionMismatch);
   });
 
@@ -532,10 +531,10 @@ describe('War Table', () => {
     // Forge a fake "player" account: a system-owned account whose bytes are
     // arbitrary. Use a wallet keypair pubkey as the fake player PDA so the
     // pair-PDA derivation succeeds but load_checked_by_key must reject it.
-    const fakePlayer = Keypair.generate().publicKey;
-    const [threadPda] = deriveDmThreadPda(alice.playerPda, fakePlayer);
+    const fakePlayer = (await Keypair.generate()).publicKey;
+    const [threadPda] = await deriveDmThreadPda(alice.playerPda, fakePlayer);
     const envelope = buildEncryptedEnvelope(threadPda, alice.publicKey, 1, { kind: WtKind.Text, payload: 'forge' });
-    const ix = createPostWarTableMessageInstruction(
+    const ix = await createPostWarTableMessageInstruction(
       { thread: threadPda, sender: alice.publicKey, senderPlayer: alice.playerPda, gateAccounts: [alice.playerPda, fakePlayer] },
       { scope: WtScope.Dm, envelope },
     );
@@ -552,11 +551,11 @@ describe('War Table', () => {
     const gridLat = Math.round(city.lat * GRID_PRECISION);
     const gridLong = Math.round(city.lon * GRID_PRECISION) + gridLatOffset;
     const cityData = await fetchCity(ctx.svm, ctx.gameEngine, cityId);
-    const encounterIndex = cityData!.totalEncountersSpawned.toNumber();
+    const encounterIndex = Number(cityData!.totalEncountersSpawned);
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createSpawnEncounterInstruction(
+        await createSpawnEncounterInstruction(
           {
             gameEngine: ctx.gameEngine,
             payer: ctx.daoAuthority.publicKey,
@@ -571,7 +570,7 @@ describe('War Table', () => {
       ),
       [ctx.daoAuthority],
     );
-    const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+    const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
     return encounterPda;
   }
 
@@ -584,8 +583,8 @@ describe('War Table', () => {
     const player = await factory.createPlayer({ initialize: true, createEstate: true });
     const text = 'epic spotted at the crossroads';
     const envelope = buildPlaintextEnvelope(encounterPda, player.publicKey, { kind: WtKind.Text, payload: text });
-    const ix = createPostEncounterMessageInstruction(encounterPda, player.publicKey, player.playerPda, envelope);
-    const logs = sendAndGetLogs(new Transaction().add(ix), [player.keypair]);
+    const ix = await createPostEncounterMessageInstruction(encounterPda, player.publicKey, player.playerPda, envelope);
+    const logs = await sendAndGetLogs(new Transaction().add(ix), [player.keypair]);
     const blobs = wt1Blobs(logs);
     expect(blobs.length).toBe(1);
     const env = decodeEnvelope(blobs[0]!);
@@ -594,7 +593,7 @@ describe('War Table', () => {
 
     // An encrypted attempt (flags bit0 set, keyVersion 0) is rejected.
     const encEnvelope = buildEncryptedEnvelope(encounterPda, player.publicKey, 0, { kind: WtKind.Text, payload: 'secret' });
-    const ixEnc = createPostEncounterMessageInstruction(encounterPda, player.publicKey, player.playerPda, encEnvelope);
+    const ixEnc = await createPostEncounterMessageInstruction(encounterPda, player.publicKey, player.playerPda, encEnvelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ixEnc), [player.keypair], GameError.WtKeyVersionMismatch);
   });
 
@@ -605,8 +604,8 @@ describe('War Table', () => {
     const player = await factory.createPlayer({ initialize: true, createEstate: true });
     const text = 'rallying the kingdom';
     const envelope = buildPlaintextEnvelope(ctx.gameEngine, player.publicKey, { kind: WtKind.Status, payload: text });
-    const ix = createPostPublicMessageInstruction(ctx.gameEngine, player.publicKey, player.playerPda, envelope);
-    const logs = sendAndGetLogs(new Transaction().add(ix), [player.keypair]);
+    const ix = await createPostPublicMessageInstruction(ctx.gameEngine, player.publicKey, player.playerPda, envelope);
+    const logs = await sendAndGetLogs(new Transaction().add(ix), [player.keypair]);
     const blobs = wt1Blobs(logs);
     expect(blobs.length).toBe(1);
     const env = decodeEnvelope(blobs[0]!);
@@ -617,7 +616,7 @@ describe('War Table', () => {
 
     // An encrypted attempt (flags bit0 set, keyVersion 0) is rejected.
     const encEnvelope = buildEncryptedEnvelope(ctx.gameEngine, player.publicKey, 0, { kind: WtKind.Text, payload: 'secret' });
-    const ixEnc = createPostPublicMessageInstruction(ctx.gameEngine, player.publicKey, player.playerPda, encEnvelope);
+    const ixEnc = await createPostPublicMessageInstruction(ctx.gameEngine, player.publicKey, player.playerPda, encEnvelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ixEnc), [player.keypair], GameError.WtKeyVersionMismatch);
   });
 
@@ -629,11 +628,11 @@ describe('War Table', () => {
     const encounterPda = await spawnEncounter(cityId, 3);
 
     // A fresh wallet with no on-chain PlayerAccount.
-    const stranger = Keypair.generate();
-    ctx.svm.airdrop(stranger.publicKey, 1_000_000_000n);
-    const [strangerPlayer] = derivePlayerPda(ctx.gameEngine, stranger.publicKey);
+    const stranger = await Keypair.generate();
+    ctx.svm.airdrop(svmKey(stranger.publicKey), 1_000_000_000n);
+    const [strangerPlayer] = await derivePlayerPda(ctx.gameEngine, stranger.publicKey);
     const envelope = buildPlaintextEnvelope(encounterPda, stranger.publicKey, { kind: WtKind.Text, payload: 'who am i' });
-    const ix = createPostEncounterMessageInstruction(encounterPda, stranger.publicKey, strangerPlayer, envelope);
+    const ix = await createPostEncounterMessageInstruction(encounterPda, stranger.publicKey, strangerPlayer, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [stranger]);
   });
 
@@ -660,11 +659,11 @@ describe('War Table', () => {
     // Stand up a real second game engine (kingdom 1). Succeeds because
     // init_game_engine no longer recreates the global NOVI mint singleton.
     const SECOND_KINGDOM_ID = 1;
-    const [secondEngine] = deriveGameEnginePda(SECOND_KINGDOM_ID);
+    const [secondEngine] = await deriveGameEnginePda(SECOND_KINGDOM_ID);
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createInitGameEngineInstruction({
+        await createInitGameEngineInstruction({
           authority: ctx.daoAuthority.publicKey,
           treasuryWallet: ctx.treasury.publicKey,
           kingdomId: SECOND_KINGDOM_ID,
@@ -678,21 +677,21 @@ describe('War Table', () => {
     // real engine-1 player and repointing its identity. PlayerCore layout:
     // account_key(1) | game_engine(@1, 32) | owner(@33, 32) | bump(@65, 1) | ...
     const template = await factory.createPlayer({ initialize: true });
-    const templateInfo = ctx.svm.getAccount(template.playerPda)!;
-    const foreigner = Keypair.generate();
-    ctx.svm.airdrop(foreigner.publicKey, 1_000_000_000n);
-    const [foreignerPlayer, foreignerBump] = derivePlayerPda(secondEngine, foreigner.publicKey);
+    const templateInfo = ctx.svm.getAccount(svmKey(template.playerPda))!;
+    const foreigner = await Keypair.generate();
+    ctx.svm.airdrop(svmKey(foreigner.publicKey), 1_000_000_000n);
+    const [foreignerPlayer, foreignerBump] = await derivePlayerPda(secondEngine, foreigner.publicKey);
 
     const data = Buffer.from(templateInfo.data);
-    secondEngine.toBuffer().copy(data, 1);
-    foreigner.publicKey.toBuffer().copy(data, 33);
+    Buffer.from(secondEngine.toBytes()).copy(data, 1);
+    Buffer.from(foreigner.publicKey.toBytes()).copy(data, 33);
     data[65] = foreignerBump;
-    ctx.svm.setAccount(foreignerPlayer, {
+    ctx.svm.setAccount(svmKey(foreignerPlayer), {
       data,
       executable: false,
       lamports: templateInfo.lamports,
       owner: templateInfo.owner, // the novus program (load_checked_by_key requires it)
-      rentEpoch: 0,
+      rentEpoch: 0n,
     });
 
     // The synthesized account is a valid Player in the second kingdom.
@@ -708,7 +707,7 @@ describe('War Table', () => {
       kind: WtKind.Text,
       payload: 'wrong kingdom',
     });
-    const ix = createPostEncounterMessageInstruction(encounterPda, foreigner.publicKey, foreignerPlayer, envelope);
+    const ix = await createPostEncounterMessageInstruction(encounterPda, foreigner.publicKey, foreignerPlayer, envelope);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [foreigner], GameError.WtNotInScope);
   });
 
@@ -723,9 +722,9 @@ describe('War Table', () => {
         kind: WtKind.Text,
         payload: `message ${i}`,
       });
-      const ix = createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
+      const ix = await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envelope);
       const slotBefore = ctx.svm.getClock().slot;
-      const logs = sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
+      const logs = await sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
       const blobs = wt1Blobs(logs);
       expect(blobs.length).toBe(1);
       ids.push({ slot: slotBefore, id: encodeMessageId({ slot: slotBefore, txDisc: 0, logIndex: 0 }) });
@@ -748,8 +747,8 @@ describe('War Table', () => {
     // P1: root.
     const env1 = buildEncryptedEnvelope(teamPda, leader.publicKey, epoch, { kind: WtKind.Text, payload: 'parent' });
     const slot1 = ctx.svm.getClock().slot;
-    const logs1 = sendAndGetLogs(
-      new Transaction().add(createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env1)),
+    const logs1 = await sendAndGetLogs(
+      new Transaction().add(await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env1)),
       [leader.keypair],
     );
     expect(wt1Blobs(logs1).length).toBe(1);
@@ -764,8 +763,8 @@ describe('War Table', () => {
       payload: 'child',
       parentId: p1Id,
     });
-    const logs2 = sendAndGetLogs(
-      new Transaction().add(createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env2)),
+    const logs2 = await sendAndGetLogs(
+      new Transaction().add(await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env2)),
       [leader.keypair],
     );
     const blobs2 = wt1Blobs(logs2);
@@ -784,8 +783,8 @@ describe('War Table', () => {
 
     const slot1 = ctx.svm.getClock().slot;
     const env1 = buildEncryptedEnvelope(teamPda, leader.publicKey, epoch, { kind: WtKind.Text, payload: 'delete me' });
-    sendAndGetLogs(
-      new Transaction().add(createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env1)),
+    await sendAndGetLogs(
+      new Transaction().add(await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, env1)),
       [leader.keypair],
     );
     const p1Id = encodeMessageId({ slot: slot1, txDisc: 0, logIndex: 0 });
@@ -798,8 +797,8 @@ describe('War Table', () => {
       payload: '',
       parentId: p1Id,
     });
-    const logsT = sendAndGetLogs(
-      new Transaction().add(createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envT)),
+    const logsT = await sendAndGetLogs(
+      new Transaction().add(await createPostTeamMessageInstruction(teamPda, leader.publicKey, leader.playerPda, envT)),
       [leader.keypair],
     );
     const env = decodeEnvelope(wt1Blobs(logsT)[0]!);
@@ -819,11 +818,11 @@ describe('War Table', () => {
       buildings: [BuildingType.Barracks, BuildingType.Citadel],
     });
     const teamId = uniqueTeamId();
-    const [teamPda] = deriveTeamPda(ctx.gameEngine, teamId);
+    const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: `R${teamId}` }),
+        await createTeamCreateInstruction({ owner: leader.publicKey, gameEngine: ctx.gameEngine, teamId }, { name: `R${teamId}` }),
       ),
       [leader.keypair],
     );
@@ -832,23 +831,23 @@ describe('War Table', () => {
     const rallyCityId = leaderAccount!.currentCity;
     const rallyId = 700 + (teamCounter % 50);
 
-    const createIx = createRallyCreateInstruction(
-      { gameEngine: ctx.gameEngine, owner: leader.publicKey, rallyId, target: Keypair.generate().publicKey, teamId, rallyCityId },
+    const createIx = await createRallyCreateInstruction(
+      { gameEngine: ctx.gameEngine, owner: leader.publicKey, rallyId, target: (await Keypair.generate()).publicKey, teamId, rallyCityId },
       {
         targetType: RallyTargetType.Encounter,
-        gatherDuration: new BN(3600),
+        gatherDuration: BigInt(3600),
         targetCityId: rallyCityId,
-        defensiveUnit1: new BN(50),
-        defensiveUnit2: new BN(0),
-        defensiveUnit3: new BN(0),
-        meleeWeapons: new BN(0),
-        rangedWeapons: new BN(0),
-        siegeWeapons: new BN(0),
+        defensiveUnit1: BigInt(50),
+        defensiveUnit2: 0n,
+        defensiveUnit3: 0n,
+        meleeWeapons: 0n,
+        rangedWeapons: 0n,
+        siegeWeapons: 0n,
       },
     );
     await sendTransaction(ctx.svm, new Transaction().add(createIx), [leader.keypair]);
 
-    const [rallyPda] = deriveRallyPda(ctx.gameEngine, leader.publicKey, rallyId);
+    const [rallyPda] = await deriveRallyPda(ctx.gameEngine, leader.publicKey, rallyId);
     const rally = await fetchRally(ctx.svm, rallyPda);
     expect(rally).not.toBeNull();
     const epoch = rally!.membershipEpoch;
@@ -856,18 +855,18 @@ describe('War Table', () => {
 
     // Participant (creator) posts OK.
     const envelope = buildEncryptedEnvelope(rallyPda, leader.publicKey, epoch, { kind: WtKind.Text, payload: 'march at gather end' });
-    const ix = createPostRallyMessageInstruction(ctx.gameEngine, leader.publicKey, rallyId, rallyPda, leader.publicKey, leader.playerPda, envelope);
-    const logs = sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
+    const ix = await createPostRallyMessageInstruction(ctx.gameEngine, leader.publicKey, rallyId, rallyPda, leader.publicKey, leader.playerPda, envelope);
+    const logs = await sendAndGetLogs(new Transaction().add(ix), [leader.keypair]);
     expect(wt1Blobs(logs).length).toBe(1);
 
     // Non-participant rejected: their RallyParticipant PDA does not exist.
     const outsider = await factory.createPlayer({ initialize: true, createEstate: true });
     const envO = buildEncryptedEnvelope(rallyPda, outsider.publicKey, epoch, { kind: WtKind.Text, payload: 'intrude' });
-    const ixO = createPostRallyMessageInstruction(ctx.gameEngine, leader.publicKey, rallyId, rallyPda, outsider.publicKey, outsider.playerPda, envO);
+    const ixO = await createPostRallyMessageInstruction(ctx.gameEngine, leader.publicKey, rallyId, rallyPda, outsider.publicKey, outsider.playerPda, envO);
     await expectTransactionToFail(ctx.svm, new Transaction().add(ixO), [outsider.keypair]);
 
     // Cancel the rally: bumps membership_epoch (process_return per returning participant).
-    const cancelIx = createRallyCancelInstruction({ gameEngine: ctx.gameEngine, owner: leader.publicKey, rally: rallyPda, rallyId, rallyCityId });
+    const cancelIx = await createRallyCancelInstruction({ gameEngine: ctx.gameEngine, owner: leader.publicKey, rally: rallyPda, rallyId, rallyCityId });
     await sendTransaction(ctx.svm, new Transaction().add(cancelIx), [leader.keypair]);
     const rallyAfter = await fetchRally(ctx.svm, rallyPda);
     expect(rallyAfter!.membershipEpoch).toBeGreaterThan(epoch);
@@ -884,7 +883,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createCreateCastleInstruction(
+        await createCreateCastleInstruction(
           { daoAuthority: ctx.daoAuthority.publicKey, gameEngine: ctx.gameEngine },
           {
             cityId,
@@ -903,36 +902,36 @@ describe('War Table', () => {
       [ctx.daoAuthority],
     );
     expect(await fetchCastleRaw(ctx.svm, ctx.gameEngine, cityId, castleId)).not.toBeNull();
-    const [castlePda] = deriveCastlePda(ctx.gameEngine, cityId, castleId);
+    const [castlePda] = await deriveCastlePda(ctx.gameEngine, cityId, castleId);
 
     // King claims the castle (this is a bump site: epoch goes 0 -> 1).
     const king = await factory.createPlayer({ initialize: true, createEstate: true });
     // King needs a team to claim.
     const kingTeamId = uniqueTeamId();
-    const [kingTeamPda] = deriveTeamPda(ctx.gameEngine, kingTeamId);
+    const [kingTeamPda] = await deriveTeamPda(ctx.gameEngine, kingTeamId);
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamCreateInstruction({ owner: king.publicKey, gameEngine: ctx.gameEngine, teamId: kingTeamId }, { name: `K${kingTeamId}` }),
+        await createTeamCreateInstruction({ owner: king.publicKey, gameEngine: ctx.gameEngine, teamId: kingTeamId }, { name: `K${kingTeamId}` }),
       ),
       [king.keypair],
     );
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createClaimVacantCastleInstruction({ gameEngine: ctx.gameEngine, claimer: king.publicKey, cityId, castleId }),
+        await createClaimVacantCastleInstruction({ gameEngine: ctx.gameEngine, claimer: king.publicKey, cityId, castleId }),
       ),
       [king.keypair],
     );
 
-    const castleAfterClaim = deserializeCastle(Buffer.from(ctx.svm.getAccount(castlePda)!.data));
+    const castleAfterClaim = deserializeCastle(Buffer.from(ctx.svm.getAccount(svmKey(castlePda))!.data));
     const kingEpoch = castleAfterClaim.membershipEpoch;
     expect(kingEpoch).toBeGreaterThan(0);
 
     // King posts (no gate account, 3 accounts total).
     const envelope = buildEncryptedEnvelope(castlePda, king.publicKey, kingEpoch, { kind: WtKind.Text, payload: 'defend the keep' });
-    const ix = createPostCastleMessageInstruction(castlePda, king.publicKey, king.playerPda, undefined, envelope);
-    const logs = sendAndGetLogs(new Transaction().add(ix), [king.keypair]);
+    const ix = await createPostCastleMessageInstruction(castlePda, king.publicKey, king.playerPda, undefined, envelope);
+    const logs = await sendAndGetLogs(new Transaction().add(ix), [king.keypair]);
     expect(wt1Blobs(logs).length).toBe(1);
 
     // Add a garrison member, then have them leave to bump the epoch.
@@ -940,7 +939,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamInviteInstruction({
+        await createTeamInviteInstruction({
           inviter: king.publicKey,
           gameEngine: ctx.gameEngine,
           team: kingTeamPda,
@@ -955,7 +954,7 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTeamAcceptInviteInstruction({
+        await createTeamAcceptInviteInstruction({
           owner: member.publicKey,
           gameEngine: ctx.gameEngine,
           team: kingTeamPda,
@@ -972,31 +971,31 @@ describe('War Table', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createJoinGarrisonInstruction(
+        await createJoinGarrisonInstruction(
           { gameEngine: ctx.gameEngine, owner: member.publicKey, cityId, castleId },
-          { units: [new BN(5), new BN(0), new BN(0)], weapons: [new BN(0), new BN(0), new BN(0)], heroSlot: 255 },
+          { units: [BigInt(5), 0n, 0n], weapons: [0n, 0n, 0n], heroSlot: 255 },
         ),
       ),
       [member.keypair],
     );
 
-    const epochAfterJoin = deserializeCastle(Buffer.from(ctx.svm.getAccount(castlePda)!.data)).membershipEpoch;
+    const epochAfterJoin = deserializeCastle(Buffer.from(ctx.svm.getAccount(svmKey(castlePda))!.data)).membershipEpoch;
     // Join does not bump the epoch.
     expect(epochAfterJoin).toBe(kingEpoch);
 
     // Garrison member's joinedAtEpoch was snapshotted to the castle epoch.
-    const [garrisonPda] = deriveGarrisonPda(castlePda, member.playerPda);
-    const garrisonInfo = ctx.svm.getAccount(garrisonPda);
+    const [garrisonPda] = await deriveGarrisonPda(castlePda, member.playerPda);
+    const garrisonInfo = ctx.svm.getAccount(svmKey(garrisonPda));
     expect(garrisonInfo).not.toBeNull();
 
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createLeaveGarrisonInstruction({ gameEngine: ctx.gameEngine, owner: member.publicKey, cityId, castleId }),
+        await createLeaveGarrisonInstruction({ gameEngine: ctx.gameEngine, owner: member.publicKey, cityId, castleId }),
       ),
       [member.keypair],
     );
-    const epochAfterLeave = deserializeCastle(Buffer.from(ctx.svm.getAccount(castlePda)!.data)).membershipEpoch;
+    const epochAfterLeave = deserializeCastle(Buffer.from(ctx.svm.getAccount(svmKey(castlePda))!.data)).membershipEpoch;
     expect(epochAfterLeave).toBeGreaterThan(epochAfterJoin);
   });
 
@@ -1006,13 +1005,13 @@ describe('War Table', () => {
     const { leader, teamPda } = await createTeamWithMember();
     const epoch = (await fetchTeam(ctx.svm, teamPda))!.membershipEpoch;
 
-    const parent = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'rally up' });
-    const fireReaction = postTeamMessage(leader, teamPda, epoch, {
+    const parent = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'rally up' });
+    const fireReaction = await postTeamMessage(leader, teamPda, epoch, {
       kind: WtKind.Reaction,
       payload: '\u{1F525}',
       parentId: parent.id,
     });
-    const heartReaction = postTeamMessage(leader, teamPda, epoch, {
+    const heartReaction = await postTeamMessage(leader, teamPda, epoch, {
       kind: WtKind.Reaction,
       payload: '\u{2764}\u{FE0F}',
       parentId: parent.id,
@@ -1036,14 +1035,14 @@ describe('War Table', () => {
     const { leader, teamPda } = await createTeamWithMember();
     const epoch = (await fetchTeam(ctx.svm, teamPda))!.membershipEpoch;
 
-    const parent = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'react then unreact' });
-    const reaction = postTeamMessage(leader, teamPda, epoch, {
+    const parent = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'react then unreact' });
+    const reaction = await postTeamMessage(leader, teamPda, epoch, {
       kind: WtKind.Reaction,
       payload: '\u{1F44D}',
       parentId: parent.id,
     });
     // Un-react targets the REACTION message id, not the reacted-to message.
-    const tomb = postTeamMessage(leader, teamPda, epoch, {
+    const tomb = await postTeamMessage(leader, teamPda, epoch, {
       kind: WtKind.Tombstone,
       payload: '',
       parentId: reaction.id,
@@ -1061,10 +1060,10 @@ describe('War Table', () => {
     const { leader, teamPda } = await createTeamWithMember();
     const epoch = (await fetchTeam(ctx.svm, teamPda))!.membershipEpoch;
 
-    const a = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'first' });
-    const b = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'second' });
-    const pinA = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Pin, payload: '', parentId: a.id });
-    const pinB = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Pin, payload: '', parentId: b.id });
+    const a = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'first' });
+    const b = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Text, payload: 'second' });
+    const pinA = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Pin, payload: '', parentId: a.id });
+    const pinB = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Pin, payload: '', parentId: b.id });
 
     let folded = foldThread([a, b, pinA, pinB]);
     // Latest pin (pinB -> b) wins; pin messages are not bubbles.
@@ -1073,7 +1072,7 @@ describe('War Table', () => {
     expect(folded.messages.filter((m) => m.kind === WtKind.Text).length).toBe(2);
 
     // A later zero-parent pin unpins, no tombstone needed.
-    const unpin = postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Pin, payload: '', parentId: WT_ID_ZERO });
+    const unpin = await postTeamMessage(leader, teamPda, epoch, { kind: WtKind.Pin, payload: '', parentId: WT_ID_ZERO });
     folded = foldThread([a, b, pinA, pinB, unpin]);
     expect(Buffer.from(folded.pinnedId).equals(Buffer.from(WT_ID_ZERO))).toBe(true);
   });
@@ -1082,9 +1081,9 @@ describe('War Table', () => {
   it('21. a MemberKicked event on a team thread synthesizes a System line', async () => {
     const { leader, member, teamPda, teamId } = await createTeamWithMember();
 
-    const kickLogs = sendAndGetLogs(
+    const kickLogs = await sendAndGetLogs(
       new Transaction().add(
-        createTeamKickMemberInstruction({
+        await createTeamKickMemberInstruction({
           kicker: leader.publicKey,
           gameEngine: ctx.gameEngine,
           team: teamPda,
@@ -1106,7 +1105,7 @@ describe('War Table', () => {
     expect(label).toContain('was removed');
 
     // An unrelated thread (different PDA) yields no label.
-    const otherThread = Keypair.generate().publicKey;
+    const otherThread = (await Keypair.generate()).publicKey;
     expect(systemLabelFor(WtScope.Team, otherThread, kicked!)).toBeNull();
     // DM scope never synthesizes a label.
     expect(systemLabelFor(WtScope.Dm, teamPda, kicked!)).toBeNull();

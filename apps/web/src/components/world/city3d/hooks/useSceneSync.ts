@@ -10,11 +10,15 @@
  */
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import type { CityAccount } from "novus-mundus-sdk";
 
 import type { CityTerrainMapWebGLProps } from "../CityTerrainMapWebGL";
 import { cssPxPerCellAt, getElevationAt, gridToWorld, midpointElevation } from "../coords";
-import { INITIAL_DISTANCE_2D, INITIAL_DISTANCE_3D, cityCameraSizeFactor } from "../controls";
+import {
+  INITIAL_DISTANCE_2D,
+  INITIAL_DISTANCE_3D,
+  cityCameraSizeFactor,
+  minDistanceForMode,
+} from "../controls";
 import {
   buildTerrainMesh,
   meshFromBakedPixels,
@@ -43,6 +47,11 @@ export interface UseSceneSyncArgs {
    * focus has already fired for the current city. Shared so the
    * snap-to-cell effect doesn't double-fire after mount. */
   autoFocusedForCityRef: RefObject<number | null>;
+  /* Tracks the cityId an explicit focusCell (locate / label click) has
+   * targeted. The home auto-focus reads it to YIELD — an explicit focus
+   * outranks the auto-snap, so locate never gets cancelled and dumped
+   * back on the viewer's own cell. */
+  focusRequestedForCityRef: RefObject<number | null>;
   /* Used by the inspection-labels prop sync. */
   inspectionTeamMatePubkeys?: string[];
 }
@@ -58,6 +67,7 @@ export function useSceneSync({
   cityLongGrid,
   requestRender,
   autoFocusedForCityRef,
+  focusRequestedForCityRef,
 }: UseSceneSyncArgs): void {
   /* Resize. */
   useEffect(() => {
@@ -99,11 +109,12 @@ export function useSceneSync({
     r.cityLongGrid = cityLongGrid;
     r.markers.setTerrain(terrain);
     r.markers.setCenterGrid(cityLatGrid, cityLongGrid, rgu);
-    /* Distance bounds: max = mode default (zoom 1×), min = max/200.
-     * Re-applied here so a city switch re-clamps in case the user
-     * was zoomed in at the previous city. */
-    const maxD = r.controller.getMode() === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    r.controller.setDistanceBounds(maxD / 200, maxD);
+    /* Distance bounds: max = mode default (zoom 1×), min = the MAX_ZOOM
+     * (500×) floor. Re-applied here so a city switch re-clamps in case
+     * the user was zoomed in at the previous city. */
+    const mode = r.controller.getMode();
+    const maxD = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    r.controller.setDistanceBounds(minDistanceForMode(mode), maxD);
     requestRender();
 
     const job = getBakeWorker().bake({
@@ -203,7 +214,7 @@ export function useSceneSync({
     const distanceTo = relativeZoom * newMax;
 
     /* Update controller's distance bounds for the new mode. */
-    r.controller.setDistanceBounds(newMax / 200, newMax);
+    r.controller.setDistanceBounds(minDistanceForMode(to), newMax);
 
     if (reduce) {
       r.modeTween?.cancel();
@@ -250,9 +261,11 @@ export function useSceneSync({
     const mode = r.controller.getMode();
     const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     const tDefault = new THREE.Vector3(0, mode === "iso" ? midpointElevation() : 0, 0);
+    // Recenter + zoom out only; PRESERVE the current yaw + pitch so reset
+    // never spins the view. Omitting `yaw` holds it (yTo = to.yaw ?? yFrom).
     r.viewTween = runViewTween(
       r.controller,
-      { target: tDefault, distance: dDefault, yaw: 0 },
+      { target: tDefault, distance: dDefault },
       requestRender,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -266,14 +279,17 @@ export function useSceneSync({
     if (!r) return;
     const req = props.focusRequest;
     if (!req) return;
+    /* Mark this city as explicitly focused so the home auto-snap below
+     * yields instead of cancelling this tween and yanking the camera
+     * back to the viewer's own cell (the "locate zooms in on me" bug). */
+    focusRequestedForCityRef.current = propsRef.current.cityAccount.cityId;
     const ox = req.gridLong - r.cityLongGrid;
     const oy = req.gridLat - r.cityLatGrid;
     const { wx, wz } = gridToWorld(ox, oy, r.rgu);
     const mode = r.controller.getMode();
-    const baseMax = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    const sizeFactor = cityCameraSizeFactor(propsRef.current.cityAccount as CityAccount);
-    const maxD = baseMax * sizeFactor;
-    const targetDistance = maxD / 200;
+    // Drive all the way to the MAX_ZOOM (500×) floor so "locate" lands
+    // fully zoomed in on the target cell.
+    const targetDistance = minDistanceForMode(mode);
     const targetVec = new THREE.Vector3(wx, mode === "iso" ? midpointElevation() : 0, wz);
     r.viewTween?.cancel();
     r.viewTween = runViewTween(
@@ -294,6 +310,13 @@ export function useSceneSync({
     if (!r) return;
     if (!props.autoFocusCell) return;
     if (autoFocusedForCityRef.current === props.cityAccount.cityId) return;
+    /* An explicit focusCell (locate / label click) for this city outranks
+     * the home auto-snap. Mark the snap satisfied and bail so we never
+     * cancel the locate tween and drop the camera on the viewer's cell. */
+    if (focusRequestedForCityRef.current === props.cityAccount.cityId) {
+      autoFocusedForCityRef.current = props.cityAccount.cityId;
+      return;
+    }
     autoFocusedForCityRef.current = props.cityAccount.cityId;
 
     const ox = props.autoFocusCell.gridLong - cityLongGrid;
@@ -321,4 +344,23 @@ export function useSceneSync({
     rgu,
     terrain,
   ]);
+
+  /* View-angle toggle — the orchestrator flips `viewYaw` between the two
+   * canonical presets (DEFAULT_YAW 0.68 angled, STRAIGHT_YAW 0 straight).
+   * Tween yaw only; target / distance / pitch are left untouched. The
+   * first run is skipped so the initial preset (which already matches the
+   * controller's mounted yaw) doesn't fire a no-op tween. */
+  const firstViewYawRef = useRef(true);
+  useEffect(() => {
+    const r = refs.current;
+    if (!r) return;
+    if (firstViewYawRef.current) {
+      firstViewYawRef.current = false;
+      return;
+    }
+    if (props.viewYaw == null) return;
+    r.viewTween?.cancel();
+    r.viewTween = runViewTween(r.controller, { yaw: props.viewYaw }, requestRender);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.viewYaw]);
 }

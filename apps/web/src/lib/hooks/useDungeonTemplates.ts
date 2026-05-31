@@ -27,7 +27,9 @@ export function useDungeonTemplates() {
     queryKey: ["dungeonTemplates"],
     queryFn: async (): Promise<DungeonEntry[]> => {
       const ids = Array.from({ length: MAX_DUNGEON_PROBE }, (_, i) => i);
-      const pdas = ids.map((id) => deriveDungeonTemplatePda(id)[0]);
+      const pdas = await Promise.all(
+        ids.map(async (id) => (await deriveDungeonTemplatePda(id))[0]),
+      );
       const infos = await connection.getMultipleAccountsInfo(pdas);
       const out: DungeonEntry[] = [];
       ids.forEach((id, i) => {

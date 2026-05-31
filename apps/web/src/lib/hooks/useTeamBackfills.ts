@@ -77,21 +77,24 @@ export function useTreasuryRequests(
 
   useEffect(() => {
     if (!teamPubkey || !members || members.length === 0) return;
-    const requestPdas = members.map(
-      (m) => deriveTreasuryRequestPda(teamPubkey, m.account.player)[0],
-    );
-    connection
-      .getMultipleAccountsInfo(requestPdas)
-      .then((infos) => {
-        const store = useAccountStore.getState();
-        for (let i = 0; i < infos.length; i++) {
-          const info = infos[i];
-          if (!info) continue;
-          const parsed = parseTreasuryRequest(info);
-          if (parsed) store.upsertTreasuryRequest(requestPdas[i], parsed);
-        }
-      })
-      .catch(() => {});
+    let cancelled = false;
+    (async () => {
+      const requestPdas = await Promise.all(
+        members.map(async (m) => (await deriveTreasuryRequestPda(teamPubkey, m.account.player))[0]),
+      );
+      const infos = await connection.getMultipleAccountsInfo(requestPdas);
+      if (cancelled) return;
+      const store = useAccountStore.getState();
+      for (let i = 0; i < infos.length; i++) {
+        const info = infos[i];
+        if (!info) continue;
+        const parsed = parseTreasuryRequest(info);
+        if (parsed) store.upsertTreasuryRequest(requestPdas[i], parsed);
+      }
+    })().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
     // teamPubkey keyed by base58 (stable identity); `refresh` re-fires post-tx.
   }, [teamPubkey?.toBase58(), members, connection, refresh]);
 }
@@ -108,25 +111,24 @@ export function useIncomingInvites(refresh: boolean): void {
 
   useEffect(() => {
     if (!publicKey) return;
-    const [meiPlayerPda] = derivePlayerPda(client.gameEngine, publicKey);
     let cancelled = false;
-    client
-      .fetchAllTeams({ activeOnly: true })
-      .then((teams) => {
-        if (cancelled || teams.length === 0) return;
-        const invitePdas = teams.map((t) => deriveTeamInvitePda(t.pubkey, meiPlayerPda)[0]);
-        return connection.getMultipleAccountsInfo(invitePdas).then((infos) => {
-          if (cancelled) return;
-          const store = useAccountStore.getState();
-          for (let i = 0; i < infos.length; i++) {
-            const info = infos[i];
-            if (!info) continue;
-            const parsed = parseTeamInvite(info);
-            if (parsed) store.upsertTeamInvite(invitePdas[i], parsed);
-          }
-        });
-      })
-      .catch(() => {});
+    (async () => {
+      const [meiPlayerPda] = await derivePlayerPda(client.gameEngine, publicKey);
+      const teams = await client.fetchAllTeams({ activeOnly: true });
+      if (cancelled || teams.length === 0) return;
+      const invitePdas = await Promise.all(
+        teams.map(async (t) => (await deriveTeamInvitePda(t.pubkey, meiPlayerPda))[0]),
+      );
+      const infos = await connection.getMultipleAccountsInfo(invitePdas);
+      if (cancelled) return;
+      const store = useAccountStore.getState();
+      for (let i = 0; i < infos.length; i++) {
+        const info = infos[i];
+        if (!info) continue;
+        const parsed = parseTeamInvite(info);
+        if (parsed) store.upsertTeamInvite(invitePdas[i], parsed);
+      }
+    })().catch(() => {});
     return () => {
       cancelled = true;
     };

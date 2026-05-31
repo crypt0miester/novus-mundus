@@ -34,7 +34,7 @@ import {
   PROGRAM_ID,
   SEEDS,
 } from '../src/index';
-import { getAssociatedTokenAddressSyncForPda } from '../src/utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../src/utils/token';
 
 // Configuration
 
@@ -234,7 +234,7 @@ async function main() {
   console.log('\n--- Step 4: Init Player ---');
   const playerKeypair = Keypair.generate();
   const [playerPda, playerBump] = await derivePlayerPda(gameEngine, playerKeypair.publicKey);
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, playerPda);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, playerPda);
   const [spawnLocation] = await deriveLocationPda(gameEngine, 1, 0, 0);
 
   log('PLAYER', `Player wallet: ${playerKeypair.publicKey.toBase58()}`);

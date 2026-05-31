@@ -92,8 +92,8 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
   // Progress for constructing buildings
   const pct = data.slot
     ? (() => {
-        const started = data.slot.constructionStarted?.toNumber?.() ?? 0;
-        const ends = data.slot.constructionEnds?.toNumber?.() ?? 0;
+        const started = Number(data.slot.constructionStarted ?? 0n);
+        const ends = Number(data.slot.constructionEnds ?? 0n);
         const total = ends - started;
         return total > 0 ? Math.min(100, Math.round(((total - remainingSec) / total) * 100)) : 0;
       })()
@@ -202,7 +202,7 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
         <div className="mt-1 flex items-baseline justify-between gap-2">
           {data.slot?.totalNoviInvested ? (
             <span className="text-[11px] text-text-muted tabular-nums">
-              {(data.slot.totalNoviInvested.toNumber?.() ?? 0).toLocaleString()} invested
+              {Number(data.slot.totalNoviInvested).toLocaleString()} invested
             </span>
           ) : (
             <span />

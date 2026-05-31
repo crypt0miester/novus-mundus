@@ -8,7 +8,6 @@
  */
 
 import type { AccountInfo, PublicKey } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { CityType } from '../types/enums';
 import type { BiomeKnobs } from '../calculators/biome';
@@ -31,11 +30,11 @@ export interface CityAccount {
   /** Current number of players present in this city */
   playersPresent: number;
   /** Total PvP attacks initiated in this city (all-time) */
-  activeEncounters: BN;
+  activeEncounters: bigint;
   /** Total PvE encounters spawned in this city (all-time) */
-  totalEncountersSpawned: BN;
+  totalEncountersSpawned: bigint;
   /** Unix timestamp when city was founded */
-  foundedAt: BN;
+  foundedAt: bigint;
   /** Minimum encounter level for this city */
   minEncounterLevel: number;
   /** Maximum encounter level for this city */
@@ -79,7 +78,7 @@ export const CITY_LAYOUT_VERSION = 2;
  * Deserialize CityAccount from raw account bytes.
  * Matches the on-chain repr(C) layout exactly, including padding.
  */
-export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
+export function deserializeCity(data: Uint8Array): CityAccount {
   const reader = new BufferReader(data);
 
   // repr(C) layout — see programs/novus_mundus/src/state/city.rs
@@ -158,7 +157,7 @@ export function deserializeCity(data: Uint8Array | Buffer): CityAccount {
 /** Parse CityAccount from account info. Returns null for malformed accounts
  * (wrong size or unparseable layout) so bulk fetches can skip stragglers
  * from older deploys instead of crashing the caller. */
-export function parseCity(accountInfo: AccountInfo<Buffer>): CityAccount | null {
+export function parseCity(accountInfo: AccountInfo<Uint8Array>): CityAccount | null {
   if (!accountInfo.data || accountInfo.data.length < CITY_ACCOUNT_SIZE) {
     return null;
   }

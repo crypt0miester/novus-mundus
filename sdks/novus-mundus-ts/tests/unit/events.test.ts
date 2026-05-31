@@ -6,7 +6,6 @@
 
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
-import BN from 'bn.js';
 import {
   computeEventDiscriminator,
   discriminatorToHex,
@@ -18,6 +17,13 @@ import {
   getEventName,
   isEventType,
 } from '../../src/events/parser';
+
+// Encode a value as a little-endian 8-byte buffer (replaces BN.toArrayLike).
+function u64le(value: bigint): Buffer {
+  const buf = Buffer.alloc(8);
+  buf.writeBigUInt64LE(BigInt.asUintN(64, value), 0);
+  return buf;
+}
 
 describe('Event Discriminator', () => {
   describe('computeEventDiscriminator', () => {
@@ -158,18 +164,18 @@ describe('EventBufferReader', () => {
       expect(reader.readI32()).toBe(-1000000);
     });
 
-    it('should read u64 as BN', () => {
+    it('should read u64 as bigint', () => {
       const buf = Buffer.alloc(8);
-      new BN(1000000).toArrayLike(Buffer, 'le', 8).copy(buf);
+      u64le(1000000n).copy(buf);
       const reader = new EventBufferReader(buf);
-      expect(reader.readU64().toNumber()).toBe(1000000);
+      expect(Number(reader.readU64())).toBe(1000000);
     });
 
-    it('should read i64 as BN', () => {
+    it('should read i64 as bigint', () => {
       const buf = Buffer.alloc(8);
-      new BN(-1000000).add(new BN(1).shln(64)).toArrayLike(Buffer, 'le', 8).copy(buf);
+      u64le(-1000000n).copy(buf);
       const reader = new EventBufferReader(buf);
-      expect(reader.readI64().toNumber()).toBe(-1000000);
+      expect(Number(reader.readI64())).toBe(-1000000);
     });
   });
 
@@ -180,9 +186,9 @@ describe('EventBufferReader', () => {
       expect(reader.readBool()).toBe(true);
     });
 
-    it('should read PublicKey', () => {
-      const keypair = Keypair.generate();
-      const reader = new EventBufferReader(keypair.publicKey.toBuffer());
+    it('should read PublicKey', async () => {
+      const keypair = await Keypair.generate();
+      const reader = new EventBufferReader(keypair.publicKey.toBytes());
       expect(reader.readPubkey().equals(keypair.publicKey)).toBe(true);
     });
   });
@@ -248,20 +254,20 @@ describe('Event Parsing', () => {
       expect(parseNovusMundusEvent(data)).toBeNull();
     });
 
-    it('should parse PlayerCreated event', () => {
+    it('should parse PlayerCreated event', async () => {
       // Build a mock PlayerCreated event: player(32) + user(32) + city(32) + timestamp(8)
       const disc = computeEventDiscriminator('PlayerCreated');
-      const player = Keypair.generate().publicKey;
-      const user = Keypair.generate().publicKey;
-      const city = Keypair.generate().publicKey;
-      const timestamp = new BN(Date.now() / 1000);
+      const player = (await Keypair.generate()).publicKey;
+      const user = (await Keypair.generate()).publicKey;
+      const city = (await Keypair.generate()).publicKey;
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc).copy(data, 0);
-      player.toBuffer().copy(data, 8);
-      user.toBuffer().copy(data, 40);
-      city.toBuffer().copy(data, 72);
-      timestamp.toArrayLike(Buffer, 'le', 8).copy(data, 104);
+      Buffer.from(player.toBytes()).copy(data, 8);
+      Buffer.from(user.toBytes()).copy(data, 40);
+      Buffer.from(city.toBytes()).copy(data, 72);
+      u64le(timestamp).copy(data, 104);
 
       const event = parseNovusMundusEvent(data);
 
@@ -272,13 +278,13 @@ describe('Event Parsing', () => {
       expect((event!.data as any).city.equals(city)).toBe(true);
     });
 
-    it('should parse TeamCreated event', () => {
+    it('should parse TeamCreated event', async () => {
       const disc = computeEventDiscriminator('TeamCreated');
-      const team = Keypair.generate().publicKey;
+      const team = (await Keypair.generate()).publicKey;
       const teamName = 'TestTeam';
-      const founder = Keypair.generate().publicKey;
-      const noviBurned = new BN(1000);
-      const timestamp = new BN(Date.now() / 1000);
+      const founder = (await Keypair.generate()).publicKey;
+      const noviBurned = 1000n;
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
       // team(32) + teamName(32) + founder(32) + noviBurned(8) + timestamp(8)
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8 + 8);
@@ -287,7 +293,7 @@ describe('Event Parsing', () => {
       Buffer.from(disc).copy(data, offset);
       offset += 8;
 
-      team.toBuffer().copy(data, offset);
+      Buffer.from(team.toBytes()).copy(data, offset);
       offset += 32;
 
       const nameBuffer = Buffer.alloc(32);
@@ -295,13 +301,13 @@ describe('Event Parsing', () => {
       nameBuffer.copy(data, offset);
       offset += 32;
 
-      founder.toBuffer().copy(data, offset);
+      Buffer.from(founder.toBytes()).copy(data, offset);
       offset += 32;
 
-      noviBurned.toArrayLike(Buffer, 'le', 8).copy(data, offset);
+      u64le(noviBurned).copy(data, offset);
       offset += 8;
 
-      timestamp.toArrayLike(Buffer, 'le', 8).copy(data, offset);
+      u64le(timestamp).copy(data, offset);
 
       const event = parseNovusMundusEvent(data);
 
@@ -310,24 +316,24 @@ describe('Event Parsing', () => {
       expect((event!.data as any).team.equals(team)).toBe(true);
       expect((event!.data as any).teamName).toBe(teamName);
       expect((event!.data as any).founder.equals(founder)).toBe(true);
-      expect((event!.data as any).noviBurned.toNumber()).toBe(1000);
+      expect(Number((event!.data as any).noviBurned)).toBe(1000);
     });
   });
 
   describe('parseEventFromBase64', () => {
-    it('should parse base64-encoded event', () => {
+    it('should parse base64-encoded event', async () => {
       const disc = computeEventDiscriminator('PlayerCreated');
-      const player = Keypair.generate().publicKey;
-      const user = Keypair.generate().publicKey;
-      const city = Keypair.generate().publicKey;
-      const timestamp = new BN(Date.now() / 1000);
+      const player = (await Keypair.generate()).publicKey;
+      const user = (await Keypair.generate()).publicKey;
+      const city = (await Keypair.generate()).publicKey;
+      const timestamp = BigInt(Math.floor(Date.now() / 1000));
 
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc).copy(data, 0);
-      player.toBuffer().copy(data, 8);
-      user.toBuffer().copy(data, 40);
-      city.toBuffer().copy(data, 72);
-      timestamp.toArrayLike(Buffer, 'le', 8).copy(data, 104);
+      Buffer.from(player.toBytes()).copy(data, 8);
+      Buffer.from(user.toBytes()).copy(data, 40);
+      Buffer.from(city.toBytes()).copy(data, 72);
+      u64le(timestamp).copy(data, 104);
 
       const base64 = data.toString('base64');
       const event = parseEventFromBase64(base64);
@@ -338,16 +344,16 @@ describe('Event Parsing', () => {
   });
 
   describe('parseEventsFromLogs', () => {
-    it('should extract events from program logs', () => {
+    it('should extract events from program logs', async () => {
       // Build a mock PlayerCreated event
       const disc = computeEventDiscriminator('PlayerCreated');
       const data = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc).copy(data, 0);
       // Fill with random pubkeys and timestamp
-      Keypair.generate().publicKey.toBuffer().copy(data, 8);
-      Keypair.generate().publicKey.toBuffer().copy(data, 40);
-      Keypair.generate().publicKey.toBuffer().copy(data, 72);
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data, 104);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data, 8);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data, 40);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data, 72);
+      u64le(BigInt(Math.floor(Date.now() / 1000))).copy(data, 104);
 
       const base64 = data.toString('base64');
       const logs = [
@@ -387,26 +393,26 @@ describe('Event Parsing', () => {
       expect(events.length).toBe(0);
     });
 
-    it('should parse multiple events', () => {
+    it('should parse multiple events', async () => {
       // Create two different events
       const disc1 = computeEventDiscriminator('PlayerCreated');
       // player(32) + user(32) + city(32) + timestamp(8)
       const data1 = Buffer.alloc(8 + 32 + 32 + 32 + 8);
       Buffer.from(disc1).copy(data1, 0);
-      Keypair.generate().publicKey.toBuffer().copy(data1, 8);
-      Keypair.generate().publicKey.toBuffer().copy(data1, 40);
-      Keypair.generate().publicKey.toBuffer().copy(data1, 72);
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data1, 104);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data1, 8);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data1, 40);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data1, 72);
+      u64le(BigInt(Math.floor(Date.now() / 1000))).copy(data1, 104);
 
       const disc2 = computeEventDiscriminator('TeamCreated');
       // team(32) + teamName(32) + founder(32) + noviBurned(8) + timestamp(8)
       const data2 = Buffer.alloc(8 + 32 + 32 + 32 + 8 + 8);
       Buffer.from(disc2).copy(data2, 0);
-      Keypair.generate().publicKey.toBuffer().copy(data2, 8);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data2, 8);
       Buffer.alloc(32).copy(data2, 40); // team name
-      Keypair.generate().publicKey.toBuffer().copy(data2, 72);
-      new BN(0).toArrayLike(Buffer, 'le', 8).copy(data2, 104); // noviBurned
-      new BN(Date.now() / 1000).toArrayLike(Buffer, 'le', 8).copy(data2, 112);
+      Buffer.from((await Keypair.generate()).publicKey.toBytes()).copy(data2, 72);
+      u64le(0n).copy(data2, 104); // noviBurned
+      u64le(BigInt(Math.floor(Date.now() / 1000))).copy(data2, 112);
 
       const logs = [
         `Program data: ${data1.toString('base64')}`,

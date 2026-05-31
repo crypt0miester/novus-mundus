@@ -16,7 +16,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -34,7 +33,7 @@ import {
   deriveTeamCastleRewardPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Create Castle (Admin)
 
@@ -89,17 +88,17 @@ export interface CreateCastleParams {
  * 5. [] rent_sysvar: Rent sysvar
  * 6+. [writable] N² Location PDAs row-major (idx = dlat*N + dlong)
  */
-export function createCreateCastleInstruction(
+export async function createCreateCastleInstruction(
   accounts: CreateCastleAccounts,
   params: CreateCastleParams
-): TransactionInstruction {
+): Promise<TransactionInstruction> {
   const n = params.footprintSize ?? 2;
   if (!Number.isInteger(n) || n < 1 || n > 4) {
     throw new Error(`footprintSize must be 1..=4 (got ${n})`);
   }
 
-  const [castle] = deriveCastlePda(accounts.gameEngine, params.cityId, params.castleId);
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, params.cityId, params.castleId);
+  const [city] = await deriveCityPda(accounts.gameEngine, params.cityId);
 
   // Anchor is already in grid units (×10,000) — matches the chain.
   const anchorGridLat = params.latitude;
@@ -121,7 +120,7 @@ export function createCreateCastleInstruction(
     for (let dlong = 0; dlong < n; dlong++) {
       const cellGridLat = anchorGridLat + dlat;
       const cellGridLong = anchorGridLong + dlong;
-      const [locPda] = deriveLocationPda(
+      const [locPda] = await deriveLocationPda(
         accounts.gameEngine,
         params.cityId,
         cellGridLat,
@@ -143,9 +142,9 @@ export function createCreateCastleInstruction(
   //   [16]    name_len u8
   //   [17..49] name [u8; 32]
   //   [49]    footprint_size u8
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
-  const namePadded = Buffer.alloc(32);
-  nameBytes.copy(namePadded);
+  const nameBytes = new TextEncoder().encode(params.name).subarray(0, 32);
+  const namePadded = new Uint8Array(32);
+  namePadded.set(nameBytes);
 
   const writer = new BufferWriter(17 + 32 + 1);
   writer.writeU16(params.cityId);
@@ -188,12 +187,12 @@ export interface ClaimVacantCastleAccounts {
  *
  * Becomes king if castle has no owner.
  */
-export function createClaimVacantCastleInstruction(
+export async function createClaimVacantCastleInstruction(
   accounts: ClaimVacantCastleAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.claimer);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [kingRegistry] = deriveKingRegistryPda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.claimer);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [kingRegistry] = await deriveKingRegistryPda(player);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)
@@ -249,14 +248,14 @@ export interface AppointCourtParams {
  *
  * King-only. Court members receive tax share.
  */
-export function createAppointCourtInstruction(
+export async function createAppointCourtInstruction(
   accounts: AppointCourtAccounts,
   params: AppointCourtParams
-): TransactionInstruction {
-  const [kingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.king);
-  const [appointeePlayer] = derivePlayerPda(accounts.gameEngine, accounts.appointee);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [court] = deriveCourtPda(castle, params.position);
+): Promise<TransactionInstruction> {
+  const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
+  const [appointeePlayer] = await derivePlayerPda(accounts.gameEngine, accounts.appointee);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [court] = await deriveCourtPda(castle, params.position);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -313,14 +312,14 @@ export interface DismissCourtParams {
  *
  * King-only.
  */
-export function createDismissCourtInstruction(
+export async function createDismissCourtInstruction(
   accounts: DismissCourtAccounts,
   params: DismissCourtParams
-): TransactionInstruction {
-  const [kingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.king);
-  const [dismissedPlayer] = derivePlayerPda(accounts.gameEngine, accounts.dismissed);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [court] = deriveCourtPda(castle, params.position);
+): Promise<TransactionInstruction> {
+  const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
+  const [dismissedPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.dismissed);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [court] = await deriveCourtPda(castle, params.position);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -377,13 +376,13 @@ export interface ResignCourtParams {
  *
  * Court member can leave voluntarily.
  */
-export function createResignCourtInstruction(
+export async function createResignCourtInstruction(
   accounts: ResignCourtAccounts,
   params: ResignCourtParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.courtMember);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [court] = deriveCourtPda(castle, params.position);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.courtMember);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [court] = await deriveCourtPda(castle, params.position);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)
@@ -400,7 +399,7 @@ export function createResignCourtInstruction(
   ];
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_RESIGN_COURT, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_RESIGN_COURT, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -433,14 +432,14 @@ export interface InitiateUpgradeParams {
  *
  * King-only. Costs NOVI from locked tokens.
  */
-export function createInitiateUpgradeInstruction(
+export async function createInitiateUpgradeInstruction(
   accounts: InitiateUpgradeAccounts,
   params: InitiateUpgradeParams
-): TransactionInstruction {
-  const [kingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.king);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [noviMint] = deriveNoviMintPda();
-  const lockedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, kingPlayer);
+): Promise<TransactionInstruction> {
+  const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [noviMint] = await deriveNoviMintPda();
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, kingPlayer);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -490,13 +489,13 @@ export interface CancelUpgradeAccounts {
  *
  * King-only. Refunds partial cost.
  */
-export function createCancelUpgradeInstruction(
+export async function createCancelUpgradeInstruction(
   accounts: CancelUpgradeAccounts
-): TransactionInstruction {
-  const [kingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.king);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-    const [noviMint] = deriveNoviMintPda();
-  const lockedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, kingPlayer);
+): Promise<TransactionInstruction> {
+  const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+    const [noviMint] = await deriveNoviMintPda();
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, kingPlayer);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -517,7 +516,7 @@ export function createCancelUpgradeInstruction(
   ];
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_CANCEL_UPGRADE, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_CANCEL_UPGRADE, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -545,10 +544,10 @@ export interface CompleteUpgradeAccounts {
  *
  * Permissionless after upgrade time elapsed.
  */
-export function createCompleteUpgradeInstruction(
+export async function createCompleteUpgradeInstruction(
   accounts: CompleteUpgradeAccounts
-): TransactionInstruction {
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+): Promise<TransactionInstruction> {
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
 
   // Rust account order:
   // 0. crank (SIGNER)
@@ -559,7 +558,7 @@ export function createCompleteUpgradeInstruction(
   ];
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_COMPLETE_UPGRADE, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_COMPLETE_UPGRADE, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -583,9 +582,9 @@ export interface JoinGarrisonAccounts {
 
 export interface JoinGarrisonParams {
   /** Units to contribute [unit1, unit2, unit3] */
-  units: [BN | number | bigint, BN | number | bigint, BN | number | bigint];
+  units: [number | bigint, number | bigint, number | bigint];
   /** Weapons to contribute [melee, ranged, siege] */
-  weapons: [BN | number | bigint, BN | number | bigint, BN | number | bigint];
+  weapons: [number | bigint, number | bigint, number | bigint];
   /** Hero slot (0-2, or 255 for no hero) */
   heroSlot: number;
   /** Hero NFT mint address (required if heroSlot < 3) */
@@ -600,13 +599,13 @@ export interface JoinGarrisonParams {
  *
  * Contribute defensive units, weapons, and optionally a hero to castle defense.
  */
-export function createJoinGarrisonInstruction(
+export async function createJoinGarrisonInstruction(
   accounts: JoinGarrisonAccounts,
   params: JoinGarrisonParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [garrison] = deriveGarrisonPda(castle, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [garrison] = await deriveGarrisonPda(castle, player);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)
@@ -629,8 +628,8 @@ export function createJoinGarrisonInstruction(
   ];
 
   if (params.heroSlot < 3 && params.heroMint && params.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(params.heroTemplateId);
-    const [heroCollection] = deriveHeroCollectionPda();
+    const [heroTemplate] = await deriveHeroTemplatePda(params.heroTemplateId);
+    const [heroCollection] = await deriveHeroCollectionPda();
     keys.push({ pubkey: params.heroMint, isSigner: false, isWritable: true });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
     keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
@@ -680,12 +679,12 @@ export interface LeaveGarrisonAccounts {
  *
  * Withdraws contributed units, weapons, and hero.
  */
-export function createLeaveGarrisonInstruction(
+export async function createLeaveGarrisonInstruction(
   accounts: LeaveGarrisonAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [garrison] = deriveGarrisonPda(castle, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [garrison] = await deriveGarrisonPda(castle, player);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)
@@ -709,8 +708,8 @@ export function createLeaveGarrisonInstruction(
   ];
 
   if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
-    const [heroCollection] = deriveHeroCollectionPda();
+    const [heroTemplate] = await deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroCollection] = await deriveHeroCollectionPda();
     keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
     keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
@@ -719,7 +718,7 @@ export function createLeaveGarrisonInstruction(
   }
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_LEAVE_GARRISON, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_LEAVE_GARRISON, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -753,13 +752,13 @@ export interface RelieveGarrisonAccounts {
  *
  * King-only. Removes member from garrison and returns their assets.
  */
-export function createRelieveGarrisonInstruction(
+export async function createRelieveGarrisonInstruction(
   accounts: RelieveGarrisonAccounts
-): TransactionInstruction {
-  const [kingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.king);
-  const [memberPlayer] = derivePlayerPda(accounts.gameEngine, accounts.garrisonMember);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [garrison] = deriveGarrisonPda(castle, memberPlayer);
+): Promise<TransactionInstruction> {
+  const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.king);
+  const [memberPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.garrisonMember);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [garrison] = await deriveGarrisonPda(castle, memberPlayer);
 
   // Rust account order:
   // 0. king_wallet (SIGNER)
@@ -785,8 +784,8 @@ export function createRelieveGarrisonInstruction(
   ];
 
   if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
-    const [heroCollection] = deriveHeroCollectionPda();
+    const [heroTemplate] = await deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroCollection] = await deriveHeroCollectionPda();
     keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
     keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
@@ -795,7 +794,7 @@ export function createRelieveGarrisonInstruction(
   }
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_RELIEVE_GARRISON, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_RELIEVE_GARRISON, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -825,16 +824,16 @@ export interface ClaimCastleRewardsAccounts {
  *
  * For king, court members, and team members. Creates TeamCastleRewardAccount if needed.
  */
-export function createClaimCastleRewardsInstruction(
+export async function createClaimCastleRewardsInstruction(
   accounts: ClaimCastleRewardsAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.claimant);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [reward] = deriveTeamCastleRewardPda(castle, player);
-    const [noviMint] = deriveNoviMintPda();
-  const lockedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
-  const [user] = deriveUserPda(accounts.claimant);
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.claimant);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [reward] = await deriveTeamCastleRewardPda(castle, player);
+    const [noviMint] = await deriveNoviMintPda();
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
+  const [user] = await deriveUserPda(accounts.claimant);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)
@@ -865,7 +864,7 @@ export function createClaimCastleRewardsInstruction(
   ];
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_CLAIM_REWARDS, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_CLAIM_REWARDS, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -893,12 +892,12 @@ export interface ClaimGarrisonLootAccounts {
  *
  * For garrison contributors after successful defense.
  */
-export function createClaimGarrisonLootInstruction(
+export async function createClaimGarrisonLootInstruction(
   accounts: ClaimGarrisonLootAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [garrison] = deriveGarrisonPda(castle, player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [garrison] = await deriveGarrisonPda(castle, player);
 
   // Rust account order:
   // 0. player_wallet (SIGNER)
@@ -913,7 +912,7 @@ export function createClaimGarrisonLootInstruction(
   ];
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_CLAIM_GARRISON_LOOT, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_CLAIM_GARRISON_LOOT, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -948,12 +947,12 @@ export interface AttackCastleParams {
  *
  * Attempt to defeat garrison and claim the throne.
  */
-export function createAttackCastleInstruction(
+export async function createAttackCastleInstruction(
   accounts: AttackCastleAccounts,
   params: AttackCastleParams
-): TransactionInstruction {
-  const [attackerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.attacker);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+): Promise<TransactionInstruction> {
+  const [attackerPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.attacker);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
   
   // Rust account order:
   // 0. attacker_wallet (SIGNER)
@@ -1011,12 +1010,12 @@ export interface FinalizeTransitionAccounts {
  *
  * Permissionless. Completes king change after contest window ends.
  */
-export function createFinalizeTransitionInstruction(
+export async function createFinalizeTransitionInstruction(
   accounts: FinalizeTransitionAccounts
-): TransactionInstruction {
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [newKingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.newKing);
-  const [newKingRegistry] = deriveKingRegistryPda(newKingPlayer);
+): Promise<TransactionInstruction> {
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [newKingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.newKing);
+  const [newKingRegistry] = await deriveKingRegistryPda(newKingPlayer);
 
   // Rust account order:
   // 0. caller (SIGNER)
@@ -1032,8 +1031,8 @@ export function createFinalizeTransitionInstruction(
   ];
 
   if (accounts.oldKing) {
-    const [oldKingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.oldKing);
-    const [oldKingRegistry] = deriveKingRegistryPda(oldKingPlayer);
+    const [oldKingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.oldKing);
+    const [oldKingRegistry] = await deriveKingRegistryPda(oldKingPlayer);
     keys.push({ pubkey: oldKingRegistry, isSigner: false, isWritable: true });
   }
 
@@ -1072,10 +1071,10 @@ export interface UpdateCastleStatusAccounts {
  * - CONTEST → PROTECTED (after contest period)
  * - PROTECTED → VULNERABLE (after protection expires)
  */
-export function createUpdateCastleStatusInstruction(
+export async function createUpdateCastleStatusInstruction(
   accounts: UpdateCastleStatusAccounts
-): TransactionInstruction {
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+): Promise<TransactionInstruction> {
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
 
   // Rust account order:
   // 0. caller (SIGNER)
@@ -1086,7 +1085,7 @@ export function createUpdateCastleStatusInstruction(
   ];
 
   // No instruction data needed
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_UPDATE_STATUS, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_UPDATE_STATUS, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -1116,12 +1115,12 @@ export interface ForceRemoveKingAccounts {
  *
  * Admin-only. Emergency use.
  */
-export function createForceRemoveKingInstruction(
+export async function createForceRemoveKingInstruction(
   accounts: ForceRemoveKingAccounts
-): TransactionInstruction {
-    const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [kingPlayer] = derivePlayerPda(accounts.gameEngine, accounts.currentKing);
-  const [kingRegistry] = deriveKingRegistryPda(kingPlayer);
+): Promise<TransactionInstruction> {
+    const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [kingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.currentKing);
+  const [kingRegistry] = await deriveKingRegistryPda(kingPlayer);
 
   // Rust account order:
   // 0. dao_authority (SIGNER)
@@ -1176,12 +1175,12 @@ export interface GarrisonCleanupAccounts {
  *
  * Permissionless. Returns assets and closes account.
  */
-export function createGarrisonCleanupInstruction(
+export async function createGarrisonCleanupInstruction(
   accounts: GarrisonCleanupAccounts
-): TransactionInstruction {
-  const [memberPlayer] = derivePlayerPda(accounts.gameEngine, accounts.garrisonMember);
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [garrison] = deriveGarrisonPda(castle, memberPlayer);
+): Promise<TransactionInstruction> {
+  const [memberPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.garrisonMember);
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [garrison] = await deriveGarrisonPda(castle, memberPlayer);
 
   // Rust account order:
   // 0. crank (SIGNER)
@@ -1205,8 +1204,8 @@ export function createGarrisonCleanupInstruction(
   ];
 
   if (accounts.heroMint && accounts.heroTemplateId !== undefined) {
-    const [heroTemplate] = deriveHeroTemplatePda(accounts.heroTemplateId);
-    const [heroCollection] = deriveHeroCollectionPda();
+    const [heroTemplate] = await deriveHeroTemplatePda(accounts.heroTemplateId);
+    const [heroCollection] = await deriveHeroCollectionPda();
     keys.push({ pubkey: accounts.heroMint, isSigner: false, isWritable: true });
     keys.push({ pubkey: heroTemplate, isSigner: false, isWritable: false });
     keys.push({ pubkey: heroCollection, isSigner: false, isWritable: false });
@@ -1215,7 +1214,7 @@ export function createGarrisonCleanupInstruction(
   }
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_GARRISON_CLEANUP, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_GARRISON_CLEANUP, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -1248,13 +1247,13 @@ export interface CourtCleanupParams {
  *
  * Permissionless. Clears reference and closes account.
  */
-export function createCourtCleanupInstruction(
+export async function createCourtCleanupInstruction(
   accounts: CourtCleanupAccounts,
   params: CourtCleanupParams
-): TransactionInstruction {
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [court] = deriveCourtPda(castle, params.position);
-  const [holderPlayer] = derivePlayerPda(accounts.gameEngine, accounts.holder);
+): Promise<TransactionInstruction> {
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [court] = await deriveCourtPda(castle, params.position);
+  const [holderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.holder);
 
   // Rust account order:
   // 0. crank (SIGNER)
@@ -1302,12 +1301,12 @@ export interface RewardsCleanupAccounts {
  *
  * Permissionless. Closes account and returns rent.
  */
-export function createRewardsCleanupInstruction(
+export async function createRewardsCleanupInstruction(
   accounts: RewardsCleanupAccounts
-): TransactionInstruction {
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [memberPlayer] = derivePlayerPda(accounts.gameEngine, accounts.member);
-  const [reward] = deriveTeamCastleRewardPda(castle, memberPlayer);
+): Promise<TransactionInstruction> {
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+  const [memberPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.member);
+  const [reward] = await deriveTeamCastleRewardPda(castle, memberPlayer);
 
   // Rust account order:
   // 0. crank (SIGNER)
@@ -1324,7 +1323,7 @@ export function createRewardsCleanupInstruction(
   ];
 
   // No instruction data needed - city_id/castle_id derived from castle PDA
-  const data = createInstructionData(DISCRIMINATORS.CASTLE_REWARDS_CLEANUP, Buffer.alloc(0));
+  const data = createInstructionData(DISCRIMINATORS.CASTLE_REWARDS_CLEANUP, new Uint8Array(0));
 
   return new TransactionInstruction({
     keys,
@@ -1363,11 +1362,11 @@ export type UpdateCastleConfigParams =
  * 1. [] game_engine
  * 2. [writable] castle
  */
-export function createUpdateCastleConfigInstruction(
+export async function createUpdateCastleConfigInstruction(
   accounts: UpdateCastleConfigAccounts,
   params: UpdateCastleConfigParams
-): TransactionInstruction {
-  const [castle] = deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
+): Promise<TransactionInstruction> {
+  const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
@@ -1375,7 +1374,7 @@ export function createUpdateCastleConfigInstruction(
     { pubkey: castle, isSigner: false, isWritable: true },
   ];
 
-  let paramData: Buffer;
+  let paramData: Uint8Array;
 
   switch (params.configType) {
     case 0: {
@@ -1409,9 +1408,9 @@ export function createUpdateCastleConfigInstruction(
     }
     case 3: {
       // name: config_type (u8) + 32 bytes (zero-padded; matches CastleAccount.name)
-      const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
-      const namePadded = Buffer.alloc(32);
-      nameBytes.copy(namePadded);
+      const nameBytes = new TextEncoder().encode(params.name).subarray(0, 32);
+      const namePadded = new Uint8Array(32);
+      namePadded.set(nameBytes);
       const writer = new BufferWriter(33);
       writer.writeU8(3);
       writer.writeBytes(namePadded);

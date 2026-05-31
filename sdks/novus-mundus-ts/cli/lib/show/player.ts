@@ -56,7 +56,7 @@ export async function showAllPlayers(client: NovusMundusClient, ctx: CLIContext)
   ];
 
   const rows = players
-    .sort((a, b) => b.account.networth.cmp(a.account.networth))
+    .sort((a, b) => (b.account.networth < a.account.networth ? -1 : b.account.networth > a.account.networth ? 1 : 0))
     .map(({ account: p }) => [
       p.name || dim('--'),
       String(p.level),
@@ -93,7 +93,7 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   // Identity
   log.info(section('Identity'));
   log.info(`  Level ${p.level} (${formatNum(p.currentXp)} XP)    Reputation: ${formatNum(p.reputation)}    Networth: ${formatNum(p.networth)}`);
-  const subEndSec = p.subscriptionEnd.toNumber();
+  const subEndSec = Number(p.subscriptionEnd);
   const nowSec = Math.floor(Date.now() / 1000);
   const subActive = subEndSec > nowSec;
   const tierName = subActive ? (TIER_NAMES[p.subscriptionTier] ?? 'Unknown') : 'Free';
@@ -159,8 +159,8 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   }
 
   // Materials
-  const matTotal = p.commonMaterials.add(p.uncommonMaterials).add(p.rareMaterials).add(p.epicMaterials).add(p.legendaryMaterials);
-  if (matTotal.gtn(0)) {
+  const matTotal = p.commonMaterials + p.uncommonMaterials + p.rareMaterials + p.epicMaterials + p.legendaryMaterials;
+  if (matTotal > 0n) {
     log.info(section('Materials'));
     log.info(`  Common: ${formatNum(p.commonMaterials)}  Uncommon: ${formatNum(p.uncommonMaterials)}  Rare: ${formatNum(p.rareMaterials)}  Epic: ${formatNum(p.epicMaterials)}  Legendary: ${formatNum(p.legendaryMaterials)}`);
   }
@@ -171,7 +171,7 @@ export async function showPlayer(client: NovusMundusClient, ctx: CLIContext, wal
   log.info(`  Joined: ${formatNum(rs.totalRalliesJoined)}    Created: ${formatNum(rs.totalRalliesCreated)}    Won: ${formatNum(rs.totalRalliesWon)}    Lost: ${formatNum(rs.totalRalliesLost)}    Loot: ${formatNum(rs.totalRallyLootEarned)}`);
 
   // Shop Stats
-  if (p.totalShopSpent.gtn(0)) {
+  if (p.totalShopSpent > 0n) {
     log.info(section('Shop Stats'));
     log.info(`  Total Spent: ${formatNum(p.totalShopSpent)}    Milestone: ${p.milestoneTier}    Loyalty Streak: ${p.loyaltyStreak}`);
   }
@@ -195,7 +195,7 @@ async function showLocationCell(
   const city = CITIES.find((c) => c.id === p.currentCity);
   const gridLat = toGrid(p.currentLat);
   const gridLong = toGrid(p.currentLong);
-  const [locationPda] = deriveLocationPda(ctx.gameEngine, p.currentCity, gridLat, gridLong);
+  const [locationPda] = await deriveLocationPda(ctx.gameEngine, p.currentCity, gridLat, gridLong);
 
   let offsetStr = '';
   if (city) {
@@ -229,7 +229,7 @@ async function showLocationCell(
 
   const occupantMatches = loc.occupant.equals(playerPda);
   const cityMatches = loc.cityId === p.currentCity;
-  const reservedSec = loc.reservedArrivalTime.toNumber();
+  const reservedSec = Number(loc.reservedArrivalTime);
   const reservedStr = reservedSec > 0
     ? `${formatDate(loc.reservedArrivalTime)} ${dim('(in-transit reservation)')}`
     : dim('arrived');

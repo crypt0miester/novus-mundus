@@ -96,6 +96,11 @@ export interface CityTerrainMapWebGLProps {
   /* Imperative reset trigger from the orchestrator's reset chip.
    * Bumping this counter runs an in-mode reset tween. */
   resetTrigger: number;
+  /* Canonical yaw preset selected by the orchestrator's view-angle
+   * toggle (DEFAULT_YAW 0.68 angled, STRAIGHT_YAW 0 straight). When it
+   * changes the scene tweens yaw to it, leaving zoom/center/pitch alone.
+   * Omitted on the 2D fallback path (top-down only). */
+  viewYaw?: number;
   /* Resolver for occupant labels — mirrors the prop the 2D fallback
    * receives. The 3D renderer uses it to populate the inspection-band
    * label pool and the active hover tooltip with name + level + tier
@@ -217,6 +222,11 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
    * useSceneSync (when autoFocusCell becomes non-null later). */
   const autoFocusedForCityRef = useRef<number | null>(null);
 
+  /* Tracks the cityId an explicit focusCell (locate / label click) has
+   * targeted, so the home auto-focus yields to it instead of cancelling
+   * the locate tween. Lives alongside autoFocusedForCityRef. */
+  const focusRequestedForCityRef = useRef<number | null>(null);
+
   /* Build the scene exactly once. Subsequent prop changes flow
    * through targeted `useEffect`s below. */
   useEffect(() => {
@@ -277,6 +287,7 @@ export function CityTerrainMapWebGL(props: CityTerrainMapWebGLProps) {
     cityLongGrid,
     requestRender,
     autoFocusedForCityRef,
+    focusRequestedForCityRef,
   });
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars

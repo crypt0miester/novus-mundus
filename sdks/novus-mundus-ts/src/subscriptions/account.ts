@@ -5,7 +5,7 @@
  */
 
 import { PublicKey } from '@solana/web3.js';
-import type { Connection, AccountInfo, Context, Commitment, SignatureResult, KeyedAccountInfo, Logs } from '@solana/web3.js';
+import type { Connection, AccountInfoWithSpace, Context, Commitment, SignatureResult, KeyedAccountInfo, Logs } from '@solana/web3.js';
 
 // Types
 
@@ -15,9 +15,14 @@ export type SubscriptionCallback<T> = (
   context: Context
 ) => void;
 
-/** Raw account change callback */
+/**
+ * Raw account change callback.
+ *
+ * v3 delivers a non-nullable `AccountInfoWithSpace<Uint8Array>` (the binary
+ * encoding); account data is `Uint8Array`, lamports/rentEpoch/space are bigint.
+ */
 export type RawSubscriptionCallback = (
-  accountInfo: AccountInfo<Buffer> | null,
+  accountInfo: AccountInfoWithSpace<Uint8Array>,
   context: Context
 ) => void;
 
@@ -81,18 +86,18 @@ export function subscribeToAccount(
 export function subscribeToAccountWithParser<T>(
   connection: Connection,
   address: PublicKey,
-  parser: (data: Buffer) => T | null,
+  parser: (data: Uint8Array) => T | null,
   callback: SubscriptionCallback<T>,
   options: SubscriptionOptions = {}
 ): SubscriptionHandle {
   const rawCallback: RawSubscriptionCallback = (accountInfo, context) => {
-    if (!accountInfo || !accountInfo.data) {
+    if (!accountInfo.data || accountInfo.data.length === 0) {
       callback(null, context);
       return;
     }
 
     try {
-      const parsed = parser(Buffer.from(accountInfo.data));
+      const parsed = parser(accountInfo.data);
       callback(parsed, context);
     } catch {
       callback(null, context);
@@ -158,7 +163,7 @@ export function createMultiSubscription(): MultiSubscriptionHandle {
 export function subscribeToAccounts(
   connection: Connection,
   addresses: PublicKey[],
-  callback: (address: PublicKey, accountInfo: AccountInfo<Buffer> | null, context: Context) => void,
+  callback: (address: PublicKey, accountInfo: AccountInfoWithSpace<Uint8Array>, context: Context) => void,
   options: SubscriptionOptions = {}
 ): MultiSubscriptionHandle {
   const multi = createMultiSubscription();
@@ -218,8 +223,8 @@ export function subscribeToProgramAccounts(
 
 // Slot and Root Subscriptions
 
-/** Slot change callback */
-export type SlotChangeCallback = (slotInfo: { slot: number; parent: number; root: number }) => void;
+/** Slot change callback (v3 SlotInfo fields are bigint) */
+export type SlotChangeCallback = (slotInfo: { slot: bigint; parent: bigint; root: bigint }) => void;
 
 /**
  * Subscribe to slot changes.
@@ -249,7 +254,7 @@ export function subscribeToSlotChanges(
  */
 export function subscribeToRootChanges(
   connection: Connection,
-  callback: (root: number) => void
+  callback: (root: bigint) => void
 ): SubscriptionHandle {
   const id = connection.onRootChange(callback);
 

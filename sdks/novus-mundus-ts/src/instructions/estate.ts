@@ -15,7 +15,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -24,7 +23,7 @@ import {
   deriveEstatePda,
   deriveBuildingTemplatePda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import { BuildingType } from '../types/enums';
 
 // Create Estate
@@ -48,12 +47,12 @@ export interface CreateEstateParams {
  * Creates the player's estate PDA for building management.
  * Estate starts with 1 plot (4 building slots).
  */
-export function createCreateEstateInstruction(
+export async function createCreateEstateInstruction(
   accounts: CreateEstateAccounts,
   params: CreateEstateParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER, WRITE)
@@ -100,17 +99,17 @@ export interface BuildBuildingParams {
  *
  * Requires NOVI payment and available building slot.
  */
-export function createBuildBuildingInstruction(
+export async function createBuildBuildingInstruction(
   accounts: BuildBuildingAccounts,
   params: BuildBuildingParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
-  const [buildingTemplate] = deriveBuildingTemplatePda(params.buildingType);
+  const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -154,17 +153,17 @@ export interface UpgradeBuildingParams {
  *
  * Requires NOVI payment. Cost scales with level.
  */
-export function createUpgradeBuildingInstruction(
+export async function createUpgradeBuildingInstruction(
   accounts: UpgradeBuildingAccounts,
   params: UpgradeBuildingParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
-  const [buildingTemplate] = deriveBuildingTemplatePda(params.buildingType);
+  const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -209,12 +208,12 @@ export interface CompleteBuildingParams {
  * Must be called by the estate owner after construction time has elapsed.
  * Building becomes Active and level increases.
  */
-export function createCompleteBuildingInstruction(
+export async function createCompleteBuildingInstruction(
   accounts: CompleteBuildingAccounts,
   params: CompleteBuildingParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -253,14 +252,14 @@ export interface BuyPlotAccounts {
  *
  * Costs increase with each plot purchased.
  */
-export function createBuyPlotInstruction(
+export async function createBuyPlotInstruction(
   accounts: BuyPlotAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -296,14 +295,14 @@ export interface DailyClaimAccounts {
  *
  * Collects resources from all active buildings.
  */
-export function createDailyClaimInstruction(
+export async function createDailyClaimInstruction(
   accounts: DailyClaimAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
   // NOVI ATA is owned by the PlayerAccount PDA.
-  const playerNoviAta = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerNoviAta = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -367,12 +366,12 @@ export interface DailyActivityParams {
  * - Midday: Market, Academy, Arena, Stables
  * - Dusk: Sanctuary, Observatory, Treasury, Citadel, Catacombs, Infirmary
  */
-export function createDailyActivityInstruction(
+export async function createDailyActivityInstruction(
   accounts: DailyActivityAccounts,
   params: DailyActivityParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -452,12 +451,12 @@ export interface ConvertMaterialsParams {
  * - Workshop Lv 10+: Rare → Epic
  * - Workshop Lv 15+: Epic → Legendary
  */
-export function createConvertMaterialsInstruction(
+export async function createConvertMaterialsInstruction(
   accounts: ConvertMaterialsAccounts,
   params: ConvertMaterialsParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -507,12 +506,12 @@ export interface BuildingSpeedupParams {
  * - Tier 1: 50% of time remains (1x gem cost)
  * - Tier 2: 25% of time remains (2x gem cost)
  */
-export function createBuildingSpeedupInstruction(
+export async function createBuildingSpeedupInstruction(
   accounts: BuildingSpeedupAccounts,
   params: BuildingSpeedupParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. player_account (WRITE)
@@ -560,12 +559,12 @@ export interface RecoverTroopsParams {
  * Requires Infirmary building. Cost is 50% of normal hire cost,
  * further reduced by Infirmary level and daily buff.
  */
-export function createRecoverTroopsInstruction(
+export async function createRecoverTroopsInstruction(
   accounts: RecoverTroopsAccounts,
   params: RecoverTroopsParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order:
   // 0. owner (SIGNER)
@@ -612,7 +611,7 @@ export interface InitializeBuildingTemplateParams {
   /** Base construction time in seconds (a level-0 build) */
   baseTimeSeconds: number;
   /** Base NOVI cost (a level-0 build) */
-  baseNoviCost: BN | number | bigint;
+  baseNoviCost: number | bigint;
   /** Per-level cost growth, in bps of 10_000 (26_180 = x2.618) */
   costGrowthBps: number;
   /** Per-(level/5) time growth, in bps of 10_000 */
@@ -625,11 +624,11 @@ export interface InitializeBuildingTemplateParams {
  * Rust account order: [dao_authority, building_template, game_engine, system_program]
  * Rust instruction data: 19 bytes
  */
-export function createInitializeBuildingTemplateInstruction(
+export async function createInitializeBuildingTemplateInstruction(
   accounts: InitializeBuildingTemplateAccounts,
   params: InitializeBuildingTemplateParams
-): TransactionInstruction {
-  const [buildingTemplate] = deriveBuildingTemplatePda(params.buildingType);
+): Promise<TransactionInstruction> {
+  const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: true },
@@ -667,7 +666,7 @@ export interface UpdateBuildingTemplateAccounts {
 
 export type UpdateBuildingTemplateParams =
   | { field: 'baseTimeSeconds'; value: number }
-  | { field: 'baseNoviCost'; value: BN | number | bigint }
+  | { field: 'baseNoviCost'; value: number | bigint }
   | { field: 'costGrowthBps'; value: number }
   | { field: 'timeGrowthBps'; value: number }
   | { field: 'isActive'; value: boolean }
@@ -680,11 +679,11 @@ export type UpdateBuildingTemplateParams =
  * Rust account order: [dao_authority, building_template, game_engine].
  * Instruction data: [field_selector: u8, value...].
  */
-export function createUpdateBuildingTemplateInstruction(
+export async function createUpdateBuildingTemplateInstruction(
   accounts: UpdateBuildingTemplateAccounts,
   params: UpdateBuildingTemplateParams
-): TransactionInstruction {
-  const [buildingTemplate] = deriveBuildingTemplatePda(accounts.buildingType);
+): Promise<TransactionInstruction> {
+  const [buildingTemplate] = await deriveBuildingTemplatePda(accounts.buildingType);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },

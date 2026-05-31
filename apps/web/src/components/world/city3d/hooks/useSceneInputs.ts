@@ -250,9 +250,12 @@ export function useSceneInputs(
     const tDefault = new THREE.Vector3(0, mode === "iso" ? midpointElevation() : 0, 0);
     const dDefault = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
     r.viewTween?.cancel();
+    // Recenter + zoom out only; PRESERVE yaw (and pitch) so reset never
+    // spins the camera. Omitting `yaw` makes runViewTween hold the
+    // current yaw (yTo = to.yaw ?? yFrom).
     r.viewTween = runViewTween(
       r.controller,
-      { target: tDefault, distance: dDefault, yaw: 0 },
+      { target: tDefault, distance: dDefault },
       requestRender,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps

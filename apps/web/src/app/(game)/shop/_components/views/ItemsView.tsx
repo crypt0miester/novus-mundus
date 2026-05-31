@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { usePlayer } from "@/lib/hooks/usePlayer";
@@ -32,7 +32,6 @@ import {
   RARITY_LABELS,
   RARITY_COLORS,
   lamportsToSol,
-  buildIdLookup,
   selectShopTile,
   useShopTileRipple,
 } from "./shared";
@@ -68,7 +67,27 @@ export function ItemsView() {
   // Tile-ripple grid root. grid-cols-2 md:grid-cols-3 -> read live breakpoint.
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
+  // PDA derivation is async under web3.js v3, so the pubkey -> id lookup is
+  // built off-thread and held in state. Empty until derivation resolves; the
+  // dependent memos re-run when it lands.
+  const [itemIdMap, setItemIdMap] = useState<Map<string, number>>(() => new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const map = new Map<string, number>();
+      const entries = await Promise.all(
+        Array.from({ length: 200 }, async (_unused, i) => {
+          const [pda] = await deriveShopItemPda(ge, i);
+          return [pda.toBase58(), i] as const;
+        }),
+      );
+      for (const [key, id] of entries) map.set(key, id);
+      if (!cancelled) setItemIdMap(map);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ge]);
 
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -78,7 +97,7 @@ export function ItemsView() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !gameEngine) throw new Error("Not ready");
-    const ix = createPurchaseItemInstruction(
+    const ix = await createPurchaseItemInstruction(
       {
         buyer: publicKey,
         gameEngine: ge,
@@ -125,7 +144,7 @@ export function ItemsView() {
     if (effectiveItem != null) {
       const item = activeItems.find((i) => i.itemId === effectiveItem);
       if (!item) return null;
-      const hasStock = item.account.maxGlobalStock.eqn(0) || item.account.currentGlobalStock.gtn(0);
+      const hasStock = item.account.maxGlobalStock === 0n || item.account.currentGlobalStock > 0n;
       const qty = itemQuantities[effectiveItem] ?? 1;
       return [
         {
@@ -189,9 +208,9 @@ export function ItemsView() {
                     {getShopItemName(a.itemType, a.quantityPerPurchase)}
                   </div>
                   <div className="mt-1 text-xs text-text-gold">
-                    {lamportsToSol(a.priceSolLamports.toNumber())} SOL
+                    {lamportsToSol(Number(a.priceSolLamports))} SOL
                   </div>
-                  {!a.maxGlobalStock.eqn(0) && a.currentGlobalStock.eqn(0) && (
+                  {a.maxGlobalStock !== 0n && a.currentGlobalStock === 0n && (
                     <div className="text-[10px] text-red-400">Sold Out</div>
                   )}
                 </button>
@@ -207,8 +226,8 @@ export function ItemsView() {
             const item = activeItems.find((i) => i.itemId === effectiveItem);
             if (!item) return null;
             const a = item.account;
-            const baseLamports = a.priceSolLamports.toNumber();
-            const hasStock = a.maxGlobalStock.eqn(0) || a.currentGlobalStock.gtn(0);
+            const baseLamports = Number(a.priceSolLamports);
+            const hasStock = a.maxGlobalStock === 0n || a.currentGlobalStock > 0n;
             const subTier = player ? getEffectiveTier(player, nowSec) : 0;
             // Mirror chain `calculate_final_price`: stack subscription ×
             // milestone × streak × fib × market multiplicatively (in that
@@ -229,10 +248,10 @@ export function ItemsView() {
             const qty = itemQuantities[effectiveItem] ?? 1;
             const unitPrice = hasDiscount ? discountedLamports : baseLamports;
             const dayNow = Math.floor(nowSec / 86400);
-            const lifetimeBought = itemPurchase ? itemPurchase.lifetimePurchased.toNumber() : 0;
+            const lifetimeBought = itemPurchase ? Number(itemPurchase.lifetimePurchased) : 0;
             const todayBought =
-              itemPurchase && itemPurchase.lastPurchaseDay.toNumber() === dayNow
-                ? itemPurchase.purchasedToday.toNumber()
+              itemPurchase && Number(itemPurchase.lastPurchaseDay) === dayNow
+                ? Number(itemPurchase.purchasedToday)
                 : 0;
 
             return (
@@ -286,11 +305,11 @@ export function ItemsView() {
                       </span>
                     </div>
                   )}
-                  {!a.maxGlobalStock.eqn(0) && (
+                  {a.maxGlobalStock !== 0n && (
                     <div className="flex items-center justify-between text-xs">
                       <span className="text-zinc-500">Stock</span>
                       <span
-                        className={`text-text-muted ${a.currentGlobalStock.eqn(0) ? "text-red-400" : ""}`}
+                        className={`text-text-muted ${a.currentGlobalStock === 0n ? "text-red-400" : ""}`}
                       >
                         {a.currentGlobalStock.toString()}/{a.maxGlobalStock.toString()}
                       </span>

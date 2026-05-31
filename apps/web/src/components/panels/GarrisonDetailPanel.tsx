@@ -49,8 +49,8 @@ export function GarrisonDetailPanel({ castlePubkey, onClose }: GarrisonDetailPan
       const cInfo = await connection.getAccountInfo(key);
       const castle = cInfo ? parseCastle(cInfo) : null;
       if (!castle || !publicKey) return null;
-      const [myPlayerPda] = derivePlayerPda(client.gameEngine, publicKey);
-      const [garrisonPda] = deriveGarrisonPda(key, myPlayerPda);
+      const [myPlayerPda] = await derivePlayerPda(client.gameEngine, publicKey);
+      const [garrisonPda] = await deriveGarrisonPda(key, myPlayerPda);
       const gInfo = await connection.getAccountInfo(garrisonPda);
       const garrison = gInfo ? parseGarrisonContribution(gInfo) : null;
       return { castle, garrison };
@@ -63,14 +63,14 @@ export function GarrisonDetailPanel({ castlePubkey, onClose }: GarrisonDetailPan
 
   const { castle, garrison } = data;
   const units = garrison
-    ? (garrison.du1?.toNumber?.() ?? 0) +
-      (garrison.du2?.toNumber?.() ?? 0) +
-      (garrison.du3?.toNumber?.() ?? 0)
+    ? (Number(garrison.du1 ?? 0n)) +
+      (Number(garrison.du2 ?? 0n)) +
+      (Number(garrison.du3 ?? 0n))
     : 0;
   const loot = garrison
-    ? (garrison.lootMelee?.toNumber?.() ?? 0) +
-      (garrison.lootRanged?.toNumber?.() ?? 0) +
-      (garrison.lootSiege?.toNumber?.() ?? 0)
+    ? (Number(garrison.lootMelee ?? 0n)) +
+      (Number(garrison.lootRanged ?? 0n)) +
+      (Number(garrison.lootSiege ?? 0n))
     : 0;
   const hasUnclaimedLoot = !!garrison && !garrison.lootClaimed && loot > 0;
   const statusLine = castle.isVacant
@@ -79,16 +79,15 @@ export function GarrisonDetailPanel({ castlePubkey, onClose }: GarrisonDetailPan
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    const ix = await createClaimGarrisonLootInstruction({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      cityId: castle.cityId,
+      castleId: castle.castleId,
+    });
     return transact
       .mutateAsync({
-        instructions: [
-          createClaimGarrisonLootInstruction({
-            owner: publicKey,
-            gameEngine: client.gameEngine,
-            cityId: castle.cityId,
-            castleId: castle.castleId,
-          }),
-        ],
+        instructions: [ix],
         invalidateKeys: [["castle"], ["player"]],
         successMessage: "Garrison loot claimed!",
         onPhase: reportPhase,
@@ -98,16 +97,15 @@ export function GarrisonDetailPanel({ castlePubkey, onClose }: GarrisonDetailPan
 
   const handleLeave = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
+    const ix = await createLeaveGarrisonInstruction({
+      owner: publicKey,
+      gameEngine: client.gameEngine,
+      cityId: castle.cityId,
+      castleId: castle.castleId,
+    });
     return transact
       .mutateAsync({
-        instructions: [
-          createLeaveGarrisonInstruction({
-            owner: publicKey,
-            gameEngine: client.gameEngine,
-            cityId: castle.cityId,
-            castleId: castle.castleId,
-          }),
-        ],
+        instructions: [ix],
         invalidateKeys: [["castle"], ["player"]],
         successMessage: "Left the garrison.",
         onPhase: reportPhase,

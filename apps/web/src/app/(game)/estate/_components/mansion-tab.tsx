@@ -86,7 +86,7 @@ export function MansionTab() {
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createDailyClaimInstruction({
+    const ix = await createDailyClaimInstruction({
       owner: publicKey,
       gameEngine: client.gameEngine,
     });

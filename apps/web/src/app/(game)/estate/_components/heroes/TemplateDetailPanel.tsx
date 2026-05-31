@@ -35,10 +35,7 @@ export function TemplateDetailPanel({
     t.account.supplyCap > 0
       ? `${t.account.mintedCount} / ${t.account.supplyCap}`
       : `${t.account.mintedCount} minted`;
-  const mintCostLamports =
-    typeof t.account.mintCostSol === "number"
-      ? t.account.mintCostSol
-      : ((t.account.mintCostSol as any).toNumber?.() ?? 0);
+  const mintCostLamports = Number(t.account.mintCostSol);
   const tier = tierFromMintCost(mintCostLamports);
   const costSol = mintCostLamports / 1_000_000_000;
 

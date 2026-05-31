@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useShopItems, useFlashSales } from "@/lib/hooks/useShop";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -24,12 +24,7 @@ import {
   isFlashSaleActive,
   getItemTypeInfo,
 } from "novus-mundus-sdk";
-import {
-  findItemType,
-  buildIdLookup,
-  selectShopTile,
-  useShopTileRipple,
-} from "./shared";
+import { findItemType, selectShopTile, useShopTileRipple } from "./shared";
 import { useIsDesktop } from "./useIsDesktop";
 
 export function FlashView() {
@@ -50,8 +45,33 @@ export function FlashView() {
   // Tile-ripple grid root. Flash sales sit in a fixed grid-cols-2 grid.
   const gridRef = useRef<HTMLDivElement>(null);
 
-  const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
-  const saleIdMap = useMemo(() => buildIdLookup(ge, deriveFlashSalePda, 100), [ge]);
+  // Reverse PDA -> id lookups. v3 PDA derivation is async, so the maps are
+  // resolved in an effect (replacing the sync buildIdLookup helper here).
+  const [itemIdMap, setItemIdMap] = useState<Map<string, number>>(new Map());
+  const [saleIdMap, setSaleIdMap] = useState<Map<string, number>>(new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const items = await Promise.all(
+        Array.from(
+          { length: 200 },
+          async (_, i) => [(await deriveShopItemPda(ge, i))[0].toBase58(), i] as const,
+        ),
+      );
+      const sales = await Promise.all(
+        Array.from(
+          { length: 100 },
+          async (_, i) => [(await deriveFlashSalePda(ge, i))[0].toBase58(), i] as const,
+        ),
+      );
+      if (cancelled) return;
+      setItemIdMap(new Map(items));
+      setSaleIdMap(new Map(sales));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ge]);
 
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -61,7 +81,7 @@ export function FlashView() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey || !gameEngine) throw new Error("Not ready");
-    const ix = createPurchaseFlashSaleInstruction(
+    const ix = await createPurchaseFlashSaleInstruction(
       {
         buyer: publicKey,
         gameEngine: ge,
@@ -105,15 +125,34 @@ export function FlashView() {
   const effectiveSale =
     selectedSale ?? (isDesktop && activeFlashSales.length > 0 ? activeFlashSales[0].saleId : null);
 
+  // The item/bundle PDA the effective sale grants — derived async (v3) so the
+  // morph action and detail panel can read it synchronously.
+  const [effectiveSaleItemPda, setEffectiveSaleItemPda] = useState<PublicKey | null>(null);
+  useEffect(() => {
+    const sale =
+      effectiveSale != null ? activeFlashSales.find((s) => s.saleId === effectiveSale) : undefined;
+    if (!sale) {
+      setEffectiveSaleItemPda(null);
+      return;
+    }
+    let cancelled = false;
+    const s = sale.account;
+    const derive = s.isBundle ? deriveBundlePda(ge, s.itemId) : deriveShopItemPda(ge, s.itemId);
+    derive.then(([pda]) => {
+      if (!cancelled) setEffectiveSaleItemPda(pda);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [effectiveSale, activeFlashSales, ge]);
+
   const morphActions = useMemo<PanelAction[] | null>(() => {
     if (effectiveSale != null) {
       const sale = activeFlashSales.find((s) => s.saleId === effectiveSale);
-      if (!sale) return null;
+      if (!sale || !effectiveSaleItemPda) return null;
       const s = sale.account;
-      const hasStock = s.maxStock.eqn(0) || s.remainingStock.gtn(0);
-      const itemPda = s.isBundle
-        ? deriveBundlePda(ge, s.itemId)[0]
-        : deriveShopItemPda(ge, s.itemId)[0];
+      const hasStock = s.maxStock === 0n || s.remainingStock > 0n;
+      const itemPda = effectiveSaleItemPda;
       return [
         {
           id: `buy-flash-${effectiveSale}`,
@@ -125,7 +164,7 @@ export function FlashView() {
       ];
     }
     return null;
-  }, [effectiveSale, activeFlashSales, handlePurchaseFlashSale, ge]);
+  }, [effectiveSale, activeFlashSales, handlePurchaseFlashSale, effectiveSaleItemPda]);
   useMorphActions(morphActions);
 
   // Rarity-aware tile ripple, ranking each tile's flare by discount depth.
@@ -179,7 +218,7 @@ export function FlashView() {
                     <span className="text-[10px] font-bold text-red-400">-{discountPct}%</span>
                   </div>
                   <div className="text-sm font-semibold text-text-primary truncate">{itemName}</div>
-                  {s.remainingStock.eqn(0) && (
+                  {s.remainingStock === 0n && (
                     <div className="text-[10px] text-red-400">Sold Out</div>
                   )}
                 </button>
@@ -195,11 +234,9 @@ export function FlashView() {
             const sale = activeFlashSales.find((s) => s.saleId === effectiveSale);
             if (!sale) return null;
             const s = sale.account;
-            const itemPda = s.isBundle
-              ? deriveBundlePda(ge, s.itemId)[0]
-              : deriveShopItemPda(ge, s.itemId)[0];
+            const itemPda = effectiveSaleItemPda;
             const discountPct = (s.discountBps / 100).toFixed(0);
-            const endsAtSec = s.endsAt.toNumber();
+            const endsAtSec = Number(s.endsAt);
             const itemName = s.isBundle
               ? `Lot #${s.itemId}`
               : (() => {
@@ -240,18 +277,22 @@ export function FlashView() {
                   <div className="text-xs text-text-muted">Offer ends</div>
                   <GoldCountdown
                     endsAt={endsAtSec}
-                    startedAt={s.startsAt.toNumber()}
+                    startedAt={Number(s.startsAt)}
                     format="compact"
                     size="sm"
                   />
                 </div>
 
                 <TxButton
-                  onClick={(rp) => handlePurchaseFlashSale(effectiveSale!, itemPda, rp)}
+                  onClick={(rp) =>
+                    itemPda
+                      ? handlePurchaseFlashSale(effectiveSale!, itemPda, rp)
+                      : Promise.reject(new Error("Loading sale, try again in a moment."))
+                  }
                   className="hidden w-full lg:block"
-                  disabled={s.remainingStock.eqn(0)}
+                  disabled={s.remainingStock === 0n || !itemPda}
                 >
-                  {s.remainingStock.eqn(0) ? "Sold Out" : `Buy for -${discountPct}%`}
+                  {s.remainingStock === 0n ? "Sold Out" : `Buy for -${discountPct}%`}
                 </TxButton>
               </>
             );

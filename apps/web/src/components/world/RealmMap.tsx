@@ -103,7 +103,7 @@ export interface RealmCityNode {
     maxEncounterLevel: number;
     latitude: number;
     longitude: number;
-    activeEncounters?: { toNumber: () => number };
+    activeEncounters?: bigint;
   };
   key: string;
   x: number;
@@ -139,12 +139,12 @@ const THEMES = ["Medieval", "Cyberpunk", "Sci-Fi", "Modern", "Post-Apocalyptic"]
 
 const typeIdx = (t: number) => Math.max(0, Math.min(3, t | 0));
 
-/** Read a possibly-BN numeric field. */
+/** Read a possibly-bigint numeric field. */
 function toNum(v: unknown): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;
-  const bn = v as { toNumber?: () => number };
-  return typeof bn.toNumber === "function" ? bn.toNumber() : Number(v) || 0;
+  if (typeof v === "bigint") return Number(v);
+  return Number(v) || 0;
 }
 
 // Map viewBox — keeps the SVG math in clean units, scales to the sheet's

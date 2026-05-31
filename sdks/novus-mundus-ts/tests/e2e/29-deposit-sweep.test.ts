@@ -13,8 +13,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
+import { Keypair, PublicKey, Transaction, TransactionInstruction } from '@solana/web3.js';
 import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 
 import {
@@ -28,8 +27,8 @@ import {
   RESERVED_NOVI_VESTING_PERIOD,
   deriveNoviMintPda,
   deriveUserPda,
-  getAssociatedTokenAddressSync,
-  getAssociatedTokenAddressSyncForPda,
+  getAssociatedTokenAddressAsync,
+  getAssociatedTokenAddressAsyncForPda,
   parseUser,
 } from '../../src/index';
 
@@ -41,8 +40,30 @@ import {
 } from '../utils/transactions';
 import { fetchAccount } from '../utils/accounts';
 import { advanceTime } from '../fixtures/time';
-import { readSplTokenAmount } from '../fixtures/svm';
+import { readSplTokenAmount, svmKey } from '../fixtures/svm';
 import { log } from '../utils/logger';
+
+/**
+ * Rebuild an instruction produced by `@solana/spl-token` (which bundles
+ * web3.js v1) into a web3.js v3 `TransactionInstruction`. The wire shape
+ * (`programId`, `keys`, `data`) is identical between the two majors, so we
+ * re-wrap the v1 pubkeys as v3 ones via their raw bytes.
+ */
+function toV3Instruction(ix: {
+  programId: { toBytes(): Uint8Array };
+  keys: { pubkey: { toBytes(): Uint8Array }; isSigner: boolean; isWritable: boolean }[];
+  data: Uint8Array;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programId.toBytes()),
+    keys: ix.keys.map((k) => ({
+      pubkey: new PublicKey(k.pubkey.toBytes()),
+      isSigner: k.isSigner,
+      isWritable: k.isWritable,
+    })),
+    data: Buffer.from(ix.data),
+  });
+}
 
 /* Helper: seed the player's wallet ATA by minting reserved → waiting out
  * vesting → withdrawing to wallet. Returns the wallet balance. */
@@ -54,13 +75,13 @@ async function seedWalletAta(
   await sendTransaction(
     ctx.svm,
     new Transaction().add(
-      createMintForPrizeInstruction(
+      await createMintForPrizeInstruction(
         {
           authority: ctx.daoAuthority.publicKey,
           gameEngine: ctx.gameEngine,
           recipientOwner: player.publicKey,
         },
-        { amount: new BN(amount), purpose: MintPurpose.Prize },
+        { amount: BigInt(amount), purpose: MintPurpose.Prize },
       ),
     ),
     [ctx.daoAuthority],
@@ -71,16 +92,16 @@ async function seedWalletAta(
   await sendTransaction(
     ctx.svm,
     new Transaction().add(
-      createWithdrawReservedInstruction(
+      await createWithdrawReservedInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
-        { amount: new BN(amount) },
+        { amount: BigInt(amount) },
       ),
     ),
     [player.keypair],
   );
 
-  const [noviMint] = deriveNoviMintPda();
-  const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
+  const [noviMint] = await deriveNoviMintPda();
+  const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
   return readSplTokenAmount(ctx.svm, walletAta);
 }
 
@@ -108,7 +129,7 @@ describe('Deposit NOVI + Sweep', () => {
 
     /* Read the on-chain user state PRE-deposit so we can verify earned_at
      * is preserved across the deposit. */
-    const [userPda] = deriveUserPda(player.publicKey);
+    const [userPda] = await deriveUserPda(player.publicKey);
     const preInfo = await fetchAccount(ctx.svm, userPda);
     expect(preInfo).not.toBeNull();
     const userPre = parseUser(preInfo!);
@@ -125,22 +146,22 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createDepositNoviInstruction(
+        await createDepositNoviInstruction(
           { owner: player.publicKey },
-          { amount: new BN(depositAmount) },
+          { amount: BigInt(depositAmount) },
         ),
       ),
       [player.keypair],
     );
 
     /* Wallet ATA: was AMOUNT, lost depositAmount (fee + credited). */
-    const [noviMint] = deriveNoviMintPda();
-    const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
+    const [noviMint] = await deriveNoviMintPda();
+    const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
     const walletAfter = readSplTokenAmount(ctx.svm, walletAta);
     expect(walletAfter).toBe(BigInt(AMOUNT - depositAmount));
 
     /* Reserved ATA: credited tokens landed here. */
-    const reservedAta = getAssociatedTokenAddressSyncForPda(noviMint, userPda);
+    const reservedAta = await getAssociatedTokenAddressAsyncForPda(noviMint, userPda);
     const reservedAfter = readSplTokenAmount(ctx.svm, reservedAta);
     expect(reservedAfter).toBe(BigInt(expectedCredited));
 
@@ -160,9 +181,9 @@ describe('Deposit NOVI + Sweep', () => {
     await expectTransactionToFail(
       ctx.svm,
       new Transaction().add(
-        createDepositNoviInstruction(
+        await createDepositNoviInstruction(
           { owner: player.publicKey },
-          { amount: new BN(0) },
+          { amount: 0n },
         ),
       ),
       [player.keypair],
@@ -182,35 +203,35 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createDepositNoviInstruction(
+        await createDepositNoviInstruction(
           { owner: player.publicKey },
-          { amount: new BN(2) },
+          { amount: BigInt(2) },
         ),
       ),
       [player.keypair],
     );
 
-    const [noviMint] = deriveNoviMintPda();
-    const [userPda] = deriveUserPda(player.publicKey);
-    const reservedAta = getAssociatedTokenAddressSyncForPda(noviMint, userPda);
+    const [noviMint] = await deriveNoviMintPda();
+    const [userPda] = await deriveUserPda(player.publicKey);
+    const reservedAta = await getAssociatedTokenAddressAsyncForPda(noviMint, userPda);
     expect(readSplTokenAmount(ctx.svm, reservedAta)).toBe(2n);
   });
 
   it("rejects when source ATA isn't wallet-owned", async () => {
     const player = await factory.createPlayer({ initialize: true });
-    const other = Keypair.generate();
+    const other = await Keypair.generate();
 
     /* Construct a deposit ix that points the source ATA at OTHER's wallet
      * — the wallet still signs as `player`, but the source ATA owner
      * field mismatches `owner.address()`. The on-chain validator should
      * reject with DepositSourceNotWalletOwned. */
-    const baseIx = createDepositNoviInstruction(
+    const baseIx = await createDepositNoviInstruction(
       { owner: player.publicKey },
-      { amount: new BN(100) },
+      { amount: BigInt(100) },
     );
     /* Account 2 is the source_token_account. Swap to other's wallet ATA. */
-    const [noviMint] = deriveNoviMintPda();
-    const otherAta = getAssociatedTokenAddressSync(noviMint, other.publicKey);
+    const [noviMint] = await deriveNoviMintPda();
+    const otherAta = await getAssociatedTokenAddressAsync(noviMint, other.publicKey);
     const tamperedKeys = [...baseIx.keys];
     tamperedKeys[2] = { pubkey: otherAta, isSigner: false, isWritable: true };
     const tamperedIx = new (baseIx.constructor as any)({
@@ -245,34 +266,36 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createMintForPrizeInstruction(
+        await createMintForPrizeInstruction(
           {
             authority: ctx.daoAuthority.publicKey,
             gameEngine: ctx.gameEngine,
             recipientOwner: player.publicKey,
           },
-          { amount: new BN(AMOUNT), purpose: MintPurpose.Prize },
+          { amount: BigInt(AMOUNT), purpose: MintPurpose.Prize },
         ),
       ),
       [ctx.daoAuthority],
     );
 
-    const [noviMint] = deriveNoviMintPda();
-    const [userPda] = deriveUserPda(player.publicKey);
-    const reservedAta = getAssociatedTokenAddressSyncForPda(noviMint, userPda);
+    const [noviMint] = await deriveNoviMintPda();
+    const [userPda] = await deriveUserPda(player.publicKey);
+    const reservedAta = await getAssociatedTokenAddressAsyncForPda(noviMint, userPda);
     const reservedBefore = readSplTokenAmount(ctx.svm, reservedAta);
 
     /* Wallet ATA needs to exist for the sweep's destination slot. */
-    const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
-    if (!ctx.svm.getAccount(walletAta)) {
+    const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
+    if (!ctx.svm.getAccount(svmKey(walletAta))) {
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
-          createAssociatedTokenAccountIdempotentInstruction(
-            player.publicKey,
-            walletAta,
-            player.publicKey,
-            noviMint,
+          toV3Instruction(
+            createAssociatedTokenAccountIdempotentInstruction(
+              player.publicKey as any,
+              walletAta as any,
+              player.publicKey as any,
+              noviMint as any,
+            ),
           ),
         ),
         [player.keypair],
@@ -283,7 +306,7 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createTreasurySweepUntrackedNoviInstruction(
+        await createTreasurySweepUntrackedNoviInstruction(
           { owner: player.publicKey },
           { kind: SweepKind.User },
         ),
@@ -301,11 +324,11 @@ describe('Deposit NOVI + Sweep', () => {
    * NOVI back into reserved via deposit_novi. */
   it('mints purpose-6 (Liquidity) directly to an external wallet ATA', async () => {
     /* External wallet — NOT a game user. We never call init_user. */
-    const externalWallet = Keypair.generate();
+    const externalWallet = await Keypair.generate();
     const AMOUNT = 5_000_000;
 
-    const [noviMint] = deriveNoviMintPda();
-    const externalAta = getAssociatedTokenAddressSync(noviMint, externalWallet.publicKey);
+    const [noviMint] = await deriveNoviMintPda();
+    const externalAta = await getAssociatedTokenAddressAsync(noviMint, externalWallet.publicKey);
 
     /* The wallet ATA doesn't exist yet — the SPL Token mint CPI requires
      * an initialized account, so the DAO ops must create it first. The
@@ -313,11 +336,13 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createAssociatedTokenAccountIdempotentInstruction(
-          ctx.daoAuthority.publicKey,
-          externalAta,
-          externalWallet.publicKey,
-          noviMint,
+        toV3Instruction(
+          createAssociatedTokenAccountIdempotentInstruction(
+            ctx.daoAuthority.publicKey as any,
+            externalAta as any,
+            externalWallet.publicKey as any,
+            noviMint as any,
+          ),
         ),
       ),
       [ctx.daoAuthority],
@@ -328,13 +353,13 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createMintForPrizeInstruction(
+        await createMintForPrizeInstruction(
           {
             authority: ctx.daoAuthority.publicKey,
             gameEngine: ctx.gameEngine,
             recipientOwner: externalWallet.publicKey,
           },
-          { amount: new BN(AMOUNT), purpose: MintPurpose.Liquidity },
+          { amount: BigInt(AMOUNT), purpose: MintPurpose.Liquidity },
         ),
       ),
       [ctx.daoAuthority],
@@ -344,8 +369,8 @@ describe('Deposit NOVI + Sweep', () => {
     expect(readSplTokenAmount(ctx.svm, externalAta)).toBe(BigInt(AMOUNT));
 
     /* And critically — no UserAccount was ever created for this wallet. */
-    const [userPda] = deriveUserPda(externalWallet.publicKey);
-    expect(ctx.svm.getAccount(userPda)).toBeNull();
+    const [userPda] = await deriveUserPda(externalWallet.publicKey);
+    expect(ctx.svm.getAccount(svmKey(userPda))).toBeNull();
   });
 
   /* Full external-mint → game-deposit loop: DAO mints purpose-6 to an
@@ -363,16 +388,18 @@ describe('Deposit NOVI + Sweep', () => {
     /* DAO mints purpose-6 directly to the wallet ATA, NOT through the
      * reserved pool. Wallet ATA needs to exist — seed via the
      * idempotent helper so the test is order-independent. */
-    const [noviMint] = deriveNoviMintPda();
-    const walletAta = getAssociatedTokenAddressSync(noviMint, player.publicKey);
+    const [noviMint] = await deriveNoviMintPda();
+    const walletAta = await getAssociatedTokenAddressAsync(noviMint, player.publicKey);
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createAssociatedTokenAccountIdempotentInstruction(
-          ctx.daoAuthority.publicKey,
-          walletAta,
-          player.publicKey,
-          noviMint,
+        toV3Instruction(
+          createAssociatedTokenAccountIdempotentInstruction(
+            ctx.daoAuthority.publicKey as any,
+            walletAta as any,
+            player.publicKey as any,
+            noviMint as any,
+          ),
         ),
       ),
       [ctx.daoAuthority],
@@ -381,13 +408,13 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createMintForPrizeInstruction(
+        await createMintForPrizeInstruction(
           {
             authority: ctx.daoAuthority.publicKey,
             gameEngine: ctx.gameEngine,
             recipientOwner: player.publicKey,
           },
-          { amount: new BN(AMOUNT), purpose: MintPurpose.Liquidity },
+          { amount: BigInt(AMOUNT), purpose: MintPurpose.Liquidity },
         ),
       ),
       [ctx.daoAuthority],
@@ -396,7 +423,7 @@ describe('Deposit NOVI + Sweep', () => {
 
     /* Critically: the external mint did NOT touch user.reserved_novi.
      * The user-side reserved pool stays at zero. */
-    const [userPda] = deriveUserPda(player.publicKey);
+    const [userPda] = await deriveUserPda(player.publicKey);
     const preDeposit = parseUser((await fetchAccount(ctx.svm, userPda))!);
     expect(preDeposit).not.toBeNull();
     expect(preDeposit!.reservedNovi.toString()).toBe('0');
@@ -410,9 +437,9 @@ describe('Deposit NOVI + Sweep', () => {
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createDepositNoviInstruction(
+        await createDepositNoviInstruction(
           { owner: player.publicKey },
-          { amount: new BN(depositAmount) },
+          { amount: BigInt(depositAmount) },
         ),
       ),
       [player.keypair],
@@ -422,7 +449,7 @@ describe('Deposit NOVI + Sweep', () => {
     expect(readSplTokenAmount(ctx.svm, walletAta)).toBe(BigInt(AMOUNT - depositAmount));
 
     /* Reserved ATA + state: credited tokens. */
-    const reservedAta = getAssociatedTokenAddressSyncForPda(noviMint, userPda);
+    const reservedAta = await getAssociatedTokenAddressAsyncForPda(noviMint, userPda);
     expect(readSplTokenAmount(ctx.svm, reservedAta)).toBe(BigInt(expectedCredited));
     const postDeposit = parseUser((await fetchAccount(ctx.svm, userPda))!);
     expect(postDeposit!.reservedNovi.toString()).toBe(String(expectedCredited));
@@ -434,29 +461,29 @@ describe('Deposit NOVI + Sweep', () => {
     const player = await factory.createPlayer({ initialize: true });
     const AMOUNT = 50_000;
 
-    const [userPda] = deriveUserPda(player.publicKey);
+    const [userPda] = await deriveUserPda(player.publicKey);
     const pre = parseUser((await fetchAccount(ctx.svm, userPda))!);
     const reservedBefore = pre!.reservedNovi;
 
     await sendTransaction(
       ctx.svm,
       new Transaction().add(
-        createMintForPrizeInstruction(
+        await createMintForPrizeInstruction(
           {
             authority: ctx.daoAuthority.publicKey,
             gameEngine: ctx.gameEngine,
             recipientOwner: player.publicKey,
           },
-          { amount: new BN(AMOUNT), purpose: MintPurpose.Prize },
+          { amount: BigInt(AMOUNT), purpose: MintPurpose.Prize },
         ),
       ),
       [ctx.daoAuthority],
     );
 
     const post = parseUser((await fetchAccount(ctx.svm, userPda))!);
-    expect(post!.reservedNovi.toString()).toBe(reservedBefore.add(new BN(AMOUNT)).toString());
+    expect(post!.reservedNovi.toString()).toBe((reservedBefore + BigInt(AMOUNT)).toString());
     /* earned_at must be non-zero (the mint reset it to clock.now). */
-    expect(post!.reservedNoviEarnedAt.toNumber()).toBeGreaterThan(0);
+    expect(Number(post!.reservedNoviEarnedAt)).toBeGreaterThan(0);
   });
 
   /* The sweep refuses to drain a PDA you don't own — Bob can't sweep
@@ -471,7 +498,7 @@ describe('Deposit NOVI + Sweep', () => {
      * with bob's wallet, but leave the PDA at index 1 pointing to
      * alice's. The on-chain `&user.owner != owner.address()` check
      * should reject. */
-    const baseIx = createTreasurySweepUntrackedNoviInstruction(
+    const baseIx = await createTreasurySweepUntrackedNoviInstruction(
       { owner: alice.publicKey },
       { kind: SweepKind.User },
     );
@@ -480,8 +507,8 @@ describe('Deposit NOVI + Sweep', () => {
     tamperedKeys[0] = { pubkey: bob.publicKey, isSigner: true, isWritable: true };
     /* Bob's wallet ATA must replace the destination too, otherwise the
      * wallet-ATA-ownership check fires first. */
-    const [noviMint] = deriveNoviMintPda();
-    const bobWallet = getAssociatedTokenAddressSync(noviMint, bob.publicKey);
+    const [noviMint] = await deriveNoviMintPda();
+    const bobWallet = await getAssociatedTokenAddressAsync(noviMint, bob.publicKey);
     tamperedKeys[3] = { pubkey: bobWallet, isSigner: false, isWritable: true };
     const tamperedIx = new (baseIx.constructor as any)({
       keys: tamperedKeys,

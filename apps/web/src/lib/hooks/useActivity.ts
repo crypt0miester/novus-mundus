@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useWallet, useConnection } from "@solana/wallet-adapter-react";
 import { PublicKey } from "@solana/web3.js";
-import bs58 from "bs58";
+import { getBase58Decoder } from "@solana/codecs-strings";
 
 import { usePlayer } from "./usePlayer";
 import { useGameEngine } from "./useGameEngine";
@@ -209,10 +209,10 @@ export function useActivity(): UseActivityResult {
         if (r.account.creator.equals(publicKey)) {
           mine.add(r.pubkey.toBase58());
         } else {
-          const [pda] = deriveRallyParticipantPda(
+          const [pda] = await deriveRallyParticipantPda(
             ge,
             r.account.creator,
-            r.account.id.toNumber(),
+            r.account.id,
             publicKey,
           );
           probes.push({ pda, rally: r.pubkey.toBase58() });
@@ -228,7 +228,7 @@ export function useActivity(): UseActivityResult {
         .filter((r) => mine.has(r.pubkey.toBase58()))
         .sort(
           (a, b) =>
-            (b.account.createdAt?.toNumber?.() ?? 0) - (a.account.createdAt?.toNumber?.() ?? 0),
+            (Number(b.account.createdAt ?? 0n)) - (Number(a.account.createdAt ?? 0n)),
         );
     },
   });
@@ -242,7 +242,7 @@ export function useActivity(): UseActivityResult {
     staleTime: 10_000,
     queryFn: async (): Promise<ReinforcementRow[]> => {
       if (!publicKey) return [];
-      const [myPlayerPda] = derivePlayerPda(ge, publicKey);
+      const [myPlayerPda] = await derivePlayerPda(ge, publicKey);
       const [sent, received] = await Promise.all([
         client.fetchReinforcementsSent(myPlayerPda),
         client.fetchReinforcementsReceived(myPlayerPda),
@@ -290,8 +290,8 @@ export function useActivity(): UseActivityResult {
     staleTime: 15_000,
     queryFn: async (): Promise<GarrisonRow[]> => {
       if (!publicKey) return [];
-      const [myPlayerPda] = derivePlayerPda(ge, publicKey);
-      const keyByte = bs58.encode(Buffer.from([AccountKey.CastleGarrison]));
+      const [myPlayerPda] = await derivePlayerPda(ge, publicKey);
+      const keyByte = getBase58Decoder().decode(Uint8Array.of(AccountKey.CastleGarrison));
       const accounts = await connection.getProgramAccounts(PROGRAM_ID, {
         filters: [
           { memcmp: { offset: 0, bytes: keyByte } },
@@ -338,8 +338,8 @@ export function useActivity(): UseActivityResult {
     // Rallies — resolve actions live in RallyDetailPanel, so no primaryAction.
     for (const r of ralliesQuery.data ?? []) {
       const st = r.account.status ?? RallyStatus.Gathering;
-      const gatherAt = r.account.gatherAt?.toNumber?.() ?? 0;
-      const arriveAt = r.account.arriveAt?.toNumber?.() ?? 0;
+      const gatherAt = Number(r.account.gatherAt ?? 0n);
+      const arriveAt = Number(r.account.arriveAt ?? 0n);
       const cityId = r.account.rallyCity ?? r.account.targetCity ?? null;
       const targetLabel = RALLY_TARGET_LABEL[r.account.targetType ?? RallyTargetType.Player] ?? "Target";
 
@@ -373,8 +373,8 @@ export function useActivity(): UseActivityResult {
     // Recall (sender, traveling/active), or Relieve (destination, active).
     for (const row of reinforcementsQuery.data ?? []) {
       const status = row.account.status ?? ReinforcementStatus.Traveling;
-      const arrivesAt = row.account.arrivesAt?.toNumber?.() ?? 0;
-      const returnAt = (row.account.returnStartedAt?.toNumber?.() ?? 0) + (row.account.returnDuration ?? 0);
+      const arrivesAt = Number(row.account.arrivesAt ?? 0n);
+      const returnAt = (Number(row.account.returnStartedAt ?? 0n)) + (row.account.returnDuration ?? 0);
       const targetCityId =
         row.direction === "sent" ? row.account.destinationCity : row.account.senderCity;
 
@@ -396,11 +396,11 @@ export function useActivity(): UseActivityResult {
         // Process arrival is permissionless once travel completes.
         primaryAction = {
           label: "Process Arrival",
-          run: (reportPhase) =>
+          run: async (reportPhase) =>
             transact
               .mutateAsync({
                 instructions: [
-                  createProcessArrivalInstruction({
+                  await createProcessArrivalInstruction({
                     reinforcement: row.pubkey,
                     destinationPlayer: row.account.destination,
                   }),
@@ -420,11 +420,11 @@ export function useActivity(): UseActivityResult {
         const destWallet = row.destinationWallet;
         primaryAction = {
           label: "Recall",
-          run: (reportPhase) =>
+          run: async (reportPhase) =>
             transact
               .mutateAsync({
                 instructions: [
-                  createRecallReinforcementInstruction({
+                  await createRecallReinforcementInstruction({
                     sender: publicKey,
                     gameEngine: ge,
                     destinationOwner: destWallet,
@@ -447,11 +447,11 @@ export function useActivity(): UseActivityResult {
         const senderWallet = row.senderWallet;
         primaryAction = {
           label: "Relieve",
-          run: (reportPhase) =>
+          run: async (reportPhase) =>
             transact
               .mutateAsync({
                 instructions: [
-                  createRelieveReinforcementInstruction({
+                  await createRelieveReinforcementInstruction({
                     destinationOwner: publicKey,
                     gameEngine: ge,
                     senderOwner: senderWallet,
@@ -500,15 +500,17 @@ export function useActivity(): UseActivityResult {
       const travelAction: ActivityAction = arrived
         ? {
             label: "Arrive",
-            run: (reportPhase) => {
+            run: async (reportPhase) => {
               const ix = intra
-                ? buildIntracityCompleteIx({ owner: publicKey, gameEngine: ge, player }).ix
-                : buildIntercityCompleteIx({
-                    owner: publicKey,
-                    gameEngine: ge,
-                    player,
-                    homeCity: cities?.find((c) => c.account.cityId === player.currentCity)?.account,
-                  }).ix;
+                ? (await buildIntracityCompleteIx({ owner: publicKey, gameEngine: ge, player })).ix
+                : (
+                    await buildIntercityCompleteIx({
+                      owner: publicKey,
+                      gameEngine: ge,
+                      player,
+                      homeCity: cities?.find((c) => c.account.cityId === player.currentCity)?.account,
+                    })
+                  ).ix;
               return transact
                 .mutateAsync({
                   instructions: [ix],
@@ -521,10 +523,10 @@ export function useActivity(): UseActivityResult {
           }
         : {
             label: "Rush",
-            run: (reportPhase) =>
+            run: async (reportPhase) =>
               transact
                 .mutateAsync({
-                  instructions: buildTravelSpeedupIxs({ owner: publicKey, gameEngine: ge, tier: 2 }),
+                  instructions: await buildTravelSpeedupIxs({ owner: publicKey, gameEngine: ge, tier: 2 }),
                   invalidateKeys: [["player"]],
                   successMessage: "Travel sped up!",
                   onPhase: reportPhase,
@@ -532,10 +534,10 @@ export function useActivity(): UseActivityResult {
                 .then((res) => res.signature),
             // Hold to charge multiple tier-2 speedups into one tx, capped at
             // collapsing the timer ∧ what the player's gems cover.
-            onHold: (reportPhase, count) =>
+            onHold: async (reportPhase, count) =>
               transact
                 .mutateAsync({
-                  instructions: buildTravelSpeedupIxs({
+                  instructions: await buildTravelSpeedupIxs({
                     owner: publicKey,
                     gameEngine: ge,
                     tier: 2,
@@ -551,7 +553,7 @@ export function useActivity(): UseActivityResult {
               timeMultiplier: 0.25,
               costMultiplier: 2,
               gemsPerMinute: geData?.account?.gameplayConfig?.gemCostPerMinuteSpeedup ?? 1,
-              gemBalance: player.gems?.toNumber?.() ?? 0,
+              gemBalance: Number(player.gems ?? 0n),
             }),
           };
 
@@ -598,9 +600,9 @@ export function useActivity(): UseActivityResult {
     for (const g of garrisonsQuery.data ?? []) {
       const hasUnclaimedLoot =
         !g.account.lootClaimed &&
-        (g.account.lootMelee?.toNumber?.() ?? 0) +
-          (g.account.lootRanged?.toNumber?.() ?? 0) +
-          (g.account.lootSiege?.toNumber?.() ?? 0) >
+        (Number(g.account.lootMelee ?? 0n)) +
+          (Number(g.account.lootRanged ?? 0n)) +
+          (Number(g.account.lootSiege ?? 0n)) >
           0;
 
       let primaryAction: ActivityAction | undefined;
@@ -609,11 +611,11 @@ export function useActivity(): UseActivityResult {
         if (hasUnclaimedLoot) {
           primaryAction = {
             label: "Claim",
-            run: (reportPhase) =>
+            run: async (reportPhase) =>
               transact
                 .mutateAsync({
                   instructions: [
-                    createClaimGarrisonLootInstruction({
+                    await createClaimGarrisonLootInstruction({
                       castleId: g.castleId,
                       cityId: g.cityId,
                       gameEngine: ge,
@@ -629,11 +631,11 @@ export function useActivity(): UseActivityResult {
         } else {
           primaryAction = {
             label: "Leave",
-            run: (reportPhase) =>
+            run: async (reportPhase) =>
               transact
                 .mutateAsync({
                   instructions: [
-                    createLeaveGarrisonInstruction({
+                    await createLeaveGarrisonInstruction({
                       castleId: g.castleId,
                       cityId: g.cityId,
                       gameEngine: ge,

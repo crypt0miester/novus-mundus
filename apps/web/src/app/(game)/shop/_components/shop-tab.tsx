@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useShopItems, useFlashSales, useDailyDeals } from "@/lib/hooks/useShop";
@@ -32,7 +32,6 @@ import { DailyView } from "./views/DailyView";
 import { EventsView } from "./views/EventsView";
 import { NoviView } from "./views/NoviView";
 import { ReservedNoviNote } from "./views/ReservedNoviNote";
-import { buildIdLookup } from "./views/shared";
 
 const CARAVAN_FRAMING = systemFraming("shop");
 
@@ -79,8 +78,34 @@ export function ShopTab() {
 
   // Build reverse-lookup maps: pubkey -> numeric ID. Needed here to compute the
   // flash / daily tab badges (their counts mirror the per-view derivations).
-  const itemIdMap = useMemo(() => buildIdLookup(ge, deriveShopItemPda, 200), [ge]);
-  const saleIdMap = useMemo(() => buildIdLookup(ge, deriveFlashSalePda, 100), [ge]);
+  // PDA derivation is async under web3.js v3, so the pubkey -> id lookups are
+  // built off-thread and held in state. Empty until derivation resolves; the
+  // dependent memos re-run when each lands.
+  const [itemIdMap, setItemIdMap] = useState<Map<string, number>>(() => new Map());
+  const [saleIdMap, setSaleIdMap] = useState<Map<string, number>>(() => new Map());
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const itemEntries = await Promise.all(
+        Array.from({ length: 200 }, async (_unused, i) => {
+          const [pda] = await deriveShopItemPda(ge, i);
+          return [pda.toBase58(), i] as const;
+        }),
+      );
+      const saleEntries = await Promise.all(
+        Array.from({ length: 100 }, async (_unused, i) => {
+          const [pda] = await deriveFlashSalePda(ge, i);
+          return [pda.toBase58(), i] as const;
+        }),
+      );
+      if (cancelled) return;
+      setItemIdMap(new Map(itemEntries));
+      setSaleIdMap(new Map(saleEntries));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [ge]);
 
   const nowSec = Math.floor(Date.now() / 1000);
 
@@ -153,14 +178,14 @@ export function ShopTab() {
               <div className="text-xs text-text-muted">Cash</div>
               <span className="inline-flex items-center gap-1">
                 <GameIcon id="resource-cash" size={14} />
-                <GoldNumber value={player.cashOnHand.toNumber()} format="compact" />
+                <GoldNumber value={Number(player.cashOnHand)} format="compact" />
               </span>
             </div>
             <div>
               <div className="text-xs text-text-muted">Gems</div>
               <span className="inline-flex items-center gap-1">
                 <GameIcon id="resource-gem" size={14} />
-                <GoldNumber value={player.gems.toNumber()} />
+                <GoldNumber value={Number(player.gems)} />
               </span>
             </div>
             <div>
@@ -224,7 +249,7 @@ export function ShopTab() {
                 items={[
                   ...npc.noviPurchaseAmounts.map((a, i) => ({
                     label: `Package ${i + 1}`,
-                    value: (a.toNumber() / 10).toLocaleString(),
+                    value: (Number(a) / 10).toLocaleString(),
                     suffix: "NOVI",
                   })),
                   ...npc.noviBulkBonusBps.map((b, i) => ({
@@ -241,7 +266,7 @@ export function ShopTab() {
                   })),
                   ...npc.noviSubDailyCap.map((c, i) => ({
                     label: `Daily Cap T${i}`,
-                    value: (c.toNumber() / 10).toLocaleString(),
+                    value: (Number(c) / 10).toLocaleString(),
                     suffix: "NOVI",
                   })),
                 ]}

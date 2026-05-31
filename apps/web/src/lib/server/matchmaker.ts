@@ -41,7 +41,7 @@ export async function findMatch(
   const gameEngine = client.gameEngine;
   const now = Math.floor(Date.now() / 1000);
 
-  const challengerPlayer = derivePlayerPda(gameEngine, challengerWallet)[0];
+  const challengerPlayer = (await derivePlayerPda(gameEngine, challengerWallet))[0];
   const challengerPlayerKey = challengerPlayer.toBase58();
 
   const participants = await client.fetchArenaParticipants(seasonId);
@@ -55,7 +55,7 @@ export async function findMatch(
 
   // Rolling-24h battle cap.
   const recentBattles = challenger.battleTimestamps.filter(
-    (t) => now - t.toNumber() < SECONDS_PER_DAY,
+    (t) => now - Number(t) < SECONDS_PER_DAY,
   ).length;
   if (recentBattles >= ARENA_MAX_DAILY_BATTLES) {
     throw new Error("Daily battle limit reached — try again later");
@@ -64,7 +64,8 @@ export async function findMatch(
   // Per-opponent battle counts within the last 24h (opponents are player PDAs).
   const opponentCounts = new Map<string, number>();
   challenger.battleOpponents.forEach((opponent, i) => {
-    const ts = challenger.battleTimestamps[i]?.toNumber() ?? 0;
+    const tsRaw = challenger.battleTimestamps[i];
+    const ts = tsRaw !== undefined ? Number(tsRaw) : 0;
     if (now - ts < SECONDS_PER_DAY) {
       const key = opponent.toBase58();
       opponentCounts.set(key, (opponentCounts.get(key) ?? 0) + 1);
@@ -94,7 +95,7 @@ export async function findMatch(
       return {
         defenderWallet: wallet,
         defenderElo: candidate.account.eloRating,
-        matchId: challenger.lastMatchId.toNumber() + 1,
+        matchId: Number(challenger.lastMatchId) + 1,
         matchTimestamp: now,
       };
     }

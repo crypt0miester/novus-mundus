@@ -11,7 +11,6 @@
 
 import { describe, it, expect, beforeAll, afterAll, setDefaultTimeout } from 'bun:test';
 import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
-import BN from 'bn.js';
 
 import {
   createAttackPlayerInstruction,
@@ -127,7 +126,7 @@ describe('Combat System', () => {
       expect(defenderBefore).not.toBeNull();
 
       // Execute attack (defender's protection expired during movePlayerToPlayer travel time)
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -148,17 +147,17 @@ describe('Combat System', () => {
       expect(defenderAfter).not.toBeNull();
 
       // Winner steals cash from loser
-      const totalCashBefore = attackerBefore!.cashOnHand.add(defenderBefore!.cashOnHand);
-      const totalCashAfter = attackerAfter!.cashOnHand.add(defenderAfter!.cashOnHand);
+      const totalCashBefore = attackerBefore!.cashOnHand + defenderBefore!.cashOnHand;
+      const totalCashAfter = attackerAfter!.cashOnHand + defenderAfter!.cashOnHand;
       // Cash is transferred, not created — total should stay roughly the same
       // (small rounding differences possible from bps calculations)
-      expect(totalCashAfter.gte(totalCashBefore.muln(9).divn(10))).toBe(true);
+      expect(totalCashAfter >= (totalCashBefore * 9n) / 10n).toBe(true);
 
       // At least one side should have fewer defensive units (casualties)
-      const defenderLostUnits = defenderBefore!.defensiveUnit1.gt(defenderAfter!.defensiveUnit1)
-        || defenderBefore!.defensiveUnit2.gt(defenderAfter!.defensiveUnit2);
-      const attackerLostUnits = attackerBefore!.defensiveUnit1.gt(attackerAfter!.defensiveUnit1)
-        || attackerBefore!.defensiveUnit2.gt(attackerAfter!.defensiveUnit2);
+      const defenderLostUnits = defenderBefore!.defensiveUnit1 > defenderAfter!.defensiveUnit1
+        || defenderBefore!.defensiveUnit2 > defenderAfter!.defensiveUnit2;
+      const attackerLostUnits = attackerBefore!.defensiveUnit1 > attackerAfter!.defensiveUnit1
+        || attackerBefore!.defensiveUnit2 > attackerAfter!.defensiveUnit2;
       expect(defenderLostUnits || attackerLostUnits).toBe(true);
     });
 
@@ -174,10 +173,10 @@ describe('Combat System', () => {
       expect(defenderAccount).not.toBeNull();
 
       const currentTime = await getCurrentTimestamp(ctx.svm);
-      expect(defenderAccount!.newPlayerProtectionUntil.toNumber()).toBeGreaterThan(currentTime);
+      expect(Number(defenderAccount!.newPlayerProtectionUntil)).toBeGreaterThan(currentTime);
 
       // Attack should fail due to protection
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -207,7 +206,7 @@ describe('Combat System', () => {
       expect(attackerAccount!.currentCity).not.toBe(defenderAccount!.currentCity);
 
       // Attack should fail - not in same city
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -228,7 +227,7 @@ describe('Combat System', () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
       await factory.hireUnits(player, 0, 100);
 
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: player.publicKey,
@@ -251,7 +250,7 @@ describe('Combat System', () => {
 
       // Don't give attacker any units
 
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -292,7 +291,7 @@ describe('Combat System', () => {
       const encounterGridLat = playerGridLat;
       const encounterGridLong = playerGridLong + 1; // ~8-10m at mid-latitudes
 
-      const spawnIx = createSpawnEncounterInstruction(
+      const spawnIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -306,18 +305,18 @@ describe('Combat System', () => {
       );
       await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
       const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
 
       // Attack the encounter (include death accounts in case encounter is killed)
-      const [playerPda] = derivePlayerPda(ctx.gameEngine, player.publicKey);
+      const [playerPda] = await derivePlayerPda(ctx.gameEngine, player.publicKey);
       const playerBefore = await fetchPlayer(ctx.svm, playerPda);
-      const lootId = playerBefore!.lootCounter.toNumber();
-      const [lootPda] = deriveLootPda(playerPda, lootId);
-      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
+      const lootId = Number(playerBefore!.lootCounter);
+      const [lootPda] = await deriveLootPda(playerPda, lootId);
+      const [encounterLocationPda] = await deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
 
-      const ix = createAttackEncounterInstruction(
+      const ix = await createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -368,7 +367,7 @@ describe('Combat System', () => {
       const encounterGridLat = playerGridLat;
       const encounterGridLong = playerGridLong + 1; // ~8-10m at mid-latitudes
 
-      const spawnIx = createSpawnEncounterInstruction(
+      const spawnIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -382,15 +381,15 @@ describe('Combat System', () => {
       );
       await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
 
       // Derive death accounts in case encounter is killed
-      const lootId = playerBefore!.lootCounter.toNumber();
-      const [lootPda] = deriveLootPda(player.playerPda, lootId);
-      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
+      const lootId = Number(playerBefore!.lootCounter);
+      const [lootPda] = await deriveLootPda(player.playerPda, lootId);
+      const [encounterLocationPda] = await deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
 
       // Attack encounter
-      const ix = createAttackEncounterInstruction(
+      const ix = await createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -411,7 +410,7 @@ describe('Combat System', () => {
       expect(playerAfter).not.toBeNull();
 
       // Should have gained some XP
-      expect(playerAfter!.currentXp.gte(playerBefore!.currentXp)).toBe(true);
+      expect(playerAfter!.currentXp >= playerBefore!.currentXp).toBe(true);
     });
   });
 
@@ -428,7 +427,7 @@ describe('Combat System', () => {
 
       const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
-      const lootCounterBefore = playerBefore!.lootCounter.toNumber();
+      const lootCounterBefore = Number(playerBefore!.lootCounter);
 
       // Spawn a Common encounter adjacent to player
       const encounterId = 0;
@@ -438,7 +437,7 @@ describe('Combat System', () => {
       const encounterGridLat = playerGridLat;
       const encounterGridLong = playerGridLong + 1;
 
-      const spawnIx = createSpawnEncounterInstruction(
+      const spawnIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -452,18 +451,18 @@ describe('Combat System', () => {
       );
       await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
       const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
 
       // Derive death accounts: loot PDA, encounter location, location creator refund
       // Use the known spawn grid coords directly (same as what we passed to spawn)
-      const [lootPda] = deriveLootPda(player.playerPda, lootCounterBefore);
-      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
+      const [lootPda] = await deriveLootPda(player.playerPda, lootCounterBefore);
+      const [encounterLocationPda] = await deriveLocationPda(ctx.gameEngine, cityId, encounterGridLat, encounterGridLong);
 
       // Attack with death accounts (encounter should die from massive damage)
       // locationCreatorRefund must match the payer who spawned the encounter (daoAuthority)
-      const attackIx = createAttackEncounterInstruction(
+      const attackIx = await createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -486,7 +485,7 @@ describe('Combat System', () => {
 
       // Player's loot counter should have incremented
       const playerAfter = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(playerAfter!.lootCounter.toNumber()).toBeGreaterThan(lootCounterBefore);
+      expect(Number(playerAfter!.lootCounter)).toBeGreaterThan(lootCounterBefore);
     });
 
     it('should claim loot successfully', async () => {
@@ -498,7 +497,7 @@ describe('Combat System', () => {
 
       const playerBefore = await fetchPlayer(ctx.svm, player.playerPda);
       expect(playerBefore).not.toBeNull();
-      const lootId = playerBefore!.lootCounter.toNumber();
+      const lootId = Number(playerBefore!.lootCounter);
 
       // Spawn and kill encounter to generate loot
       const encounterId = 0;
@@ -506,7 +505,7 @@ describe('Combat System', () => {
       const pGridLat = Math.round(city.lat * GRID_PRECISION);
       const pGridLong = Math.round(city.lon * GRID_PRECISION);
 
-      const spawnIx = createSpawnEncounterInstruction(
+      const spawnIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -520,15 +519,15 @@ describe('Combat System', () => {
       );
       await sendTransaction(ctx.svm, new Transaction().add(spawnIx), [ctx.daoAuthority]);
 
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
       const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
 
-      const [lootPda] = deriveLootPda(player.playerPda, lootId);
+      const [lootPda] = await deriveLootPda(player.playerPda, lootId);
       // Use known spawn grid coords directly
-      const [encounterLocationPda] = deriveLocationPda(ctx.gameEngine, cityId, pGridLat, pGridLong + 1);
+      const [encounterLocationPda] = await deriveLocationPda(ctx.gameEngine, cityId, pGridLat, pGridLong + 1);
 
-      const attackIx = createAttackEncounterInstruction(
+      const attackIx = await createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -550,7 +549,7 @@ describe('Combat System', () => {
       const cashBefore = playerBeforeClaim!.cashOnHand;
 
       // Claim loot — creator is the owner wallet (who paid rent for loot account)
-      const claimIx = createClaimLootInstruction({
+      const claimIx = await createClaimLootInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         loot: lootPda,
@@ -561,7 +560,7 @@ describe('Combat System', () => {
 
       // Verify rewards were transferred
       const playerAfterClaim = await fetchPlayer(ctx.svm, player.playerPda);
-      expect(playerAfterClaim!.cashOnHand.gt(cashBefore)).toBe(true);
+      expect(playerAfterClaim!.cashOnHand > cashBefore).toBe(true);
 
       // Loot account should be closed (rent reclaimed)
       const lootGone = !(await accountExists(ctx.svm, lootPda));
@@ -571,10 +570,10 @@ describe('Combat System', () => {
     it('should reject claim of non-existent loot', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      const mockLootAccount = Keypair.generate().publicKey;
-      const mockCreator = Keypair.generate().publicKey;
+      const mockLootAccount = (await Keypair.generate()).publicKey;
+      const mockCreator = (await Keypair.generate()).publicKey;
 
-      const ix = createClaimLootInstruction({
+      const ix = await createClaimLootInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         loot: mockLootAccount,
@@ -653,7 +652,7 @@ describe('Combat System', () => {
       expect(defenderBefore).not.toBeNull();
 
       // Execute PvP attack
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -673,8 +672,8 @@ describe('Combat System', () => {
       expect(attackerAfter).not.toBeNull();
 
       // One side must have lost units — casualties are inflicted via inflict_damage()
-      const defLost = defenderBefore!.defensiveUnit1.gt(defenderAfter!.defensiveUnit1)
-        || defenderBefore!.defensiveUnit2.gt(defenderAfter!.defensiveUnit2);
+      const defLost = defenderBefore!.defensiveUnit1 > defenderAfter!.defensiveUnit1
+        || defenderBefore!.defensiveUnit2 > defenderAfter!.defensiveUnit2;
       expect(defLost).toBe(true);
     });
 
@@ -698,7 +697,7 @@ describe('Combat System', () => {
       await factory.movePlayerToPlayer(attacker, defender);
 
       // Attack
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -717,9 +716,9 @@ describe('Combat System', () => {
 
       // At least 2 of 3 unit types should have taken casualties (proportional distribution)
       let typesWithCasualties = 0;
-      if (defenderBefore!.defensiveUnit1.gt(defenderAfter!.defensiveUnit1)) typesWithCasualties++;
-      if (defenderBefore!.defensiveUnit2.gt(defenderAfter!.defensiveUnit2)) typesWithCasualties++;
-      if (defenderBefore!.defensiveUnit3.gt(defenderAfter!.defensiveUnit3)) typesWithCasualties++;
+      if (defenderBefore!.defensiveUnit1 > defenderAfter!.defensiveUnit1) typesWithCasualties++;
+      if (defenderBefore!.defensiveUnit2 > defenderAfter!.defensiveUnit2) typesWithCasualties++;
+      if (defenderBefore!.defensiveUnit3 > defenderAfter!.defensiveUnit3) typesWithCasualties++;
       expect(typesWithCasualties).toBeGreaterThanOrEqual(2);
     });
   });
@@ -743,7 +742,7 @@ describe('Combat System', () => {
       const pGridLat = Math.round(city.lat * GRID_PRECISION);
       const pGridLong = Math.round(city.lon * GRID_PRECISION);
 
-      const spawnIx = createSpawnEncounterInstruction(
+      const spawnIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -763,8 +762,8 @@ describe('Combat System', () => {
       await factory.startIntracityTravel(player, cityId, pGridLat, pGridLong, destLat, destLong);
 
       // Try to attack while traveling — should fail with PlayerTraveling
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
-      const ix = createAttackEncounterInstruction(
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterId);
+      const ix = await createAttackEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           owner: player.publicKey,
@@ -803,7 +802,7 @@ describe('Combat System', () => {
       await factory.startIntracityTravel(attacker, 1, attackerLoc!.gridLat, attackerLoc!.gridLong, destLat, destLong);
 
       // Try to PvP attack while traveling — should fail
-      const ix = createAttackPlayerInstruction(
+      const ix = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -833,7 +832,7 @@ describe('Combat System', () => {
       await advanceTime(ctx.svm, 3);
 
       // First attack
-      const ix1 = createAttackPlayerInstruction(
+      const ix1 = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -847,7 +846,7 @@ describe('Combat System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(ix1), [attacker.keypair]);
 
       // Second attack immediately should fail due to cooldown
-      const ix2 = createAttackPlayerInstruction(
+      const ix2 = await createAttackPlayerInstruction(
         {
           gameEngine: ctx.gameEngine,
           attacker: attacker.publicKey,
@@ -876,7 +875,7 @@ describe('Combat System', () => {
       const encounterIndex = 0; // Must match city's encounter_counter (starts at 0)
       const { gridLat, gridLong } = goldenSpiralGridCoords(cityId, 5);
 
-      const ix = createSpawnEncounterInstruction(
+      const ix = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -896,7 +895,7 @@ describe('Combat System', () => {
       await sendTransaction(ctx.svm, tx, [ctx.daoAuthority]);
 
       // Verify encounter was created
-      const [encounterPda] = deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
+      const [encounterPda] = await deriveEncounterPda(ctx.gameEngine, cityId, encounterIndex);
       const encounter = await fetchEncounter(ctx.svm, encounterPda);
       expect(encounter).not.toBeNull();
     });
@@ -908,7 +907,7 @@ describe('Combat System', () => {
       // Spawn low level encounter (encounterIndex 0 - must match city counter)
       // Use spiral index 5 for coords to avoid city-center collision with player spawns
       const spawn0 = goldenSpiralGridCoords(cityId, 5);
-      const lowLevelIx = createSpawnEncounterInstruction(
+      const lowLevelIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -923,7 +922,7 @@ describe('Combat System', () => {
 
       // Spawn higher rarity encounter (encounterIndex 1) - use Rare to avoid time-of-day restrictions
       const spawn1 = goldenSpiralGridCoords(cityId, 6);
-      const highLevelIx = createSpawnEncounterInstruction(
+      const highLevelIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -949,7 +948,7 @@ describe('Combat System', () => {
       // Common encounter = basic rewards (encounterIndex 0 for this city)
       // Use spiral index 5 for coords to avoid city-center collision with player spawns
       const spawn0 = goldenSpiralGridCoords(cityId, 5);
-      const commonIx = createSpawnEncounterInstruction(
+      const commonIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,
@@ -964,7 +963,7 @@ describe('Combat System', () => {
 
       // Uncommon encounter = better rewards (encounterIndex 1 for this city)
       const spawn1 = goldenSpiralGridCoords(cityId, 6);
-      const uncommonIx = createSpawnEncounterInstruction(
+      const uncommonIx = await createSpawnEncounterInstruction(
         {
           gameEngine: ctx.gameEngine,
           payer: ctx.daoAuthority.publicKey,

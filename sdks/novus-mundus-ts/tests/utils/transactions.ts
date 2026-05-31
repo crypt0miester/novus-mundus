@@ -10,11 +10,12 @@ import {
   Transaction,
   TransactionInstruction,
   ComputeBudgetProgram,
+  type Blockhash,
   type TransactionSignature,
 } from '@solana/web3.js';
-import bs58 from 'bs58';
+import { getBase58Decoder, getBase58Encoder } from '@solana/codecs-strings';
 
-import { type LiteSVM, FailedTransactionMetadata } from '../fixtures/svm';
+import { type LiteSVM, FailedTransactionMetadata, sendSignedTx } from '../fixtures/svm';
 import { parseEventsFromLogs, type NovusMundusEvent } from '../../src/events/index';
 import { GameError, parseErrorMessage } from '../../src/errors';
 import { log } from './logger';
@@ -95,11 +96,12 @@ export async function sendTransaction(
   const opts = { ...DEFAULT_TX_OPTIONS, ...options };
   const label = opts._label ?? 'tx';
 
-  tx.recentBlockhash = svm.latestBlockhash();
+  tx.recentBlockhash = svm.latestBlockhash() as Blockhash;
   tx.feePayer = signers[0]!.publicKey;
-  tx.sign(...signers);
+  await tx.sign(...signers);
 
-  const result = svm.sendTransaction(tx);
+  const signedBytes = await tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+  const result = sendSignedTx(svm, signedBytes);
 
   if (result instanceof FailedTransactionMetadata) {
     const meta = result.meta();
@@ -123,7 +125,7 @@ export async function sendTransaction(
     throw error;
   }
 
-  const sig = bs58.encode(result.signature());
+  const sig = getBase58Decoder().decode(result.signature());
   
   // Expire blockhash so identical transactions can be sent again
   svm.expireBlockhash();
@@ -168,7 +170,7 @@ export async function getTransactionLogs(
   signature: TransactionSignature
 ): Promise<string[]> {
   // Fall back to SVM transaction history
-  const sigBytes = bs58.decode(signature);
+  const sigBytes = new Uint8Array(getBase58Encoder().encode(signature));
   const txMeta = svm.getTransaction(sigBytes);
   if (txMeta) {
     const meta = txMeta instanceof FailedTransactionMetadata ? txMeta.meta() : txMeta;
@@ -221,11 +223,12 @@ export async function sendTransactionWithResult(
   signers: Keypair[],
   options: TransactionOptions = {}
 ): Promise<TransactionResult> {
-  tx.recentBlockhash = svm.latestBlockhash();
+  tx.recentBlockhash = svm.latestBlockhash() as Blockhash;
   tx.feePayer = signers[0]!.publicKey;
-  tx.sign(...signers);
+  await tx.sign(...signers);
 
-  const result = svm.sendTransaction(tx);
+  const signedBytes = await tx.serialize({ requireAllSignatures: false, verifySignatures: false });
+  const result = sendSignedTx(svm, signedBytes);
 
   if (result instanceof FailedTransactionMetadata) {
     const meta = result.meta();
@@ -240,7 +243,7 @@ export async function sendTransactionWithResult(
     };
   }
 
-  const sig = bs58.encode(result.signature());
+  const sig = getBase58Decoder().decode(result.signature());
   const logs = result.logs();
   const events = parseEventsFromLogs(logs);
   const cu = Number(result.computeUnitsConsumed());

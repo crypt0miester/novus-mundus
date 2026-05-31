@@ -21,7 +21,7 @@ import {
 const amountArgs = packed<{ amount: bigint }>([
   ['amount', u64],
 ], 8);
-import { getAssociatedTokenAddressSync, getAssociatedTokenAddressSyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
+import { getAssociatedTokenAddressAsync, getAssociatedTokenAddressAsyncForPda, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 
 // Reserved to Locked
 
@@ -69,8 +69,8 @@ export async function createReservedToLockedInstruction(
   const [noviMint] = await deriveNoviMintPda();
 
   // Token accounts are owned by PDAs, not the wallet
-  const reservedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
-  const lockedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
+  const lockedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -137,9 +137,9 @@ export async function createWithdrawReservedInstruction(
   const [noviMint] = await deriveNoviMintPda();
 
   // Reserved token account is owned by UserAccount PDA
-  const reservedTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
   // User wallet token account is owned by user's wallet (standard ATA)
-  const userWalletTokenAccount = await getAssociatedTokenAddressSync(noviMint, accounts.owner);
+  const userWalletTokenAccount = await getAssociatedTokenAddressAsync(noviMint, accounts.owner);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },

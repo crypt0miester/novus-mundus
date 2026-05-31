@@ -34,11 +34,11 @@ export async function POST(req: Request) {
   const template = await getDungeonTemplate(run.dungeonId);
   if (!template) return fail("dungeon template not found", 404);
 
-  const ix = createResumeInstruction(
+  const ix = await createResumeInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: (await gameAuthorityKeypair()).publicKey,
     },
     {
       templateId: run.dungeonId,

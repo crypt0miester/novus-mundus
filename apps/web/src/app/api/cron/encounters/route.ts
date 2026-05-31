@@ -132,7 +132,7 @@ async function handle(req: Request): Promise<Response> {
   const connection = serverConnection();
   const client = serverClient();
   const ge = gameEnginePda();
-  const authority = gameAuthorityKeypair();
+  const authority = await gameAuthorityKeypair();
 
   let cities: Awaited<ReturnType<typeof client.fetchAllCities>>;
   try {
@@ -245,12 +245,12 @@ async function processCity(args: {
   const nowSec = Math.floor(Date.now() / 1000);
   const aliveCountsByRarity: Record<number, number> = {};
   for (const { account: e } of encounters) {
-    const aliveOnChain = !e.health.isZero() && e.despawnAt.toNumber() > nowSec;
+    const aliveOnChain = e.health !== 0n && Number(e.despawnAt) > nowSec;
     if (!aliveOnChain) continue;
     aliveCountsByRarity[e.rarity] = (aliveCountsByRarity[e.rarity] ?? 0) + 1;
   }
 
-  let nextIndex = city.totalEncountersSpawned.toNumber();
+  let nextIndex = Number(city.totalEncountersSpawned);
   /* baseLat/baseLong are passed to the chain as i32 grid units, NOT
    * degrees. The chain reads grid_lat/long as i32 and divides by
    * GRID_PRECISION (10000) to recover the f64 lat/long. We must scale
@@ -272,11 +272,11 @@ async function processCity(args: {
    * us — chain returns InvalidPDA on the encounter PDA derivation). */
   const refetchNextIndex = async (): Promise<number | null> => {
     try {
-      const [cityPda] = deriveCityPda(gameEngine, cityId);
+      const [cityPda] = await deriveCityPda(gameEngine, cityId);
       const info = await connection.getAccountInfo(cityPda, "confirmed");
       if (!info?.data) return null;
       const fresh = deserializeCity(info.data);
-      return fresh.totalEncountersSpawned.toNumber();
+      return Number(fresh.totalEncountersSpawned);
     } catch {
       return null;
     }
@@ -323,12 +323,12 @@ async function processCity(args: {
    * recipient correctly, then batch into multi-ix transactions. */
   const pending: TransactionInstruction[] = [];
   for (const { account: enc } of encounters) {
-    const despawnAt = enc.despawnAt.toNumber();
+    const despawnAt = Number(enc.despawnAt);
     if (nowSec < despawnAt + CLEANUP_GRACE_SECONDS) {
       if (nowSec >= despawnAt) summary.pending++;
       continue;
     }
-    const encounterIndex = enc.id.toNumber();
+    const encounterIndex = Number(enc.id);
     const gridLat = Math.round(enc.locationLat * GRID_PRECISION);
     const gridLong = Math.round(enc.locationLong * GRID_PRECISION);
 
@@ -341,8 +341,8 @@ async function processCity(args: {
      * wallet and the chain reverting the whole batched tx. */
     let rentRecipient = authority.publicKey;
     try {
-      const [locationPda] = deriveLocationPda(gameEngine, cityId, gridLat, gridLong);
-      const [encounterPda] = deriveEncounterPda(gameEngine, cityId, encounterIndex);
+      const [locationPda] = await deriveLocationPda(gameEngine, cityId, gridLat, gridLong);
+      const [encounterPda] = await deriveEncounterPda(gameEngine, cityId, encounterIndex);
       const locInfo = await connection.getAccountInfo(locationPda);
       if (locInfo && locInfo.data.length > 0) {
         const loc = deserializeLocation(locInfo.data);
@@ -355,7 +355,7 @@ async function processCity(args: {
     }
 
     pending.push(
-      createCleanupEncounterInstruction({
+      await createCleanupEncounterInstruction({
         gameEngine,
         cityId,
         encounterIndex,
@@ -503,7 +503,7 @@ async function trySpawnBatch(args: {
         break;
       }
       spawnIxs.push(
-        createSpawnEncounterInstruction(
+        await createSpawnEncounterInstruction(
           {
             payer: args.authority.publicKey,
             playerOwner: args.authority.publicKey,
@@ -523,7 +523,7 @@ async function trySpawnBatch(args: {
 
     /* Fresh blockhash per attempt — the previous one may have expired
      * during MAX_BIOME_RETRIES cell picks + a chain of failed sims. */
-    let blockhash: string;
+    let blockhash: Awaited<ReturnType<typeof args.connection.getLatestBlockhash>>["blockhash"];
     try {
       ({ blockhash } = await args.connection.getLatestBlockhash());
     } catch {

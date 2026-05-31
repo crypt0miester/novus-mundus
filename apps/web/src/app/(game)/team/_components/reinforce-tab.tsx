@@ -72,14 +72,14 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
   const { data: teamData } = useTeam(teamPubkey);
   const teamId = teamData?.account?.id;
   const ownedUnits: [number, number, number] = [
-    player?.defensiveUnit1?.toNumber?.() ?? 0,
-    player?.defensiveUnit2?.toNumber?.() ?? 0,
-    player?.defensiveUnit3?.toNumber?.() ?? 0,
+    Number(player?.defensiveUnit1 ?? 0n),
+    Number(player?.defensiveUnit2 ?? 0n),
+    Number(player?.defensiveUnit3 ?? 0n),
   ];
   const ownedWeapons: [number, number, number] = [
-    player?.meleeWeapons?.toNumber?.() ?? 0,
-    player?.rangedWeapons?.toNumber?.() ?? 0,
-    player?.siegeWeapons?.toNumber?.() ?? 0,
+    Number(player?.meleeWeapons ?? 0n),
+    Number(player?.rangedWeapons ?? 0n),
+    Number(player?.siegeWeapons ?? 0n),
   ];
 
   // Locked heroes (slots 0-2); one may optionally travel with the reinforcement.
@@ -117,7 +117,7 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
     let cancelled = false;
     (async () => {
       const ge = client.gameEngine;
-      const [myPlayerPda] = derivePlayerPda(ge, publicKey);
+      const [myPlayerPda] = await derivePlayerPda(ge, publicKey);
       const [sent, received] = await Promise.all([
         client.fetchReinforcementsSent(myPlayerPda),
         client.fetchReinforcementsReceived(myPlayerPda),
@@ -187,19 +187,19 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
     const targetPubkey = new PublicKey(targetAddress.trim());
     // The destination's current city is needed for the instruction — read it
     // from their on-chain player account.
-    const [destPda] = derivePlayerPda(ge, targetPubkey);
+    const [destPda] = await derivePlayerPda(ge, targetPubkey);
     const destInfo = await connection.getAccountInfo(destPda);
     const destPlayer = destInfo ? parsePlayer(destInfo) : null;
     if (!destPlayer) throw new Error("Target player not found");
     const hero = reinHeroSlot < 3 ? lockedHeroes[reinHeroSlot] : null;
-    const ix = createSendReinforcementInstruction(
+    const ix = await createSendReinforcementInstruction(
       {
         sender: publicKey,
         gameEngine: ge,
         destinationOwner: targetPubkey,
         senderCityId: player.currentCity,
         destinationCityId: destPlayer.currentCity,
-        teamId: teamId.toNumber(),
+        teamId: Number(teamId),
         heroNft: hero?.mint,
       },
       {
@@ -228,7 +228,7 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!row.destinationWallet) throw new Error("Destination wallet unresolved");
     const ge = client.gameEngine;
-    const ix = createRecallReinforcementInstruction({
+    const ix = await createRecallReinforcementInstruction({
       sender: publicKey,
       gameEngine: ge,
       destinationOwner: row.destinationWallet,
@@ -259,10 +259,12 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
     // Hold-to-charge packs `count` speedups into one tx; each reads the live
     // timer on-chain, so the leg (outbound or return) collapses step by step.
     const n = Math.max(1, Math.floor(count));
-    const instructions = Array.from({ length: n }, () =>
-      createReinforcementSpeedupInstruction(
-        { sender: publicKey, gameEngine: geKey, destinationOwner },
-        { speedupTier: tier as 1 | 2 },
+    const instructions = await Promise.all(
+      Array.from({ length: n }, () =>
+        createReinforcementSpeedupInstruction(
+          { sender: publicKey, gameEngine: geKey, destinationOwner },
+          { speedupTier: tier as 1 | 2 },
+        ),
       ),
     );
     return transact
@@ -277,7 +279,7 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
 
   // Permissionless: process arrival of a traveling reinforcement.
   const handleProcessArrival = async (row: ReinforcementRow, reportPhase: (p: TxPhase) => void) => {
-    const ix = createProcessArrivalInstruction({
+    const ix = await createProcessArrivalInstruction({
       reinforcement: row.pubkey,
       destinationPlayer: row.account.destination,
     });
@@ -296,7 +298,7 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
     if (!publicKey) throw new Error("Wallet not connected");
     if (!row.senderWallet) throw new Error("Sender wallet unresolved");
     const ge = client.gameEngine;
-    const ix = createRelieveReinforcementInstruction({
+    const ix = await createRelieveReinforcementInstruction({
       destinationOwner: publicKey,
       gameEngine: ge,
       senderOwner: row.senderWallet,
@@ -334,15 +336,15 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
           <div className="grid grid-cols-3 gap-4">
             <div>
               <div className="text-xs text-text-muted">Infantry</div>
-              <GoldNumber value={player.defensiveUnit1?.toNumber?.() ?? 0} />
+              <GoldNumber value={Number(player.defensiveUnit1 ?? 0n)} />
             </div>
             <div>
               <div className="text-xs text-text-muted">Cavalry</div>
-              <GoldNumber value={player.defensiveUnit2?.toNumber?.() ?? 0} />
+              <GoldNumber value={Number(player.defensiveUnit2 ?? 0n)} />
             </div>
             <div>
               <div className="text-xs text-text-muted">Siege</div>
-              <GoldNumber value={player.defensiveUnit3?.toNumber?.() ?? 0} />
+              <GoldNumber value={Number(player.defensiveUnit3 ?? 0n)} />
             </div>
           </div>
         </div>
@@ -461,14 +463,14 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
             {reinforcements.map((row) => {
               const status = row.account.status ?? 0;
               const totalUnits =
-                (row.account.unitsDef1?.toNumber?.() ?? 0) +
-                (row.account.unitsDef2?.toNumber?.() ?? 0) +
-                (row.account.unitsDef3?.toNumber?.() ?? 0);
+                (Number(row.account.unitsDef1 ?? 0n)) +
+                (Number(row.account.unitsDef2 ?? 0n)) +
+                (Number(row.account.unitsDef3 ?? 0n));
               const counterparty =
                 row.direction === "sent" ? row.account.destination : row.account.sender;
-              const arrivesAt = row.account.arrivesAt?.toNumber?.() ?? 0;
+              const arrivesAt = Number(row.account.arrivesAt ?? 0n);
               const returnAt =
-                (row.account.returnStartedAt?.toNumber?.() ?? 0) +
+                (Number(row.account.returnStartedAt ?? 0n)) +
                 (row.account.returnDuration ?? 0);
               const gemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
               // Seconds left on the leg in flight: outbound while Traveling,
@@ -484,7 +486,7 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
               // Hold-to-charge caps for the two speedup tiers: T1 leaves 50% of
               // time / 1x cost, T2 leaves 25% / 2x — the same formula the
               // reinforcement processor prices against, so the cap matches chain.
-              const gemBalance = player?.gems?.toNumber?.() ?? 0;
+              const gemBalance = Number(player?.gems ?? 0n);
               const speedupTiers = [
                 {
                   tier: 1,

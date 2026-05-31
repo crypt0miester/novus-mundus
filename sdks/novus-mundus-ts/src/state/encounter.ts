@@ -6,23 +6,22 @@
  */
 
 import { PublicKey, type AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 import { EncounterType } from '../types/enums';
 
 // Encounter Account Interface
 
 export interface EncounterAccount {
-  id: BN;
+  id: bigint;
   cityId: number;
   level: number;
   rarity: EncounterType;
   locationLat: number;
   locationLong: number;
-  spawnedAt: BN;
-  despawnAt: BN;
-  health: BN;
-  maxHealth: BN;
+  spawnedAt: bigint;
+  despawnAt: bigint;
+  health: bigint;
+  maxHealth: bigint;
   defense: number;
   attackerCount: number;
   bump: number;
@@ -41,7 +40,7 @@ export function calculateEncounterAccountSize(attackerCount: number): number {
 // Deserialization
 
 /** Deserialize EncounterAccount from raw bytes */
-export function deserializeEncounter(data: Uint8Array | Buffer): EncounterAccount {
+export function deserializeEncounter(data: Uint8Array): EncounterAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key discriminator
@@ -92,7 +91,7 @@ export function deserializeEncounter(data: Uint8Array | Buffer): EncounterAccoun
 }
 
 /** Parse EncounterAccount from account info */
-export function parseEncounter(accountInfo: AccountInfo<Buffer>): EncounterAccount | null {
+export function parseEncounter(accountInfo: AccountInfo<Uint8Array>): EncounterAccount | null {
   if (!accountInfo.data || accountInfo.data.length < ENCOUNTER_ACCOUNT_BASE_SIZE) {
     return null;
   }
@@ -103,12 +102,12 @@ export function parseEncounter(accountInfo: AccountInfo<Buffer>): EncounterAccou
 
 /** Check if encounter is alive */
 export function isEncounterAlive(encounter: EncounterAccount): boolean {
-  return encounter.health.gtn(0);
+  return encounter.health > 0n;
 }
 
 /** Check if encounter has despawned */
 export function isEncounterDespawned(encounter: EncounterAccount, nowSeconds: number): boolean {
-  return nowSeconds >= encounter.despawnAt.toNumber();
+  return nowSeconds >= Number(encounter.despawnAt);
 }
 
 /** Check if player has already attacked this encounter */
@@ -118,6 +117,6 @@ export function hasPlayerAttacked(encounter: EncounterAccount, player: PublicKey
 
 /** Get health percentage (0-100) */
 export function getEncounterHealthPercent(encounter: EncounterAccount): number {
-  if (encounter.maxHealth.isZero()) return 0;
-  return encounter.health.muln(100).div(encounter.maxHealth).toNumber();
+  if (encounter.maxHealth === 0n) return 0;
+  return Number((encounter.health * 100n) / encounter.maxHealth);
 }

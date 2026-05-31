@@ -46,9 +46,9 @@ export function DestinationCellGrid({
 
   useEffect(() => {
     let cancelled = false;
-    const pdas = cells.map((c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)[0]);
-    client.connection
-      .getMultipleAccountsInfo(pdas)
+    Promise.all(cells.map((c) => deriveLocationPda(ge, cityId, c.gridLat, c.gridLong)))
+      .then((derived) => derived.map(([pda]) => pda))
+      .then((pdas) => client.connection.getMultipleAccountsInfo(pdas))
       .then((accts) => {
         if (!cancelled) setOccupancy(accts.map((a) => a !== null));
       })

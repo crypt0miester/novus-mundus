@@ -13,7 +13,6 @@ import {
   LAMPORTS_PER_SOL,
   PublicKey,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -57,7 +56,7 @@ const HERO_TEMPLATES = [
     name: 'Warrior',
     heroType: 0, // Common
     category: 0, // Melee
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10), // 0.1 SOL
+    mintCostSol: BigInt(LAMPORTS_PER_SOL / 10), // 0.1 SOL
     supplyCap: 0, // unlimited
     enabled: true,
     eventExclusive: false,
@@ -73,7 +72,7 @@ const HERO_TEMPLATES = [
     name: 'Archer',
     heroType: 0, // Common
     category: 1, // Ranged
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: BigInt(LAMPORTS_PER_SOL / 10),
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -89,7 +88,7 @@ const HERO_TEMPLATES = [
     name: 'Mage',
     heroType: 0, // Common
     category: 2, // Magic
-    mintCostSol: new BN(LAMPORTS_PER_SOL / 10),
+    mintCostSol: BigInt(LAMPORTS_PER_SOL / 10),
     supplyCap: 0,
     enabled: true,
     eventExclusive: false,
@@ -109,7 +108,7 @@ const HERO_TEMPLATES = [
     baseDefense: 100,
     baseHealth: 1200,
     baseCritBps: 700, // 7%
-    mintPriceLamports: new BN(LAMPORTS_PER_SOL / 2), // 0.5 SOL
+    mintPriceLamports: BigInt(LAMPORTS_PER_SOL / 2), // 0.5 SOL
     maxSupply: 1000,
     minPlayerLevel: 5,
     requiredEventId: 0,
@@ -125,7 +124,7 @@ const RESEARCH_TEMPLATES = [
     category: 0, // Battle
     maxLevel: 10,
     baseTimeSeconds: 300, // 5 minutes
-    baseCost: new BN(100), // 10 NOVI
+    baseCost: BigInt(100), // 10 NOVI
     buffType: 0, // Attack
     buffPerLevelBps: 200, // +2% per level
     prerequisiteType: -1, // None
@@ -137,7 +136,7 @@ const RESEARCH_TEMPLATES = [
     category: 0, // Battle
     maxLevel: 10,
     baseTimeSeconds: 600, // 10 minutes
-    baseCost: new BN(200),
+    baseCost: BigInt(200),
     buffType: 1, // Defense
     buffPerLevelBps: 200,
     prerequisiteType: 0, // Requires Attack I
@@ -149,7 +148,7 @@ const RESEARCH_TEMPLATES = [
     category: 1, // Economy
     maxLevel: 10,
     baseTimeSeconds: 300,
-    baseCost: new BN(100),
+    baseCost: BigInt(100),
     buffType: 4, // Resource Rate
     buffPerLevelBps: 300, // +3% per level
     prerequisiteType: -1,
@@ -161,7 +160,7 @@ const RESEARCH_TEMPLATES = [
     category: 1, // Economy
     maxLevel: 10,
     baseTimeSeconds: 450,
-    baseCost: new BN(150),
+    baseCost: BigInt(150),
     buffType: 5, // Capacity
     buffPerLevelBps: 500, // +5% per level
     prerequisiteType: 2, // Requires Resource I
@@ -173,7 +172,7 @@ const RESEARCH_TEMPLATES = [
     category: 2, // Growth
     maxLevel: 10,
     baseTimeSeconds: 600,
-    baseCost: new BN(200),
+    baseCost: BigInt(200),
     buffType: 6, // XP Rate
     buffPerLevelBps: 200, // +2% per level
     prerequisiteType: -1,
@@ -414,9 +413,9 @@ async function main() {
 
   // Load/create keypairs
   const keysDir = path.join(__dirname, '../keys');
-  const daoAuthority = loadKeypair(path.join(keysDir, 'dao-authority.json'));
-  const treasury = loadKeypair(path.join(keysDir, 'treasury.json'));
-  const testPlayer = loadKeypair(path.join(keysDir, 'test-player.json'));
+  const daoAuthority = await loadKeypair(path.join(keysDir, 'dao-authority.json'));
+  const treasury = await loadKeypair(path.join(keysDir, 'treasury.json'));
+  const testPlayer = await loadKeypair(path.join(keysDir, 'test-player.json'));
 
   console.log(`\nDAO Authority: ${daoAuthority.publicKey.toBase58()}`);
   console.log(`Treasury: ${treasury.publicKey.toBase58()}`);

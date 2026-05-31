@@ -15,7 +15,6 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import BN from 'bn.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -35,7 +34,7 @@ import {
   deriveAllowedTokenPda,
   deriveUserPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda, SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda, SPL_TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
 import { SLOT_HASHES_SYSVAR } from './oracle';
 
 // Initialize Config (Admin)
@@ -66,11 +65,11 @@ export interface InitializeConfigParams {
  *
  * Admin-only. Creates global shop config with discount caps.
  */
-export function createInitializeConfigInstruction(
+export async function createInitializeConfigInstruction(
   accounts: InitializeConfigAccounts,
   params: InitializeConfigParams = {}
-): TransactionInstruction {
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+): Promise<TransactionInstruction> {
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -121,13 +120,13 @@ export interface CreateItemParams {
   /** Base stats bonus in basis points */
   baseStatsBps: number;
   /** Price in SOL lamports */
-  priceSolLamports: BN | number | bigint;
+  priceSolLamports: number | bigint;
   /** Available from timestamp (0=now) */
-  availableFrom?: BN | number | bigint;
+  availableFrom?: number | bigint;
   /** Available until timestamp (0=forever) */
-  availableUntil?: BN | number | bigint;
+  availableUntil?: number | bigint;
   /** Max global stock (0=unlimited) */
-  maxGlobalStock?: BN | number | bigint;
+  maxGlobalStock?: number | bigint;
   /** Max per player (0=unlimited) */
   maxPerPlayer?: number;
   /** Max per day (0=unlimited) */
@@ -144,11 +143,11 @@ export interface CreateItemParams {
  *
  * Admin-only. Creates a purchasable item in the shop.
  */
-export function createCreateItemInstruction(
+export async function createCreateItemInstruction(
   accounts: CreateItemAccounts,
   params: CreateItemParams
-): TransactionInstruction {
-    const [shopItem] = deriveShopItemPda(accounts.gameEngine, params.itemId);
+): Promise<TransactionInstruction> {
+    const [shopItem] = await deriveShopItemPda(accounts.gameEngine, params.itemId);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -207,19 +206,19 @@ export enum UpdateItemField {
 
 export interface UpdateItemParams {
   /** New price in lamports (requires PriceSol flag) */
-  priceSolLamports?: BN | number | bigint;
+  priceSolLamports?: number | bigint;
   /** Is active (requires IsActive flag) */
   isActive?: boolean;
   /** Is featured (requires IsFeatured flag) */
   isFeatured?: boolean;
   /** Available from timestamp (requires AvailableFrom flag) */
-  availableFrom?: BN | number | bigint;
+  availableFrom?: number | bigint;
   /** Available until timestamp (requires AvailableUntil flag) */
-  availableUntil?: BN | number | bigint;
+  availableUntil?: number | bigint;
   /** Max global stock (requires Stock flag) */
-  maxGlobalStock?: BN | number | bigint;
+  maxGlobalStock?: number | bigint;
   /** Current global stock (requires Stock flag) */
-  currentGlobalStock?: BN | number | bigint;
+  currentGlobalStock?: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -229,11 +228,11 @@ export interface UpdateItemParams {
  * Admin-only. Updates item properties using bitmask flags.
  * Only fields with their flag set will be updated.
  */
-export function createUpdateItemInstruction(
+export async function createUpdateItemInstruction(
   accounts: UpdateItemAccounts,
   params: UpdateItemParams = {}
-): TransactionInstruction {
-    const [shopItem] = deriveShopItemPda(accounts.gameEngine, accounts.itemId);
+): Promise<TransactionInstruction> {
+    const [shopItem] = await deriveShopItemPda(accounts.gameEngine, accounts.itemId);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
@@ -366,7 +365,7 @@ export interface PurchaseItemParams {
   /** Daily deal slot index (if using daily deal) */
   dailyDealSlot?: number;
   /** Weekly sale week number (if using weekly sale) */
-  weeklySaleWeek?: BN | number | bigint;
+  weeklySaleWeek?: number | bigint;
 }
 
 /** ~20,000 CU */
@@ -375,16 +374,16 @@ export interface PurchaseItemParams {
  *
  * Handles payment and inventory fulfillment.
  */
-export function createPurchaseItemInstruction(
+export async function createPurchaseItemInstruction(
   accounts: PurchaseItemAccounts,
   params: PurchaseItemParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-  const [shopItem] = deriveShopItemPda(accounts.gameEngine, accounts.itemId);
-  const [playerPurchase] = derivePlayerPurchasePda(accounts.buyer, accounts.itemId);
-  const [inventory] = deriveInventoryPda(player);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.buyer);
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+  const [shopItem] = await deriveShopItemPda(accounts.gameEngine, accounts.itemId);
+  const [playerPurchase] = await derivePlayerPurchasePda(accounts.buyer, accounts.itemId);
+  const [inventory] = await deriveInventoryPda(player);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.buyer, isSigner: true, isWritable: true },
@@ -401,12 +400,11 @@ export function createPurchaseItemInstruction(
 
   // Add optional discount accounts
   if (params.discountFlags && (params.discountFlags & 1) !== 0 && params.dailyDealSlot !== undefined) {
-    const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, params.dailyDealSlot);
+    const [dailyDeal] = await deriveDailyDealPda(accounts.gameEngine, params.dailyDealSlot);
     keys.push({ pubkey: dailyDeal, isSigner: false, isWritable: false });
   }
   if (params.discountFlags && (params.discountFlags & 2) !== 0 && params.weeklySaleWeek !== undefined) {
-    const weekNum = BN.isBN(params.weeklySaleWeek) ? params.weeklySaleWeek.toNumber() : params.weeklySaleWeek;
-    const [weeklySale] = deriveWeeklySalePda(accounts.gameEngine, weekNum);
+    const [weeklySale] = await deriveWeeklySalePda(accounts.gameEngine, params.weeklySaleWeek);
     keys.push({ pubkey: weeklySale, isSigner: false, isWritable: false });
   }
 
@@ -511,11 +509,11 @@ export interface CreateBundleParams {
   /** Savings in basis points (for display) */
   savingsBps: number;
   /** Price in SOL lamports */
-  priceSolLamports: BN | number | bigint;
+  priceSolLamports: number | bigint;
   /** Available from timestamp */
-  availableFrom: BN | number | bigint;
+  availableFrom: number | bigint;
   /** Available until timestamp */
-  availableUntil: BN | number | bigint;
+  availableUntil: number | bigint;
   /** Is active */
   isActive: boolean;
   /** Items in bundle (2-10 items) */
@@ -528,11 +526,11 @@ export interface CreateBundleParams {
  *
  * Admin-only. Creates a pre-built bundle of items.
  */
-export function createCreateBundleInstruction(
+export async function createCreateBundleInstruction(
   accounts: CreateBundleAccounts,
   params: CreateBundleParams
-): TransactionInstruction {
-    const [bundle] = deriveBundlePda(accounts.gameEngine, params.bundleId);
+): Promise<TransactionInstruction> {
+    const [bundle] = await deriveBundlePda(accounts.gameEngine, params.bundleId);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -589,13 +587,13 @@ export const UPDATE_BUNDLE_SAVINGS_BPS = 8;
 
 export interface UpdateBundleParams {
   /** New price in lamports */
-  priceSolLamports?: BN | number | bigint;
+  priceSolLamports?: number | bigint;
   /** Is active */
   isActive?: boolean;
   /** Available from timestamp */
-  availableFrom?: BN | number | bigint;
+  availableFrom?: number | bigint;
   /** Available until timestamp */
-  availableUntil?: BN | number | bigint;
+  availableUntil?: number | bigint;
   /** Savings in basis points */
   savingsBps?: number;
 }
@@ -607,11 +605,11 @@ export interface UpdateBundleParams {
  * Admin-only. Updates bundle properties using bitmask flags.
  * Only fields with their flag set will be updated.
  */
-export function createUpdateBundleInstruction(
+export async function createUpdateBundleInstruction(
   accounts: UpdateBundleAccounts,
   params: UpdateBundleParams = {}
-): TransactionInstruction {
-    const [bundle] = deriveBundlePda(accounts.gameEngine, accounts.bundleId);
+): Promise<TransactionInstruction> {
+    const [bundle] = await deriveBundlePda(accounts.gameEngine, accounts.bundleId);
 
   // Rust account order: dao_authority, game_engine, bundle
   const keys = [
@@ -696,15 +694,15 @@ export interface PurchaseBundleParams {
  *
  * Handles bundled payment and fulfillment.
  */
-export function createPurchaseBundleInstruction(
+export async function createPurchaseBundleInstruction(
   accounts: PurchaseBundleAccounts,
   params: PurchaseBundleParams = {}
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-  const [bundle] = deriveBundlePda(accounts.gameEngine, accounts.bundleId);
-  const [inventory] = deriveInventoryPda(player);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.buyer);
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+  const [bundle] = await deriveBundlePda(accounts.gameEngine, accounts.bundleId);
+  const [inventory] = await deriveInventoryPda(player);
+  const [estate] = await deriveEstatePda(player);
 
   const keys = [
     { pubkey: accounts.buyer, isSigner: true, isWritable: true },
@@ -757,11 +755,11 @@ export interface CreateFlashSaleParams {
   /** Discount in basis points (max 50%) */
   discountBps: number;
   /** Start timestamp */
-  startsAt: BN | number | bigint;
+  startsAt: number | bigint;
   /** Duration in seconds */
   durationSecs: number;
   /** Max stock available */
-  maxStock: BN | number | bigint;
+  maxStock: number | bigint;
 }
 
 /** ~10,000 CU */
@@ -770,12 +768,12 @@ export interface CreateFlashSaleParams {
  *
  * Admin-only. Time-limited sale with limited stock.
  */
-export function createCreateFlashSaleInstruction(
+export async function createCreateFlashSaleInstruction(
   accounts: CreateFlashSaleAccounts,
   params: CreateFlashSaleParams
-): TransactionInstruction {
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-  const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+): Promise<TransactionInstruction> {
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+  const [flashSale] = await deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -832,15 +830,15 @@ export interface PurchaseFlashSaleParams {
  * Flash sales have limited stock and time. Applies flash sale discount
  * plus subscription tier discount.
  */
-export function createPurchaseFlashSaleInstruction(
+export async function createPurchaseFlashSaleInstruction(
   accounts: PurchaseFlashSaleAccounts,
   params: PurchaseFlashSaleParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-  const [flashSale] = deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
-  const [inventory] = deriveInventoryPda(player);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.buyer);
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+  const [flashSale] = await deriveFlashSalePda(accounts.gameEngine, accounts.saleId);
+  const [inventory] = await deriveInventoryPda(player);
+  const [estate] = await deriveEstatePda(player);
 
   // Rust account order: buyer, player, game_engine, shop_config, flash_sale,
   //                     item_or_bundle, treasury, inventory, system_program, estate
@@ -858,12 +856,8 @@ export function createPurchaseFlashSaleInstruction(
   ];
 
   // Instruction data: sale_id (u64) + quantity (u16) + payment_type (u8)
-  const saleIdBN = typeof accounts.saleId === 'bigint'
-    ? new BN(accounts.saleId.toString())
-    : new BN(accounts.saleId);
-
   const writer = new BufferWriter(11);
-  writer.writeU64(saleIdBN);
+  writer.writeU64(accounts.saleId);
   writer.writeU16(params.quantity);
   writer.writeU8(params.paymentType ?? 0);
 
@@ -907,10 +901,10 @@ export interface CloseSaleAccounts {
  * close any sale regardless of state; non-DAO callers must be the original
  * payer AND the sale must be closable (ended/sold-out).
  */
-export function createCloseSaleInstruction(
+export async function createCloseSaleInstruction(
   accounts: CloseSaleAccounts,
   params: CloseSaleParams,
-): TransactionInstruction {
+): Promise<TransactionInstruction> {
   // Resolve sale PDA + numeric sale_id (encoded as u64 in ix data; SeasonalSale
   // is keyed by event pubkey so sale_id is unused on-chain but we still send 0
   // to satisfy the 9-byte payload length check).
@@ -920,23 +914,23 @@ export function createCloseSaleInstruction(
 
   switch (params.saleType) {
     case 0:
-      [salePda] = deriveFlashSalePda(accounts.gameEngine, params.saleId);
+      [salePda] = await deriveFlashSalePda(accounts.gameEngine, params.saleId);
       saleIdU64 = BigInt(params.saleId);
       break;
     case 1:
-      [salePda] = deriveWeeklySalePda(accounts.gameEngine, params.weekNumber);
+      [salePda] = await deriveWeeklySalePda(accounts.gameEngine, params.weekNumber);
       saleIdU64 = BigInt(params.weekNumber);
       break;
     case 2:
-      [salePda] = deriveSeasonalSalePda(accounts.gameEngine, params.event);
+      [salePda] = await deriveSeasonalSalePda(accounts.gameEngine, params.event);
       saleIdU64 = 0n;
       break;
     case 3:
-      [salePda] = deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
+      [salePda] = await deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
       saleIdU64 = BigInt(params.proposalId);
       break;
     case 4: {
-      [salePda] = derivePlayerPurchasePda(params.player, params.itemId);
+      [salePda] = await derivePlayerPurchasePda(params.player, params.itemId);
       saleIdU64 = BigInt(params.itemId); // Rust treats sale_id as u32 item_id
       extraKey = { pubkey: params.shopItem, isSigner: false, isWritable: false };
       break;
@@ -992,11 +986,11 @@ export interface CreateDailyDealParams {
  *
  * Admin-only. Creates rotating daily deals.
  */
-export function createCreateDailyDealInstruction(
+export async function createCreateDailyDealInstruction(
   accounts: CreateDailyDealAccounts,
   params: CreateDailyDealParams
-): TransactionInstruction {
-    const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, params.slotIndex);
+): Promise<TransactionInstruction> {
+    const [dailyDeal] = await deriveDailyDealPda(accounts.gameEngine, params.slotIndex);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -1047,11 +1041,11 @@ export interface RotateDailyDealParams {
  *
  * Admin-only. Updates an existing daily deal slot.
  */
-export function createRotateDailyDealInstruction(
+export async function createRotateDailyDealInstruction(
   accounts: RotateDailyDealAccounts,
   params: RotateDailyDealParams
-): TransactionInstruction {
-    const [dailyDeal] = deriveDailyDealPda(accounts.gameEngine, accounts.slotIndex);
+): Promise<TransactionInstruction> {
+    const [dailyDeal] = await deriveDailyDealPda(accounts.gameEngine, accounts.slotIndex);
 
   const keys = [
     { pubkey: accounts.daoAuthority, isSigner: true, isWritable: false },
@@ -1087,7 +1081,7 @@ export interface CreateWeeklySaleAccounts {
 
 export interface CreateWeeklySaleParams {
   /** Week number (epoch week number for PDA) */
-  weekNumber: BN | number | bigint;
+  weekNumber: number | bigint;
   /** Theme (0=Combat, 1=Defense, 2=Resource, 3=Growth, 4=Expedition) */
   theme: number;
   /** Bonus type */
@@ -1097,7 +1091,7 @@ export interface CreateWeeklySaleParams {
   /** Category discounts [Equipment, Consumable, Material, Cosmetic] in bps (max 3000) */
   categoryDiscounts: [number, number, number, number];
   /** Start timestamp */
-  startsAt: BN | number | bigint;
+  startsAt: number | bigint;
   /** Duration in days (1-7) */
   durationDays: number;
 }
@@ -1108,12 +1102,11 @@ export interface CreateWeeklySaleParams {
  *
  * Admin-only. Category-wide discounts for a week.
  */
-export function createCreateWeeklySaleInstruction(
+export async function createCreateWeeklySaleInstruction(
   accounts: CreateWeeklySaleAccounts,
   params: CreateWeeklySaleParams
-): TransactionInstruction {
-    const weekNum = BN.isBN(params.weekNumber) ? params.weekNumber.toNumber() : params.weekNumber;
-  const [weeklySale] = deriveWeeklySalePda(accounts.gameEngine, weekNum);
+): Promise<TransactionInstruction> {
+  const [weeklySale] = await deriveWeeklySalePda(accounts.gameEngine, params.weekNumber);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -1163,11 +1156,11 @@ export interface CreateSeasonalSaleParams {
   /** Global discount in basis points (max 5000) */
   globalDiscountBps: number;
   /** Start timestamp */
-  startsAt: BN | number | bigint;
+  startsAt: number | bigint;
   /** End timestamp */
-  endsAt: BN | number | bigint;
+  endsAt: number | bigint;
   /** Spend threshold for exclusive reward (lamports) */
-  spendThreshold: BN | number | bigint;
+  spendThreshold: number | bigint;
   /** Exclusive cosmetic item ID */
   exclusiveCosmeticId: number;
   /** Featured items with individual discounts */
@@ -1180,11 +1173,11 @@ export interface CreateSeasonalSaleParams {
  *
  * Admin-only. Event-linked promotional sale.
  */
-export function createCreateSeasonalSaleInstruction(
+export async function createCreateSeasonalSaleInstruction(
   accounts: CreateSeasonalSaleAccounts,
   params: CreateSeasonalSaleParams
-): TransactionInstruction {
-    const [seasonalSale] = deriveSeasonalSalePda(accounts.gameEngine, accounts.event);
+): Promise<TransactionInstruction> {
+    const [seasonalSale] = await deriveSeasonalSalePda(accounts.gameEngine, accounts.event);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -1200,9 +1193,7 @@ export function createCreateSeasonalSaleInstruction(
   const writer = new BufferWriter(63 + featuredCount * 6);
 
   // Write name as fixed 32-byte buffer
-  const nameBytes = Buffer.alloc(32);
-  nameBytes.write(params.name.slice(0, 32), 'utf8');
-  writer.writeBytes(nameBytes);
+  writer.writeString(params.name, 32);
 
   writer.writeU16(params.globalDiscountBps);
   writer.writeI64(params.startsAt);
@@ -1238,7 +1229,7 @@ export interface CreateDaoPromotionAccounts {
 
 export interface CreateDaoPromotionParams {
   /** Governance proposal ID (used in PDA) */
-  proposalId: BN | number | bigint;
+  proposalId: number | bigint;
   /** Title (max 32 bytes UTF-8) */
   title: string;
   /** Equipment category discount in bps (max 5000) */
@@ -1254,11 +1245,11 @@ export interface CreateDaoPromotionParams {
   /** Max discount in bps (max 5000) */
   maxDiscountBps: number;
   /** Start timestamp */
-  startsAt: BN | number | bigint;
+  startsAt: number | bigint;
   /** End timestamp */
-  endsAt: BN | number | bigint;
+  endsAt: number | bigint;
   /** Max discount budget in lamports */
-  maxDiscountBudgetLamports: BN | number | bigint;
+  maxDiscountBudgetLamports: number | bigint;
 }
 
 /** ~5,000 CU */
@@ -1267,12 +1258,11 @@ export interface CreateDaoPromotionParams {
  *
  * Admin-only. Governance-approved promotional campaign.
  */
-export function createCreateDaoPromotionInstruction(
+export async function createCreateDaoPromotionInstruction(
   accounts: CreateDaoPromotionAccounts,
   params: CreateDaoPromotionParams
-): TransactionInstruction {
-    const proposalNum = BN.isBN(params.proposalId) ? params.proposalId.toNumber() : params.proposalId;
-  const [daoPromotion] = deriveDaoPromotionPda(accounts.gameEngine, proposalNum);
+): Promise<TransactionInstruction> {
+  const [daoPromotion] = await deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
 
   const keys = [
     { pubkey: accounts.payer, isSigner: true, isWritable: true },
@@ -1286,9 +1276,7 @@ export function createCreateDaoPromotionInstruction(
   const writer = new BufferWriter(76);
   writer.writeU64(params.proposalId);
 
-  const titleBytes = Buffer.alloc(32);
-  titleBytes.write(params.title.slice(0, 32), 'utf8');
-  writer.writeBytes(titleBytes);
+  writer.writeString(params.title, 32);
 
   writer.writeU16(params.equipmentDiscountBps);
   writer.writeU16(params.consumableDiscountBps);
@@ -1341,12 +1329,16 @@ const UPDATE_SOL_ORACLE = 32;
  * account address. The on-chain program stores it in the `*_pyth_feed` config
  * fields and verifies it against the `PriceUpdateV2` account at purchase time.
  */
-function feedIdBuffer(feedId: string): Buffer {
+function feedIdBuffer(feedId: string): Uint8Array {
   const hex = feedId.startsWith('0x') ? feedId.slice(2) : feedId;
   if (hex.length !== 64 || !/^[0-9a-fA-F]+$/.test(hex)) {
     throw new Error(`Invalid Pyth feed id (expected 64 hex chars): ${feedId}`);
   }
-  return Buffer.from(hex, 'hex');
+  const out = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    out[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
 }
 
 /** ~20,000 CU */
@@ -1360,11 +1352,11 @@ function feedIdBuffer(feedId: string): Buffer {
  * The Pyth and Switchboard SOL feeds, and the Switchboard queue, are all bare
  * 32-byte pubkeys in the instruction data — no feed accounts are passed.
  */
-export function createUpdateConfigInstruction(
+export async function createUpdateConfigInstruction(
   accounts: UpdateConfigAccounts,
   params: UpdateConfigParams = {}
-): TransactionInstruction {
-    const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
+): Promise<TransactionInstruction> {
+    const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
 
   // Rust order: dao_authority, game_engine, shop_config. No trailing feed
   // accounts — the SOL oracle feeds + queue ride in the instruction data.
@@ -1448,25 +1440,25 @@ export interface ActivateSaleAccounts {
  * Permissionless. Caller pays the tx fee but never receives anything from
  * the call. Used by anyone to push a stale sale into its correct state.
  */
-export function createActivateSaleInstruction(
+export async function createActivateSaleInstruction(
   accounts: ActivateSaleAccounts,
   params: ActivateSaleParams,
-): TransactionInstruction {
+): Promise<TransactionInstruction> {
   let salePda: PublicKey;
   // Payload: sale_type (u8) + sale_id (Seasonal: 32-byte event; DAOPromo: u64)
-  let payload: Buffer;
+  let payload: Uint8Array;
 
   switch (params.saleType) {
     case 0: {
-      [salePda] = deriveSeasonalSalePda(accounts.gameEngine, params.event);
+      [salePda] = await deriveSeasonalSalePda(accounts.gameEngine, params.event);
       const w = new BufferWriter(33);
       w.writeU8(0);
-      w.writeBytes(params.event.toBuffer());
+      w.writeBytes(params.event.toBytes());
       payload = w.toBuffer();
       break;
     }
     case 1: {
-      [salePda] = deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
+      [salePda] = await deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
       const w = new BufferWriter(9);
       w.writeU8(1);
       w.writeU64(BigInt(params.proposalId));
@@ -1529,12 +1521,12 @@ export interface CreateAllowedTokenParams {
  *
  * Admin-only. Enables payment with this SPL token.
  */
-export function createCreateAllowedTokenInstruction(
+export async function createCreateAllowedTokenInstruction(
   accounts: CreateAllowedTokenAccounts,
   params: CreateAllowedTokenParams
-): TransactionInstruction {
-    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
-  const treasuryTokenAccount = getAssociatedTokenAddressSyncForPda(accounts.tokenMint, accounts.treasuryWallet);
+): Promise<TransactionInstruction> {
+    const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+  const treasuryTokenAccount = await getAssociatedTokenAddressAsyncForPda(accounts.tokenMint, accounts.treasuryWallet);
 
   // Rust order (base 9): authority(signer+payer), game_engine, allowed_token,
   // token_mint, system_program, treasury_wallet, treasury_token_account,
@@ -1620,11 +1612,11 @@ export interface UpdateAllowedTokenParams {
  * Admin-only. Rust processor accepts one field per instruction call.
  * Returns an array of instructions (one per specified field).
  */
-export function createUpdateAllowedTokenInstruction(
+export async function createUpdateAllowedTokenInstruction(
   accounts: UpdateAllowedTokenAccounts,
   params: UpdateAllowedTokenParams = {}
-): TransactionInstruction[] {
-  const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+): Promise<TransactionInstruction[]> {
+  const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
 
   // Rust order: authority(signer), game_engine, allowed_token, token_mint
   const keys = [
@@ -1717,10 +1709,10 @@ export interface CloseAllowedTokenAccounts {
  *
  * Admin-only. Reclaims rent.
  */
-export function createCloseAllowedTokenInstruction(
+export async function createCloseAllowedTokenInstruction(
   accounts: CloseAllowedTokenAccounts
-): TransactionInstruction {
-    const [allowedToken] = deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
+): Promise<TransactionInstruction> {
+    const [allowedToken] = await deriveAllowedTokenPda(accounts.gameEngine, accounts.tokenMint);
 
   // Rust order: authority(signer), game_engine, allowed_token, token_mint
   const keys = [
@@ -1766,7 +1758,7 @@ export interface PurchaseNoviParams {
   /** Package index (0-4) */
   packageIndex: number;
   /** Maximum lamports willing to pay (slippage protection) */
-  maxLamports: BN | number | bigint;
+  maxLamports: number | bigint;
   /** Optional oracle accounts for price discovery with 15% undercut */
   oracleAccounts?: PurchaseNoviOracleAccounts;
 }
@@ -1801,15 +1793,15 @@ export interface PurchaseNoviParams {
  * 10. [] sol_oracle_feed - SOL/USD feed (Pyth or Switchboard pull feed)
  * 11. [] novi_oracle_feed - NOVI/USD feed (same oracle program as sol)
  */
-export function createPurchaseNoviInstruction(
+export async function createPurchaseNoviInstruction(
   accounts: PurchaseNoviAccounts,
   params: PurchaseNoviParams
-): TransactionInstruction {
-    const [user] = deriveUserPda(accounts.buyer);
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.buyer);
+): Promise<TransactionInstruction> {
+    const [user] = await deriveUserPda(accounts.buyer);
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.buyer);
 
   // Reserved token account is owned by UserAccount PDA
-  const reservedTokenAccount = getAssociatedTokenAddressSyncForPda(accounts.noviMint, user);
+  const reservedTokenAccount = await getAssociatedTokenAddressAsyncForPda(accounts.noviMint, user);
 
   const keys = [
     { pubkey: accounts.buyer, isSigner: true, isWritable: true },

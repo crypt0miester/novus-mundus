@@ -65,15 +65,15 @@ export interface AttackPlayerParams {
  * - Armor reduces incoming damage
  * - Loot transferred directly on victory (cash, armor, produce, vehicles, weapons)
  */
-export function createAttackPlayerInstruction(
+export async function createAttackPlayerInstruction(
   accounts: AttackPlayerAccounts,
   params: AttackPlayerParams
-): TransactionInstruction {
-  const [attackerPlayer] = derivePlayerPda(accounts.gameEngine, accounts.attacker);
-  const [attackerCity] = deriveCityPda(accounts.gameEngine, accounts.attackerCityId);
-  const [defenderCity] = deriveCityPda(accounts.gameEngine, accounts.defenderCityId);
-  const [attackerEstate] = deriveEstatePda(attackerPlayer);
-  const [defenderEstate] = deriveEstatePda(accounts.defenderPlayer);
+): Promise<TransactionInstruction> {
+  const [attackerPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.attacker);
+  const [attackerCity] = await deriveCityPda(accounts.gameEngine, accounts.attackerCityId);
+  const [defenderCity] = await deriveCityPda(accounts.gameEngine, accounts.defenderCityId);
+  const [attackerEstate] = await deriveEstatePda(attackerPlayer);
+  const [defenderEstate] = await deriveEstatePda(accounts.defenderPlayer);
 
   const keys = [
     { pubkey: attackerPlayer, isSigner: false, isWritable: true },
@@ -88,16 +88,16 @@ export function createAttackPlayerInstruction(
 
   // Optional attacker event accounts (must be paired)
   if (accounts.attackerEventId !== undefined) {
-    const [attackerEvent] = deriveEventPda(accounts.gameEngine, accounts.attackerEventId);
-    const [attackerEventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.attackerEventId, accounts.attacker);
+    const [attackerEvent] = await deriveEventPda(accounts.gameEngine, accounts.attackerEventId);
+    const [attackerEventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.attackerEventId, accounts.attacker);
     keys.push({ pubkey: attackerEventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: attackerEvent, isSigner: false, isWritable: true });
   }
 
   // Optional defender event accounts (must be paired, only if attacker events provided)
   if (accounts.defenderEventId !== undefined && accounts.attackerEventId !== undefined && accounts.defenderOwner) {
-    const [defenderEvent] = deriveEventPda(accounts.gameEngine, accounts.defenderEventId);
-    const [defenderEventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.defenderEventId, accounts.defenderOwner);
+    const [defenderEvent] = await deriveEventPda(accounts.gameEngine, accounts.defenderEventId);
+    const [defenderEventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.defenderEventId, accounts.defenderOwner);
     keys.push({ pubkey: defenderEventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: defenderEvent, isSigner: false, isWritable: true });
   }
@@ -174,12 +174,12 @@ export interface AttackEncounterParams {
  * - Instant cash reward proportional to damage dealt
  * - LootAccount created on kill with full rewards (claim separately)
  */
-export function createAttackEncounterInstruction(
+export async function createAttackEncounterInstruction(
   accounts: AttackEncounterAccounts,
   params: AttackEncounterParams
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [estate] = deriveEstatePda(player);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [estate] = await deriveEstatePda(player);
 
   // Base accounts (always required)
   const keys = [
@@ -197,8 +197,8 @@ export function createAttackEncounterInstruction(
   // Optional event accounts (must be paired)
   const hasEvent = accounts.eventId !== undefined;
   if (hasEvent) {
-    const [event] = deriveEventPda(accounts.gameEngine, accounts.eventId!);
-    const [eventParticipation] = deriveEventParticipationPda(accounts.gameEngine, accounts.eventId!, accounts.owner);
+    const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId!);
+    const [eventParticipation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId!, accounts.owner);
     keys.push({ pubkey: eventParticipation, isSigner: false, isWritable: true });
     keys.push({ pubkey: event, isSigner: false, isWritable: true });
   }

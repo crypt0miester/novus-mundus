@@ -64,7 +64,7 @@ import {
   readSplTokenAmount,
 } from '../fixtures/svm';
 import { PROGRAM_ID } from '../../src/program';
-import { getAssociatedTokenAddressSync } from '../../src/index';
+import { getAssociatedTokenAddressAsync } from '../../src/index';
 import { addressBytes } from '../../src/crypto';
 
 /** An address's 32 bytes double as a Pyth feed id (hex) for tests. */
@@ -1001,8 +1001,8 @@ describe('Shop System', () => {
 
       // Buyer + treasury ATAs for the payment token.
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = await getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-      const treasuryAta = await getAssociatedTokenAddressSync(tokenMint, ctx.treasury.address);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.address);
       const BUYER_START = 1_000_000_000_000n; // 1000 tokens (9 decimals)
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
@@ -1104,7 +1104,7 @@ describe('Shop System', () => {
       );
 
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = await getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
       const BUYER_START = 1_000_000_000_000n;
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
@@ -1208,8 +1208,8 @@ describe('Shop System', () => {
       );
 
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = await getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-      const treasuryAta = await getAssociatedTokenAddressSync(tokenMint, ctx.treasury.address);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.address);
       const BUYER_START = 1_000_000_000_000n;
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
@@ -1324,8 +1324,8 @@ describe('Shop System', () => {
       );
 
       const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = await getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-      const treasuryAta = await getAssociatedTokenAddressSync(tokenMint, ctx.treasury.address);
+      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.address);
       seedSplTokenAccount(ctx.svm, buyerAta, {
         mint: tokenMint,
         owner: buyer.publicKey,

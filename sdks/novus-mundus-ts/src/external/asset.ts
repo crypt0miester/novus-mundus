@@ -29,6 +29,18 @@ const KEY_PLUGIN_HEADER_V1 = 3;
 const KEY_PLUGIN_REGISTRY_V1 = 4;
 const PLUGIN_TYPE_ATTRIBUTES = 6;
 
+// Byte readers (Buffer-free; operate on Uint8Array via DataView)
+function readU32LE(view: DataView, offset: number): number {
+  return view.getUint32(offset, true);
+}
+function readU64LE(view: DataView, offset: number): bigint {
+  return view.getBigUint64(offset, true);
+}
+const UTF8 = new TextDecoder();
+function decodeUtf8(buf: Uint8Array, start: number, end: number): string {
+  return UTF8.decode(buf.subarray(start, end));
+}
+
 // Types
 
 export interface ParsedAssetV1 {
@@ -56,10 +68,11 @@ export interface ParsedAssetV1 {
  * @param data - Raw account data bytes
  * @returns Parsed asset, or null if the data is not a valid AssetV1
  */
-export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
+export function parseAssetV1(data: Uint8Array): ParsedAssetV1 | null {
   if (data.length < 100) return null;
 
-  const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+  const buf = data;
+  const view = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
 
   // Key discriminator
   if (buf[0] !== KEY_ASSET_V1) return null;
@@ -78,18 +91,18 @@ export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
 
   // Name (Borsh String: u32 LE len + chars)
   if (offset + 4 > buf.length) return null;
-  const nameLen = buf.readUInt32LE(offset);
+  const nameLen = readU32LE(view, offset);
   offset += 4;
   if (offset + nameLen > buf.length) return null;
-  const name = buf.subarray(offset, offset + nameLen).toString('utf8').replace(/\0/g, '');
+  const name = decodeUtf8(buf, offset, offset + nameLen).replace(/\0/g, '');
   offset += nameLen;
 
   // URI
   if (offset + 4 > buf.length) return null;
-  const uriLen = buf.readUInt32LE(offset);
+  const uriLen = readU32LE(view, offset);
   offset += 4;
   if (offset + uriLen > buf.length) return null;
-  const uri = buf.subarray(offset, offset + uriLen).toString('utf8');
+  const uri = decodeUtf8(buf, offset, offset + uriLen);
   offset += uriLen;
 
   // seq Option<u64>
@@ -99,7 +112,7 @@ export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
   let seq: bigint | null = null;
   if (seqDisc === 1) {
     if (offset + 8 > buf.length) return null;
-    seq = buf.readBigUInt64LE(offset);
+    seq = readU64LE(view, offset);
     offset += 8;
   }
 
@@ -111,7 +124,7 @@ export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
 
   // plugin_registry_offset (u64 LE)
   if (offset + 9 > buf.length) return null;
-  const registryOffset = Number(buf.readBigUInt64LE(offset + 1));
+  const registryOffset = Number(readU64LE(view, offset + 1));
 
   // PluginRegistryV1 — Key=4
   if (registryOffset >= buf.length || buf[registryOffset] !== KEY_PLUGIN_REGISTRY_V1) {
@@ -119,9 +132,9 @@ export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
   }
 
   // Find Attributes plugin in registry
-  const attributesOffset = findAttributesPlugin(buf, registryOffset);
+  const attributesOffset = findAttributesPlugin(buf, view, registryOffset);
   const attributes = attributesOffset > 0
-    ? parseAttributes(buf, attributesOffset)
+    ? parseAttributes(buf, view, attributesOffset)
     : {};
 
   return { owner, updateAuthorityType: uaDisc, updateAuthority, name, uri, seq, attributes };
@@ -129,11 +142,11 @@ export function parseAssetV1(data: Buffer | Uint8Array): ParsedAssetV1 | null {
 
 // Internal helpers
 
-function findAttributesPlugin(buf: Buffer, registryOffset: number): number {
+function findAttributesPlugin(buf: Uint8Array, view: DataView, registryOffset: number): number {
   let pos = registryOffset + 1; // skip Key byte
 
   if (pos + 4 > buf.length) return 0;
-  const registryLen = buf.readUInt32LE(pos);
+  const registryLen = readU32LE(view, pos);
   pos += 4;
 
   for (let i = 0; i < registryLen; i++) {
@@ -148,7 +161,7 @@ function findAttributesPlugin(buf: Buffer, registryOffset: number): number {
     if (authDisc === 3) pos += 32; // Address variant has pubkey
 
     if (pos + 8 > buf.length) return 0;
-    const pluginOffset = Number(buf.readBigUInt64LE(pos));
+    const pluginOffset = Number(readU64LE(view, pos));
     pos += 8;
 
     if (pluginType === PLUGIN_TYPE_ATTRIBUTES) {
@@ -159,12 +172,12 @@ function findAttributesPlugin(buf: Buffer, registryOffset: number): number {
   return 0;
 }
 
-function parseAttributes(buf: Buffer, offset: number): Record<string, string> {
+function parseAttributes(buf: Uint8Array, view: DataView, offset: number): Record<string, string> {
   const attrs: Record<string, string> = {};
   let pos = offset + 1; // skip plugin type discriminator
 
   if (pos + 4 > buf.length) return attrs;
-  const count = buf.readUInt32LE(pos);
+  const count = readU32LE(view, pos);
   pos += 4;
 
   // Sanity cap
@@ -172,17 +185,17 @@ function parseAttributes(buf: Buffer, offset: number): Record<string, string> {
 
   for (let i = 0; i < limit; i++) {
     if (pos + 4 > buf.length) break;
-    const keyLen = buf.readUInt32LE(pos);
+    const keyLen = readU32LE(view, pos);
     pos += 4;
     if (keyLen === 0 || keyLen > 64 || pos + keyLen > buf.length) break;
-    const key = buf.subarray(pos, pos + keyLen).toString('utf8');
+    const key = decodeUtf8(buf, pos, pos + keyLen);
     pos += keyLen;
 
     if (pos + 4 > buf.length) break;
-    const valLen = buf.readUInt32LE(pos);
+    const valLen = readU32LE(view, pos);
     pos += 4;
     if (valLen > 64 || pos + valLen > buf.length) break;
-    const val = buf.subarray(pos, pos + valLen).toString('utf8');
+    const val = decodeUtf8(buf, pos, pos + valLen);
     pos += valLen;
 
     attrs[key] = val;

@@ -7,7 +7,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader, isNullPubkey } from '../utils/deserialize';
 import { ArenaSeasonStatus } from '../types/enums';
 
@@ -15,7 +14,7 @@ import { ArenaSeasonStatus } from '../types/enums';
 
 export interface ArenaLeaderboardEntry {
   player: PublicKey;
-  totalPoints: BN;
+  totalPoints: bigint;
 }
 
 // Arena Season Account Interface
@@ -24,22 +23,22 @@ export interface ArenaSeasonAccount {
   seasonId: number;
   cityId: number;
   authority: PublicKey;
-  startTime: BN;
-  endTime: BN;
-  claimDeadline: BN;
+  startTime: bigint;
+  endTime: bigint;
+  claimDeadline: bigint;
   status: ArenaSeasonStatus;
   leaderboard: ArenaLeaderboardEntry[];
   leaderboardCount: number;
   leaderboardClaimed: boolean[];
-  masterPrizePool: BN;
-  dailyPrizePool: BN;
-  dailyDistributionCap: BN;
-  distributedToday: BN;
+  masterPrizePool: bigint;
+  dailyPrizePool: bigint;
+  dailyDistributionCap: bigint;
+  distributedToday: bigint;
   lastDistributionDay: number;
-  prizeRemaining: BN;
+  prizeRemaining: bigint;
   minLevelRequired: number;
-  minPointsForLeaderboard: BN;
-  totalBattles: BN;
+  minPointsForLeaderboard: bigint;
+  totalBattles: bigint;
   bump: number;
 }
 
@@ -51,13 +50,13 @@ export const ARENA_SEASON_ACCOUNT_SIZE = 608;
 export interface ArenaParticipantAccount {
   player: PublicKey;
   seasonId: number;
-  battleTimestamps: BN[];
+  battleTimestamps: bigint[];
   battleOpponents: PublicKey[];
   battleIndex: number;
-  lastMatchId: BN;
+  lastMatchId: bigint;
   dailyRewardClaimedDay: number;
   eloRating: number;
-  totalPoints: BN;
+  totalPoints: bigint;
   wins: number;
   losses: number;
   masterRewardClaimed: boolean;
@@ -73,11 +72,11 @@ export interface ArenaLoadoutAccount {
   player: PublicKey;
   bump: number;
   arenaHero: PublicKey;
-  defensiveUnits: BN[];
-  meleeWeapons: BN;
-  rangedWeapons: BN;
-  siegeWeapons: BN;
-  armorPieces: BN;
+  defensiveUnits: bigint[];
+  meleeWeapons: bigint;
+  rangedWeapons: bigint;
+  siegeWeapons: bigint;
+  armorPieces: bigint;
 }
 
 /** ArenaLoadoutAccount size in bytes (with repr(C) alignment padding) */
@@ -120,7 +119,7 @@ export const ARENA_LOADOUT_ACCOUNT_SIZE = 168;
  * 601: _reserved [u8; 7] (7)
  * 608: END
  */
-export function deserializeArenaSeason(data: Uint8Array | Buffer): ArenaSeasonAccount {
+export function deserializeArenaSeason(data: Uint8Array): ArenaSeasonAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -229,7 +228,7 @@ export function deserializeArenaSeason(data: Uint8Array | Buffer): ArenaSeasonAc
  * 531: TAIL PADDING (5) -- align struct to 8
  * 536: END
  */
-export function deserializeArenaParticipant(data: Uint8Array | Buffer): ArenaParticipantAccount {
+export function deserializeArenaParticipant(data: Uint8Array): ArenaParticipantAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -305,7 +304,7 @@ export function deserializeArenaParticipant(data: Uint8Array | Buffer): ArenaPar
  * 167: TAIL PADDING (1) -- align struct to 8
  * 168: END
  */
-export function deserializeArenaLoadout(data: Uint8Array | Buffer): ArenaLoadoutAccount {
+export function deserializeArenaLoadout(data: Uint8Array): ArenaLoadoutAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -342,7 +341,7 @@ export function deserializeArenaLoadout(data: Uint8Array | Buffer): ArenaLoadout
 // Parse Functions
 
 /** Parse ArenaSeasonAccount from account info */
-export function parseArenaSeason(accountInfo: AccountInfo<Buffer>): ArenaSeasonAccount | null {
+export function parseArenaSeason(accountInfo: AccountInfo<Uint8Array>): ArenaSeasonAccount | null {
   if (!accountInfo.data || accountInfo.data.length < ARENA_SEASON_ACCOUNT_SIZE) {
     return null;
   }
@@ -350,7 +349,7 @@ export function parseArenaSeason(accountInfo: AccountInfo<Buffer>): ArenaSeasonA
 }
 
 /** Parse ArenaParticipantAccount from account info */
-export function parseArenaParticipant(accountInfo: AccountInfo<Buffer>): ArenaParticipantAccount | null {
+export function parseArenaParticipant(accountInfo: AccountInfo<Uint8Array>): ArenaParticipantAccount | null {
   if (!accountInfo.data || accountInfo.data.length < ARENA_PARTICIPANT_ACCOUNT_SIZE) {
     return null;
   }
@@ -358,7 +357,7 @@ export function parseArenaParticipant(accountInfo: AccountInfo<Buffer>): ArenaPa
 }
 
 /** Parse ArenaLoadoutAccount from account info */
-export function parseArenaLoadout(accountInfo: AccountInfo<Buffer>): ArenaLoadoutAccount | null {
+export function parseArenaLoadout(accountInfo: AccountInfo<Uint8Array>): ArenaLoadoutAccount | null {
   if (!accountInfo.data || accountInfo.data.length < ARENA_LOADOUT_ACCOUNT_SIZE) {
     return null;
   }
@@ -403,7 +402,7 @@ export function countBattlesInWindow(
   const cutoff = nowSeconds - windowSeconds;
   let count = 0;
   for (const timestamp of participant.battleTimestamps) {
-    if (timestamp.toNumber() > cutoff) {
+    if (Number(timestamp) > cutoff) {
       count++;
     }
   }
@@ -411,13 +410,13 @@ export function countBattlesInWindow(
 }
 
 /** Get total units in loadout */
-export function getLoadoutTotalUnits(loadout: ArenaLoadoutAccount): BN {
-  return loadout.defensiveUnits[0]!.add(loadout.defensiveUnits[1]!).add(loadout.defensiveUnits[2]!);
+export function getLoadoutTotalUnits(loadout: ArenaLoadoutAccount): bigint {
+  return loadout.defensiveUnits[0]! + loadout.defensiveUnits[1]! + loadout.defensiveUnits[2]!;
 }
 
 /** Get total weapons in loadout */
-export function getLoadoutTotalWeapons(loadout: ArenaLoadoutAccount): BN {
-  return loadout.meleeWeapons.add(loadout.rangedWeapons).add(loadout.siegeWeapons);
+export function getLoadoutTotalWeapons(loadout: ArenaLoadoutAccount): bigint {
+  return loadout.meleeWeapons + loadout.rangedWeapons + loadout.siegeWeapons;
 }
 
 /** Check if loadout has custom hero set */

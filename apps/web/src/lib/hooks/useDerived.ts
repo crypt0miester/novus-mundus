@@ -14,9 +14,9 @@ export function useCombatPower() {
     if (!player) return { total: 0, defense: 0 };
 
     const def = calculateDefensivePower(
-      player.defensiveUnit1.toNumber(),
-      player.defensiveUnit2.toNumber(),
-      player.defensiveUnit3.toNumber(),
+      Number(player.defensiveUnit1),
+      Number(player.defensiveUnit2),
+      Number(player.defensiveUnit3),
     );
 
     return {
@@ -33,7 +33,7 @@ export function useTravelProgress() {
 
   // An active journey has a positive arrival timestamp; a settled player has
   // -1 (set by intercity_complete) or 0 — never a real time.
-  const arrival = player ? player.arrivalTime.toNumber() : 0;
+  const arrival = player ? Number(player.arrivalTime) : 0;
   const inTransit = arrival > 0;
   // Tick every second while a journey is underway so `pct` stays live.
   const now = useNow(inTransit);
@@ -43,7 +43,7 @@ export function useTravelProgress() {
       return { traveling: false, pct: 0, endsAt: 0, startedAt: 0 };
     }
 
-    const departure = player.departureTime.toNumber();
+    const departure = Number(player.departureTime);
 
     return {
       // True for the whole journey — including arrived-but-not-completed,
@@ -141,7 +141,7 @@ export function useSubscriptionStatus() {
     if (!player) return { tier: 0, active: false, expiresAt: 0, tierName: "No Charter" };
 
     const now = Math.floor(Date.now() / 1000);
-    const end = player.subscriptionEnd.toNumber();
+    const end = Number(player.subscriptionEnd);
     const active = end > now;
     const tierNames = ["Rookie", "Expert", "Epic", "Legendary"];
 
@@ -169,7 +169,7 @@ export function useDailyRewards() {
       };
 
     const now = Math.floor(Date.now() / 1000);
-    const lastClaim = player.lastDailyClaim.toNumber();
+    const lastClaim = Number(player.lastDailyClaim);
     const DAY = 86400;
     const cooldownEnds = lastClaim + DAY;
 
@@ -189,6 +189,6 @@ function useNetworth() {
 
   return useMemo(() => {
     if (!player) return 0;
-    return player.networth.toNumber();
+    return Number(player.networth);
   }, [player]);
 }

@@ -173,7 +173,10 @@ export function setupCityScene(args: SetupCitySceneArgs): {
   const camera = new THREE.PerspectiveCamera(
     FOV_DEG,
     wrap.clientWidth / wrap.clientHeight,
-    0.01,
+    // Near plane sits just inside the deepest zoom (MAX_ZOOM=500): iso
+    // 4.5/500 = 0.009, top 8/500 = 0.016, both clear of 0.005. Was 0.01,
+    // which clipped the focused cell once locate zoomed past ~450x.
+    0.005,
     1000,
   );
 

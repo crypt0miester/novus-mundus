@@ -21,7 +21,7 @@ import {
   deriveEstatePda,
   deriveBuildingTemplatePda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import { BuildingType } from '../types/enums';
 
 // Create Estate
@@ -117,7 +117,7 @@ export async function createBuildBuildingInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -166,7 +166,7 @@ export async function createUpgradeBuildingInstruction(
   const [noviMint] = await deriveNoviMintPda();
   const [buildingTemplate] = await deriveBuildingTemplatePda(params.buildingType);
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -254,7 +254,7 @@ export async function createBuyPlotInstruction(
   const [estate] = await deriveEstatePda(player);
   const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },

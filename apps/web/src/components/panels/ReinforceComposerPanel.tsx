@@ -76,7 +76,7 @@ export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceCompo
   const { data: targetPlayer } = useQuery({
     queryKey: ["reinforce-composer", "target", targetWallet, client.gameEngine.toBase58()],
     queryFn: async () => {
-      const [pda] = derivePlayerPda(client.gameEngine, targetKey);
+      const [pda] = await derivePlayerPda(client.gameEngine, targetKey);
       const info = await connection.getAccountInfo(pda);
       return info ? parsePlayer(info) : null;
     },
@@ -118,14 +118,14 @@ export function ReinforceComposerPanel({ targetWallet, onClose }: ReinforceCompo
     if (!targetPlayer) throw new Error("Target player not found on chain");
     if (!hasAnyCommitment) throw new Error("Choose units or weapons to send");
     const hero = heroSlot < 3 ? lockedHeroes[heroSlot] : null;
-    const ix = createSendReinforcementInstruction(
+    const ix = await createSendReinforcementInstruction(
       {
         sender: publicKey,
         gameEngine: client.gameEngine,
         destinationOwner: targetKey,
         senderCityId: player.currentCity,
         destinationCityId: targetPlayer.currentCity,
-        teamId: teamId.toNumber(),
+        teamId: Number(teamId),
         heroNft: hero?.mint,
       },
       {

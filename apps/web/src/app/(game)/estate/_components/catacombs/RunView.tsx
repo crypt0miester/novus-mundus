@@ -31,11 +31,11 @@ interface RunViewProps {
   playerMaxStamina: number;
 }
 
-/** BN | number to number, defensively. */
-function n(v: { toNumber?: () => number } | number | null | undefined): number {
+/** bigint | number to number, defensively. */
+function n(v: bigint | number | null | undefined): number {
   if (v == null) return 0;
   if (typeof v === "number") return v;
-  return v.toNumber?.() ?? 0;
+  return Number(v);
 }
 
 function fmt(x: number): string {
@@ -426,7 +426,7 @@ export function RunView({ run, template, playerStamina, playerMaxStamina }: RunV
 
   const handleFlee = async (rp: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createFleeInstruction({
+    const ix = await createFleeInstruction({
       gameEngine: client.gameEngine,
       owner: publicKey,
       heroMint: run.heroMint,
@@ -443,7 +443,7 @@ export function RunView({ run, template, playerStamina, playerMaxStamina }: RunV
 
   const handleClaim = async (rp: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createClaimDungeonInstruction({
+    const ix = await createClaimDungeonInstruction({
       gameEngine: client.gameEngine,
       owner: publicKey,
       heroMint: run.heroMint,

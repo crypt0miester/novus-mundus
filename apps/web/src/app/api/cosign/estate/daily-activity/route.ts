@@ -6,7 +6,7 @@ import {
   currentTimeWindow,
   deriveNoviMintPda,
   deriveResearchPda,
-  getAssociatedTokenAddressSyncForPda,
+  getAssociatedTokenAddressAsyncForPda,
   hasBuildingAtLevel,
   isNullPubkey,
   BuildingType,
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
   if (precondition) return fail(precondition.error, 409, precondition.code);
   const currentWindow = currentTimeWindow(estate, now);
 
-  const player = playerPda(owner);
+  const player = await playerPda(owner);
 
   // Conditional accounts, attached per building type.
   let heroMint = PublicKey.default;
@@ -119,13 +119,13 @@ export async function POST(req: Request) {
       heroMint = hero;
     }
   } else if (buildingType === BuildingType.Treasury) {
-    noviMint = deriveNoviMintPda()[0];
-    playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+    noviMint = (await deriveNoviMintPda())[0];
+    playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
   } else if (buildingType === BuildingType.Academy) {
     // Pad slots 6 & 7 so researchProgress lands at the program's index 8.
     playerTokenAccount = PublicKey.default;
     noviMint = PublicKey.default;
-    researchProgress = deriveResearchPda(player)[0];
+    researchProgress = (await deriveResearchPda(player))[0];
   }
 
   // Resolve the score.
@@ -156,7 +156,7 @@ export async function POST(req: Request) {
   } else {
     score = rollScore(
       "estate.daily_activity",
-      estatePda(owner).toBase58(),
+      (await estatePda(owner)).toBase58(),
       `${buildingType}:${estate.dailyDate}`,
     );
   }
@@ -170,11 +170,11 @@ export async function POST(req: Request) {
     score = Math.min(100, score + windowBonus);
   }
 
-  const ix = createDailyActivityInstruction(
+  const ix = await createDailyActivityInstruction(
     {
       owner,
       gameEngine: gameEnginePda(),
-      gameAuthority: gameAuthorityKeypair().publicKey,
+      gameAuthority: (await gameAuthorityKeypair()).publicKey,
       heroMint,
       playerTokenAccount,
       noviMint,

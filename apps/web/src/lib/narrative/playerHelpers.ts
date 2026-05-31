@@ -22,12 +22,12 @@ interface SlotLike {
 
 /** Loose shape for the few player fields the narrative reads. */
 interface UnitsLike {
-  defensiveUnit1: { toNumber(): number };
-  defensiveUnit2: { toNumber(): number };
-  defensiveUnit3: { toNumber(): number };
-  operativeUnit1: { toNumber(): number };
-  operativeUnit2: { toNumber(): number };
-  operativeUnit3: { toNumber(): number };
+  defensiveUnit1: bigint;
+  defensiveUnit2: bigint;
+  defensiveUnit3: bigint;
+  operativeUnit1: bigint;
+  operativeUnit2: bigint;
+  operativeUnit3: bigint;
 }
 
 /** True if `slot` is built (active or upgrading). */
@@ -43,12 +43,12 @@ export function hasBuildingAtLevel(buildings: SlotLike[], type: number, minLevel
 /** Sum of all six unit fields (defensive + operative). */
 export function getTotalUnits(player: UnitsLike): number {
   return (
-    player.defensiveUnit1.toNumber() +
-    player.defensiveUnit2.toNumber() +
-    player.defensiveUnit3.toNumber() +
-    player.operativeUnit1.toNumber() +
-    player.operativeUnit2.toNumber() +
-    player.operativeUnit3.toNumber()
+    Number(player.defensiveUnit1) +
+    Number(player.defensiveUnit2) +
+    Number(player.defensiveUnit3) +
+    Number(player.operativeUnit1) +
+    Number(player.operativeUnit2) +
+    Number(player.operativeUnit3)
   );
 }
 

@@ -12,6 +12,7 @@
 
 import { PublicKey } from '@solana/web3.js';
 import type { Connection } from '@solana/web3.js';
+import { bytesStartWith } from '../utils/deserialize';
 
 // Program IDs
 
@@ -51,9 +52,10 @@ export const PYTH_ETH_USD_FEED_ID =
   'ff61491a931112ddf1bd8147cd1b641375f79f5825126d665480874634fd0ace';
 
 /** `PriceUpdateV2` Anchor account discriminator. */
-const PRICE_UPDATE_V2_DISCRIMINATOR = Buffer.from([
+const PRICE_UPDATE_V2_DISCRIMINATOR = new Uint8Array([
   34, 241, 35, 99, 157, 126, 244, 205,
 ]);
+
 
 // Types
 
@@ -65,11 +67,11 @@ export type PythVerificationLevel =
 /** Parsed `PriceUpdateV2` account. */
 export interface PythPriceUpdate {
   /** Authority that posted/owns the update account. */
-  writeAuthority: Buffer;
+  writeAuthority: Uint8Array;
   /** How thoroughly the underlying Wormhole VAA was verified. */
   verificationLevel: PythVerificationLevel;
   /** 32-byte feed id. */
-  feedId: Buffer;
+  feedId: Uint8Array;
   /** Price value (real value = `price * 10^exponent`). */
   price: bigint;
   /** Confidence interval, same scale as `price`. */
@@ -91,17 +93,25 @@ export interface PythPriceUpdate {
 // Feed id helpers
 
 /** Convert a 64-hex-char (optionally `0x`-prefixed) feed id to 32 bytes. */
-export function feedIdToBytes(feedId: string): Buffer {
+export function feedIdToBytes(feedId: string): Uint8Array {
   const hex = feedId.startsWith('0x') ? feedId.slice(2) : feedId;
   if (hex.length !== 64 || !/^[0-9a-fA-F]+$/.test(hex)) {
     throw new Error(`Invalid Pyth feed id (expected 64 hex chars): ${feedId}`);
   }
-  return Buffer.from(hex, 'hex');
+  const bytes = new Uint8Array(32);
+  for (let i = 0; i < 32; i++) {
+    bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return bytes;
 }
 
 /** Convert a 32-byte feed id to a 64-hex-char string. */
-export function feedIdToHex(feedId: Buffer | Uint8Array): string {
-  return Buffer.from(feedId).toString('hex');
+export function feedIdToHex(feedId: Uint8Array): string {
+  let hex = '';
+  for (let i = 0; i < feedId.length; i++) {
+    hex += feedId[i]!.toString(16).padStart(2, '0');
+  }
+  return hex;
 }
 
 // Parsing
@@ -115,10 +125,12 @@ export function feedIdToHex(feedId: Buffer | Uint8Array): string {
  * @param data - Raw account data (including the 8-byte discriminator)
  * @returns Parsed update, or `null` if the data is not a `PriceUpdateV2`
  */
-export function parsePythPriceUpdate(data: Buffer): PythPriceUpdate | null {
+export function parsePythPriceUpdate(data: Uint8Array): PythPriceUpdate | null {
   // discriminator(8) + write_authority(32) + verification_level tag(1)
   if (data.length < 41) return null;
-  if (!data.subarray(0, 8).equals(PRICE_UPDATE_V2_DISCRIMINATOR)) return null;
+  if (!bytesStartWith(data, PRICE_UPDATE_V2_DISCRIMINATOR)) return null;
+
+  const view = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
   const writeAuthority = data.subarray(8, 40);
 
@@ -143,14 +155,14 @@ export function parsePythPriceUpdate(data: Buffer): PythPriceUpdate | null {
     writeAuthority,
     verificationLevel,
     feedId: data.subarray(pmOff, pmOff + 32),
-    price: data.readBigInt64LE(pmOff + 32),
-    conf: data.readBigUInt64LE(pmOff + 40),
-    exponent: data.readInt32LE(pmOff + 48),
-    publishTime: Number(data.readBigInt64LE(pmOff + 52)),
-    prevPublishTime: Number(data.readBigInt64LE(pmOff + 60)),
-    emaPrice: data.readBigInt64LE(pmOff + 68),
-    emaConf: data.readBigUInt64LE(pmOff + 76),
-    postedSlot: data.readBigUInt64LE(pmOff + 84),
+    price: view.getBigInt64(pmOff + 32, true),
+    conf: view.getBigUint64(pmOff + 40, true),
+    exponent: view.getInt32(pmOff + 48, true),
+    publishTime: Number(view.getBigInt64(pmOff + 52, true)),
+    prevPublishTime: Number(view.getBigInt64(pmOff + 60, true)),
+    emaPrice: view.getBigInt64(pmOff + 68, true),
+    emaConf: view.getBigUint64(pmOff + 76, true),
+    postedSlot: view.getBigUint64(pmOff + 84, true),
   };
 }
 
@@ -202,7 +214,7 @@ export function isConfidenceAcceptable(
  */
 export function validatePythPriceUpdate(
   update: PythPriceUpdate,
-  expectedFeedId: Buffer | Uint8Array,
+  expectedFeedId: Uint8Array,
   currentTimestamp: number,
   maxStalenessSeconds = 60,
   maxConfidenceBps = 100
@@ -239,7 +251,7 @@ export async function fetchPythPriceUpdate(
 ): Promise<PythPriceUpdate | null> {
   const accountInfo = await connection.getAccountInfo(priceAccount);
   if (!accountInfo || !accountInfo.data) return null;
-  return parsePythPriceUpdate(Buffer.from(accountInfo.data));
+  return parsePythPriceUpdate(accountInfo.data);
 }
 
 /** Fetch the USD price for a Pyth price account. */

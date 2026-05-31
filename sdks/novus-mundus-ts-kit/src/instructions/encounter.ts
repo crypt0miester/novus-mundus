@@ -16,7 +16,7 @@ import {
   derivePlayerPda,
   deriveNoviMintPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Enums
 
@@ -97,7 +97,7 @@ export async function createSpawnEncounterInstruction(
   const [city] = await deriveCityPda(accounts.gameEngine, accounts.cityId);
   const [encounter] = await deriveEncounterPda(accounts.gameEngine, accounts.cityId, accounts.encounterIndex);
   const [noviMint] = await deriveNoviMintPda();
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
   const [spawnLocation] = await deriveLocationPda(accounts.gameEngine, accounts.cityId, accounts.gridLat, accounts.gridLong);
 
   // Rust account order (10):

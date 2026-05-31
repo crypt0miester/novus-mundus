@@ -65,21 +65,22 @@ export async function POST(req: Request) {
   if (body.buyStamina) {
     const player = await getPlayer(owner);
     if (!player) return fail("player account not found", 404);
-    const shortfall = template.staminaCost - player.encounterStamina.toNumber();
+    const shortfall = template.staminaCost - Number(player.encounterStamina);
     if (shortfall > 0) {
       instructions.push(
-        createPurchaseStaminaInstruction({ owner, gameEngine }, { amount: shortfall }),
+        await createPurchaseStaminaInstruction({ owner, gameEngine }, { amount: shortfall }),
       );
     }
   }
 
+  const gameAuthority = (await gameAuthorityKeypair()).publicKey;
   instructions.push(
-    createEnterDungeonInstruction(
+    await createEnterDungeonInstruction(
       {
         owner,
         gameEngine,
         heroMint,
-        gameAuthority: gameAuthorityKeypair().publicKey,
+        gameAuthority,
       },
       {
         templateId: dungeonId,

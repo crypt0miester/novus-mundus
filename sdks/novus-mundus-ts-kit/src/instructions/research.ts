@@ -20,10 +20,10 @@ import {
   deriveResearchPda,
   deriveResearchTemplatePda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Note: TOKEN_PROGRAM_ID used for start_research
-// Note: getAssociatedTokenAddressSyncForPda used for start_research
+// Note: getAssociatedTokenAddressAsyncForPda used for start_research
 
 // Initialize Template (Admin)
 
@@ -258,7 +258,7 @@ export async function createStartResearchInstruction(
   const [estate] = await deriveEstatePda(player);
   const [noviMint] = await deriveNoviMintPda();
   // Token account is owned by PlayerAccount PDA
-  const playerTokenAccount = await getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

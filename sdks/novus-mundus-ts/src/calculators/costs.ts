@@ -394,18 +394,17 @@ export function subscriptionDiscountBps(tier: number): number {
  * Mirrors `calculate_milestone_discount` in
  * programs/novus_mundus/src/processor/shop/common.rs.
  *
- * Thresholds are u64 on chain and arrive here as BN values. We use BN's
- * own `gte` for comparison so the chain-side bucketing matches exactly
+ * Thresholds are u64 on chain and arrive here as bigint values. We compare
+ * with native bigint `>=` so the chain-side bucketing matches exactly
  * regardless of value magnitude (no JS Number truncation).
  */
-import type BN from 'bn.js';
 
 export interface ShopConfigForMilestone {
-  bronzeThreshold: BN;
-  silverThreshold: BN;
-  goldThreshold: BN;
-  platinumThreshold: BN;
-  diamondThreshold: BN;
+  bronzeThreshold: bigint;
+  silverThreshold: bigint;
+  goldThreshold: bigint;
+  platinumThreshold: bigint;
+  diamondThreshold: bigint;
   bronzeDiscountBps: number;
   silverDiscountBps: number;
   goldDiscountBps: number;
@@ -414,14 +413,14 @@ export interface ShopConfigForMilestone {
 }
 
 export function milestoneDiscountBps(
-  totalSpent: BN,
+  totalSpent: bigint,
   config: ShopConfigForMilestone,
 ): number {
-  if (totalSpent.gte(config.diamondThreshold)) return config.diamondDiscountBps;
-  if (totalSpent.gte(config.platinumThreshold)) return config.platinumDiscountBps;
-  if (totalSpent.gte(config.goldThreshold)) return config.goldDiscountBps;
-  if (totalSpent.gte(config.silverThreshold)) return config.silverDiscountBps;
-  if (totalSpent.gte(config.bronzeThreshold)) return config.bronzeDiscountBps;
+  if (totalSpent >= config.diamondThreshold) return config.diamondDiscountBps;
+  if (totalSpent >= config.platinumThreshold) return config.platinumDiscountBps;
+  if (totalSpent >= config.goldThreshold) return config.goldDiscountBps;
+  if (totalSpent >= config.silverThreshold) return config.silverDiscountBps;
+  if (totalSpent >= config.bronzeThreshold) return config.bronzeDiscountBps;
   return 0;
 }
 

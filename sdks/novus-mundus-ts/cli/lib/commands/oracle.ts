@@ -32,7 +32,7 @@ import {
   deriveOracleQuotePda,
   parseShopConfig,
   parseAllowedToken,
-  getAssociatedTokenAddressSync,
+  getAssociatedTokenAddressAsync,
   ALLOWED_TOKEN_ACCOUNT_SIZE,
   PYTH_SOL_USD_FEED_ID,
   PYTH_USDC_USD_FEED_ID,
@@ -102,7 +102,7 @@ function isZeroKey(key: PublicKey): boolean {
 }
 
 async function loadShopConfig(ctx: CLIContext) {
-  const [configPda] = deriveShopConfigPda(ctx.gameEngine);
+  const [configPda] = await deriveShopConfigPda(ctx.gameEngine);
   const info = await ctx.connection.getAccountInfo(configPda);
   if (!info) {
     throw new Error('ShopConfig not found — run `novus init shop` first');
@@ -141,7 +141,7 @@ async function handleConfig(ctx: CLIContext, flags: string[]): Promise<void> {
   // oracle section, so unspecified fields keep their existing values.
   const solPythFeed = pythFlag
     ? resolvePythFeed(pythFlag)
-    : config.solPythFeed.toBuffer().toString('hex');
+    : Buffer.from(config.solPythFeed.toBytes()).toString('hex');
   const solSwitchboardFeed = sbFeedFlag
     ? feedHashToPubkey(sbFeedFlag)
     : config.solSwitchboardFeed;
@@ -195,7 +195,7 @@ async function handleInitQuote(ctx: CLIContext, flags: string[]): Promise<void> 
     return;
   }
 
-  const [oracleQuote] = deriveOracleQuotePda(switchboardQueue);
+  const [oracleQuote] = await deriveOracleQuotePda(switchboardQueue);
   log.info(`  queue        ${switchboardQueue.toBase58()}`);
   log.info(`  oracle-quote ${oracleQuote.toBase58()}`);
 
@@ -239,7 +239,7 @@ async function handleAllowToken(ctx: CLIContext, flags: string[]): Promise<void>
   const confidenceThresholdBps = parseInt(getFlag(flags, '--confidence') ?? '100', 10);
   const discountBps = parseInt(getFlag(flags, '--discount') ?? '0', 10);
 
-  const [allowedToken] = deriveAllowedTokenPda(ctx.gameEngine, tokenMint);
+  const [allowedToken] = await deriveAllowedTokenPda(ctx.gameEngine, tokenMint);
   log.info(`  mint          ${tokenMint.toBase58()}`);
   log.info(`  allowed-token ${allowedToken.toBase58()}`);
   if (pegged) log.info(`  pricing       ${green('$1-pegged stablecoin')} (no oracle)`);
@@ -279,7 +279,7 @@ async function handleAllowToken(ctx: CLIContext, flags: string[]): Promise<void>
 // oracle buy — exercise a token-payment item purchase
 
 async function handleBuy(ctx: CLIContext, flags: string[]): Promise<void> {
-  const buyer = loadKeypair(requireFlag(flags, '--buyer'));
+  const buyer = await loadKeypair(requireFlag(flags, '--buyer'));
   const itemId = parseInt(requireFlag(flags, '--item'), 10);
   const tokenMint = new PublicKey(requireFlag(flags, '--mint'));
   const payment = requireFlag(flags, '--payment').toLowerCase();
@@ -289,9 +289,9 @@ async function handleBuy(ctx: CLIContext, flags: string[]): Promise<void> {
     return;
   }
 
-  const [allowedToken] = deriveAllowedTokenPda(ctx.gameEngine, tokenMint);
-  const buyerTokenAta = getAssociatedTokenAddressSync(tokenMint, buyer.publicKey);
-  const treasuryTokenAta = getAssociatedTokenAddressSync(tokenMint, ctx.treasury.publicKey);
+  const [allowedToken] = await deriveAllowedTokenPda(ctx.gameEngine, tokenMint);
+  const buyerTokenAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+  const treasuryTokenAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.publicKey);
 
   const tokenPayment: TokenPaymentAccounts = {
     allowedToken,
@@ -306,7 +306,7 @@ async function handleBuy(ctx: CLIContext, flags: string[]): Promise<void> {
       log.error('Switchboard not configured — run `oracle config --switchboard-queue ...`');
       return;
     }
-    const [oracleQuote] = deriveOracleQuotePda(switchboardQueue);
+    const [oracleQuote] = await deriveOracleQuotePda(switchboardQueue);
     tokenPayment.oracleQuote = oracleQuote;
     tokenPayment.switchboardQueue = switchboardQueue;
     log.info(`  oracle-quote  ${oracleQuote.toBase58()}`);
@@ -338,7 +338,7 @@ async function handleBuy(ctx: CLIContext, flags: string[]): Promise<void> {
 
 async function handleStatus(ctx: CLIContext): Promise<void> {
   const config = await loadShopConfig(ctx);
-  const pythHex = config.solPythFeed.toBuffer().toString('hex');
+  const pythHex = Buffer.from(config.solPythFeed.toBytes()).toString('hex');
   const sbFeed = config.solSwitchboardFeed;
   const queue = config.solSwitchboardQueue;
 
@@ -350,7 +350,7 @@ async function handleStatus(ctx: CLIContext): Promise<void> {
   console.log(`    confidence bps    ${config.solConfidenceThresholdBps}`);
 
   if (!isZeroKey(queue)) {
-    const [oracleQuote] = deriveOracleQuotePda(queue);
+    const [oracleQuote] = await deriveOracleQuotePda(queue);
     const exists = await accountExists(ctx.connection, oracleQuote);
     console.log(
       `    oracle-quote PDA  ${oracleQuote.toBase58()} ` +
@@ -372,7 +372,7 @@ async function handleStatus(ctx: CLIContext): Promise<void> {
       ? green('$1-pegged')
       : isZeroKey(tok.pythFeed)
         ? `switchboard ${tok.switchboardFeed.toBase58()}`
-        : `pyth ${tok.pythFeed.toBuffer().toString('hex')}`;
+        : `pyth ${Buffer.from(tok.pythFeed.toBytes()).toString('hex')}`;
     console.log(`    ${cyan(tok.mint.toBase58())}  ${dim(pricing)}  discount ${tok.discountBps}bps`);
   }
   console.log();
@@ -396,8 +396,8 @@ async function handleInitAlt(ctx: CLIContext): Promise<void> {
     return;
   }
 
-  const [shopConfig] = deriveShopConfigPda(ctx.gameEngine);
-  const [oracleQuote] = deriveOracleQuotePda(queue);
+  const [shopConfig] = await deriveShopConfigPda(ctx.gameEngine);
+  const [oracleQuote] = await deriveOracleQuotePda(queue);
   const fixedAccounts = [
     ctx.gameEngine,
     shopConfig,
@@ -411,7 +411,7 @@ async function handleInitAlt(ctx: CLIContext): Promise<void> {
   // The ALT is derived from a recent slot; `finalized` avoids a slot the
   // cluster might roll back under the new table account.
   const recentSlot = await ctx.connection.getSlot('finalized');
-  const [createIx, altAddress] = AddressLookupTableProgram.createLookupTable({
+  const [createIx, altAddress] = await AddressLookupTableProgram.createLookupTable({
     authority: ctx.daoAuthority.publicKey,
     payer: ctx.daoAuthority.publicKey,
     recentSlot,

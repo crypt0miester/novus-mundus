@@ -14,7 +14,6 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import type BN from 'bn.js';
 import { BufferReader } from '../utils/deserialize';
 
 // Shop Enums
@@ -65,11 +64,11 @@ export interface ShopConfigAccount {
   flashSaleMaxDurationSecs: number;
 
   // Milestone thresholds
-  bronzeThreshold: BN;
-  silverThreshold: BN;
-  goldThreshold: BN;
-  platinumThreshold: BN;
-  diamondThreshold: BN;
+  bronzeThreshold: bigint;
+  silverThreshold: bigint;
+  goldThreshold: bigint;
+  platinumThreshold: bigint;
+  diamondThreshold: bigint;
 
   // Milestone discounts
   bronzeDiscountBps: number;
@@ -85,11 +84,11 @@ export interface ShopConfigAccount {
   streakDay7Bps: number;
 
   // Global stats
-  totalSolCollected: BN;
-  totalNoviBurned: BN;
+  totalSolCollected: bigint;
+  totalNoviBurned: bigint;
 
   // State
-  nextFlashSaleId: BN;
+  nextFlashSaleId: bigint;
 
   // Oracle config
   /** Pyth SOL/USD feed id (32-byte feed identifier, not an account). */
@@ -115,11 +114,11 @@ export interface ShopItemAccount {
   rarity: ShopItemRarity;
   quantityPerPurchase: number;
   baseStatsBps: number;
-  priceSolLamports: BN;
-  availableFrom: BN;
-  availableUntil: BN;
-  maxGlobalStock: BN;
-  currentGlobalStock: BN;
+  priceSolLamports: bigint;
+  availableFrom: bigint;
+  availableUntil: bigint;
+  maxGlobalStock: bigint;
+  currentGlobalStock: bigint;
   maxPerPlayer: number;
   maxPerDay: number;
   isActive: boolean;
@@ -147,11 +146,11 @@ export interface BundleAccount {
   savingsBps: number;
   isActive: boolean;
   items: BundleItem[];
-  priceSolLamports: BN;
-  availableFrom: BN;
-  availableUntil: BN;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
+  priceSolLamports: bigint;
+  availableFrom: bigint;
+  availableUntil: bigint;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
@@ -163,11 +162,11 @@ export const BUNDLE_ACCOUNT_SIZE = 152;
 export interface DailyDealAccount {
   itemId: number;
   discountBps: number;
-  startedAt: BN;
+  startedAt: bigint;
   nextItemId: number;
   nextDiscountBps: number;
-  purchasesToday: BN;
-  revenueTodayLamports: BN;
+  purchasesToday: bigint;
+  revenueTodayLamports: bigint;
   bump: number;
 }
 
@@ -182,13 +181,13 @@ export interface FlashSaleAccount {
   isBundle: boolean;
   status: FlashSaleStatus;
   discountBps: number;
-  announcedAt: BN;
-  startsAt: BN;
-  endsAt: BN;
-  maxStock: BN;
-  remainingStock: BN;
-  totalClaims: BN;
-  totalRevenueLamports: BN;
+  announcedAt: bigint;
+  startsAt: bigint;
+  endsAt: bigint;
+  maxStock: bigint;
+  remainingStock: bigint;
+  totalClaims: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
@@ -198,7 +197,7 @@ export const FLASH_SALE_ACCOUNT_SIZE = 120;
 // Deserialization
 
 /** Deserialize ShopConfigAccount from raw bytes */
-export function deserializeShopConfig(data: Uint8Array | Buffer): ShopConfigAccount {
+export function deserializeShopConfig(data: Uint8Array): ShopConfigAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -293,7 +292,7 @@ export function deserializeShopConfig(data: Uint8Array | Buffer): ShopConfigAcco
 }
 
 /** Deserialize ShopItemAccount from raw bytes */
-export function deserializeShopItem(data: Uint8Array | Buffer): ShopItemAccount {
+export function deserializeShopItem(data: Uint8Array): ShopItemAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -348,7 +347,7 @@ export function deserializeShopItem(data: Uint8Array | Buffer): ShopItemAccount 
 }
 
 /** Deserialize BundleAccount from raw bytes */
-export function deserializeBundle(data: Uint8Array | Buffer): BundleAccount {
+export function deserializeBundle(data: Uint8Array): BundleAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -402,7 +401,7 @@ export function deserializeBundle(data: Uint8Array | Buffer): BundleAccount {
 }
 
 /** Deserialize DailyDealAccount from raw bytes */
-export function deserializeDailyDeal(data: Uint8Array | Buffer): DailyDealAccount {
+export function deserializeDailyDeal(data: Uint8Array): DailyDealAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -437,7 +436,7 @@ export function deserializeDailyDeal(data: Uint8Array | Buffer): DailyDealAccoun
 }
 
 /** Deserialize FlashSaleAccount from raw bytes */
-export function deserializeFlashSale(data: Uint8Array | Buffer): FlashSaleAccount {
+export function deserializeFlashSale(data: Uint8Array): FlashSaleAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -485,7 +484,7 @@ export function deserializeFlashSale(data: Uint8Array | Buffer): FlashSaleAccoun
 // Parse Functions
 
 /** Parse ShopConfigAccount from account info */
-export function parseShopConfig(accountInfo: AccountInfo<Buffer>): ShopConfigAccount | null {
+export function parseShopConfig(accountInfo: AccountInfo<Uint8Array>): ShopConfigAccount | null {
   if (!accountInfo.data || accountInfo.data.length < SHOP_CONFIG_ACCOUNT_SIZE) {
     return null;
   }
@@ -493,7 +492,7 @@ export function parseShopConfig(accountInfo: AccountInfo<Buffer>): ShopConfigAcc
 }
 
 /** Parse ShopItemAccount from account info */
-export function parseShopItem(accountInfo: AccountInfo<Buffer>): ShopItemAccount | null {
+export function parseShopItem(accountInfo: AccountInfo<Uint8Array>): ShopItemAccount | null {
   if (!accountInfo.data || accountInfo.data.length < SHOP_ITEM_ACCOUNT_SIZE) {
     return null;
   }
@@ -501,7 +500,7 @@ export function parseShopItem(accountInfo: AccountInfo<Buffer>): ShopItemAccount
 }
 
 /** Parse BundleAccount from account info */
-export function parseBundle(accountInfo: AccountInfo<Buffer>): BundleAccount | null {
+export function parseBundle(accountInfo: AccountInfo<Uint8Array>): BundleAccount | null {
   if (!accountInfo.data || accountInfo.data.length < BUNDLE_ACCOUNT_SIZE) {
     return null;
   }
@@ -509,7 +508,7 @@ export function parseBundle(accountInfo: AccountInfo<Buffer>): BundleAccount | n
 }
 
 /** Parse DailyDealAccount from account info */
-export function parseDailyDeal(accountInfo: AccountInfo<Buffer>): DailyDealAccount | null {
+export function parseDailyDeal(accountInfo: AccountInfo<Uint8Array>): DailyDealAccount | null {
   if (!accountInfo.data || accountInfo.data.length < DAILY_DEAL_ACCOUNT_SIZE) {
     return null;
   }
@@ -517,7 +516,7 @@ export function parseDailyDeal(accountInfo: AccountInfo<Buffer>): DailyDealAccou
 }
 
 /** Parse FlashSaleAccount from account info */
-export function parseFlashSale(accountInfo: AccountInfo<Buffer>): FlashSaleAccount | null {
+export function parseFlashSale(accountInfo: AccountInfo<Uint8Array>): FlashSaleAccount | null {
   if (!accountInfo.data || accountInfo.data.length < FLASH_SALE_ACCOUNT_SIZE) {
     return null;
   }
@@ -529,8 +528,8 @@ export function parseFlashSale(accountInfo: AccountInfo<Buffer>): FlashSaleAccou
 /** Check if item is available for purchase */
 export function isItemAvailable(item: ShopItemAccount, nowSeconds: number): boolean {
   if (!item.isActive) return false;
-  const from = item.availableFrom.toNumber();
-  const until = item.availableUntil.toNumber();
+  const from = Number(item.availableFrom);
+  const until = Number(item.availableUntil);
   if (from > 0 && nowSeconds < from) return false;
   if (until > 0 && nowSeconds > until) return false;
   return true;
@@ -539,7 +538,7 @@ export function isItemAvailable(item: ShopItemAccount, nowSeconds: number): bool
 /** Check if flash sale is currently active */
 export function isFlashSaleActive(sale: FlashSaleAccount, nowSeconds: number): boolean {
   if (sale.status !== FlashSaleStatus.Active) return false;
-  return nowSeconds >= sale.startsAt.toNumber() && nowSeconds < sale.endsAt.toNumber();
+  return nowSeconds >= Number(sale.startsAt) && nowSeconds < Number(sale.endsAt);
 }
 
 /** Check if flash sale can be closed */
@@ -550,13 +549,13 @@ export function canCloseFlashSale(sale: FlashSaleAccount): boolean {
 /** Get milestone tier from total spent */
 export function getMilestoneTier(
   config: ShopConfigAccount,
-  totalSpent: BN
+  totalSpent: bigint
 ): 'none' | 'bronze' | 'silver' | 'gold' | 'platinum' | 'diamond' {
-  if (totalSpent.gte(config.diamondThreshold)) return 'diamond';
-  if (totalSpent.gte(config.platinumThreshold)) return 'platinum';
-  if (totalSpent.gte(config.goldThreshold)) return 'gold';
-  if (totalSpent.gte(config.silverThreshold)) return 'silver';
-  if (totalSpent.gte(config.bronzeThreshold)) return 'bronze';
+  if (totalSpent >= config.diamondThreshold) return 'diamond';
+  if (totalSpent >= config.platinumThreshold) return 'platinum';
+  if (totalSpent >= config.goldThreshold) return 'gold';
+  if (totalSpent >= config.silverThreshold) return 'silver';
+  if (totalSpent >= config.bronzeThreshold) return 'bronze';
   return 'none';
 }
 
@@ -601,10 +600,10 @@ export interface WeeklySaleAccount {
   bonusType: number;
   bonusValueBps: number;
   categoryDiscounts: number[];
-  startsAt: BN;
-  endsAt: BN;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
+  startsAt: bigint;
+  endsAt: bigint;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
@@ -621,13 +620,13 @@ export interface SeasonalSaleAccount {
   featuredCount: number;
   status: SeasonalSaleStatus;
   globalDiscountBps: number;
-  startsAt: BN;
-  endsAt: BN;
-  spendThreshold: BN;
+  startsAt: bigint;
+  endsAt: bigint;
+  spendThreshold: bigint;
   exclusiveCosmeticId: number;
   exclusiveClaims: number;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
   bump: number;
 }
 
@@ -646,14 +645,14 @@ export interface DAOPromotionAccount {
   globalDiscountBps: number;
   maxDiscountBps: number;
   status: DaoPromotionStatus;
-  approvedAt: BN;
-  startsAt: BN;
-  endsAt: BN;
-  maxDiscountBudgetLamports: BN;
-  usedDiscountBudget: BN;
-  totalPurchases: BN;
-  totalRevenueLamports: BN;
-  uniquePurchasers: BN;
+  approvedAt: bigint;
+  startsAt: bigint;
+  endsAt: bigint;
+  maxDiscountBudgetLamports: bigint;
+  usedDiscountBudget: bigint;
+  totalPurchases: bigint;
+  totalRevenueLamports: bigint;
+  uniquePurchasers: bigint;
   bump: number;
 }
 
@@ -663,9 +662,9 @@ export const DAO_PROMOTION_ACCOUNT_SIZE = 168;
 // Player Purchase Account Interface
 
 export interface PlayerPurchaseAccount {
-  lifetimePurchased: BN;
-  purchasedToday: BN;
-  lastPurchaseDay: BN;
+  lifetimePurchased: bigint;
+  purchasedToday: bigint;
+  lastPurchaseDay: bigint;
   bump: number;
 }
 
@@ -693,7 +692,7 @@ export const ALLOWED_TOKEN_ACCOUNT_SIZE = 122;
 // New Account Deserialization
 
 /** Deserialize WeeklySaleAccount from raw bytes */
-export function deserializeWeeklySale(data: Uint8Array | Buffer): WeeklySaleAccount {
+export function deserializeWeeklySale(data: Uint8Array): WeeklySaleAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -729,7 +728,7 @@ export function deserializeWeeklySale(data: Uint8Array | Buffer): WeeklySaleAcco
 }
 
 /** Deserialize SeasonalSaleAccount from raw bytes */
-export function deserializeSeasonalSale(data: Uint8Array | Buffer): SeasonalSaleAccount {
+export function deserializeSeasonalSale(data: Uint8Array): SeasonalSaleAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -775,7 +774,7 @@ export function deserializeSeasonalSale(data: Uint8Array | Buffer): SeasonalSale
 }
 
 /** Deserialize DAOPromotionAccount from raw bytes */
-export function deserializeDaoPromotion(data: Uint8Array | Buffer): DAOPromotionAccount {
+export function deserializeDaoPromotion(data: Uint8Array): DAOPromotionAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -828,7 +827,7 @@ export function deserializeDaoPromotion(data: Uint8Array | Buffer): DAOPromotion
 }
 
 /** Deserialize PlayerPurchaseAccount from raw bytes */
-export function deserializePlayerPurchase(data: Uint8Array | Buffer): PlayerPurchaseAccount {
+export function deserializePlayerPurchase(data: Uint8Array): PlayerPurchaseAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -849,7 +848,7 @@ export function deserializePlayerPurchase(data: Uint8Array | Buffer): PlayerPurc
 }
 
 /** Deserialize AllowedTokenAccount from raw bytes */
-export function deserializeAllowedToken(data: Uint8Array | Buffer): AllowedTokenAccount {
+export function deserializeAllowedToken(data: Uint8Array): AllowedTokenAccount {
   const reader = new BufferReader(data);
 
   reader.readU8(); // account_key
@@ -883,7 +882,7 @@ export function deserializeAllowedToken(data: Uint8Array | Buffer): AllowedToken
 // New Account Parse Functions
 
 /** Parse WeeklySaleAccount from account info */
-export function parseWeeklySale(accountInfo: AccountInfo<Buffer>): WeeklySaleAccount | null {
+export function parseWeeklySale(accountInfo: AccountInfo<Uint8Array>): WeeklySaleAccount | null {
   if (!accountInfo.data || accountInfo.data.length < WEEKLY_SALE_ACCOUNT_SIZE) {
     return null;
   }
@@ -891,7 +890,7 @@ export function parseWeeklySale(accountInfo: AccountInfo<Buffer>): WeeklySaleAcc
 }
 
 /** Parse SeasonalSaleAccount from account info */
-export function parseSeasonalSale(accountInfo: AccountInfo<Buffer>): SeasonalSaleAccount | null {
+export function parseSeasonalSale(accountInfo: AccountInfo<Uint8Array>): SeasonalSaleAccount | null {
   if (!accountInfo.data || accountInfo.data.length < SEASONAL_SALE_ACCOUNT_SIZE) {
     return null;
   }
@@ -899,7 +898,7 @@ export function parseSeasonalSale(accountInfo: AccountInfo<Buffer>): SeasonalSal
 }
 
 /** Parse DAOPromotionAccount from account info */
-export function parseDaoPromotion(accountInfo: AccountInfo<Buffer>): DAOPromotionAccount | null {
+export function parseDaoPromotion(accountInfo: AccountInfo<Uint8Array>): DAOPromotionAccount | null {
   if (!accountInfo.data || accountInfo.data.length < DAO_PROMOTION_ACCOUNT_SIZE) {
     return null;
   }
@@ -907,7 +906,7 @@ export function parseDaoPromotion(accountInfo: AccountInfo<Buffer>): DAOPromotio
 }
 
 /** Parse PlayerPurchaseAccount from account info */
-export function parsePlayerPurchase(accountInfo: AccountInfo<Buffer>): PlayerPurchaseAccount | null {
+export function parsePlayerPurchase(accountInfo: AccountInfo<Uint8Array>): PlayerPurchaseAccount | null {
   if (!accountInfo.data || accountInfo.data.length < PLAYER_PURCHASE_ACCOUNT_SIZE) {
     return null;
   }
@@ -915,7 +914,7 @@ export function parsePlayerPurchase(accountInfo: AccountInfo<Buffer>): PlayerPur
 }
 
 /** Parse AllowedTokenAccount from account info */
-export function parseAllowedToken(accountInfo: AccountInfo<Buffer>): AllowedTokenAccount | null {
+export function parseAllowedToken(accountInfo: AccountInfo<Uint8Array>): AllowedTokenAccount | null {
   if (!accountInfo.data || accountInfo.data.length < ALLOWED_TOKEN_ACCOUNT_SIZE) {
     return null;
   }
@@ -926,24 +925,24 @@ export function parseAllowedToken(accountInfo: AccountInfo<Buffer>): AllowedToke
 
 /** Check if weekly sale is currently active */
 export function isWeeklySaleActive(sale: WeeklySaleAccount, nowSeconds: number): boolean {
-  return nowSeconds >= sale.startsAt.toNumber() && nowSeconds < sale.endsAt.toNumber();
+  return nowSeconds >= Number(sale.startsAt) && nowSeconds < Number(sale.endsAt);
 }
 
 /** Check if seasonal sale is currently active */
 export function isSeasonalSaleActive(sale: SeasonalSaleAccount, nowSeconds: number): boolean {
   if (sale.status !== SeasonalSaleStatus.Active) return false;
-  return nowSeconds >= sale.startsAt.toNumber() && nowSeconds < sale.endsAt.toNumber();
+  return nowSeconds >= Number(sale.startsAt) && nowSeconds < Number(sale.endsAt);
 }
 
 /** Check if DAO promotion is currently active */
 export function isDaoPromotionActive(promotion: DAOPromotionAccount, nowSeconds: number): boolean {
   if (promotion.status !== DaoPromotionStatus.Active) return false;
-  return nowSeconds >= promotion.startsAt.toNumber() && nowSeconds < promotion.endsAt.toNumber();
+  return nowSeconds >= Number(promotion.startsAt) && nowSeconds < Number(promotion.endsAt);
 }
 
 /** Check if DAO promotion has remaining budget */
 export function hasDaoPromotionBudget(promotion: DAOPromotionAccount): boolean {
-  return promotion.usedDiscountBudget.lt(promotion.maxDiscountBudgetLamports);
+  return promotion.usedDiscountBudget < promotion.maxDiscountBudgetLamports;
 }
 
 // Item Type Metadata (derived from on-chain fulfill_item)

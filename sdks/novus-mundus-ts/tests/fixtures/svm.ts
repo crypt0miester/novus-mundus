@@ -5,14 +5,43 @@
  * needed for E2E tests. Replaces solana-test-validator.
  */
 
-import { LiteSVM, Clock, FailedTransactionMetadata, type TransactionMetadata } from 'litesvm';
-import { PublicKey, SYSVAR_SLOT_HASHES_PUBKEY, type AccountInfo } from '@solana/web3.js';
+import { LiteSVM, Clock, FailedTransactionMetadata, type TransactionMetadata, type AccountInfoBytes } from 'litesvm';
+import { PublicKey, SYSVAR_SLOT_HASHES_PUBKEY, VersionedTransaction, type AccountInfo } from '@solana/web3.js';
 import { deriveOracleQuotePda } from '../../src/pda';
 import * as path from 'path';
 import * as fs from 'fs';
 
 export { LiteSVM, Clock, FailedTransactionMetadata };
 export type { TransactionMetadata };
+
+// LiteSVM is typed against web3.js v1 (its own nested dependency), whose
+// `PublicKey` class is nominally distinct from the v3 `PublicKey` (= `Address`)
+// the SDK uses. The two are runtime-compatible (both expose `.toBytes()`), so we
+// bridge the nominal gap with thin casts at every LiteSVM call boundary.
+type SvmPubkey = Parameters<LiteSVM['getAccount']>[0];
+export const svmKey = (pk: PublicKey): SvmPubkey => pk as unknown as SvmPubkey;
+const svmAccount = (acct: {
+  data: Uint8Array;
+  executable: boolean;
+  lamports: number;
+  owner: PublicKey;
+  rentEpoch: number;
+}): AccountInfoBytes => acct as unknown as AccountInfoBytes;
+
+// Send the bytes of a SIGNED transaction through LiteSVM. LiteSVM (web3.js v1)
+// serializes synchronously at its napi boundary, but v3's legacy
+// `Transaction.serialize()` is async — handing it the legacy tx yields a Promise,
+// not bytes. Callers serialize the signed tx, then this re-wraps the identical wire
+// bytes as a v3 `VersionedTransaction` (whose `serialize()` is sync) so LiteSVM's
+// versioned-send path receives real bytes. Centralizes the v1/v3 nominal cast, like
+// `svmKey`/`svmAccount`.
+export function sendSignedTx(
+  svm: LiteSVM,
+  signedBytes: Uint8Array
+): ReturnType<LiteSVM['sendTransaction']> {
+  const vtx = VersionedTransaction.deserialize(signedBytes);
+  return svm.sendTransaction(vtx as unknown as Parameters<LiteSVM['sendTransaction']>[0]);
+}
 
 const SDK_DIR = path.join(__dirname, '../..');
 const ROOT_DIR = path.join(SDK_DIR, '../..');
@@ -39,10 +68,10 @@ export function createTestSvm(): LiteSVM {
 
   // Load program binaries
   const novusSoPath = NOVUS_MUNDUS_SO;
-  svm.addProgramFromFile(NOVUS_MUNDUS_PROGRAM_ID, novusSoPath);
-  svm.addProgramFromFile(MPL_CORE_PROGRAM_ID, path.join(BIN_DIR, 'mpl_core.so'));
-  svm.addProgramFromFile(TLD_HOUSE_PROGRAM_ID, path.join(BIN_DIR, 'tld_house.so'));
-  svm.addProgramFromFile(ALT_NAME_SERVICE_PROGRAM_ID, path.join(BIN_DIR, 'alt_name_service.so'));
+  svm.addProgramFromFile(svmKey(NOVUS_MUNDUS_PROGRAM_ID), novusSoPath);
+  svm.addProgramFromFile(svmKey(MPL_CORE_PROGRAM_ID), path.join(BIN_DIR, 'mpl_core.so'));
+  svm.addProgramFromFile(svmKey(TLD_HOUSE_PROGRAM_ID), path.join(BIN_DIR, 'tld_house.so'));
+  svm.addProgramFromFile(svmKey(ALT_NAME_SERVICE_PROGRAM_ID), path.join(BIN_DIR, 'alt_name_service.so'));
 
   // Seed TLD accounts from mainnet snapshots
   const dataDir = path.join(__dirname, 'data');
@@ -65,23 +94,26 @@ function loadAccountFromJson(svm: LiteSVM, address: PublicKey, jsonPath: string)
   const acct = json.account;
   const data = Buffer.from(acct.data[0], 'base64');
 
-  svm.setAccount(address, {
+  svm.setAccount(svmKey(address), svmAccount({
     data,
     executable: acct.executable,
     lamports: acct.lamports,
     owner: new PublicKey(acct.owner),
     rentEpoch: 0,
-  });
+  }));
 }
 
 /**
  * Convert LiteSVM's AccountInfo<Uint8Array> to web3.js AccountInfo<Buffer>.
  * All deserialization functions in the SDK expect Buffer data.
  */
-export function toAccountInfo(account: AccountInfo<Uint8Array>): AccountInfo<Buffer> {
+export function toAccountInfo(account: AccountInfoBytes): AccountInfo<Buffer> {
   return {
-    ...account,
+    executable: account.executable,
+    owner: new PublicKey(account.owner as unknown as Uint8Array),
+    lamports: BigInt(account.lamports as unknown as number),
     data: Buffer.from(account.data),
+    rentEpoch: BigInt(account.rentEpoch as unknown as number),
   };
 }
 
@@ -167,13 +199,13 @@ export function seedMockPythFeed(
   data.writeBigUInt64LE(BigInt(price?.conf ?? 0), pm + 76); // ema_conf
   data.writeBigUInt64LE(svm.getClock().slot, pm + 84); // posted_slot
 
-  svm.setAccount(pubkey, {
+  svm.setAccount(svmKey(pubkey), svmAccount({
     data,
     executable: false,
     lamports: 1_000_000_000,
     owner: PYTH_PROGRAM_ID,
     rentEpoch: 0,
-  });
+  }));
 }
 
 /** Write a positive i128 in little-endian (low 64 bits then high 64 bits). */
@@ -262,13 +294,13 @@ export function seedMockSwitchboardFeed(
     data.writeBigUInt64LE(slot, OFF_RESULT_SLOT);
   }
 
-  svm.setAccount(pubkey, {
+  svm.setAccount(svmKey(pubkey), svmAccount({
     data,
     executable: false,
     lamports: 1_000_000_000,
     owner: SWITCHBOARD_PROGRAM_ID,
     rentEpoch: 0,
-  });
+  }));
 }
 
 // Switchboard On-Demand `OracleQuote` mocks (Model B)
@@ -304,13 +336,13 @@ export function seedMockSwitchboardQueue(
   if (oracleSigningKey) {
     Buffer.from(oracleSigningKey).copy(data, QUEUE_ED25519_KEYS_OFFSET);
   }
-  svm.setAccount(queue, {
+  svm.setAccount(svmKey(queue), svmAccount({
     data,
     executable: false,
     lamports: 1_000_000_000,
     owner: SWITCHBOARD_PROGRAM_ID,
     rentEpoch: 0,
-  });
+  }));
 }
 
 /** One feed inside a mock `OracleQuote`. */
@@ -347,7 +379,7 @@ function feedId32(id: Buffer | Uint8Array | string): Buffer {
  *
  * Returns the derived oracle-quote PDA address.
  */
-export function seedMockOracleQuote(
+export async function seedMockOracleQuote(
   svm: LiteSVM,
   opts: {
     /** novus_mundus program id (the PDA owner). */
@@ -363,7 +395,7 @@ export function seedMockOracleQuote(
     /** 32-byte signed slot hash; defaults to a fixed pattern. */
     signedSlothash?: Buffer | Uint8Array;
   },
-): PublicKey {
+): Promise<PublicKey> {
   if (opts.feeds.length === 0 || opts.feeds.length > 8) {
     throw new Error('OracleQuote carries 1–8 feeds');
   }
@@ -413,18 +445,18 @@ export function seedMockOracleQuote(
   // Persisted account: [SBOracle][queue][len u16][ed25519 data].
   const data = Buffer.alloc(8 + 32 + 2 + ed.length);
   Buffer.from('SBOracle').copy(data, 0);
-  opts.queue.toBuffer().copy(data, 8);
+  Buffer.from(opts.queue.toBytes()).copy(data, 8);
   data.writeUInt16LE(ed.length, 40);
   ed.copy(data, 42);
 
-  const [quotePda] = deriveOracleQuotePda(opts.queue);
-  svm.setAccount(quotePda, {
+  const [quotePda] = await deriveOracleQuotePda(opts.queue);
+  svm.setAccount(svmKey(quotePda), svmAccount({
     data,
     executable: false,
     lamports: 1_000_000_000,
     owner: opts.programId,
     rentEpoch: 0,
-  });
+  }));
 
   // SlotHashes sysvar: [count u64][slot u64][hash 32] — one entry, so the
   // on-chain `find_slothash_in_sysvar` resolves `recentSlot` at index 0.
@@ -432,13 +464,13 @@ export function seedMockOracleQuote(
   sh.writeBigUInt64LE(1n, 0);
   sh.writeBigUInt64LE(recentSlot, 8);
   signedSlothash.copy(sh, 16);
-  svm.setAccount(SYSVAR_SLOT_HASHES_PUBKEY, {
+  svm.setAccount(svmKey(SYSVAR_SLOT_HASHES_PUBKEY), svmAccount({
     data: sh,
     executable: false,
     lamports: 1_000_000_000,
     owner: SYSVAR_OWNER,
     rentEpoch: 0,
-  });
+  }));
 
   return quotePda;
 }
@@ -466,18 +498,18 @@ export function seedSplMint(
 ): void {
   const data = Buffer.alloc(82);
   data.writeUInt32LE(1, 0); // mint_authority = Some
-  opts.mintAuthority.toBuffer().copy(data, 4);
+  Buffer.from(opts.mintAuthority.toBytes()).copy(data, 4);
   data.writeBigUInt64LE(BigInt(opts.supply ?? 0), 36);
   data.writeUInt8(opts.decimals, 44);
   data.writeUInt8(1, 45); // is_initialized
   // freeze_authority COption tag stays 0 (None)
-  svm.setAccount(mint, {
+  svm.setAccount(svmKey(mint), svmAccount({
     data,
     executable: false,
     lamports: 1_000_000_000,
     owner: SPL_TOKEN_PROGRAM_ID,
     rentEpoch: 0,
-  });
+  }));
 }
 
 /**
@@ -503,22 +535,22 @@ export function seedSplTokenAccount(
   opts: { mint: PublicKey; owner: PublicKey; amount: bigint | number },
 ): void {
   const data = Buffer.alloc(165);
-  opts.mint.toBuffer().copy(data, 0);
-  opts.owner.toBuffer().copy(data, 32);
+  Buffer.from(opts.mint.toBytes()).copy(data, 0);
+  Buffer.from(opts.owner.toBytes()).copy(data, 32);
   data.writeBigUInt64LE(BigInt(opts.amount), 64);
   data.writeUInt8(1, 108); // state = Initialized
-  svm.setAccount(tokenAccount, {
+  svm.setAccount(svmKey(tokenAccount), svmAccount({
     data,
     executable: false,
     lamports: 2_039_280, // rent-exempt minimum for 165 bytes
     owner: SPL_TOKEN_PROGRAM_ID,
     rentEpoch: 0,
-  });
+  }));
 }
 
 /** Read the `amount` (u64 LE @ offset 64) from a seeded SPL token account. */
 export function readSplTokenAmount(svm: LiteSVM, tokenAccount: PublicKey): bigint {
-  const acct = svm.getAccount(tokenAccount);
+  const acct = svm.getAccount(svmKey(tokenAccount));
   if (!acct || acct.data.length < 72) return 0n;
   return Buffer.from(acct.data).readBigUInt64LE(64);
 }
@@ -542,27 +574,29 @@ export function readSplTokenAmount(svm: LiteSVM, tokenAccount: PublicKey): bigin
  * solana-program-loader layout) and the offsets read by
  * `assert_is_program_authority` in `init_game_engine.rs`.
  */
-export function seedProgramDataPda(
+export async function seedProgramDataPda(
   svm: LiteSVM,
   programId: PublicKey,
   upgradeAuthority: PublicKey,
-): void {
-  const [programData] = PublicKey.findProgramAddressSync(
-    [programId.toBuffer()],
+): Promise<void> {
+  // web3.js v3 removed the sync PDA derivation; derivation is async now.
+  const [programDataAddr] = await PublicKey.findProgramAddress(
+    [programId.toBytes()],
     BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
   );
+  const programData = new PublicKey(programDataAddr);
 
   const data = Buffer.alloc(45);
   data.writeUInt32LE(3, 0); // enum tag = ProgramData
   // slot at 4..12 stays zero
   data.writeUInt8(1, 12); // Some(upgrade_authority)
-  upgradeAuthority.toBuffer().copy(data, 13);
+  Buffer.from(upgradeAuthority.toBytes()).copy(data, 13);
 
-  svm.setAccount(programData, {
+  svm.setAccount(svmKey(programData), svmAccount({
     data,
     executable: false,
     lamports: 1_000_000_000,
     owner: BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
     rentEpoch: 0,
-  });
+  }));
 }

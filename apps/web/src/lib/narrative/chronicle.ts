@@ -12,9 +12,7 @@ import type { Act } from "./types";
 
 // Structural shapes — the real PlayerCore / EstateAccount satisfy these.
 
-interface Numeric {
-  toNumber(): number;
-}
+type Numeric = bigint;
 interface SlotLike {
   buildingType: number;
   status: number;
@@ -60,7 +58,7 @@ export function buildChronicleFacts(
     hasBuilding: (type, minLevel = 1) => hasBuildingAtLevel(buildings, type, minLevel),
     units: player ? getTotalUnits(player) : 0,
     researchDone: (player?.researchAttackBps ?? 0) > 0,
-    encountersFought: player ? player.totalEncounterAttacks.toNumber() : 0,
+    encountersFought: player ? Number(player.totalEncounterAttacks) : 0,
     extensions: player?.extensions ?? 0,
     inHouse: !!player && hasTeam(player),
     ownsCastle,

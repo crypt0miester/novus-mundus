@@ -29,7 +29,7 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import { Radar, RefreshCw } from "lucide-react";
+import { Radar, RefreshCw, Compass } from "lucide-react";
 import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER, toGrid } from "novus-mundus-sdk";
 import { useSettings, type MapMode } from "@/lib/store/settings";
 import { useCityOccupied, type OccupiedCell } from "@/lib/hooks/useCityOccupied";
@@ -54,6 +54,7 @@ import {
   type HoverReadout,
   type PickInfo,
 } from "./city3d/CityTerrainMapWebGL";
+import { DEFAULT_YAW, STRAIGHT_YAW } from "./city3d/controls";
 
 export type {
   CityTerrainEntity,
@@ -193,6 +194,11 @@ const CityTerrainMap3DScene = forwardRef<CityTerrainMapHandle, CityTerrainMap3DS
     const [cellsVisible, setCellsVisible] = useState(false);
     const [touchOrbitEnabled, setTouchOrbitEnabled] = useState(false);
     const [resetTrigger, setResetTrigger] = useState(0);
+    /* View-angle toggle — flips the camera yaw between the two canonical
+     * presets: DEFAULT_YAW (angled, the mount default) and STRAIGHT_YAW
+     * (north-up). The 3D scene tweens yaw on change, leaving zoom/center
+     * /pitch alone. */
+    const [viewYaw, setViewYaw] = useState<number>(DEFAULT_YAW);
     /* Active hovered occupant + its projected CSS-px position. The 3D
      * renderer fires `onActiveOccupant` on pointer-move (or null when
      * the pointer is over empty terrain). The orchestrator renders
@@ -459,6 +465,7 @@ const CityTerrainMap3DScene = forwardRef<CityTerrainMapHandle, CityTerrainMap3DS
         onContextLost={() => setWebglLost(true)}
         touchOrbitEnabled={touchOrbitEnabled}
         resetTrigger={resetTrigger}
+        viewYaw={viewYaw}
         getDotTooltip={props.getDotTooltip}
         teamMatePubkeys={props.teamMatePubkeys}
         onActiveOccupant={setActiveOccupant}
@@ -485,6 +492,24 @@ const CityTerrainMap3DScene = forwardRef<CityTerrainMapHandle, CityTerrainMap3DS
             title={mapMode === "iso" ? "Switch to top-down (2D)" : "Switch to tilted view (3D)"}
           >
             {mapMode === "iso" ? "2D" : "3D"}
+          </button>
+          {/* View-angle toggle — flip between the angled (0.68) and
+           * straight north-up (0) yaw presets. aria-pressed marks the
+           * north-up state. Lives next to the 2D/3D pill. */}
+          <button
+            type="button"
+            className={`${styles.togglePill} ${styles.anglePill}`}
+            onClick={() =>
+              setViewYaw((y) => (y === STRAIGHT_YAW ? DEFAULT_YAW : STRAIGHT_YAW))
+            }
+            aria-pressed={viewYaw === STRAIGHT_YAW}
+            title={
+              viewYaw === STRAIGHT_YAW
+                ? "Switch to angled view"
+                : "Switch to straight (north-up) view"
+            }
+          >
+            <Compass size={15} aria-hidden />
           </button>
           {touchSupport && (
             <button

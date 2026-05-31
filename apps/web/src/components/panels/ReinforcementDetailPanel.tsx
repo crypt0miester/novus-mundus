@@ -69,7 +69,7 @@ export function ReinforcementDetailPanel({
       const info = await connection.getAccountInfo(key);
       const account = info ? parseReinforcement(info) : null;
       if (!account || !publicKey) return null;
-      const [myPlayerPda] = derivePlayerPda(client.gameEngine, publicKey);
+      const [myPlayerPda] = await derivePlayerPda(client.gameEngine, publicKey);
       const direction: "sent" | "received" = account.sender.equals(myPlayerPda)
         ? "sent"
         : "received";
@@ -95,11 +95,11 @@ export function ReinforcementDetailPanel({
   const status = account.status ?? 0;
   const counterparty = direction === "sent" ? account.destination : account.sender;
   const totalUnits =
-    (account.unitsDef1?.toNumber?.() ?? 0) +
-    (account.unitsDef2?.toNumber?.() ?? 0) +
-    (account.unitsDef3?.toNumber?.() ?? 0);
-  const arrivesAt = account.arrivesAt?.toNumber?.() ?? 0;
-  const returnAt = (account.returnStartedAt?.toNumber?.() ?? 0) + (account.returnDuration ?? 0);
+    (Number(account.unitsDef1 ?? 0n)) +
+    (Number(account.unitsDef2 ?? 0n)) +
+    (Number(account.unitsDef3 ?? 0n));
+  const arrivesAt = Number(account.arrivesAt ?? 0n);
+  const returnAt = (Number(account.returnStartedAt ?? 0n)) + (account.returnDuration ?? 0);
   const gemsPerMinute = ge?.gameplayConfig.gemCostPerMinuteSpeedup ?? 1;
   // Seconds left on whichever leg is in flight. The on-chain speedup handles
   // both the outbound (Traveling) and return (Returning) trips via the same
@@ -113,7 +113,7 @@ export function ReinforcementDetailPanel({
         : 0;
   // Hold-to-charge caps for the two tiers (T1 50%/1x, T2 25%/2x), priced the
   // same way the reinforcement processor does so the cap matches the chain.
-  const gemBalance = player?.gems?.toNumber?.() ?? 0;
+  const gemBalance = Number(player?.gems ?? 0n);
   const speedupTiers = [
     {
       tier: 1,
@@ -141,34 +141,33 @@ export function ReinforcementDetailPanel({
     },
   ];
 
-  const handleProcessArrival = async (reportPhase: (p: TxPhase) => void) =>
-    transact
+  const handleProcessArrival = async (reportPhase: (p: TxPhase) => void) => {
+    const ix = await createProcessArrivalInstruction({
+      reinforcement: key,
+      destinationPlayer: account.destination,
+    });
+    return transact
       .mutateAsync({
-        instructions: [
-          createProcessArrivalInstruction({
-            reinforcement: key,
-            destinationPlayer: account.destination,
-          }),
-        ],
+        instructions: [ix],
         invalidateKeys: [["player"]],
         successMessage: "Reinforcement arrival processed!",
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
+  };
 
   const handleRecall = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !destWallet) throw new Error("Destination wallet unresolved");
+    const ix = await createRecallReinforcementInstruction({
+      sender: publicKey,
+      gameEngine: client.gameEngine,
+      destinationOwner: destWallet,
+      senderCityId: account.senderCity ?? 0,
+      destinationCityId: account.destinationCity ?? 0,
+    });
     return transact
       .mutateAsync({
-        instructions: [
-          createRecallReinforcementInstruction({
-            sender: publicKey,
-            gameEngine: client.gameEngine,
-            destinationOwner: destWallet,
-            senderCityId: account.senderCity ?? 0,
-            destinationCityId: account.destinationCity ?? 0,
-          }),
-        ],
+        instructions: [ix],
         invalidateKeys: [["player"]],
         successMessage: "Reinforcements recalled!",
         onPhase: reportPhase,
@@ -181,17 +180,16 @@ export function ReinforcementDetailPanel({
 
   const handleRelieve = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !senderWallet) throw new Error("Sender wallet unresolved");
+    const ix = await createRelieveReinforcementInstruction({
+      destinationOwner: publicKey,
+      gameEngine: client.gameEngine,
+      senderOwner: senderWallet,
+      senderCityId: account.senderCity ?? 0,
+      destinationCityId: account.destinationCity ?? 0,
+    });
     return transact
       .mutateAsync({
-        instructions: [
-          createRelieveReinforcementInstruction({
-            destinationOwner: publicKey,
-            gameEngine: client.gameEngine,
-            senderOwner: senderWallet,
-            senderCityId: account.senderCity ?? 0,
-            destinationCityId: account.destinationCity ?? 0,
-          }),
-        ],
+        instructions: [ix],
         invalidateKeys: [["player"]],
         successMessage: "Reinforcements relieved (sent back)!",
         onPhase: reportPhase,
@@ -212,10 +210,12 @@ export function ReinforcementDetailPanel({
     // Hold-to-charge packs `count` speedups into one tx; each reads the live
     // timer, so the in-flight leg collapses step by step.
     const n = Math.max(1, Math.floor(count));
-    const instructions = Array.from({ length: n }, () =>
-      createReinforcementSpeedupInstruction(
-        { sender: publicKey, gameEngine: client.gameEngine, destinationOwner },
-        { speedupTier: tier as 1 | 2 },
+    const instructions = await Promise.all(
+      Array.from({ length: n }, () =>
+        createReinforcementSpeedupInstruction(
+          { sender: publicKey, gameEngine: client.gameEngine, destinationOwner },
+          { speedupTier: tier as 1 | 2 },
+        ),
       ),
     );
     return transact

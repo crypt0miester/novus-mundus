@@ -60,7 +60,7 @@ export function WorkshopTab() {
   const handleConvertMaterials = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createConvertMaterialsInstruction(
+    const ix = await createConvertMaterialsInstruction(
       { owner: publicKey, gameEngine: ge },
       { fromTier: convertFromTier, conversions: convertAmount },
     );
@@ -84,7 +84,7 @@ export function WorkshopTab() {
 
   const fromMat = MATERIAL_TIERS[convertFromTier];
   const toName = MATERIAL_TIERS[convertFromTier + 1]?.name ?? "Legendary";
-  const availableFrom = player?.[fromMat?.field]?.toNumber?.() ?? 0;
+  const availableFrom = Number(player?.[fromMat?.field] ?? 0n);
   const maxConversions = Math.floor(availableFrom / 100);
   const requiredWorkshop = WORKSHOP_LEVEL_REQ[convertFromTier] ?? 99;
   const workshopOk = workshopLevel >= requiredWorkshop;
@@ -97,7 +97,7 @@ export function WorkshopTab() {
           {/* Material inventory */}
           <div className="grid gap-2 grid-cols-5">
             {ALL_MATERIALS.map((m) => {
-              const val = player?.[m.field]?.toNumber?.() ?? 0;
+              const val = Number(player?.[m.field] ?? 0n);
               return (
                 <div key={m.name} className="card text-center">
                   <div className="text-[10px] text-text-muted">{m.name}</div>

@@ -1,7 +1,11 @@
 import "server-only";
 import { Connection, Keypair } from "@solana/web3.js";
 import { NovusMundusClient } from "novus-mundus-sdk";
-import bs58 from "bs58";
+import { getBase58Encoder } from "@solana/codecs-strings";
+
+// v3 base58 codec (replaces bs58). Naming is inverted vs the bs58 package:
+//   bs58.decode(b58str) -> bytes  ===  getBase58Encoder().encode(b58str)
+const base58Encoder = getBase58Encoder();
 
 /**
  * Server-only configuration + the `game_authority` signing key.
@@ -19,13 +23,17 @@ export const KINGDOM_ID = Number(process.env.KINGDOM_ID ?? process.env.NEXT_PUBL
 function decodeSecretKey(raw: string): Uint8Array {
   const s = raw.trim();
   if (s.startsWith("[")) return Uint8Array.from(JSON.parse(s) as number[]);
-  return bs58.decode(s);
+  return new Uint8Array(base58Encoder.encode(s));
 }
 
 let cachedKeypair: Keypair | null = null;
 
-/** The game_authority keypair. Throws if `GAME_AUTHORITY_SECRET_KEY` is unset. */
-export function gameAuthorityKeypair(): Keypair {
+/**
+ * The game_authority keypair. Throws if `GAME_AUTHORITY_SECRET_KEY` is unset.
+ *
+ * v3: `Keypair.fromSecretKey` is async, so this is async too.
+ */
+export async function gameAuthorityKeypair(): Promise<Keypair> {
   if (cachedKeypair) return cachedKeypair;
   const raw = process.env.GAME_AUTHORITY_SECRET_KEY;
   if (!raw) {
@@ -35,7 +43,7 @@ export function gameAuthorityKeypair(): Keypair {
         "stored in GameEngine.game_authority for this kingdom.",
     );
   }
-  cachedKeypair = Keypair.fromSecretKey(decodeSecretKey(raw));
+  cachedKeypair = await Keypair.fromSecretKey(decodeSecretKey(raw));
   return cachedKeypair;
 }
 

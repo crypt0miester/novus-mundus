@@ -84,7 +84,7 @@ export function PlayerCard({
           {showNetworth && (
             <div className="text-right">
               <div className="text-[10px] text-text-muted">Networth</div>
-              <GoldNumber value={player.networth.toNumber()} size="sm" />
+              <GoldNumber value={Number(player.networth)} size="sm" />
             </div>
           )}
           {actions && <div>{actions}</div>}
@@ -95,14 +95,14 @@ export function PlayerCard({
         <div className="mt-3 border-t border-border-default pt-3">
           <UnitGrid
             defense={[
-              player.defensiveUnit1.toNumber(),
-              player.defensiveUnit2.toNumber(),
-              player.defensiveUnit3.toNumber(),
+              Number(player.defensiveUnit1),
+              Number(player.defensiveUnit2),
+              Number(player.defensiveUnit3),
             ]}
             offense={[
-              player.operativeUnit1.toNumber(),
-              player.operativeUnit2.toNumber(),
-              player.operativeUnit3.toNumber(),
+              Number(player.operativeUnit1),
+              Number(player.operativeUnit2),
+              Number(player.operativeUnit3),
             ]}
             compact
           />

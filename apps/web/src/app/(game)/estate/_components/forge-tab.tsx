@@ -51,8 +51,8 @@ export function ForgeTab() {
     queryFn: async () => {
       if (!publicKey) return null;
       const ge = client.gameEngine;
-      const [playerPda] = derivePlayerPda(ge, publicKey);
-      const [craftPda] = deriveCraftedEquipmentPda(playerPda);
+      const [playerPda] = await derivePlayerPda(ge, publicKey);
+      const [craftPda] = await deriveCraftedEquipmentPda(playerPda);
       const info = await connection.getAccountInfo(craftPda);
       if (!info) return { pubkey: craftPda, exists: false, account: null };
       return { pubkey: craftPda, exists: true, account: info };
@@ -178,23 +178,23 @@ export function ForgeTab() {
     const mats = qualityInfo.materials;
     const checks = [];
     if (mats.common > 0) {
-      const have = player.commonMaterials?.toNumber?.() ?? 0;
+      const have = Number(player.commonMaterials ?? 0n);
       checks.push({ name: "Common", need: mats.common, have, ok: have >= mats.common });
     }
     if (mats.uncommon > 0) {
-      const have = player.uncommonMaterials?.toNumber?.() ?? 0;
+      const have = Number(player.uncommonMaterials ?? 0n);
       checks.push({ name: "Uncommon", need: mats.uncommon, have, ok: have >= mats.uncommon });
     }
     if (mats.rare > 0) {
-      const have = player.rareMaterials?.toNumber?.() ?? 0;
+      const have = Number(player.rareMaterials ?? 0n);
       checks.push({ name: "Rare", need: mats.rare, have, ok: have >= mats.rare });
     }
     if (mats.epic > 0) {
-      const have = player.epicMaterials?.toNumber?.() ?? 0;
+      const have = Number(player.epicMaterials ?? 0n);
       checks.push({ name: "Epic", need: mats.epic, have, ok: have >= mats.epic });
     }
     if (mats.legendary > 0) {
-      const have = player.legendaryMaterials?.toNumber?.() ?? 0;
+      const have = Number(player.legendaryMaterials ?? 0n);
       checks.push({ name: "Legendary", need: mats.legendary, have, ok: have >= mats.legendary });
     }
     return checks;
@@ -203,7 +203,7 @@ export function ForgeTab() {
   const handleStartCraft = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createStartCraftInstruction(
+    const ix = await createStartCraftInstruction(
       { owner: publicKey, gameEngine: ge },
       { equipmentType: selectedCraft, qualityTier: selectedQuality },
     );
@@ -220,7 +220,7 @@ export function ForgeTab() {
   const handleStrike = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createStrikeInstruction({ owner: publicKey, gameEngine: ge });
+    const ix = await createStrikeInstruction({ owner: publicKey, gameEngine: ge });
     return transact
       .mutateAsync({
         instructions: [ix],
@@ -234,7 +234,7 @@ export function ForgeTab() {
   const handleAbandonCraft = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
     const ge = client.gameEngine;
-    const ix = createAbandonCraftInstruction({
+    const ix = await createAbandonCraftInstruction({
       owner: publicKey,
       gameEngine: ge,
     });
@@ -254,7 +254,7 @@ export function ForgeTab() {
     reportPhase: (p: TxPhase) => void,
   ) => {
     if (!publicKey) throw new Error("Wallet not connected");
-    const ix = createEquipInstruction(
+    const ix = await createEquipInstruction(
       { owner: publicKey, gameEngine: client.gameEngine },
       { equipmentType, qualityTier },
     );
@@ -314,20 +314,20 @@ export function ForgeTab() {
                   <div className="text-xs text-text-muted">Fragments</div>
                   <span className="inline-flex items-center gap-1">
                     <GameIcon id="resource-fragments" size={14} />
-                    <GoldNumber value={player.fragments?.toNumber?.() ?? 0} />
+                    <GoldNumber value={Number(player.fragments ?? 0n)} />
                   </span>
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Common</div>
-                  <GoldNumber value={player.commonMaterials?.toNumber?.() ?? 0} glow={false} />
+                  <GoldNumber value={Number(player.commonMaterials ?? 0n)} glow={false} />
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Uncommon</div>
-                  <GoldNumber value={player.uncommonMaterials?.toNumber?.() ?? 0} glow={false} />
+                  <GoldNumber value={Number(player.uncommonMaterials ?? 0n)} glow={false} />
                 </div>
                 <div>
                   <div className="text-xs text-text-muted">Rare</div>
-                  <GoldNumber value={player.rareMaterials?.toNumber?.() ?? 0} glow={false} />
+                  <GoldNumber value={Number(player.rareMaterials ?? 0n)} glow={false} />
                 </div>
               </div>
             </div>

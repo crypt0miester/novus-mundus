@@ -2,7 +2,6 @@
  * Phase 10 — Starter Events
  */
 
-import BN from 'bn.js';
 import { type CLIContext } from '../context';
 import { createOrSkip, newStats, accountExists, type PhaseStats } from '../helpers';
 import {
@@ -22,7 +21,7 @@ export async function initEvents(ctx: CLIContext): Promise<PhaseStats> {
   const now = Math.floor(Date.now() / 1000);
 
   for (const event of EVENTS) {
-    const [eventPda] = deriveEventPda(ctx.gameEngine, event.eventId);
+    const [eventPda] = await deriveEventPda(ctx.gameEngine, event.eventId);
 
     const startTime = now;
     const endTime = now + event.durationDays * 86400;
@@ -39,14 +38,14 @@ export async function initEvents(ctx: CLIContext): Promise<PhaseStats> {
         },
         {
           name: event.name,
-          startTime: new BN(startTime),
-          endTime: new BN(endTime),
+          startTime: BigInt(startTime),
+          endTime: BigInt(endTime),
           eventType: event.eventType,
           minLevel: event.minLevel,
-          minReputation: new BN(event.minReputation),
+          minReputation: BigInt(event.minReputation),
           requiredSubscriptionTier: event.requiredSubscriptionTier,
           prizeType: event.prizeType,
-          prizeAmount: new BN(event.prizeAmount),
+          prizeAmount: BigInt(event.prizeAmount),
           autoActivate: event.autoActivate,
         }
       ),
@@ -61,7 +60,7 @@ export async function statusEvents(ctx: CLIContext): Promise<string> {
   let count = 0;
   let consecutiveMisses = 0;
   for (let id = 0; consecutiveMisses < 5; id++) {
-    const [pda] = deriveEventPda(ctx.gameEngine, id);
+    const [pda] = await deriveEventPda(ctx.gameEngine, id);
     if (await accountExists(ctx.connection, pda)) {
       count++;
       consecutiveMisses = 0;
@@ -82,7 +81,7 @@ export async function detailEvents(ctx: CLIContext): Promise<string> {
   const rows: string[][] = [];
   let consecutiveMisses = 0;
   for (let id = 0; consecutiveMisses < 5; id++) {
-    const [pda] = deriveEventPda(ctx.gameEngine, id);
+    const [pda] = await deriveEventPda(ctx.gameEngine, id);
     const info = await ctx.connection.getAccountInfo(pda);
 
     if (!info) {

@@ -38,45 +38,54 @@ type SpeedupTier = 1 | 2;
 // ── Location PDA helpers ──
 
 /** Location PDA for the player's current chain position. */
-export function playerLocationPda(gameEngine: PublicKey, player: PlayerCore): PublicKey {
-  return deriveLocationPda(
-    gameEngine,
-    player.currentCity,
-    toGrid(player.currentLat),
-    toGrid(player.currentLong),
+export async function playerLocationPda(
+  gameEngine: PublicKey,
+  player: PlayerCore,
+): Promise<PublicKey> {
+  return (
+    await deriveLocationPda(
+      gameEngine,
+      player.currentCity,
+      toGrid(player.currentLat),
+      toGrid(player.currentLong),
+    )
   )[0];
 }
 
 /** Location PDA for a specific grid cell in a city (coords already in grid units). */
-export function cellLocationPda(
+export async function cellLocationPda(
   gameEngine: PublicKey,
   cityId: number,
   gridLat: number,
   gridLong: number,
-): PublicKey {
-  return deriveLocationPda(gameEngine, cityId, gridLat, gridLong)[0];
+): Promise<PublicKey> {
+  return (await deriveLocationPda(gameEngine, cityId, gridLat, gridLong))[0];
 }
 
 /** Location PDA for a city's centre cell (from the CityAccount lat/long). */
-export function cityCentreLocationPda(
+export async function cityCentreLocationPda(
   gameEngine: PublicKey,
   cityId: number,
   city: CityCentre,
-): PublicKey {
-  return deriveLocationPda(gameEngine, cityId, toGrid(city.latitude), toGrid(city.longitude))[0];
+): Promise<PublicKey> {
+  return (
+    await deriveLocationPda(gameEngine, cityId, toGrid(city.latitude), toGrid(city.longitude))
+  )[0];
 }
 
 /** Location PDA for the player's in-flight destination (traveling_to_lat/long). */
-function travelingToLocationPda(
+async function travelingToLocationPda(
   gameEngine: PublicKey,
   cityId: number,
   player: PlayerCore,
-): PublicKey {
-  return deriveLocationPda(
-    gameEngine,
-    cityId,
-    toGrid(player.travelingToLat),
-    toGrid(player.travelingToLong),
+): Promise<PublicKey> {
+  return (
+    await deriveLocationPda(
+      gameEngine,
+      cityId,
+      toGrid(player.travelingToLat),
+      toGrid(player.travelingToLong),
+    )
   )[0];
 }
 
@@ -93,7 +102,9 @@ export interface IntercityStartArgs {
   destGridLong: number;
 }
 
-export function buildIntercityStartIx(a: IntercityStartArgs): TransactionInstruction {
+export async function buildIntercityStartIx(
+  a: IntercityStartArgs,
+): Promise<TransactionInstruction> {
   return createIntercityStartInstruction({
     owner: a.owner,
     gameEngine: a.gameEngine,
@@ -101,8 +112,8 @@ export function buildIntercityStartIx(a: IntercityStartArgs): TransactionInstruc
     destinationCityId: a.destinationCityId,
     destGridLat: a.destGridLat,
     destGridLong: a.destGridLong,
-    originLocation: playerLocationPda(a.gameEngine, a.player),
-    destinationLocation: cellLocationPda(
+    originLocation: await playerLocationPda(a.gameEngine, a.player),
+    destinationLocation: await cellLocationPda(
       a.gameEngine,
       a.destinationCityId,
       a.destGridLat,
@@ -131,27 +142,24 @@ export interface IntercityCompleteArgs {
  * traveling_to_lat/long would address a non-existent (System-owned) PDA and the
  * ix would fail.
  */
-export function buildIntercityCompleteIx(a: IntercityCompleteArgs): {
+export async function buildIntercityCompleteIx(a: IntercityCompleteArgs): Promise<{
   ix: TransactionInstruction;
   destinationCityId: number;
   destLat: number;
   destLong: number;
-} {
+}> {
   const returningHome = a.player.destinationCity === a.player.currentCity;
   if (returningHome && !a.homeCity) throw new Error("Origin city not loaded");
   const destinationCityId = a.player.destinationCity;
   const destLat = returningHome ? a.homeCity!.latitude : a.player.travelingToLat;
   const destLong = returningHome ? a.homeCity!.longitude : a.player.travelingToLong;
-  const ix = createIntercityCompleteInstruction({
+  const ix = await createIntercityCompleteInstruction({
     owner: a.owner,
     gameEngine: a.gameEngine,
     originCityId: a.player.currentCity,
     destinationCityId,
-    destinationLocation: deriveLocationPda(
-      a.gameEngine,
-      destinationCityId,
-      toGrid(destLat),
-      toGrid(destLong),
+    destinationLocation: (
+      await deriveLocationPda(a.gameEngine, destinationCityId, toGrid(destLat), toGrid(destLong))
     )[0],
   });
   return { ix, destinationCityId, destLat, destLong };
@@ -165,14 +173,20 @@ export interface IntercityCancelArgs {
   originCity: CityCentre;
 }
 
-export function buildIntercityCancelIx(a: IntercityCancelArgs): TransactionInstruction {
+export async function buildIntercityCancelIx(
+  a: IntercityCancelArgs,
+): Promise<TransactionInstruction> {
   return createIntercityCancelInstruction({
     owner: a.owner,
     gameEngine: a.gameEngine,
     originCityId: a.player.currentCity,
     destinationCityId: a.player.destinationCity,
-    originLocation: cityCentreLocationPda(a.gameEngine, a.player.currentCity, a.originCity),
-    destinationLocation: travelingToLocationPda(a.gameEngine, a.player.destinationCity, a.player),
+    originLocation: await cityCentreLocationPda(a.gameEngine, a.player.currentCity, a.originCity),
+    destinationLocation: await travelingToLocationPda(
+      a.gameEngine,
+      a.player.destinationCity,
+      a.player,
+    ),
     // intercity_start stamps the destination cell's location_creator with the
     // traveling player's wallet and intercity_cancel refunds its rent there —
     // any other account trips GameError::InvalidParameter (6007).
@@ -189,14 +203,16 @@ export interface IntercityTeleportArgs {
   destGridLong: number;
 }
 
-export function buildIntercityTeleportIx(a: IntercityTeleportArgs): TransactionInstruction {
+export async function buildIntercityTeleportIx(
+  a: IntercityTeleportArgs,
+): Promise<TransactionInstruction> {
   return createIntercityTeleportInstruction({
     owner: a.owner,
     gameEngine: a.gameEngine,
     originCityId: a.player.currentCity,
     destinationCityId: a.destinationCityId,
-    originLocation: playerLocationPda(a.gameEngine, a.player),
-    destinationLocation: cellLocationPda(
+    originLocation: await playerLocationPda(a.gameEngine, a.player),
+    destinationLocation: await cellLocationPda(
       a.gameEngine,
       a.destinationCityId,
       a.destGridLat,
@@ -213,12 +229,14 @@ export interface TravelSpeedupArgs {
   count?: number;
 }
 
-export function buildTravelSpeedupIxs(a: TravelSpeedupArgs): TransactionInstruction[] {
+export function buildTravelSpeedupIxs(a: TravelSpeedupArgs): Promise<TransactionInstruction[]> {
   const n = Math.max(1, Math.floor(a.count ?? 1));
-  return Array.from({ length: n }, () =>
-    createTravelSpeedupInstruction(
-      { owner: a.owner, gameEngine: a.gameEngine },
-      { speedupTier: a.tier },
+  return Promise.all(
+    Array.from({ length: n }, () =>
+      createTravelSpeedupInstruction(
+        { owner: a.owner, gameEngine: a.gameEngine },
+        { speedupTier: a.tier },
+      ),
     ),
   );
 }
@@ -234,15 +252,22 @@ export interface IntracityStartArgs {
   targetGridLong: number;
 }
 
-export function buildIntracityStartIx(a: IntracityStartArgs): TransactionInstruction {
+export async function buildIntracityStartIx(
+  a: IntracityStartArgs,
+): Promise<TransactionInstruction> {
   const cityId = a.player.currentCity;
   return createIntracityStartInstruction(
     {
       owner: a.owner,
       gameEngine: a.gameEngine,
       cityId,
-      originLocation: playerLocationPda(a.gameEngine, a.player),
-      destinationLocation: cellLocationPda(a.gameEngine, cityId, a.targetGridLat, a.targetGridLong),
+      originLocation: await playerLocationPda(a.gameEngine, a.player),
+      destinationLocation: await cellLocationPda(
+        a.gameEngine,
+        cityId,
+        a.targetGridLat,
+        a.targetGridLong,
+      ),
       originCreatorRefund: a.gameAuthority ?? a.owner,
     },
     { destinationLat: a.targetGridLat / 10000, destinationLong: a.targetGridLong / 10000 },
@@ -256,23 +281,20 @@ export interface IntracityCompleteArgs {
 }
 
 /** Returns the complete instruction plus the destination for the optimistic store update. */
-export function buildIntracityCompleteIx(a: IntracityCompleteArgs): {
+export async function buildIntracityCompleteIx(a: IntracityCompleteArgs): Promise<{
   ix: TransactionInstruction;
   destLat: number;
   destLong: number;
-} {
+}> {
   const cityId = a.player.currentCity;
   const destLat = a.player.travelingToLat;
   const destLong = a.player.travelingToLong;
-  const ix = createIntracityCompleteInstruction({
+  const ix = await createIntracityCompleteInstruction({
     owner: a.owner,
     gameEngine: a.gameEngine,
     cityId,
-    destinationLocation: deriveLocationPda(
-      a.gameEngine,
-      cityId,
-      toGrid(destLat),
-      toGrid(destLong),
+    destinationLocation: (
+      await deriveLocationPda(a.gameEngine, cityId, toGrid(destLat), toGrid(destLong))
     )[0],
   });
   return { ix, destLat, destLong };
@@ -284,14 +306,16 @@ export interface IntracityCancelArgs {
   player: PlayerCore;
 }
 
-export function buildIntracityCancelIx(a: IntracityCancelArgs): TransactionInstruction {
+export async function buildIntracityCancelIx(
+  a: IntracityCancelArgs,
+): Promise<TransactionInstruction> {
   const cityId = a.player.currentCity;
   return createIntracityCancelInstruction({
     owner: a.owner,
     gameEngine: a.gameEngine,
     cityId,
-    originLocation: playerLocationPda(a.gameEngine, a.player),
-    destinationLocation: travelingToLocationPda(a.gameEngine, cityId, a.player),
+    originLocation: await playerLocationPda(a.gameEngine, a.player),
+    destinationLocation: await travelingToLocationPda(a.gameEngine, cityId, a.player),
     // intracity_start sets dest_location.location_creator = owner, so the refund
     // of the freed destination cell must go to the player wallet.
     destinationCreatorRefund: a.owner,
@@ -309,14 +333,18 @@ export interface AttackEncounterArgs {
   encounter: Pick<EncounterAccount, "cityId" | "locationLat" | "locationLong" | "id">;
 }
 
-export function buildAttackEncounterIx(a: AttackEncounterArgs): TransactionInstruction {
-  const [playerPda] = derivePlayerPda(a.gameEngine, a.owner);
-  const [loot] = deriveLootPda(playerPda, a.player.lootCounter.toNumber());
-  const encounterLocation = deriveLocationPda(
-    a.gameEngine,
-    a.encounter.cityId,
-    toGrid(a.encounter.locationLat),
-    toGrid(a.encounter.locationLong),
+export async function buildAttackEncounterIx(
+  a: AttackEncounterArgs,
+): Promise<TransactionInstruction> {
+  const [playerPda] = await derivePlayerPda(a.gameEngine, a.owner);
+  const [loot] = await deriveLootPda(playerPda, a.player.lootCounter);
+  const encounterLocation = (
+    await deriveLocationPda(
+      a.gameEngine,
+      a.encounter.cityId,
+      toGrid(a.encounter.locationLat),
+      toGrid(a.encounter.locationLong),
+    )
   )[0];
   return createAttackEncounterInstruction(
     {
@@ -327,7 +355,7 @@ export function buildAttackEncounterIx(a: AttackEncounterArgs): TransactionInstr
       encounterLocation,
       locationCreatorRefund: a.gameAuthority ?? a.owner,
     },
-    { encounterId: a.encounter.id.toNumber() },
+    { encounterId: a.encounter.id },
   );
 }
 
@@ -340,7 +368,7 @@ export interface AttackPlayerArgs {
   driveBy: boolean;
 }
 
-export function buildAttackPlayerIx(a: AttackPlayerArgs): TransactionInstruction {
+export async function buildAttackPlayerIx(a: AttackPlayerArgs): Promise<TransactionInstruction> {
   return createAttackPlayerInstruction(
     {
       attacker: a.attacker,

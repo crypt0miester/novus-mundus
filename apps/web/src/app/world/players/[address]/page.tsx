@@ -112,7 +112,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
     const teamPdaStr = teamPda.toBase58();
     const match = teams.find((t) => t.pubkey.toBase58() === teamPdaStr);
     if (!match) return null;
-    return { id: match.account.id.toNumber(), name: match.account.name };
+    return { id: Number(match.account.id), name: match.account.name };
   }, [result, teams]);
 
   const copyAddress = () => {
@@ -197,19 +197,19 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
   const tierIndex = Math.min(effectiveTier, 3);
   const tierAccent = TIER_ACCENT[tierIndex] ?? TIER_ACCENT[0];
   const cityName = cityMap.get(player.currentCity);
-  const isProtected = player.newPlayerProtectionUntil.toNumber() > Math.floor(Date.now() / 1000);
-  const createdDate = new Date(player.createdAt.toNumber() * 1000).toLocaleDateString();
+  const isProtected = Number(player.newPlayerProtectionUntil) > Math.floor(Date.now() / 1000);
+  const createdDate = new Date(Number(player.createdAt) * 1000).toLocaleDateString();
 
   // Combat power = defensive units only (operatives don't fight on-chain)
   const totalPower = calculateDefensivePower(
-    player.defensiveUnit1.toNumber(),
-    player.defensiveUnit2.toNumber(),
-    player.defensiveUnit3.toNumber(),
+    Number(player.defensiveUnit1),
+    Number(player.defensiveUnit2),
+    Number(player.defensiveUnit3),
   );
 
-  const xpProgress = levelProgressPercent(player.level, player.currentXp.toNumber());
+  const xpProgress = levelProgressPercent(player.level, Number(player.currentXp));
   const xpToNext = xpRequiredForLevel(player.level + 1);
-  const xpCurrent = player.currentXp.toNumber();
+  const xpCurrent = Number(player.currentXp);
 
   const isSelf = citizen.isCitizen && citizen.player && citizen.player.owner.toBase58() === address;
 
@@ -358,9 +358,9 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
               screenshot reads as one composed image. */}
           <div className="relative mt-5 grid grid-cols-3 gap-2 border-t border-border-default pt-4 sm:gap-4 sm:pt-5">
             {[
-              { label: "Networth", value: player.networth.toNumber() },
+              { label: "Networth", value: Number(player.networth) },
               { label: "Combat Power", value: totalPower },
-              { label: "Reputation", value: player.reputation.toNumber() },
+              { label: "Reputation", value: Number(player.reputation) },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
@@ -381,26 +381,26 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
           </h3>
           <UnitGrid
             defense={[
-              player.defensiveUnit1.toNumber(),
-              player.defensiveUnit2.toNumber(),
-              player.defensiveUnit3.toNumber(),
+              Number(player.defensiveUnit1),
+              Number(player.defensiveUnit2),
+              Number(player.defensiveUnit3),
             ]}
             offense={[
-              player.operativeUnit1.toNumber(),
-              player.operativeUnit2.toNumber(),
-              player.operativeUnit3.toNumber(),
+              Number(player.operativeUnit1),
+              Number(player.operativeUnit2),
+              Number(player.operativeUnit3),
             ]}
           />
           {/* Equipment + provisions. Produce + drays sit with the army stats
               because they're what gets the army to the fight and keep it fed. */}
           <div className="mt-4 grid grid-cols-3 gap-3 sm:grid-cols-6">
             {[
-              { label: "Melee", value: player.meleeWeapons.toNumber() },
-              { label: "Ranged", value: player.rangedWeapons.toNumber() },
-              { label: "Siege", value: player.siegeWeapons.toNumber() },
-              { label: "Armor", value: player.armorPieces.toNumber() },
-              { label: "Produce", value: player.produce.toNumber() },
-              { label: "Drays", value: player.vehicles.toNumber() },
+              { label: "Melee", value: Number(player.meleeWeapons) },
+              { label: "Ranged", value: Number(player.rangedWeapons) },
+              { label: "Siege", value: Number(player.siegeWeapons) },
+              { label: "Armor", value: Number(player.armorPieces) },
+              { label: "Produce", value: Number(player.produce) },
+              { label: "Drays", value: Number(player.vehicles) },
             ].map((w) => (
               <div key={w.label} className="text-center">
                 <div className="text-[10px] text-text-muted">{w.label}</div>
@@ -417,10 +417,10 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
           </h3>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
             {[
-              { label: "Total Attacks", value: player.totalAttacks.toNumber() },
-              { label: "Total Defenses", value: player.totalDefenses.toNumber() },
-              { label: "Encounter Kills", value: player.totalEncounterAttacks.toNumber() },
-              { label: "Attack Power", value: player.totalAttackPower.toNumber() },
+              { label: "Total Attacks", value: Number(player.totalAttacks) },
+              { label: "Total Defenses", value: Number(player.totalDefenses) },
+              { label: "Encounter Kills", value: Number(player.totalEncounterAttacks) },
+              { label: "Attack Power", value: Number(player.totalAttackPower) },
             ].map((s) => (
               <div key={s.label}>
                 <div className="text-xs text-text-muted">{s.label}</div>

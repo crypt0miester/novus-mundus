@@ -80,17 +80,14 @@ export function useKingdomEvents({ filter }: { filter: EventStatusFilter }) {
     if (!publicKey) return;
     if (eventsMap.size === 0) return;
 
-    /* Convert to bigint at the boundary — the SDK ships its own bn.js types,
-     * and the web app's root install is a different version, so passing BN
-     * across the module boundary trips TS2345. bigint sidesteps the duplicate
-     * type identity entirely. */
+    // The SDK exposes event ids as bigint; collect them for the bulk fetch.
     const pendingEventIds: bigint[] = [];
     const pendingEventKeys: string[] = [];
     for (const [key, entry] of eventsMap) {
       if (checkedParticipationFor.current.has(key)) continue;
       checkedParticipationFor.current.add(key);
       pendingEventKeys.push(key);
-      pendingEventIds.push(BigInt(entry.account.id.toString()));
+      pendingEventIds.push(entry.account.id);
     }
     if (pendingEventIds.length === 0) return;
 
@@ -128,8 +125,8 @@ export function useKingdomEvents({ filter }: { filter: EventStatusFilter }) {
     }
     return out.sort((a, b) =>
       filter === "active"
-        ? a.account.endTime.toNumber() - b.account.endTime.toNumber()
-        : b.account.endTime.toNumber() - a.account.endTime.toNumber(),
+        ? Number(a.account.endTime) - Number(b.account.endTime)
+        : Number(b.account.endTime) - Number(a.account.endTime),
     );
   }, [eventsMap, filter]);
 

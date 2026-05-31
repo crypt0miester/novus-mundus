@@ -28,7 +28,7 @@ export async function crankDungeons(ctx: CLIContext): Promise<PhaseStats> {
   log.info(`  Checking ${DUNGEONS.length} dungeon templates...`);
 
   for (const dungeon of DUNGEONS) {
-    const [leaderboardPda] = deriveDungeonLeaderboardPda(
+    const [leaderboardPda] = await deriveDungeonLeaderboardPda(
       ctx.gameEngine,
       dungeon.templateId,
       weekNumber

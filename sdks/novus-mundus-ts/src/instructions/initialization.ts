@@ -14,6 +14,7 @@ import {
   SystemProgram,
   SYSVAR_RENT_PUBKEY,
 } from '@solana/web3.js';
+import { getProgramDerivedAddress, type Address } from '@solana/addresses';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 
 /** BPFLoaderUpgradeab1e11111111111111111111111 — owner of program-data PDAs. */
@@ -25,11 +26,12 @@ export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
  * Derive the program-data PDA for this program.
  * Layout: `find_program_address([PROGRAM_ID], BPF_LOADER_UPGRADEABLE)`.
  */
-export function deriveProgramDataPda(): [PublicKey, number] {
-  return PublicKey.findProgramAddressSync(
-    [PROGRAM_ID.toBuffer()],
-    BPF_LOADER_UPGRADEABLE_PROGRAM_ID,
-  );
+export async function deriveProgramDataPda(): Promise<[PublicKey, number]> {
+  const [addr, bump] = await getProgramDerivedAddress({
+    programAddress: BPF_LOADER_UPGRADEABLE_PROGRAM_ID.toBase58() as Address,
+    seeds: [PROGRAM_ID.toBytes()],
+  });
+  return [new PublicKey(addr), bump];
 }
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
@@ -40,7 +42,7 @@ import {
   deriveCityPda,
   deriveLocationPda,
 } from '../pda';
-import { getAssociatedTokenAddressSyncForPda } from '../utils/token';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Initialize Game Engine
 
@@ -82,13 +84,13 @@ export interface InitGameEngineParams {
  * - kingdom_start_time: i64 (8 bytes)
  * - registration_closes_at: i64 (8 bytes)
  */
-export function createInitGameEngineInstruction(
+export async function createInitGameEngineInstruction(
   accounts: InitGameEngineAccounts,
   params?: InitGameEngineParams
-): TransactionInstruction {
-  const [gameEngine] = deriveGameEnginePda(accounts.kingdomId);
-  const [noviMint] = deriveNoviMintPda();
-  const [programData] = deriveProgramDataPda();
+): Promise<TransactionInstruction> {
+  const [gameEngine] = await deriveGameEnginePda(accounts.kingdomId);
+  const [noviMint] = await deriveNoviMintPda();
+  const [programData] = await deriveProgramDataPda();
 
   // Rust account order (8):
   // 0. [writable] game_engine: GameEngine PDA
@@ -125,7 +127,7 @@ export function createInitGameEngineInstruction(
 
   // kingdom_name: [u8; 32] zero-padded
   const kingdomName = params?.kingdomName || `Kingdom ${accounts.kingdomId}`;
-  const nameBytes = Buffer.from(kingdomName, 'utf8').subarray(0, 32);
+  const nameBytes = new TextEncoder().encode(kingdomName).subarray(0, 32);
   writer.writeBytes(nameBytes);
   writer.writeZeros(32 - nameBytes.length);
 
@@ -178,15 +180,15 @@ export interface InitPlayerAccounts {
  * - 20 Produce, 1000 Cash
  * - 24-hour New Player Protection
  */
-export function createInitPlayerInstruction(
+export async function createInitPlayerInstruction(
   accounts: InitPlayerAccounts
-): TransactionInstruction {
-  const [player] = derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
-  const [startingCity] = deriveCityPda(accounts.gameEngine, accounts.startingCityId);
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
+  const [startingCity] = await deriveCityPda(accounts.gameEngine, accounts.startingCityId);
 
   // Player's NOVI token ATA - owned by PlayerAccount PDA
-  const playerTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, player);
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Quantize city coordinates to grid (must match Rust: round(coord * 10000.0) as i32)
   const GRID_PRECISION = 10000.0;
@@ -194,10 +196,10 @@ export function createInitPlayerInstruction(
   const spawnGridLong = Math.round(accounts.cityLongitude * GRID_PRECISION);
 
   // Spawn location PDA derived from quantized spawn coordinates
-  const [spawnLocation] = deriveLocationPda(accounts.gameEngine, accounts.startingCityId, spawnGridLat, spawnGridLong);
+  const [spawnLocation] = await deriveLocationPda(accounts.gameEngine, accounts.startingCityId, spawnGridLat, spawnGridLong);
 
   // User account PDA - must be created before player init
-  const [user] = deriveUserPda(accounts.owner);
+  const [user] = await deriveUserPda(accounts.owner);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
@@ -255,14 +257,14 @@ export interface InitUserAccounts {
  * 6. [] token_program
  * 7. [] associated_token_program
  */
-export function createInitUserInstruction(
+export async function createInitUserInstruction(
   accounts: InitUserAccounts
-): TransactionInstruction {
-  const [user] = deriveUserPda(accounts.owner);
-  const [noviMint] = deriveNoviMintPda();
+): Promise<TransactionInstruction> {
+  const [user] = await deriveUserPda(accounts.owner);
+  const [noviMint] = await deriveNoviMintPda();
 
   // User's NOVI token ATA - owned by UserAccount PDA
-  const userTokenAccount = getAssociatedTokenAddressSyncForPda(noviMint, user);
+  const userTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, user);
 
   const keys = [
     { pubkey: user, isSigner: false, isWritable: true },
@@ -353,11 +355,11 @@ export interface InitCityParams {
  * - [62]     coast: u8 (0=none, 1..=8 = N/NE/E/SE/S/SW/W/NW)
  * - [63]     landmass_seed: u8
  */
-export function createInitCityInstruction(
+export async function createInitCityInstruction(
   accounts: InitCityAccounts,
   params: InitCityParams
-): TransactionInstruction {
-  const [city] = deriveCityPda(accounts.gameEngine, params.cityId);
+): Promise<TransactionInstruction> {
+  const [city] = await deriveCityPda(accounts.gameEngine, params.cityId);
 
   // Rust account order: dao_authority, city, game_engine, system_program
   const keys = [
@@ -374,7 +376,7 @@ export function createInitCityInstruction(
   writer.writeU16(params.cityId);
 
   // [2..34] name: [u8; 32] - fixed size, zero-padded
-  const nameBytes = Buffer.from(params.name, 'utf8').subarray(0, 32);
+  const nameBytes = new TextEncoder().encode(params.name).subarray(0, 32);
   writer.writeBytes(nameBytes);
   writer.writeZeros(32 - nameBytes.length);
 
@@ -545,7 +547,7 @@ export function createBatchCitiesInstruction(
   // Buffer size: header (3) + per city (1 + name_len + 30).
   let bufSize = 3;
   for (const city of params.cities) {
-    const nameBytes = Buffer.from(city.name, 'utf-8');
+    const nameBytes = new TextEncoder().encode(city.name);
     bufSize += 1 + nameBytes.length + 30;
   }
 
@@ -554,7 +556,7 @@ export function createBatchCitiesInstruction(
   writer.writeU8(count);
 
   for (const city of params.cities) {
-    const nameBytes = Buffer.from(city.name, 'utf-8');
+    const nameBytes = new TextEncoder().encode(city.name);
     if (nameBytes.length > 32) {
       throw new Error(`City name "${city.name}" exceeds 32 bytes`);
     }
@@ -661,7 +663,7 @@ export function createUpdateGameConfigInstruction(
   // IMPORTANT: buffers must be in bit order (caps=0, arena=7, expedition=8, ...)
   // because the on-chain code reads them sequentially by bit position.
   let updateFlags = 0;
-  const configBuffers: Buffer[] = [];
+  const configBuffers: Uint8Array[] = [];
 
   if (params.capsConfig) {
     updateFlags |= UPDATE_FLAGS.CAPS;
@@ -697,9 +699,17 @@ export function createUpdateGameConfigInstruction(
   }
 
   // Instruction data: update_flags (u16) + concatenated config bytes
-  const flagsBuf = Buffer.alloc(2);
-  flagsBuf.writeUInt16LE(updateFlags);
-  const instructionPayload = Buffer.concat([flagsBuf, ...configBuffers]);
+  const flagsBuf = new Uint8Array(2);
+  new DataView(flagsBuf.buffer).setUint16(0, updateFlags, true);
+  const totalLen = flagsBuf.length + configBuffers.reduce((n, b) => n + b.length, 0);
+  const instructionPayload = new Uint8Array(totalLen);
+  let payloadOffset = 0;
+  instructionPayload.set(flagsBuf, payloadOffset);
+  payloadOffset += flagsBuf.length;
+  for (const b of configBuffers) {
+    instructionPayload.set(b, payloadOffset);
+    payloadOffset += b.length;
+  }
 
   const data = createInstructionData(DISCRIMINATORS.UPDATE_GAME_CONFIG, instructionPayload);
 

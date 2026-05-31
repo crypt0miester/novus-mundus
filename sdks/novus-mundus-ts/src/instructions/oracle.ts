@@ -39,10 +39,10 @@ export interface InitOracleQuoteAccounts {
  * One quote account per Switchboard queue, derived `["oracle_quote", queue]`.
  * After creation, `crankOracleQuote` keeps it fresh.
  */
-export function createInitOracleQuoteInstruction(
+export async function createInitOracleQuoteInstruction(
   accounts: InitOracleQuoteAccounts
-): TransactionInstruction {
-  const [oracleQuote] = deriveOracleQuotePda(accounts.switchboardQueue);
+): Promise<TransactionInstruction> {
+  const [oracleQuote] = await deriveOracleQuotePda(accounts.switchboardQueue);
 
   const keys = [
     { pubkey: accounts.authority, isSigner: true, isWritable: true },
@@ -79,12 +79,12 @@ export interface CrankOracleQuoteAccounts {
  *
  * @param ed25519IxIndex index of the ed25519 verify instruction (default 0).
  */
-export function createCrankOracleQuoteInstruction(
+export async function createCrankOracleQuoteInstruction(
   accounts: CrankOracleQuoteAccounts,
   ed25519IxIndex = 0
-): TransactionInstruction {
-  const [shopConfig] = deriveShopConfigPda(accounts.gameEngine);
-  const [oracleQuote] = deriveOracleQuotePda(accounts.switchboardQueue);
+): Promise<TransactionInstruction> {
+  const [shopConfig] = await deriveShopConfigPda(accounts.gameEngine);
+  const [oracleQuote] = await deriveOracleQuotePda(accounts.switchboardQueue);
 
   const keys = [
     { pubkey: accounts.cranker, isSigner: true, isWritable: false },
@@ -100,7 +100,7 @@ export function createCrankOracleQuoteInstruction(
     programId: PROGRAM_ID,
     data: createInstructionData(
       DISCRIMINATORS.ORACLE_CRANK_QUOTE,
-      Buffer.from([ed25519IxIndex & 0xff])
+      new Uint8Array([ed25519IxIndex & 0xff])
     ),
   });
 }
