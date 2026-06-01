@@ -497,6 +497,17 @@ export function startGameSubscriptions(client: NovusMundusClient, wallet: Public
     store().upsertHeroTemplate(pubkey, account);
   });
 
+  // Eviction hook for closed accounts. programSubscribe never reports a close
+  // (the closed account leaves program ownership), so this fires only if a
+  // per-account close watch is registered for the pubkey. None are wired right
+  // now: global maps (locations, encounters, team members) are reconciled by
+  // context instead (reconcileCityLocations, per-team fetch). To re-enable
+  // real-time eviction for a short-lived account, call manager.watchForClose(
+  // pubkey) in its handler above — the SDK manager supports it.
+  manager.onClose((pubkey) => {
+    store().removeClosedAccount(pubkey.toBase58());
+  });
+
   manager.start();
 
   // The async init can be cancelled (cleanup called before it finished); if so,

@@ -1,21 +1,31 @@
 /**
- * Castle Data — one per city.
+ * Castle Data — a full per-city tier ladder.
  *
- * cityIds are matched to the canonical city list in `./cities.ts` by
- * geographic coordinate (anchor lat/long → city lat/long). The chain's
- * `castle_fits_in_city_grid` validator enforces that
- * `|anchor - city_centre| <= plot_half_extent` along both axes, so any
- * mismatch surfaces as `OutOfRange` (error 6411) at init time.
+ * Castles are NOT one-per-city. A CastleAccount PDA is keyed by
+ * [CASTLE_SEED, game_engine, city_id, castle_id] (see programs/novus_mundus/
+ * src/state/castle.rs), so a city can host many castles, each its own grade.
+ * We seed the whole ladder for every city (24 cities x 5 tiers = 120 castles):
+ * castle_id == tier (0=Outpost .. 4=Citadel), so a city's five castles occupy
+ * castle_ids 0..4 and their PDAs never collide.
  *
- * Three castles carry historic names (`La Plata Keep`, `Inca Citadel`,
- * `Nairobi Outpost`) for cities the catalogue doesn't include — those
- * are re-anchored to the nearest available city (Rio / Los Angeles /
- * Johannesburg respectively) so the chain accepts them; the lore name
- * stays for flavour.
+ * Placement. Each castle carries a hint (grid lat/lon). The CLI castle phase's
+ * `resolveCastleAnchor` spirals out from the hint to the nearest fully passable,
+ * attack-surroundable NxN footprint, so a hint is a starting guess, not a hard
+ * coordinate. The five hints are spread around the city centre (offsets ~900
+ * grid units, roughly 10 km; footprints are <= 4 cells) so footprints never
+ * overlap each other or the spawn centre. The Citadel keeps the city's curated
+ * landmark name + hint where one exists (see CITADELS); the four lower tiers are
+ * auto-named "<City> <Tier>" and offset from centre. Water-heavy cities
+ * (Shirevane / Lyssandor) may surface a "water-locked" init warning for some
+ * tiers; re-tune that tier's hint if so.
  *
- * City 15 (Lyssandor / Singapore) has no castle in the current list —
- * intentional; add one here when the cosmetics arc fills the gap.
+ * The chain's `castle_fits_in_city_grid` validator enforces that the whole
+ * footprint stays inside the city plot, so a hint that lands outside surfaces as
+ * `OutOfRange` (error 6411) at init. Gates (minLevel / networth / troops) are
+ * derived from tier — see GATES.
  */
+
+import { CITIES } from './cities';
 
 export interface CastleData {
   castleId: number;
@@ -25,22 +35,22 @@ export interface CastleData {
   minLevel: number;
   minNetworthMillions: number;
   minTroopsThousands: number;
-  /** Anchor latitude in grid units (×10,000 = LocationAccount precision). */
+  /** Anchor latitude in grid units (x10,000 = LocationAccount precision). */
   latitude: number;
-  /** Anchor longitude in grid units (×10,000 = LocationAccount precision). */
+  /** Anchor longitude in grid units (x10,000 = LocationAccount precision). */
   longitude: number;
   /**
-   * Castle footprint size N for an N×N plot. Defaults to 2 (≈22 m × 22 m
-   * keep). Citadels can be 3 or 4; Outposts stay at 1 or 2.
+   * Castle footprint size N for an N x N plot. Defaults via
+   * `defaultFootprintForTier`. Citadels can be 3 or 4; Outposts stay at 1 or 2.
    */
   footprintSize?: number;
 }
 
 /**
- * Default footprint size keyed by tier. Tier 0 (Outposts) stay small;
- * tier 4 (Citadels) get the largest plots within the cutover-allowed
- * range (≤ 4 per the chain validator). The CLI phase calls this when
- * a castle entry omits `footprintSize`.
+ * Default footprint size keyed by tier. Tier 0 (Outposts) stay small; tier 4
+ * (Citadels) get the largest plots within the cutover-allowed range (<= 4 per
+ * the chain validator). The CLI phase calls this when a castle entry omits
+ * `footprintSize`.
  */
 export function defaultFootprintForTier(tier: number): number {
   switch (tier) {
@@ -53,39 +63,96 @@ export function defaultFootprintForTier(tier: number): number {
   }
 }
 
-export const CASTLES: CastleData[] = [
-  // Castles whose anchor sits on the matched city centre (or near it).
-  // The cityId column is the on-chain target; the lat/long is the
-  // anchor inside that city's plot.
-  { castleId: 0,  cityId: 0,  name: 'Tower of London',     tier: 4, minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10, latitude: 515085, longitude: -757 },     // London → Valdenmoor
-  { castleId: 1,  cityId: 1,  name: 'Bastille Fortress',   tier: 3, minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8,  latitude: 488566, longitude: 23522 },   // Paris → Coranthas
-  { castleId: 2,  cityId: 2,  name: 'Castel Sant Angelo',  tier: 3, minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8,  latitude: 419028, longitude: 124964 },  // Rome → Solterrae
-  // Acropolis lon was 232750 (= 23.275); Athens / Kael Mora sits at 23.7275.
-  // The 4525-grid-unit gap exceeded the 2794 plot half-extent. Anchoring at
-  // Athens' actual longitude lands inside the plot.
-  { castleId: 3,  cityId: 3,  name: 'Acropolis Citadel',   tier: 4, minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10, latitude: 379838, longitude: 237275 },  // Athens → Kael Mora
-  { castleId: 4,  cityId: 4,  name: 'Brandenburg Gate',    tier: 2, minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5,  latitude: 525200, longitude: 134050 },  // Berlin → Thornmark
-  { castleId: 5,  cityId: 5,  name: 'Kremlin Fortress',    tier: 4, minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10, latitude: 557558, longitude: 376173 },  // Moscow → Vraenholdt
-  { castleId: 6,  cityId: 6,  name: 'Topkapi Palace',      tier: 3, minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8,  latitude: 410082, longitude: 289784 },  // Istanbul → Kaelindra
-  { castleId: 7,  cityId: 7,  name: 'Cairo Citadel',       tier: 3, minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8,  latitude: 300444, longitude: 312357 },  // Cairo → Auren Khet
-  { castleId: 8,  cityId: 8,  name: 'Dubai Citadel',       tier: 3, minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8,  latitude: 252048, longitude: 552708 },  // Dubai → Solvaran
-  { castleId: 9,  cityId: 9,  name: 'Baghdad Palace',      tier: 3, minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8,  latitude: 333152, longitude: 443661 },  // Baghdad → Korthain
-  { castleId: 10, cityId: 10, name: 'Lagos Outpost',       tier: 0, minLevel: 10, minNetworthMillions: 5,  minTroopsThousands: 2,  latitude: 65244,  longitude: 33792 },   // Lagos → Duskara
-  { castleId: 11, cityId: 11, name: 'Edo Castle',          tier: 4, minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10, latitude: 356762, longitude: 1396503 }, // Tokyo → Shirevane
-  { castleId: 12, cityId: 12, name: 'Forbidden City',      tier: 4, minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10, latitude: 399042, longitude: 1164074 }, // Beijing → Drenmire
-  { castleId: 13, cityId: 13, name: 'Shanghai Keep',       tier: 2, minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5,  latitude: 312304, longitude: 1214737 }, // Shanghai → Pelagora
-  { castleId: 14, cityId: 14, name: 'Gyeongbok Palace',    tier: 2, minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5,  latitude: 375665, longitude: 1269780 }, // Seoul → Aelthis
-  // City 15 (Lyssandor / Singapore) intentionally has no castle.
-  { castleId: 15, cityId: 16, name: 'Mumbai Fort',         tier: 2, minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5,  latitude: 190760, longitude: 728777 },  // Mumbai → Maravhen
-  { castleId: 16, cityId: 17, name: 'Liberty Fortress',    tier: 4, minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10, latitude: 407128, longitude: -740060 }, // NYC → Ashenveil
-  // Castles below this line are historic-named anchors re-targeted to
-  // the nearest available city — the city catalogue lacks Lima /
-  // Buenos Aires / Nairobi, so the original anchors didn't fit. Lore
-  // names kept for flavour; consider renaming during the next pass.
-  { castleId: 17, cityId: 18, name: 'Inca Citadel',        tier: 1, minLevel: 15, minNetworthMillions: 10, minTroopsThousands: 3,  latitude: 340572, longitude: -1182387 },// Lima → Eldrath (LA) — re-anchored
-  { castleId: 18, cityId: 19, name: 'Aztec Stronghold',    tier: 2, minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5,  latitude: 194326, longitude: -991332 }, // Mexico City → Tonalca
-  { castleId: 19, cityId: 20, name: 'Bandeirantes Fort',   tier: 2, minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5,  latitude: -235505, longitude: -466333 },// Sao Paulo → Verador
-  { castleId: 20, cityId: 21, name: 'Sydney Stronghold',   tier: 1, minLevel: 15, minNetworthMillions: 10, minTroopsThousands: 3,  latitude: -338688, longitude: 1512093 },// Sydney → Mirethane
-  { castleId: 21, cityId: 22, name: 'Nairobi Outpost',     tier: 0, minLevel: 10, minNetworthMillions: 5,  minTroopsThousands: 2,  latitude: -261991, longitude: 280523 }, // Nairobi → Grimhollow (Joburg) — re-anchored
-  { castleId: 22, cityId: 23, name: 'La Plata Keep',       tier: 1, minLevel: 15, minNetworthMillions: 10, minTroopsThousands: 3,  latitude: -229018, longitude: -431679 },// Buenos Aires → Seralune (Rio) — re-anchored
-];
+/** Tier index to display name. castle_id == tier index. */
+export const TIER_NAMES = ['Outpost', 'Keep', 'Stronghold', 'Fortress', 'Citadel'] as const;
+
+/** Entry gates per tier (index = tier). Mirrors the historic per-tier values. */
+const GATES = [
+  { minLevel: 10, minNetworthMillions: 5,  minTroopsThousands: 2 },  // 0 Outpost
+  { minLevel: 15, minNetworthMillions: 10, minTroopsThousands: 3 },  // 1 Keep
+  { minLevel: 20, minNetworthMillions: 20, minTroopsThousands: 5 },  // 2 Stronghold
+  { minLevel: 25, minNetworthMillions: 30, minTroopsThousands: 8 },  // 3 Fortress
+  { minLevel: 30, minNetworthMillions: 50, minTroopsThousands: 10 }, // 4 Citadel
+] as const;
+
+/** Hint offset from city centre (grid units) for the four lower tiers. The
+ *  Citadel (tier 4) uses its curated/centre hint instead. ~900 units (about
+ *  10 km) keeps footprints (<= 4 cells) well clear of each other and the spawn. */
+const TIER_OFFSETS = [
+  { dLat:  900, dLon:  900 }, // 0 Outpost     (NE)
+  { dLat:  900, dLon: -900 }, // 1 Keep        (NW)
+  { dLat: -900, dLon:  900 }, // 2 Stronghold  (SE)
+  { dLat: -900, dLon: -900 }, // 3 Fortress    (SW)
+] as const;
+
+/**
+ * Curated Citadel (tier 4) per city: the iconic landmark keeps its name and
+ * hand-placed hint. Cities absent here get a generated "<City> Citadel" anchored
+ * at the city centre. Hints are grid units (x10,000 = LocationAccount precision).
+ * Cities 15 (Lyssandor) and 18-23 had no real-world landmark in the catalogue, so
+ * they fall through to the generated name rather than a re-anchored foreign one.
+ */
+const CITADELS: Record<number, { name: string; lat: number; lon: number }> = {
+  0:  { name: 'Tower of London',    lat: 515085, lon: -757 },
+  1:  { name: 'Bastille Fortress',  lat: 488566, lon: 23522 },
+  2:  { name: 'Castel Sant Angelo', lat: 419028, lon: 124964 },
+  3:  { name: 'Acropolis Citadel',  lat: 379838, lon: 237275 },
+  4:  { name: 'Brandenburg Gate',   lat: 525200, lon: 134050 },
+  5:  { name: 'Kremlin Fortress',   lat: 557558, lon: 376173 },
+  6:  { name: 'Topkapi Palace',     lat: 410082, lon: 289784 },
+  7:  { name: 'Cairo Citadel',      lat: 300444, lon: 312357 },
+  8:  { name: 'Dubai Citadel',      lat: 252048, lon: 552708 },
+  9:  { name: 'Baghdad Palace',     lat: 333152, lon: 443661 },
+  10: { name: 'Lagos Bastion',      lat: 65244,  lon: 33792 },
+  11: { name: 'Edo Castle',         lat: 356762, lon: 1396503 },
+  12: { name: 'Forbidden City',     lat: 399042, lon: 1164074 },
+  13: { name: 'Shanghai Citadel',   lat: 312304, lon: 1214737 },
+  14: { name: 'Gyeongbok Palace',   lat: 375665, lon: 1269780 },
+  16: { name: 'Mumbai Fort',        lat: 190760, lon: 728777 },
+  17: { name: 'Liberty Fortress',   lat: 407128, lon: -740060 },
+};
+
+/**
+ * Build the five-castle ladder for a city. castle_id == tier, so the PDAs
+ * [city_id, 0..4] are distinct. The Citadel takes the curated landmark; the
+ * lower tiers are named "<City> <Tier>" and offset from the city centre.
+ */
+function buildLadder(): CastleData[] {
+  const castles: CastleData[] = [];
+  for (const city of CITIES) {
+    const centreLat = Math.round(city.lat * 10_000);
+    const centreLon = Math.round(city.lon * 10_000);
+    for (let tier = 0; tier <= 4; tier++) {
+      const gate = GATES[tier];
+      let name: string;
+      let latitude: number;
+      let longitude: number;
+      if (tier === 4) {
+        const landmark = CITADELS[city.id];
+        name = landmark ? landmark.name : `${city.name} Citadel`;
+        latitude = landmark ? landmark.lat : centreLat;
+        longitude = landmark ? landmark.lon : centreLon;
+      } else {
+        const off = TIER_OFFSETS[tier];
+        name = `${city.name} ${TIER_NAMES[tier]}`;
+        latitude = centreLat + off.dLat;
+        longitude = centreLon + off.dLon;
+      }
+      castles.push({
+        castleId: tier, // castle_id == tier; PDA = [city_id, castle_id] so unique per city
+        cityId: city.id,
+        name,
+        tier,
+        minLevel: gate.minLevel,
+        minNetworthMillions: gate.minNetworthMillions,
+        minTroopsThousands: gate.minTroopsThousands,
+        latitude,
+        longitude,
+        // footprintSize omitted: phase applies defaultFootprintForTier(tier)
+      });
+    }
+  }
+  return castles;
+}
+
+export const CASTLES: CastleData[] = buildLadder();

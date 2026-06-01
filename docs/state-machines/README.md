@@ -92,10 +92,10 @@ CORE (528 B)
   → +INVENTORY (144 B)  EXT_INVENTORY = 0x04
   → +TEAM      (112 B)  EXT_TEAM      = 0x10
   → +RALLY     (80 B)   EXT_RALLY     = 0x08
-  → +HEROES    (168 B)  EXT_HEROES    = 0x02
+  → +HEROES    (208 B)  EXT_HEROES    = 0x02
   → +COSMETICS (80 B)   EXT_COSMETICS = 0x20
   → +COURT     (48 B)   EXT_COURT     = 0x40
-MAX_SIZE = 1208 B
+MAX_SIZE = 1248 B
 ```
 
 Sections are appended in the order above; an earlier section must exist before a later one is added.

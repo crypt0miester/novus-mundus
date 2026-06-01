@@ -73,7 +73,7 @@ const COMMON_HEROES: HeroTemplateData[] = [
     heroType: 1, category: 4,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 0.1),
     supplyCap: 4_000, enabled: true, eventExclusive: false,
-    requiredPlayerLevel: 1, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 1, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 2, baseBps: 400 }, { stat: 8, baseBps: 300 }],
   },
   {
@@ -180,7 +180,7 @@ const RARE_HEROES: HeroTemplateData[] = [
     heroType: 2, category: 0,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 0.25),
     supplyCap: 2_000, enabled: true, eventExclusive: false,
-    requiredPlayerLevel: 5, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 5, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 15, baseBps: 1000 }, { stat: 3, baseBps: 800 }, { stat: 7, baseBps: 500 }],
   },
   {
@@ -388,7 +388,7 @@ const LEGENDARY_HEROES: HeroTemplateData[] = [
     heroType: 3, category: 1,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 5.0),
     supplyCap: 100, enabled: true, eventExclusive: false,
-    requiredPlayerLevel: 30, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 30, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 4, baseBps: 1500 }, { stat: 7, baseBps: 1200 }, { stat: 2, baseBps: 1000 }, { stat: 3, baseBps: 800 }],
   },
   {
@@ -502,7 +502,7 @@ const RESERVE_RARE: HeroTemplateData[] = [
     heroType: 1, category: 0,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 0.25),
     supplyCap: 2_000, enabled: false, eventExclusive: false,
-    requiredPlayerLevel: 5, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 5, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 2, baseBps: 1100 }, { stat: 8, baseBps: 700 }, { stat: 11, baseBps: 400 }],
   },
   {
@@ -511,7 +511,7 @@ const RESERVE_RARE: HeroTemplateData[] = [
     heroType: 1, category: 1,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 0.25),
     supplyCap: 2_000, enabled: false, eventExclusive: false,
-    requiredPlayerLevel: 5, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 5, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 2, baseBps: 1000 }, { stat: 11, baseBps: 600 }, { stat: 8, baseBps: 400 }],
   },
   {
@@ -631,7 +631,7 @@ const RESERVE_EPIC: HeroTemplateData[] = [
     heroType: 1, category: 1,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 1.0),
     supplyCap: 1_000, enabled: false, eventExclusive: false,
-    requiredPlayerLevel: 15, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 15, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 2, baseBps: 1400 }, { stat: 9, baseBps: 1000 }, { stat: 4, baseBps: 600 }],
   },
   {
@@ -640,7 +640,7 @@ const RESERVE_EPIC: HeroTemplateData[] = [
     heroType: 0, category: 1,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 1.0),
     supplyCap: 1_000, enabled: false, eventExclusive: false,
-    requiredPlayerLevel: 15, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 15, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 1, baseBps: 1600 }, { stat: 7, baseBps: 1200 }, { stat: 14, baseBps: 600 }],
   },
   {
@@ -730,7 +730,7 @@ const RESERVE_EPIC: HeroTemplateData[] = [
     heroType: 3, category: 4,
     mintCostLamports: Math.floor(LAMPORTS_PER_SOL * 1.0),
     supplyCap: 1_000, enabled: false, eventExclusive: false,
-    requiredPlayerLevel: 15, meditationCityId: 0, // Valdenmoor
+    requiredPlayerLevel: 15, meditationCityId: 0, // anywhere (0 = any-city sentinel; Valdenmoor is id 0 but can't be a meditation lock)
     buffs: [{ stat: 1, baseBps: 1400 }, { stat: 6, baseBps: 1000 }, { stat: 2, baseBps: 700 }],
   },
   {

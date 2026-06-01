@@ -213,18 +213,9 @@ export function CampTab() {
                   {noviBalance.toLocaleString()}
                 </span>
               </div>
-              <NumberField
-                label="NOVI to spend"
-                value={hireNoviAmount}
-                onChange={setHireNoviAmount}
-                min={1}
-                max={noviBalance}
-                suffix="NOVI"
-                fibonacciCheckValue={noviToDeci(hireNoviAmount)}
-              />
               <ActivityForecast
                 activity={ActivityType.Consuming}
-                verb={`Hiring ${selectedUnit.label}`}
+                verb={`Hiring`}
               >
                 {hireForecast ? (
                   <span className="flex items-center justify-between gap-2">
@@ -240,8 +231,17 @@ export function CampTab() {
                   <span className="text-text-muted">Loading forecast…</span>
                 )}
               </ActivityForecast>
+              <NumberField
+                label="NOVI to spend"
+                value={hireNoviAmount}
+                onChange={setHireNoviAmount}
+                min={1}
+                max={noviBalance}
+                suffix="NOVI"
+                fibonacciCheckValue={noviToDeci(hireNoviAmount)}
+              />
               <TxButton onClick={handleHire} disabled={noviBalance < hireNoviAmount}>
-                {noviBalance >= hireNoviAmount ? `Hire ${selectedUnit.label}` : "Insufficient NOVI"}
+                {noviBalance >= hireNoviAmount ? `Hire` : "Insufficient NOVI"}
               </TxButton>
             </div>
           </div>

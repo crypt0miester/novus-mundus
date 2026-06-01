@@ -35,6 +35,7 @@ function CopyableAddress({ label, address }: { label: string; address: string })
     <div className="flex justify-between text-sm">
       <span className="text-text-muted">{label}</span>
       <button
+        type="button"
         onClick={handleCopy}
         className="group flex items-center gap-1.5 font-mono text-text-primary transition-colors hover:text-text-gold"
         title="Copy to clipboard"
@@ -81,6 +82,13 @@ export default function SettingsPage() {
 
   const player = playerData?.account;
   const gameEngine = geData?.pubkey;
+
+  // Theme choice unlocks at Epic (tier 2); below that the app is locked to
+  // paper, so the toggle is disabled. auto resolves to dark at Epic+, so the
+  // visible choice is just paper vs dark.
+  const themeUnlocked = sub.active && sub.tier >= 2;
+  const selectedTheme: ThemePreference =
+    themeUnlocked && themePreference !== "paper" ? "dark" : "paper";
 
   const playerHasName = useMemo(() => {
     if (!player) return false;
@@ -245,6 +253,7 @@ export default function SettingsPage() {
                 Danger Zone
               </h3>
               <button
+                type="button"
                 onClick={() => disconnect()}
                 className="rounded-lg border border-red-800 bg-red-900/20 px-4 py-2 text-sm font-medium text-red-400 transition-all hover:bg-red-900/40"
               >
@@ -269,6 +278,7 @@ export default function SettingsPage() {
                     {(["compact", "full"] as const).map((fmt) => (
                       <button
                         key={fmt}
+                        type="button"
                         onClick={() => setNumberFormat(fmt)}
                         className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
                           numberFormat === fmt
@@ -287,6 +297,7 @@ export default function SettingsPage() {
                     <p className="text-xs text-text-muted">Page transitions and number rolling</p>
                   </div>
                   <button
+                    type="button"
                     onClick={() => setAnimationsEnabled(!animationsEnabled)}
                     className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${
                       animationsEnabled ? "bg-primary" : "bg-zinc-700"
@@ -331,20 +342,30 @@ export default function SettingsPage() {
               <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
                 <div>
                   <span className="text-text-primary">Appearance</span>
-                  <p className="text-xs text-text-muted">Paper uses a light parchment background</p>
+                  <p className="text-xs text-text-muted">
+                    {themeUnlocked
+                      ? "Paper uses a light parchment background"
+                      : "Theme choice unlocks at Epic"}
+                  </p>
                 </div>
-                <div className="flex rounded-lg border border-zinc-800">
-                  {(["paper", "auto", "dark"] as ThemePreference[]).map((t) => (
+                <div
+                  className={`flex rounded-lg border border-zinc-800 ${
+                    themeUnlocked ? "" : "opacity-60"
+                  }`}
+                >
+                  {(["paper", "dark"] as ThemePreference[]).map((t) => (
                     <button
                       key={t}
+                      type="button"
+                      disabled={!themeUnlocked}
                       onClick={() => setThemePreference(t)}
                       className={`px-3 py-1.5 text-xs font-medium capitalize transition-colors ${
-                        themePreference === t
+                        selectedTheme === t
                           ? "bg-accent/30 text-text-gold"
-                          : "text-text-muted hover:text-text-primary"
-                      }`}
+                          : "text-text-muted"
+                      } ${themeUnlocked ? "hover:text-text-primary" : "cursor-not-allowed"}`}
                     >
-                      {t === "auto" ? "Auto" : t === "paper" ? "Paper" : "Dark"}
+                      {t === "paper" ? "Paper" : "Dark"}
                     </button>
                   ))}
                 </div>
@@ -365,6 +386,7 @@ export default function SettingsPage() {
                   {EXPLORER_OPTIONS.map((opt) => (
                     <button
                       key={opt.value}
+                      type="button"
                       onClick={() => setExplorer(opt.value)}
                       className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                         explorer === opt.value
@@ -396,6 +418,7 @@ export default function SettingsPage() {
                     {PRIORITY_PRESETS.map((preset) => (
                       <button
                         key={preset.value}
+                        type="button"
                         onClick={() => setPriorityFee(preset.value)}
                         className={`px-3 py-1.5 text-xs font-medium transition-colors ${
                           priorityFee === preset.value

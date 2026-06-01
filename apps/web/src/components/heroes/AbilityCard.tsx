@@ -10,7 +10,7 @@ import {
   formatDurationCompact,
   AbilityKind,
 } from "novus-mundus-sdk";
-import { animate, svg, utils, waapi, type JSAnimation } from "animejs";
+import { animate, svg, utils, type JSAnimation } from "animejs";
 import { TxButton } from "@/components/shared/TxButton";
 import {
   useHeroAbilityCooldown,
@@ -111,9 +111,6 @@ function InteractiveTrigger({ template, heroMint, slotIndex }: InteractiveTrigge
   const ringAnimRef = useRef<JSAnimation | null>(null);
   const btnWrapRef = useRef<HTMLDivElement>(null);
   const wasReadyRef = useRef<boolean>(cd.ready);
-  const numRef = useRef<HTMLDivElement>(null);
-  const lastFlipSecRef = useRef<number>(-1);
-  const badgeRef = useRef<HTMLDivElement>(null);
 
   // Build the arc drawable + autoplay:false draw animation ONCE per cooldown
   // window (keyed on readyAt, which changes only when the ability is freshly
@@ -172,61 +169,21 @@ function InteractiveTrigger({ template, heroMint, slotIndex }: InteractiveTrigge
     return unregister;
   }, [cd.ready, cd.readyAt, template.abilityCooldownSecs]);
 
-  // Per-second number scale-flip + ready-edge BLOOM. Both are one-shots gated on
-  // an edge (the whole second changing / ready flipping true), so they fire on
-  // the transition, not on every render.
+  // Ready-edge bloom: bloom the button once when the cooldown completes. The
+  // per-second timer pulse was removed, so the countdown number now sits still.
   useEffect(() => {
     if (prefersReducedMotion()) {
       wasReadyRef.current = cd.ready;
       return;
     }
-    // Ready edge: bloom the button once when the cooldown completes.
     if (cd.ready && !wasReadyRef.current && btnWrapRef.current) {
       animate(btnWrapRef.current, { scale: [0.9, 1.06, 1], ease: BLOOM, duration: 520 });
     }
     wasReadyRef.current = cd.ready;
-
-    // Per-second flip: punch the number whenever the displayed second changes.
-    if (!cd.ready && numRef.current) {
-      if (cd.remainingSecs !== lastFlipSecRef.current) {
-        lastFlipSecRef.current = cd.remainingSecs;
-        animate(numRef.current, { scale: [1, 1.18, 1], ease: "outBack", duration: 280 });
-      }
-    } else {
-      lastFlipSecRef.current = -1;
-    }
-  }, [cd.ready, cd.remainingSecs]);
-
-  // Armed badge pulse. waapi scale/opacity only (compositor-safe) so it survives
-  // a busy main thread while a tx is signing. Looped while armed; torn down when
-  // the badge unmounts on disarm. Early-return under reduced motion: an ambient
-  // loop must not even run.
-  useEffect(() => {
-    if (!armedHere || !badgeRef.current) return;
-    if (prefersReducedMotion()) return;
-    const pulse = waapi.animate(badgeRef.current, {
-      scale: [1, 1.04, 1],
-      opacity: [0.85, 1, 0.85],
-      duration: 1600,
-      ease: "inOutQuad",
-      loop: true,
-    });
-    return () => {
-      pulse.cancel();
-    };
-  }, [armedHere]);
+  }, [cd.ready]);
 
   return (
     <div ref={rootRef} className="mt-2 space-y-2">
-      {armedHere && (
-        <div
-          ref={badgeRef}
-          className="rounded border border-border-gold/40 bg-accent/15 px-2 py-1 text-[10px] text-text-gold"
-        >
-          Armed, fires on next matching action.
-        </div>
-      )}
-
       <div className="flex items-center justify-between gap-2">
         <div ref={btnWrapRef} className="flex-1">
           <TxButton
@@ -270,11 +227,7 @@ function InteractiveTrigger({ template, heroMint, slotIndex }: InteractiveTrigge
               className="text-text-gold"
             />
           </svg>
-          <div
-            ref={numRef}
-            className="text-right font-mono text-[11px] text-text-secondary"
-            style={{ transformOrigin: "right center" }}
-          >
+          <div className="text-right font-mono text-[11px] text-text-secondary">
             {cd.ready ? "Ready" : formatDurationCompact(cd.remainingSecs)}
           </div>
         </div>

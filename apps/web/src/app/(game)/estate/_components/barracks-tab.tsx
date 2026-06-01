@@ -226,7 +226,7 @@ export function BarracksTab() {
               </div>
               <ActivityForecast
                 activity={ActivityType.Consuming}
-                verb={`Hiring ${selectedUnit.label}`}
+                verb={`Hiring`}
               >
                 {hireForecast ? (
                   <span className="flex items-center justify-between gap-2">
@@ -249,7 +249,7 @@ export function BarracksTab() {
                 fibonacciCheckValue={noviToDeci(hireNoviAmount)}
               />
               <TxButton onClick={handleHire} disabled={noviBalance < hireNoviAmount}>
-                {noviBalance >= hireNoviAmount ? `Hire ${selectedUnit.label}` : "Insufficient NOVI"}
+                {noviBalance >= hireNoviAmount ? `Hire` : "Insufficient NOVI"}
               </TxButton>
             </div>
           </div>

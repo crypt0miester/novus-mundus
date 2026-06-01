@@ -4,6 +4,7 @@
 
 import type { CLIContext, ParsedArgs } from "../context";
 import { log, type PhaseStats } from "../helpers";
+import { assertSeedDataValid } from "../validate-data";
 import { initArena } from "../phases/arena";
 import { initBuildings } from "../phases/buildings";
 import { initCastles } from "../phases/castles";
@@ -44,6 +45,14 @@ export async function handleInit(
 ): Promise<void> {
 	const target = args.target;
 	const start = Date.now();
+
+	// Preflight: reject internally-inconsistent seed data before any chain write.
+	try {
+		assertSeedDataValid();
+	} catch (error: any) {
+		log.error(error.message);
+		return;
+	}
 
 	let totalCreated = 0;
 	let totalUpdated = 0;

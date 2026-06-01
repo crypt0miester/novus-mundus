@@ -406,7 +406,7 @@ export const BUFF_STATS: Record<number, BuffStatMeta> = {
   [BuffStat.AttackPower]: { stat: BuffStat.AttackPower, attrKey: "Attack", abbr: "ATK", name: "Attack Power", description: "Increases damage dealt in combat." },
   [BuffStat.DefensePower]: { stat: BuffStat.DefensePower, attrKey: "Defense", abbr: "DEF", name: "Defense Power", description: "Reduces damage taken in combat." },
   [BuffStat.CashCollectionRate]: { stat: BuffStat.CashCollectionRate, attrKey: "Economy", abbr: "ECO", name: "Cash Collection", description: "Increases cash collected from resources." },
-  [BuffStat.XpGain]: { stat: BuffStat.XpGain, attrKey: "XP", abbr: "XP", name: "XP Gain", description: "Increases experience earned." },
+  [BuffStat.XpGain]: { stat: BuffStat.XpGain, attrKey: "XPGain", abbr: "XP", name: "XP Gain", description: "Increases experience earned." },
   [BuffStat.TrainingCostReduction]: { stat: BuffStat.TrainingCostReduction, attrKey: "Training", abbr: "TRN", name: "Training Cost", description: "Reduces the cost of training units." },
   [BuffStat.RallyCapacity]: { stat: BuffStat.RallyCapacity, attrKey: "Rally", abbr: "RLY", name: "Rally Capacity", description: "Increases troop capacity in rallies." },
   [BuffStat.CriticalHitChance]: { stat: BuffStat.CriticalHitChance, attrKey: "Crit", abbr: "CRT", name: "Critical Hit", description: "Increases critical hit chance in combat." },

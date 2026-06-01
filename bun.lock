@@ -4,7 +4,6 @@
   "workspaces": {
     "": {
       "devDependencies": {
-        "@types/bn.js": "5.1.0",
         "@types/chai": "4.3.0",
         "@types/mocha": "9.0.0",
         "chai": "4.3.4",
@@ -74,26 +73,6 @@
         "@types/bun": "latest",
         "@types/yargs": "^17.0.33",
         "litesvm": "0.6.0",
-        "typescript": "^5",
-        "yargs": "^17.7.2",
-      },
-    },
-    "sdks/novus-mundus-ts-kit": {
-      "name": "novus-mundus-sdk-kit",
-      "version": "0.1.0",
-      "dependencies": {
-        "@noble/curves": "^1.9.7",
-        "@noble/hashes": "^2.0.1",
-        "@solana-program/compute-budget": "^0.15.0",
-        "@solana/kit": "^6.9.0",
-      },
-      "devDependencies": {
-        "@solana/web3.js": "^1.98.0",
-        "@switchboard-xyz/common": "^5.8.0",
-        "@switchboard-xyz/on-demand": "^3.9.0",
-        "@types/bun": "latest",
-        "@types/yargs": "^17.0.33",
-        "litesvm": "1.0.0",
         "typescript": "^5",
         "yargs": "^17.7.2",
       },
@@ -297,8 +276,6 @@
 
     "@solana-program/system": ["@solana-program/system@0.12.0", "", { "peerDependencies": { "@solana/kit": "^6.1.0" } }, "sha512-ZnAAWeGVMWNtJhw3GdifI2HnhZ0A0H0qs8tBkcFvxp/8wIavvO+GOM4Jd0N22u2+Lni2zcwvcrxrsxj6Mjphng=="],
 
-    "@solana-program/token": ["@solana-program/token@0.12.0", "", { "dependencies": { "@solana-program/system": "^0.12.0" }, "peerDependencies": { "@solana/kit": "^6.1.0" } }, "sha512-hnidRNuFhmqUdW5aWkKTJ+cdzuotVMNwLsTyAk0Nd8VjLDld+vQC0fugHWqm5GPrvYe0hCNAhtpJcZVnNp7rOA=="],
-
     "@solana/accounts": ["@solana/accounts@6.9.0", "", { "dependencies": { "@solana/addresses": "6.9.0", "@solana/codecs-core": "6.9.0", "@solana/codecs-strings": "6.9.0", "@solana/errors": "6.9.0", "@solana/rpc-spec": "6.9.0", "@solana/rpc-types": "6.9.0" }, "peerDependencies": { "typescript": ">=5.4.0" }, "optionalPeers": ["typescript"] }, "sha512-g36AJreJrgf9AAjOfbdFHEFUTymBgzbWHoEDElZ+fDKvqBINDiUVKzDApwc7C7kGPMFqQBaoEHnQRxf2IqfKZQ=="],
 
     "@solana/addresses": ["@solana/addresses@6.9.0", "", { "dependencies": { "@solana/assertions": "6.9.0", "@solana/codecs-core": "6.9.0", "@solana/codecs-strings": "6.9.0", "@solana/errors": "6.9.0", "@solana/nominal-types": "6.9.0" }, "peerDependencies": { "typescript": ">=5.4.0" }, "optionalPeers": ["typescript"] }, "sha512-tWnG2L6lo/ZhcMT019F3myDsH87MM8EZbTO0cgwgvVPlEdIGblROFF3tGVrb7FVCOlbPI0ONCFyPbnrmR58LsA=="],
@@ -458,8 +435,6 @@
     "@turbo/windows-arm64": ["@turbo/windows-arm64@2.9.2", "", { "os": "win32", "cpu": "arm64" }, "sha512-qPFjErR4MrKo71lNfqgUNaajftZN2nyaOsSxMSb2NI+5r/zlB26yjXUKYvADGg4EWvaLTJPIzgZDT9ZX+WN9bw=="],
 
     "@tweenjs/tween.js": ["@tweenjs/tween.js@23.1.3", "", {}, "sha512-vJmvvwFxYuGnF2axRtPYocag6Clbb5YS7kLL+SO/TeVFzHqDIWrNKYtcsPMibjDx9O+bu+psAy9NKfWklassUA=="],
-
-    "@types/bn.js": ["@types/bn.js@5.1.0", "", { "dependencies": { "@types/node": "*" } }, "sha512-QSSVYj7pYFN49kW77o2s9xTCwZ8F2xLbjLLSEVh8D2F4JUhZtPAGOFLTD+ffqksBx/u4cE/KImFjyhqCjn/LIA=="],
 
     "@types/bun": ["@types/bun@1.3.14", "", { "dependencies": { "bun-types": "1.3.14" } }, "sha512-h1hFqFVcvAvD9j9K7ZW7vd82aSA+rTdznZa+5bwvCwqSB1jmmfLcbIWhOLx1/+boy/xmjgCs/OMUL8hRJSmnPw=="],
 
@@ -885,8 +860,6 @@
 
     "novus-mundus-sdk": ["novus-mundus-sdk@workspace:sdks/novus-mundus-ts"],
 
-    "novus-mundus-sdk-kit": ["novus-mundus-sdk-kit@workspace:sdks/novus-mundus-ts-kit"],
-
     "novus-mundus-web": ["novus-mundus-web@workspace:apps/web"],
 
     "number-flow": ["number-flow@0.6.0", "", { "dependencies": { "esm-env": "^1.1.4" } }, "sha512-K8flNq2Wqus53vjp/btVo3qXFkagF8dIdYavreBfE7hlvFFG/b1HMGEH6nZL+mlrJ+4lbLP9OmPv3t2rmRkpSQ=="],
@@ -1151,10 +1124,6 @@
 
     "novus-mundus-sdk/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
 
-    "novus-mundus-sdk-kit/litesvm": ["litesvm@1.0.0", "", { "dependencies": { "@solana-program/system": "^0.12.0", "@solana-program/token": "^0.12.0", "@solana/kit": "^6.5.0" }, "optionalDependencies": { "litesvm-darwin-arm64": "1.0.0", "litesvm-darwin-x64": "1.0.0", "litesvm-linux-arm64-gnu": "1.0.0", "litesvm-linux-arm64-musl": "1.0.0", "litesvm-linux-x64-gnu": "1.0.0", "litesvm-linux-x64-musl": "1.0.0" } }, "sha512-+uM5Uqut++IKNoG4rw2QzMNspZhqqqRXZ5XDPxb68kJMBrOdvIJX9Ie7IAHTD26qdX074FqMDqlOqlJR9H3xIw=="],
-
-    "novus-mundus-sdk-kit/typescript": ["typescript@5.9.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-jl1vZzPDinLr9eUt3J/t7V6FgNEw9QjvBPdysz9KfQDD41fQrC2Y4vKQdiaUpFT4bXlb1RHhLpp8wtm6M5TgSw=="],
-
     "novus-mundus-web/typescript": ["typescript@5.7.3", "", { "bin": { "tsc": "bin/tsc", "tsserver": "bin/tsserver" } }, "sha512-84MVSjMEHP+FQRPy3pX9sTVV/INIex71s9TL2Gm5FG/WG1SqXeKyZ0k7/blY/4FdOzI12CBy1vGc4og/eus0fw=="],
 
     "playwright/fsevents": ["fsevents@2.3.2", "", { "os": "darwin" }, "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA=="],
@@ -1210,18 +1179,6 @@
     "mocha/yargs/cliui": ["cliui@7.0.4", "", { "dependencies": { "string-width": "^4.2.0", "strip-ansi": "^6.0.0", "wrap-ansi": "^7.0.0" } }, "sha512-OcRE68cOsVMXp1Yvonl/fzkQOyjLSu/8bhPDfQt0e0/Eb283TKP20Fs2MqoPsr9SwA595rRCA+QMzYc9nBP+JQ=="],
 
     "next/postcss/nanoid": ["nanoid@3.3.11", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-N8SpfPUnUp1bK+PMYW8qSWdl9U+wwNWI4QKxOYDy9JAro3WMX7p2OeVRF9v+347pnakNevPmiHhNmZ2HbFA76w=="],
-
-    "novus-mundus-sdk-kit/litesvm/litesvm-darwin-arm64": ["litesvm-darwin-arm64@1.0.0", "", { "os": "darwin", "cpu": "arm64" }, "sha512-Fl1i0G+DbsMh4M0nLtFvJcbYcxVZyYOnJhvLTxzFy26CN5dtOHRTWcHTkQZpfEwdIQxCJAvjsGIHAg4K/ecycQ=="],
-
-    "novus-mundus-sdk-kit/litesvm/litesvm-darwin-x64": ["litesvm-darwin-x64@1.0.0", "", { "os": "darwin", "cpu": "x64" }, "sha512-4gSTuYdOCZ0SpjbGRhZ6g8ua8oSJtMgHwz7qpjTPvXw5Zc1K2bdWDlV0FNwg+NSTTQhCn7PzmpFKip2lI/CU3w=="],
-
-    "novus-mundus-sdk-kit/litesvm/litesvm-linux-arm64-gnu": ["litesvm-linux-arm64-gnu@1.0.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-i/NdIvl/D3AJE2PbvYOqORKAe5EYpKO6hlgqKEukzWDQd/yx7hmevg/yEI5rJuI0BfTDPZzRuK4Y5wMKdKu42A=="],
-
-    "novus-mundus-sdk-kit/litesvm/litesvm-linux-arm64-musl": ["litesvm-linux-arm64-musl@1.0.0", "", { "os": "linux", "cpu": "arm64" }, "sha512-suv1yKYH4oBcR9dIf4JdoMOjdDPyi4QHsO6dKB7Kw/0/tGxnWy/ZcZCMqE283exEyGc64bZXqFTZQQcZxqJrRw=="],
-
-    "novus-mundus-sdk-kit/litesvm/litesvm-linux-x64-gnu": ["litesvm-linux-x64-gnu@1.0.0", "", { "os": "linux", "cpu": "x64" }, "sha512-mM+0lSof8Kb45EXUOqM6E+uVNEZgfOn7Vy0PgEgHI9igDhoxID7S4Z44AAcw5k0hzfPT7qtHGH/uOeIFz6w5fw=="],
-
-    "novus-mundus-sdk-kit/litesvm/litesvm-linux-x64-musl": ["litesvm-linux-x64-musl@1.0.0", "", { "os": "linux", "cpu": "x64" }, "sha512-xBuFg4PYicqrkthgEgX7GkY2XftqwwBhqZoxEjMjLT9XiRAu82xZJsZTQ0yC749+phXeWT7fjp3W6uVEKvDjAQ=="],
 
     "rimraf/glob/minimatch": ["minimatch@9.0.5", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, "sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow=="],
 

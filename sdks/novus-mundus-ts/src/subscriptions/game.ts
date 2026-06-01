@@ -38,6 +38,7 @@ import { AccountKey } from '../types/enums';
 import { tryDeserializeAnyAccount, type RoutedAccount } from '../state/router';
 
 import {
+  subscribeToAccount,
   subscribeToAccountWithParser,
   subscribeToProgramAccounts,
   subscribeToLogs,
@@ -226,18 +227,18 @@ export async function subscribeToEncounter(
  * Subscribe to expedition account changes.
  *
  * @param connection - Solana connection
- * @param owner - Player pubkey (owner of the expedition)
+ * @param playerPda - The player's PDA (the expedition PDA is seeded by it)
  * @param callback - Callback for expedition account changes
  * @param options - Subscription options
  * @returns Subscription handle
  */
 export async function subscribeToExpedition(
   connection: Connection,
-  owner: PublicKey,
+  playerPda: PublicKey,
   callback: SubscriptionCallback<ExpeditionAccount>,
   options: SubscriptionOptions = {}
 ): Promise<SubscriptionHandle> {
-  const [expeditionPda] = await deriveExpeditionPda(owner);
+  const [expeditionPda] = await deriveExpeditionPda(playerPda);
   return subscribeToAccountWithParser(
     connection,
     expeditionPda,
@@ -420,6 +421,14 @@ export type AccountHandler<T = unknown> = (
 ) => void;
 
 /**
+ * Handler invoked when a program account is closed (rent reclaimed). The
+ * close notification arrives with empty data, so the AccountKey discriminator
+ * is gone and we can only report the pubkey. Consumers reconcile by removing
+ * that pubkey from whichever maps may hold it (Location, Encounter, etc.).
+ */
+export type CloseHandler = (pubkey: PublicKey, context: Context) => void;
+
+/**
  * Unified game subscription manager using a single `onProgramAccountChange`.
  *
  * Instead of creating one WebSocket subscription per account, this manager
@@ -440,6 +449,8 @@ export class GameSubscriptionManager {
   private connection: Connection;
   private gameEngine: PublicKey;
   private handlers: Map<AccountKey, Set<AccountHandler>> = new Map();
+  private closeHandlers: Set<CloseHandler> = new Set();
+  private closeWatches: Map<string, SubscriptionHandle> = new Map();
   private subscription: SubscriptionHandle | null = null;
   private options: SubscriptionOptions;
 
@@ -486,6 +497,75 @@ export class GameSubscriptionManager {
   }
 
   /**
+   * Register a handler for account-close notifications, fired by the per-account
+   * close watches (see `watchForClose`) when a watched account is closed.
+   *
+   * `onProgramAccountChange` cannot deliver closes: closing reassigns the account
+   * to the System Program, so it leaves this program's ownership and is filtered
+   * out of the program subscription (solana-labs#25097). Callers must therefore
+   * `watchForClose` each short-lived PDA they want eviction for (Location,
+   * Encounter, Loot, rallies, team/treasury/garrison/court records, ...).
+   */
+  onClose(handler: CloseHandler): void {
+    this.closeHandlers.add(handler);
+  }
+
+  /**
+   * Remove a previously-registered close handler.
+   */
+  offClose(handler: CloseHandler): void {
+    this.closeHandlers.delete(handler);
+  }
+
+  /**
+   * Watch a specific account for closure via a per-account `accountSubscribe`,
+   * which (unlike `onProgramAccountChange`) does fire on close, delivering an
+   * empty-data payload. On close, the registered `onClose` handlers run and the
+   * watch tears itself down. Idempotent per pubkey, so it is safe to call on
+   * every upsert of a short-lived account.
+   */
+  watchForClose(pubkey: PublicKey): void {
+    const key = pubkey.toBase58();
+    if (this.closeWatches.has(key)) {
+      return; // already watching
+    }
+
+    const handle = subscribeToAccount(
+      this.connection,
+      pubkey,
+      (accountInfo, context) => {
+        // Non-empty data means a normal update; the program subscription's
+        // router already handles those. Only act on the empty-data close.
+        if (accountInfo.data && accountInfo.data.length > 0) {
+          return;
+        }
+        this.unwatchForClose(pubkey);
+        for (const closeHandler of this.closeHandlers) {
+          try {
+            closeHandler(pubkey, context);
+          } catch {
+            // swallow handler errors so one bad handler can't break the rest
+          }
+        }
+      },
+      this.options
+    );
+    this.closeWatches.set(key, handle);
+  }
+
+  /**
+   * Stop watching an account for closure. No-op if it was not being watched.
+   */
+  unwatchForClose(pubkey: PublicKey): void {
+    const key = pubkey.toBase58();
+    const handle = this.closeWatches.get(key);
+    if (handle) {
+      this.closeWatches.delete(key);
+      void handle.unsubscribe();
+    }
+  }
+
+  /**
    * Start the program-wide subscription.
    * All program account changes flow through a single WebSocket.
    */
@@ -499,6 +579,11 @@ export class GameSubscriptionManager {
       PROGRAM_ID,
       (keyedAccountInfo, context) => {
         const data = keyedAccountInfo.accountInfo.data;
+        // Closes never arrive through programSubscribe: a closed account is
+        // reassigned to the System Program and drops out of this program-owned
+        // subscription (solana-labs#25097). Eviction is driven by per-account
+        // close watches instead (see `watchForClose`); this empty-data guard is
+        // only defensive and is effectively unreachable here.
         if (!data || data.length === 0) {
           return;
         }
@@ -534,6 +619,12 @@ export class GameSubscriptionManager {
       await this.subscription.unsubscribe();
       this.subscription = null;
     }
+    // Tear down any per-account close watches alongside the program subscription.
+    if (this.closeWatches.size > 0) {
+      const handles = Array.from(this.closeWatches.values());
+      this.closeWatches.clear();
+      await Promise.all(handles.map((h) => h.unsubscribe()));
+    }
   }
 
   /**
@@ -549,6 +640,7 @@ export class GameSubscriptionManager {
   async destroy(): Promise<void> {
     await this.stop();
     this.handlers.clear();
+    this.closeHandlers.clear();
   }
 
   /**

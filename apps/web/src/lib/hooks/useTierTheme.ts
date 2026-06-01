@@ -42,12 +42,16 @@ export function useTierTheme() {
   }, [player, themePreference]);
 }
 
-/** Resolve "auto" theme preference into "paper" or "dark" based on tier */
+/** Resolve a theme preference into "paper" or "dark".
+ *  The paper-vs-dark choice unlocks at Epic (tier 2). Rookie/Expert are locked
+ *  to paper ("primitive and white"), so their preference is ignored. */
 function resolveTheme(pref: ThemePreference, tier: number): string {
+  // Below Epic the theme is locked to paper regardless of preference.
+  if (tier < 2) return "paper";
   if (pref === "paper") return "paper";
   if (pref === "dark") return "dark";
-  // auto: Rookie/Expert = paper, Epic/Legendary = dark
-  return tier <= 1 ? "paper" : "dark";
+  // auto at Epic/Legendary defaults to dark.
+  return "dark";
 }
 
 /** Read cached tier from localStorage (defaults to 0 if unknown) */

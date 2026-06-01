@@ -7,7 +7,7 @@ import {
   formatDurationCompact,
   AbilityKind,
 } from "novus-mundus-sdk";
-import { animate, waapi } from "animejs";
+import { animate } from "animejs";
 import { usePendingEffect } from "@/lib/hooks/useHeroAbility";
 import { prefersReducedMotion } from "@/lib/utils";
 import { BLOOM } from "@/lib/motion/tokens";
@@ -24,8 +24,7 @@ interface PendingEffectBadgeProps {
 export function PendingEffectBadge({ variant = "inline" }: PendingEffectBadgeProps) {
   const pending = usePendingEffect();
 
-  // The wrapper the arm-in bloom and the ambient breathe play on. Both motions
-  // touch transform + opacity only, so the breathe stays compositor-safe.
+  // The wrapper the one-shot arm-in bloom plays on.
   const rootRef = useRef<HTMLDivElement>(null);
   // Edge-detect arming: usePendingEffect re-evaluates on every second tick, so a
   // raw mount check would re-fire on each render. Track the previous armed kind
@@ -50,25 +49,6 @@ export function PendingEffectBadge({ variant = "inline" }: PendingEffectBadgePro
     }
     prevKindRef.current = kind;
   }, [kind]);
-
-  // Ambient breathe while armed (block variant only: the prominent card carries
-  // the cue; the inline pill stays still to avoid jitter in dense headers).
-  // waapi scale/opacity only, so it survives a busy main thread during signing.
-  // Early-return under reduced motion: an ambient loop must not even run.
-  useEffect(() => {
-    if (kind === 0 || variant !== "block" || !rootRef.current) return;
-    if (prefersReducedMotion()) return;
-    const pulse = waapi.animate(rootRef.current, {
-      scale: [1, 1.02, 1],
-      opacity: [0.9, 1, 0.9],
-      duration: 2200,
-      ease: "inOutQuad",
-      loop: true,
-    });
-    return () => {
-      pulse.cancel();
-    };
-  }, [kind, variant]);
 
   if (!pending) return null;
 
@@ -110,16 +90,16 @@ function describePending(p: { kind: number; stat: number; param: number }): stri
     case AbilityKind.BuffNext: {
       const stat = getBuffStatMeta(p.stat);
       const pct = (p.param / 100).toFixed(1);
-      return `Next combat action: +${pct}% ${stat?.name ?? "stat"}`;
+      return `combat action: +${pct}% ${stat?.name ?? "stat"}`;
     }
     case AbilityKind.CritNext:
-      return "Next attack will be a guaranteed crit";
+      return "attack will be a guaranteed crit";
     case AbilityKind.ShieldNext:
-      return "Next defense will be doubled";
+      return "defense will be doubled";
     case AbilityKind.EncounterSkip:
-      return "Next encounter will be auto-defeated";
+      return "encounter will be auto-defeated";
     default:
-      return "Effect armed";
+      return "effect armed";
   }
 }
 

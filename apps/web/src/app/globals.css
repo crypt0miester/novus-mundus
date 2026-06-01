@@ -4,18 +4,41 @@ button:not(:disabled) {
   cursor: pointer;
 }
 
+/* Focus: themed accent ring for keyboard/AT users, nothing on mouse focus.
+   Uses --color-text-gold so the ring tracks the readable (theme-aware) accent
+   rather than the chrome accent, keeping it visible on both themes. */
+*:focus-visible {
+  outline: 2px solid var(--color-text-gold);
+  outline-offset: 2px;
+}
 *:focus:not(:focus-visible) {
   outline: none;
 }
 
-/* ═══════════════════════════════════════════════════════════════
-   NOVUS MUNDUS — Black & Gold Elite Theme
-   ═══════════════════════════════════════════════════════════════ */
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Firefox (any engine without ::-webkit-scrollbar) gets the themed bar via the
+   standard properties. Scoped to non-webkit engines: in Chromium, setting
+   scrollbar-width/color on the document element overrides and disables the
+   custom ::-webkit-scrollbar styling below, which is the 4px gold bar we want. */
+@supports not selector(::-webkit-scrollbar) {
+  html {
+    scrollbar-width: thin;
+    scrollbar-color: var(--tier-scrollbar) var(--color-surface);
+  }
+}
+
+/* Novus Mundus: black and gold elite theme. */
 
 @theme {
   /* Gold palette */
   --color-gold-50: #fefce8;
   --color-gold-100: #fef9c3;
+  /* Note: gold-200 is intentionally the saturated Legendary-rarity amber,
+     not a lightness step between 100 and 300 (text-gold-200 is used as a
+     rarity accent in shared.ts / Badge.tsx / ReflexGame). */
   --color-gold-200: #f1af09;
   --color-gold-300: #fde047;
   --color-gold-400: #fbbf24;
@@ -25,7 +48,7 @@ button:not(:disabled) {
   --color-gold-800: #92400e;
   --color-gold-900: #78350f;
 
-  /* Semantic tokens — defaults are paper (tier 0) */
+  /* Semantic tokens. Defaults are paper (tier 0). */
   --color-primary: #92400e;
   --color-primary-hover: #78350f;
   --color-primary-dim: #6b3410;
@@ -38,7 +61,7 @@ button:not(:disabled) {
   --color-border-gold: #92400e;
   --color-border-gold-bright: #b45309;
 
-  /* Tier accent — follows the player's subscription tier (copper to crimson).
+  /* Tier accent follows the player's subscription tier (copper to crimson).
      Rebound to --tier-accent on <body>; defaults here are paper / tier 0.
      Use for accent chrome (bg-accent, border-accent, ring-accent). */
   --color-accent: var(--tier-accent);
@@ -46,8 +69,11 @@ button:not(:disabled) {
 
   --color-text-primary: #1a1a1a;
   --color-text-secondary: #4a4a4a;
+  /* text-gold is theme-aware at runtime (set in the data-theme blocks); this
+     static default only covers the pre-hydration frame. */
   --color-text-gold: #92400e;
-  --color-text-muted: #8a8a7a;
+  /* Muted darkened from #8a8a7a to clear WCAG AA on the paper surfaces. */
+  --color-text-muted: #666658;
 
   --color-danger: #ef4444;
   --color-success: #22c55e;
@@ -63,11 +89,11 @@ button:not(:disabled) {
   --font-display: var(--font-cinzel), serif;
 }
 
-/* ─── Tier CSS Variables ─── */
+/* Tier CSS variables */
 
 :root {
   --tier-accent: #92400e;
-  --tier-accent-bright: #92400e;
+  --tier-accent-bright: #b45309;
   --tier-accent-glow: rgba(146, 64, 14, 0.15);
   --tier-border: #d4cfc6;
   --tier-noise: 0.04;
@@ -75,7 +101,7 @@ button:not(:disabled) {
   --tier-vignette-color: 0, 0, 0;
   --tier-scrollbar: #c4bfb6;
 
-  /* ─── NM Design System Variables (default = paper / tier 0) ─── */
+  /* NM design-system variables (default = paper / tier 0) */
   --nm-bg: #F5F0E8;
   --nm-bg-raised: #EDE8DF;
   --nm-bg-bar: #E5E0D7;
@@ -83,18 +109,20 @@ button:not(:disabled) {
   --nm-accent-bright: var(--tier-accent-bright);
   --nm-text: #1a1a1a;
   --nm-text-secondary: #4a4a4a;
-  --nm-text-muted: #8a8a7a;
+  --nm-text-muted: #666658;
   --nm-border: #d4cfc6;
 }
 
-/* ─── NM Theme Overrides ─── */
+/* NM theme overrides.
+   text-gold is set here so accent text uses the darker chrome accent on the
+   light surface and the lighter bright accent on dark, which is what reads. */
 body[data-theme="paper"] {
   --nm-bg: #F5F0E8;
   --nm-bg-raised: #EDE8DF;
   --nm-bg-bar: #E5E0D7;
   --nm-text: #1a1a1a;
   --nm-text-secondary: #4a4a4a;
-  --nm-text-muted: #8a8a7a;
+  --nm-text-muted: #666658;
   --nm-border: #d4cfc6;
   --color-surface: #F5F0E8;
   --color-surface-raised: #EDE8DF;
@@ -102,7 +130,12 @@ body[data-theme="paper"] {
   --color-border-default: #d4cfc6;
   --color-text-primary: #1a1a1a;
   --color-text-secondary: #4a4a4a;
-  --color-text-muted: #8a8a7a;
+  --color-text-muted: #666658;
+  --color-text-gold: var(--tier-accent);
+  /* Semantic colors darkened for legibility on the cream surface. */
+  --color-danger: #b91c1c;
+  --color-success: #15803d;
+  --color-info: #2563eb;
 }
 
 body[data-theme="dark"] {
@@ -120,15 +153,16 @@ body[data-theme="dark"] {
   --color-text-primary: #fafafa;
   --color-text-secondary: #a1a1aa;
   --color-text-muted: #8a8a93;
+  --color-text-gold: var(--tier-accent-bright);
   --color-primary: #daa520;
   --color-primary-hover: #f59e0b;
 }
 
-/* --nm-accent / --nm-accent-bright follow --tier-accent (aliased in :root) —
+/* --nm-accent / --nm-accent-bright follow --tier-accent (aliased in :root),
    single source of truth, no per-tier overrides. */
 
 /* Chain ladder: Rookie 0 / Expert 1 / Epic 2 / Legendary 3.
-   tier 0 (Rookie / no charter) keeps the :root defaults — no override. */
+   tier 0 (Rookie / no charter) keeps the :root defaults, no override. */
 
 body[data-tier="1"] {
   --tier-accent: #CD7F32;
@@ -138,7 +172,6 @@ body[data-tier="1"] {
   --tier-noise: 0.025;
   --tier-vignette: 0.35;
   --tier-scrollbar: #5C4033;
-  --color-text-gold: #D4944A;
 }
 
 body[data-tier="2"] {
@@ -149,7 +182,6 @@ body[data-tier="2"] {
   --tier-noise: 0.01;
   --tier-vignette: 0.15;
   --tier-scrollbar: #92400e;
-  --color-text-gold: #daa520;
 }
 
 body[data-tier="3"] {
@@ -161,20 +193,35 @@ body[data-tier="3"] {
   --tier-vignette: 0.12;
   --tier-vignette-color: 40, 8, 8;
   --tier-scrollbar: #5C1515;
-  --color-text-gold: #9a2222;
 }
 
-/* ─── Base ─── */
+/* Readability overrides where a tier accent fails WCAG on a reachable theme.
+   Theme choice unlocks at Epic, so Rookie/Expert are paper-only while Epic and
+   Legendary can pick either. The failing reachable pairs are Expert's bronze on
+   cream (2.3:1), Epic's gold on cream (1.8:1), and Legendary's crimson on
+   near-black (2.3:1). text-gold gets a tuned value for each; chrome
+   (borders/fills) keeps the brand accent. */
+body[data-theme="paper"][data-tier="1"] {
+  --color-text-gold: #8a5a1f;
+}
+body[data-theme="paper"][data-tier="2"] {
+  --color-text-gold: #7a5c00;
+}
+body[data-theme="dark"][data-tier="3"] {
+  --color-text-gold: #d97070;
+}
+
+/* Base */
 
 body {
   @apply bg-surface text-text-primary antialiased;
   font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  accent-color: var(--tier-accent);
   --color-border-gold: var(--tier-accent);
   --color-border-gold-bright: var(--tier-accent-bright);
-  --color-text-gold: var(--tier-accent-bright);
 }
 
-/* ─── Noise overlay ─── */
+/* Noise overlay */
 body::before {
   content: "";
   position: fixed;
@@ -215,10 +262,10 @@ body::before {
   display: none;
 }
 
-/* ─── Gold effects ─── */
+/* Gold effects */
 
 .tier-title {
-  color: var(--tier-accent-bright);
+  color: var(--color-text-gold);
 }
 
 
@@ -231,7 +278,7 @@ body::before {
 }
 
 
-/* ─── Progress bar animation ─── */
+/* Progress bar */
 
 .bar-gold {
   background: var(--nm-accent);
@@ -242,7 +289,7 @@ body::before {
 }
 
 
-/* ─── Card styles ─── */
+/* Card styles */
 
 .card {
   @apply bg-surface-raised rounded-lg border border-border-default p-4;
@@ -257,14 +304,14 @@ body::before {
   border-color: var(--nm-accent-bright);
 }
 
-/* ─── Tier-aware accent utilities ─── */
+/* Tier-aware accent utilities */
 
 .tier-accent-text {
-  color: var(--tier-accent-bright);
+  color: var(--color-text-gold);
 }
 
 .tier-hover-text:hover {
-  color: var(--tier-accent-bright);
+  color: var(--color-text-gold);
 }
 
 .tier-accent-border {
@@ -281,7 +328,7 @@ body::before {
 }
 
 .shimmer-tier {
-  color: var(--nm-accent-bright);
+  color: var(--color-text-gold);
 }
 
 /* Free tier: dull accent */
@@ -303,24 +350,19 @@ body:not([data-tier]) .card:hover {
   font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.05em;
-  color: var(--tier-accent-bright);
-}
-
-/* Legendary badge — crimson */
-body[data-tier="4"] .tier-badge {
-  color: #9a2222;
+  color: var(--color-text-gold);
 }
 
 
-/* ─── Tabular nums for all game numbers ─── */
+/* Tabular nums for all game numbers */
 .game-num {
   @apply font-mono text-text-gold;
   font-variant-numeric: tabular-nums;
 }
 
-/* The Cairn — the guiding orb (PLAYER_JOURNEY_GAMEPLAN.md §4).
+/* The Cairn, the guiding orb (PLAYER_JOURNEY_GAMEPLAN.md section 4).
    Colour tracks the estate's mood; brightness tracks the climb.
-   Casts a shadow in the light theme, throws light in the dark — inverted,
+   Casts a shadow in the light theme, throws light in the dark (inverted),
    so the stone never disappears into the page. */
 
 @keyframes cairn-pulse {
@@ -370,7 +412,7 @@ body[data-theme="dark"] .cairn-orb {
   .cairn-orb { animation: none; }
 }
 
-/* ─── NumberField slider ─── */
+/* NumberField slider */
 
 .nm-slider {
   -webkit-appearance: none;
@@ -390,7 +432,7 @@ body[data-theme="dark"] .cairn-orb {
   outline: none;
 }
 
-/* Track — accent fill up to `--nm-fill`, neutral channel after it. */
+/* Track: accent fill up to `--nm-fill`, neutral channel after it. */
 .nm-slider::-webkit-slider-runnable-track {
   height: 6px;
   border-radius: 9999px;
@@ -411,7 +453,7 @@ body[data-theme="dark"] .cairn-orb {
   );
 }
 
-/* Thumb — `margin-top` centres it on the 6px track. */
+/* Thumb: `margin-top` centres it on the 6px track. */
 .nm-slider::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
@@ -442,12 +484,12 @@ body[data-theme="dark"] .cairn-orb {
   box-shadow: 0 0 0 1px var(--tier-accent), 0 0 0 5px var(--tier-accent-glow);
 }
 
-/* ─── Cosmetic name-color animations ─── *
+/* Cosmetic name-color animations.
  * Keyed off `CosmeticColorEntry.animation` in lib/config/cosmetics-catalog.ts.
- * Applied on top of an inline `color: <hex>` set from the catalog. `aurora`
- * cycles through colors and will override the inline color; the rest layer
- * opacity / text-shadow / filter modulation on top so the base hex still
- * reads. */
+ * Applied on top of an inline `color: <hex>` set from the catalog; these layer
+ * opacity / text-shadow / filter modulation so the base hex still reads. The
+ * `aurora` variant is not here: it cycles colors and is driven in JS
+ * (wardrobe-tab.tsx), overriding the inline color. */
 
 @keyframes cosmetic-anim-pulse {
   0%, 100% { opacity: 1; }
@@ -490,4 +532,3 @@ body[data-theme="dark"] .cairn-orb {
 .cosmetic-color-anim-cinder {
   animation: cosmetic-anim-cinder 2.8s ease-in-out infinite;
 }
-

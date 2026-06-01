@@ -63,7 +63,7 @@ pub fn process(
 
     // 3. Validate ExpeditionAccount PDA
     let (expected_expedition_pda, _) = pinocchio::Address::find_program_address(
-        &[EXPEDITION_SEED, owner.address().as_ref()],
+        &[EXPEDITION_SEED, player_account.address().as_ref()],
         program_id,
     );
 
@@ -136,11 +136,11 @@ pub fn process(
 
         // Derive expedition PDA signer
         let (_, expedition_bump) = pinocchio::Address::find_program_address(
-            &[EXPEDITION_SEED, owner.address().as_ref()],
+            &[EXPEDITION_SEED, player_account.address().as_ref()],
             program_id,
         );
         let bump_seed = [expedition_bump];
-        let expedition_seeds = crate::seeds!(EXPEDITION_SEED, owner.address(), &bump_seed);
+        let expedition_seeds = crate::seeds!(EXPEDITION_SEED, player_account.address(), &bump_seed);
         let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
         // Transfer hero NFT from expedition back to owner

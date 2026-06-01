@@ -108,8 +108,10 @@ export const SHOP_ITEMS: ShopItemData[] = [
     isFeatured: false,
   },
   {
+    // item_type 51 credits `cash_on_hand` in fulfill_item (NOT locked NOVI),
+    // so the name reflects cash. quantityPerPurchase 10000 = 10k cash per buy.
     itemId: 5,
-    name: 'Small NOVI Pack',
+    name: 'Cash Pack (10,000)',
     itemType: 51,
     category: 1,            // Consumable (Currency=4 not yet deployed)
     rarity: 0,
@@ -305,7 +307,7 @@ export const SHOP_BUNDLES: ShopBundleData[] = [
     isActive: true,
     items: [
       { itemId: 2, quantity: 5 },  // Fragments x500
-      { itemId: 4, quantity: 3 },  // Stamina x3
+      { itemId: 9, quantity: 3 },  // Stamina x300 (3 × Stamina Refill 100) — item 4 was retired
     ],
   },
 ];

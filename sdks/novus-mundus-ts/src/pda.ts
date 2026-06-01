@@ -400,9 +400,14 @@ export async function deriveCraftedEquipmentPda(
 
 // Expedition System PDAs
 
-/** Derive Expedition PDA for a player */
-export async function deriveExpeditionPda(owner: PublicKey): Promise<[PublicKey, number]> {
-  return derive(PROGRAM_ID, [SEEDS.EXPEDITION, owner.toBytes()]);
+/**
+ * Derive a player's Expedition PDA. Seeded by the PLAYER PDA (kingdom-scoped),
+ * NOT the owner wallet — a wallet holds a distinct player per kingdom, so keying
+ * by wallet would collide the expedition across kingdoms. Mirrors
+ * `[EXPEDITION_SEED, player_account]` on-chain.
+ */
+export async function deriveExpeditionPda(playerPda: PublicKey): Promise<[PublicKey, number]> {
+  return derive(PROGRAM_ID, [SEEDS.EXPEDITION, playerPda.toBytes()]);
 }
 
 // Arena System PDAs

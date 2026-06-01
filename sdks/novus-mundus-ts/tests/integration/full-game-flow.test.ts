@@ -465,7 +465,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       // Verify expedition created
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Mining);
       expect(Number(expedition!.operativeUnit1)).toBe(50);
@@ -519,7 +519,7 @@ describe('Full Game Flow Integration', () => {
       );
 
       // Verify expedition gone
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).toBeNull();
 
       // Verify operatives returned

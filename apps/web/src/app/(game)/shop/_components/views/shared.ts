@@ -142,7 +142,7 @@ export function useShopTileRipple(
 // with an outElastic translateY float so the lift overshoots and settles like a
 // real object. The selected tile rises, every other tile settles back to rest.
 // Reduced motion sets the float state directly (no overshoot).
-const NOVI_FLOAT_Y = -12;
+const NOVI_FLOAT_Y = -5;
 
 export function floatNoviTiles(root: Element, selectedIndex: number, reduce: boolean): void {
   const tiles = Array.from(root.querySelectorAll<HTMLElement>(RIPPLE_TILE));

@@ -44,15 +44,45 @@ import {
 } from "novus-mundus-sdk";
 import { useCoSign } from "@/lib/cosign";
 
-// Expedition reward constants (from novus_mundus constants)
+// Expedition reward constants (mirror programs/novus_mundus/src/constants.rs).
+// The yield RATES and the operative CAP live in the on-chain economic_config and
+// are read from the GameEngine at use time; the arrays below are the deployed
+// defaults, used only as a fallback until that config loads.
 const MINING_DURATION_HOURS = [1, 2, 4, 8, 16] as const;
 const FISHING_DURATION_HOURS = [1, 2, 4, 8, 16] as const;
-const MINING_GEMS_PER_OP_HOUR = [10, 18, 30, 50, 80] as const;
-const FISHING_PRODUCE_PER_OP_HOUR = [15, 25, 40, 60, 100] as const;
+// Rates are stored ×100 (the claim divides by 100): e.g. 10 -> 0.10 gems/op/hr.
+const MINING_GEMS_PER_OP_HOUR = [1, 2, 5, 8, 10] as const;
+const FISHING_PRODUCE_PER_OP_HOUR = [2, 3, 8, 12, 15] as const;
 const MINING_FRAGMENT_BONUS = [1, 3, 8, 20, 50] as const;
 const FISHING_FRAGMENT_BONUS = [1, 2, 5, 12, 30] as const;
 const MINING_NOVI_COST = [100, 500, 2_000, 8_000, 30_000] as const;
 const FISHING_NOVI_COST = [100, 500, 2_000, 8_000, 30_000] as const;
+const DEFAULT_MAX_OPERATIVES = 10_000;
+// Operative tier weights (bps): op1 1.0x / op2 1.5x / op3 2.0x.
+const OP_WEIGHT_BPS = [10_000, 15_000, 20_000] as const;
+
+/**
+ * Mirror the on-chain base-yield math (expedition/claim.rs): weight operatives
+ * by tier, cap at maxOps with sqrt diminishing returns, then
+ * `base = weighted × hours × rate / 100` (rate is stored ×100). This is the
+ * PRE-multiplier base; the time-of-day / research / hero / strike / rare-find
+ * bonuses are applied at claim time and are not previewed here.
+ */
+function estimateExpeditionBaseYield(
+  op1: number,
+  op2: number,
+  op3: number,
+  hours: number,
+  ratePer100: number,
+  maxOps: number,
+): number {
+  const rawWeighted = Math.floor(
+    (op1 * OP_WEIGHT_BPS[0] + op2 * OP_WEIGHT_BPS[1] + op3 * OP_WEIGHT_BPS[2]) / 10_000,
+  );
+  const weighted =
+    rawWeighted <= maxOps ? rawWeighted : maxOps + Math.floor(Math.sqrt(rawWeighted - maxOps));
+  return Math.floor((weighted * hours * ratePer100) / 100);
+}
 
 // Expedition stamina cost uses encounter type 0 (common encounter cost)
 const EXPEDITION_STAMINA_COST = ENCOUNTER_STAMINA_COSTS[0] ?? 10;
@@ -135,8 +165,8 @@ export function ExpeditionTab() {
       return {
         ok: false,
         message: isUpgrading
-          ? `${name} Lv ${b.level} is upgrading to Lv ${b.level + 1} — Tier ${expeditionTier} needs Lv ${required}.`
-          : `Tier ${expeditionTier} needs ${name} Lv ${required} — yours is Lv ${b.level}.`,
+          ? `${name} Lv ${b.level} is upgrading to Lv ${b.level + 1}`
+          : `Tier ${expeditionTier} needs ${name} Lv ${required}.`,
       };
     }
     return { ok: true, message: null };
@@ -187,15 +217,16 @@ export function ExpeditionTab() {
   // Reward preview for selected expedition type (tier 0 = base tier)
   const rewardPreview = useMemo(() => {
     const tier = expeditionTier;
-    const ops = expeditionOps[0] + expeditionOps[1] + expeditionOps[2];
+    const [op1, op2, op3] = expeditionOps;
+    const maxOps = Number(ge?.economicConfig?.maxOperativesPerExpedition ?? DEFAULT_MAX_OPERATIVES);
 
     if (selectedType === 1) {
       // Mining
       const hours = MINING_DURATION_HOURS[tier] ?? 1;
-      const gemsPerOpHour = MINING_GEMS_PER_OP_HOUR[tier] ?? 10;
+      const rate = ge?.economicConfig?.miningGemsPerOpHour?.[tier] ?? MINING_GEMS_PER_OP_HOUR[tier];
       const fragments = MINING_FRAGMENT_BONUS[tier] ?? 1;
       const cost = MINING_NOVI_COST[tier] ?? 100;
-      const estimatedGems = Math.floor(ops * gemsPerOpHour * hours);
+      const estimatedGems = estimateExpeditionBaseYield(op1, op2, op3, hours, rate, maxOps);
       return {
         duration: hours,
         estimatedGems,
@@ -207,10 +238,10 @@ export function ExpeditionTab() {
     } else {
       // Fishing
       const hours = FISHING_DURATION_HOURS[tier] ?? 1;
-      const producePerOpHour = FISHING_PRODUCE_PER_OP_HOUR[tier] ?? 15;
+      const rate = ge?.economicConfig?.fishingProducePerOpHour?.[tier] ?? FISHING_PRODUCE_PER_OP_HOUR[tier];
       const fragments = FISHING_FRAGMENT_BONUS[tier] ?? 1;
       const cost = FISHING_NOVI_COST[tier] ?? 100;
-      const estimatedProduce = Math.floor(ops * producePerOpHour * hours);
+      const estimatedProduce = estimateExpeditionBaseYield(op1, op2, op3, hours, rate, maxOps);
       return {
         duration: hours,
         estimatedGems: estimatedProduce,
@@ -220,39 +251,39 @@ export function ExpeditionTab() {
         resourceIcon: "resource-produce" as GameIconId,
       };
     }
-  }, [selectedType, expeditionTier, expeditionOps]);
+  }, [selectedType, expeditionTier, expeditionOps, ge]);
 
   // Active expedition reward display
   const activeRewardInfo = useMemo(() => {
     if (!expedition) return null;
     const tier = expedition.tier ?? 0;
-    const ops =
-      (Number(expedition.operativeUnit1 ?? 0n)) +
-      (Number(expedition.operativeUnit2 ?? 0n)) +
-      (Number(expedition.operativeUnit3 ?? 0n));
+    const op1 = Number(expedition.operativeUnit1 ?? 0n);
+    const op2 = Number(expedition.operativeUnit2 ?? 0n);
+    const op3 = Number(expedition.operativeUnit3 ?? 0n);
+    const maxOps = Number(ge?.economicConfig?.maxOperativesPerExpedition ?? DEFAULT_MAX_OPERATIVES);
 
     if (expedition.expeditionType === 1) {
       const hours = MINING_DURATION_HOURS[tier] ?? 1;
-      const gemsPerOpHour = MINING_GEMS_PER_OP_HOUR[tier] ?? 10;
+      const rate = ge?.economicConfig?.miningGemsPerOpHour?.[tier] ?? MINING_GEMS_PER_OP_HOUR[tier];
       const fragments = MINING_FRAGMENT_BONUS[tier] ?? 1;
       return {
-        estimated: Math.floor(ops * gemsPerOpHour * hours),
+        estimated: estimateExpeditionBaseYield(op1, op2, op3, hours, rate, maxOps),
         fragments,
         label: "Gems",
         icon: "resource-gem" as GameIconId,
       };
     } else {
       const hours = FISHING_DURATION_HOURS[tier] ?? 1;
-      const producePerOpHour = FISHING_PRODUCE_PER_OP_HOUR[tier] ?? 15;
+      const rate = ge?.economicConfig?.fishingProducePerOpHour?.[tier] ?? FISHING_PRODUCE_PER_OP_HOUR[tier];
       const fragments = FISHING_FRAGMENT_BONUS[tier] ?? 1;
       return {
-        estimated: Math.floor(ops * producePerOpHour * hours),
+        estimated: estimateExpeditionBaseYield(op1, op2, op3, hours, rate, maxOps),
         fragments,
         label: "Produce",
         icon: "resource-produce" as GameIconId,
       };
     }
-  }, [expedition]);
+  }, [expedition, ge]);
 
   const handleStart = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -592,8 +623,7 @@ export function ExpeditionTab() {
                           : "border-zinc-800 text-text-muted hover:border-zinc-700"
                       }`}
                     >
-                      <div className="text-xs font-semibold">T{t}</div>
-                      <div className="text-[10px] text-text-muted">{durations[t]}h</div>
+                      <div className="text-xs font-semibold">{durations[t]}h</div>
                     </button>
                   ));
                 })()}
@@ -614,26 +644,43 @@ export function ExpeditionTab() {
               />
             </div>
 
-            {/* Hero — optional, grants bonus yield */}
-            <div className="mt-4">
-              <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Hero (optional)
+            {/* Hero — optional, grants bonus yield. Button row (matches the rally composer). */}
+            {lockedHeroes.some((h) => h !== null) && (
+              <div className="mt-4">
+                <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Hero (optional)
+                </div>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExpeditionHeroSlot(NO_HERO_SLOT)}
+                    className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                      expeditionHeroSlot === NO_HERO_SLOT
+                        ? "border-border-gold/50 bg-accent/30 text-text-gold"
+                        : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
+                    }`}
+                  >
+                    None
+                  </button>
+                  {lockedHeroes.map((h, i) =>
+                    h ? (
+                      <button
+                        key={i}
+                        type="button"
+                        onClick={() => setExpeditionHeroSlot(i)}
+                        className={`rounded-md border px-2.5 py-1.5 text-xs font-medium transition-colors ${
+                          expeditionHeroSlot === i
+                            ? "border-border-gold/50 bg-accent/30 text-text-gold"
+                            : "border-zinc-700 bg-surface text-text-secondary hover:bg-surface/70"
+                        }`}
+                      >
+                        {h.name}
+                      </button>
+                    ) : null,
+                  )}
+                </div>
               </div>
-              <select
-                value={expeditionHeroSlot}
-                onChange={(e) => setExpeditionHeroSlot(Number(e.target.value))}
-                className="mt-2 w-full rounded border border-zinc-800 bg-surface px-2 py-1.5 text-sm text-text-primary"
-              >
-                <option value={NO_HERO_SLOT}>No hero</option>
-                {lockedHeroes.map((h, i) =>
-                  h ? (
-                    <option key={i} value={i}>
-                      Slot {i}: {h.name}
-                    </option>
-                  ) : null,
-                )}
-              </select>
-            </div>
+            )}
 
             {/* Reward Preview */}
             {rewardPreview && (

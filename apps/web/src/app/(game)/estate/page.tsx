@@ -174,13 +174,6 @@ function EstateContent() {
                     <span className="text-text-muted">/{maxSlots}</span>
                   </div>
                 </div>
-                <div className="ml-auto flex items-center gap-2">
-                  {canBuyPlot && (
-                    <TxButton onClick={handleBuyPlot} variant="secondary" className="text-xs px-4">
-                      Buy Plot ({(nextPlotCost / 1000).toFixed(0)}k NOVI)
-                    </TxButton>
-                  )}
-                </div>
               </div>
             </div>
 

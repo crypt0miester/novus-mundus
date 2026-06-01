@@ -25,8 +25,8 @@ import { PublicKey } from '@solana/web3.js';
 
 // `@switchboard-xyz/on-demand` (and the crank-oracle script that wraps it) run
 // web3.js-v1 top-level code that throws under Bun's runtime. Import both lazily
-// so merely loading the CLI module graph — `novus init`, `create-player`,
-// `validator`, etc. — never evaluates them; they only load when the oracle
+// so merely loading the CLI module graph (`novus init`, `create-player`,
+// `validator`, etc.) never evaluates them; they only load when the oracle
 // crank actually reaches the cranking path below.
 
 /** A 32-byte feed-hash key is "unset" when all zero. */
@@ -77,7 +77,7 @@ export async function crankOracle(ctx: CLIContext): Promise<PhaseStats> {
   log.info(`  Cranking ${feeds.length} feed(s) on queue ${config.solSwitchboardQueue.toBase58()}`);
 
   // Lazy-load the web3.js-v1 oracle deps only now that we're committed to
-  // cranking — see the import note at the top of this file.
+  // cranking. See the import note at the top of this file.
   const sb = await import('@switchboard-xyz/on-demand');
   const { crankOnce } = await import('../../../scripts/crank-oracle');
 

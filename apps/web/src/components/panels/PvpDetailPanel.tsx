@@ -24,6 +24,10 @@ import { usePlayerPresence } from "@/lib/hooks/usePresence";
 import { PresenceDot } from "@/components/presence/PresenceDot";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
+import { bnToSafeNumber } from "@/lib/utils";
+import { useCombatForecast } from "@/lib/hooks/useCombatForecast";
+import { useRefill } from "@/lib/hooks/useRefill";
+import { CombatForecastPanel } from "@/components/combat/CombatForecastPanel";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
@@ -105,6 +109,30 @@ export function PvpDetailPanel({
       return null;
     }
   }, [player]);
+
+  // PvP forecast: a strike commits the whole army; the target's garrison is
+  // the defender. Coverage-only until the target account has loaded.
+  const ownUnits: [number, number, number] = [
+    bnToSafeNumber(player?.defensiveUnit1),
+    bnToSafeNumber(player?.defensiveUnit2),
+    bnToSafeNumber(player?.defensiveUnit3),
+  ];
+  const ownWeapons: [number, number, number] = [
+    bnToSafeNumber(player?.meleeWeapons),
+    bnToSafeNumber(player?.rangedWeapons),
+    bnToSafeNumber(player?.siegeWeapons),
+  ];
+  const forecast = useCombatForecast({
+    combat: "pvp",
+    units: ownUnits,
+    weapons: ownWeapons,
+    target: target ? { kind: "player", player: target.account } : { kind: "none" },
+  });
+  // Arm up to the recommended force, never less than arming the standing army.
+  const refill = useRefill(
+    forecast.acquire?.troops ?? 0,
+    Math.max(forecast.acquire?.weapons ?? 0, forecast.coverage.deficit),
+  );
 
   // ── Handlers ──
 
@@ -254,6 +282,18 @@ export function PvpDetailPanel({
           </div>
         </div>
       )}
+
+      {/* Combat forecast: will this strike land? + arm-up / refill. */}
+      <CombatForecastPanel
+        result={forecast}
+        combat="pvp"
+        refill={{
+          plan: refill.plan,
+          run: refill.run,
+          running: refill.running,
+          isLegendary: forecast.isLegendary,
+        }}
+      />
 
       <TargetTravel
         targetLat={target.account.currentLat}

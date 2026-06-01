@@ -42,9 +42,9 @@ export async function estatePda(owner: PublicKey): Promise<PublicKey> {
   return (await deriveEstatePda(await playerPda(owner)))[0];
 }
 
-/** A player's expedition PDA (seeded by the owner wallet, not the player PDA). */
+/** A player's expedition PDA (seeded by the player PDA — kingdom-scoped). */
 export async function expeditionPda(owner: PublicKey): Promise<PublicKey> {
-  return (await deriveExpeditionPda(owner))[0];
+  return (await deriveExpeditionPda(await playerPda(owner)))[0];
 }
 
 async function fetchParsed<T>(

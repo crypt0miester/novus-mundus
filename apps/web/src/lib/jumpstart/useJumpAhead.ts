@@ -80,6 +80,8 @@ type PlannedStep =
        *  The first such step in the plan is where the pre-flight balance check
        *  runs — derived from the plan rather than re-encoding step order. */
       spendsSol?: boolean;
+      /** Fold key: consecutive steps sharing it collapse into one UI row. */
+      group?: string;
     }
   | { kind: "build"; id: string; label: string; buildingType: BuildingType }
   | {
@@ -335,6 +337,7 @@ async function buildSteps(recipe: JumpRecipe, ctx: JumpContext): Promise<Planned
       label: `Research ${getResearchName(r.researchType)} to Lv${r.targetLevel}`,
       computeUnits: 60_000 + 50_000 * r.targetLevel,
       instructions,
+      group: "research",
     });
   }
 
@@ -557,7 +560,10 @@ export function useJumpAhead() {
               const utx = await client.buildVersionedTransaction(unit.instructions, publicKey, {
                 computeUnits: unit.computeUnits,
               });
-              if (unit.signers?.length) utx.sign(unit.signers);
+              // v3 seam: VersionedTransaction.sign is async (signs in place via
+              // web-crypto), so it must be awaited for the hero-mint keypair
+              // signatures to land before the wallet signs and we serialize/send.
+              if (unit.signers?.length) await utx.sign(unit.signers);
               const usigned = await signTransaction(utx);
               const usig = await client.connection.sendRawTransaction(usigned.serialize(), {
                 skipPreflight: false,
@@ -590,7 +596,9 @@ export function useJumpAhead() {
             });
             // Hero-mint steps carry ephemeral keypairs that must co-sign the new
             // NFT asset; they partial-sign before the wallet signs as fee payer.
-            if (step.signers?.length) tx.sign(step.signers);
+            // v3 seam: sign() is async (web-crypto), so await it for the
+            // signatures to land before the wallet signs and we serialize.
+            if (step.signers?.length) await tx.sign(step.signers);
           } else {
             appendLog(`${step.label} — calibrating speedups…`);
             const speedups = await probeBuildSpeedups(
@@ -749,6 +757,9 @@ export function useJumpAhead() {
               label: p.label,
               status: (done ? "done" : "pending") as JumpStep["status"],
               detail: done ? "already done" : undefined,
+              // Consecutive steps sharing a group fold into one collapsible UI row
+              // (the "build" steps, the "research" steps).
+              group: p.kind === "build" ? "build" : p.kind === "fixed" ? p.group : undefined,
             };
           }),
           phase: "running",

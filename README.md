@@ -510,7 +510,7 @@ See "Anti-Sybil Event Eligibility" above. Tier-gated by account age, min attacks
 - **Framework**: Pinocchio 0.9.2 (no Anchor — all account validation is manual)
 - **External crates**: `p-core` (MPL Core for hero NFTs), `p-pyth` (Pyth price feeds), `switchboard-on-demand`, `alt-name-service` + `tld-house` (ANS / .alldomains player and team names), `libm` (deterministic float math)
 - **Instruction discriminator**: u16 little-endian (2 bytes)
-- **Account size**: PlayerAccount is `PlayerCore` (1056 bytes) + up to 7 extension sections (research, heroes, inventory, rally, team, cosmetics, court) up to a total `MAX_SIZE = 1946 bytes`
+- **Account size**: PlayerAccount is `PlayerCore` (528 bytes) + up to 7 extension sections (research, inventory, team, rally, heroes, cosmetics, court) up to a total `MAX_SIZE = 1248 bytes`
 - **PDA seeds**: kingdom-scoped except for the NOVI mint (shared)
 
 See `TECHNICAL_ARCHITECTURE.md` for full module structure, account layouts, instruction dispatch table, and PDA seed reference.
@@ -569,7 +569,7 @@ bun run novus status                      # verify each system reports OK
 bun run novus create-player --tier beginner   # optional: register a CLI-spun player (the web app handles wallet-based player creation)
 ```
 
-`init all` is create-or-skip — existing accounts are never overwritten. See `sdks/novus-mundus-ts/cli/README.md` for the full command reference.
+`init all` is create-or-skip — existing accounts are never overwritten. Both `init` and `update` first run a client-side seed-data preflight (`cli/lib/validate-data.ts`) that checks cross-references and enum ranges in `cli/data/*` (bundle items exist and are active, hero meditation cities and buff stats are valid, castle/city ids resolve, dungeon floor arrays match, etc.) and aborts with line-itemized errors before any account is written. See `sdks/novus-mundus-ts/cli/README.md` for the full command reference.
 
 #### Biome seeding — operator notes
 

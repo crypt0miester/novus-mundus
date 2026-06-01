@@ -75,7 +75,7 @@ export async function createExpeditionStartInstruction(
   params: ExpeditionStartParams
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [expedition] = await deriveExpeditionPda(player);
   const [estate] = await deriveEstatePda(player);
 
   const keys = [
@@ -146,7 +146,7 @@ export async function createExpeditionStrikeInstruction(
   params: ExpeditionStrikeParams
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [expedition] = await deriveExpeditionPda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
@@ -203,7 +203,7 @@ export async function createExpeditionClaimInstruction(
   accounts: ExpeditionClaimAccounts
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [expedition] = await deriveExpeditionPda(player);
   const [estate] = await deriveEstatePda(player);
 
   const keys = [
@@ -256,7 +256,7 @@ export async function createExpeditionAbortInstruction(
   accounts: ExpeditionAbortAccounts
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [expedition] = await deriveExpeditionPda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -314,7 +314,7 @@ export async function createExpeditionSpeedupInstruction(
   params: ExpeditionSpeedupParams
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [expedition] = await deriveExpeditionPda(accounts.owner);
+  const [expedition] = await deriveExpeditionPda(player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },

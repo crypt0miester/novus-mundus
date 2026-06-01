@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePlayer } from "./usePlayer";
 import { useIncomingThreat } from "./useIncomingThreat";
 import { cairnBeat } from "@/lib/narrative";
+import { useCairnNudgeStore } from "@/lib/store/cairn-nudge";
 
 /**
  * How long a wallet must sit at Level 1 (in this tab's session) before the
@@ -40,6 +41,9 @@ export function useCairnNudge(): string | null {
   const { data: playerData } = usePlayer();
   const level = playerData?.account?.level ?? null;
   const threat = useIncomingThreat();
+  // An imperative line the player just triggered (combat forecast warning). It
+  // is the freshest signal and outranks the passive nudges below.
+  const transient = useCairnNudgeStore((s) => s.line);
 
   // Whether the L1 stall hint is within its show window. Every sessionStorage
   // read/write happens in the effect below, never in the render body.
@@ -101,6 +105,8 @@ export function useCairnNudge(): string | null {
     }, 5000);
     return () => clearInterval(id);
   }, [level]);
+
+  if (transient) return transient;
 
   if (threat.active) {
     // The seat outranks all: a host marching on a castle you hold is the gravest

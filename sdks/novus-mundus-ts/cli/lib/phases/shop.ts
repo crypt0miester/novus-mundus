@@ -186,7 +186,7 @@ export async function initShop(ctx: CLIContext): Promise<PhaseStats> {
 
       // Flash sales are created already active (createFlashSale defaults
       // isActive=true; autoActivate sets startsAt=now above), so no separate
-      // activate_sale call is needed — that instruction now targets only
+      // activate_sale call is needed; that instruction now targets only
       // seasonal / DAO-promotion sales.
       void created;
 

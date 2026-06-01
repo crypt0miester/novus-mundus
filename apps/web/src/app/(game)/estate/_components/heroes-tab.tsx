@@ -483,27 +483,6 @@ export function HeroesTab() {
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-3 lg:grid-rows-1 lg:h-full">
       {/* Left: lists — scrolls independently of the detail column */}
       <div className="space-y-4 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto px-1">
-        <PendingEffectBadge variant="block" />
-
-        {heroBuffs.length > 0 && (
-          <div className="flex flex-wrap gap-2">
-            {heroBuffs.map((buff) => {
-              const icon = buffStatIcon(buff.stat);
-              return (
-                <div
-                  key={buff.label}
-                  className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-surface px-2.5 py-1"
-                >
-                  {icon && <GameIcon id={icon} title={buff.label} size={16} />}
-                  <span className="text-xs font-bold text-text-gold">
-                    +{(buff.bps / 100).toFixed(1)}%
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        )}
-
         <div className="flex items-center gap-4 text-xs text-text-muted">
           <span>
             {filledSlots}/{maxLockedHeroes} slots
@@ -549,24 +528,6 @@ export function HeroesTab() {
             </div>
           )}
 
-          {/* Slot-unlock hint — mirror the chain's
-              `max_locked_heroes_for_sanctuary_level` ladder so players see
-              what Sanctuary level unlocks the next slot instead of tapping
-              a locked card and getting MaxHeroesLocked. Skipped when all
-              three storage slots are already available (Sanctuary ≥ 10). */}
-          {lockGate.allowed && nextSlotUnlockLevel !== null && (
-            <div className="mb-2 rounded-lg border border-border-gold/40 bg-accent/10 px-3 py-2">
-              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-                {maxLockedHeroes === 0 ? "Hero slots locked" : "Unlock the next slot"}
-              </div>
-              <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
-                {maxLockedHeroes === 0
-                  ? "Build a Sanctuary on your estate to unlock your first hero slot."
-                  : `Upgrade to Sanctuary level ${nextSlotUnlockLevel} to unlock slot ${maxLockedHeroes + 1}.`}
-              </p>
-            </div>
-          )}
-
           <div className="grid gap-2 grid-cols-3">
             {[0, 1, 2].map((i) => {
               const hero = lockedHeroes[i];
@@ -601,6 +562,39 @@ export function HeroesTab() {
           </div>
         </div>
 
+        <PendingEffectBadge variant="block" />
+
+        {heroBuffs.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {heroBuffs.map((buff) => {
+              const icon = buffStatIcon(buff.stat);
+              return (
+                <div
+                  key={buff.label}
+                  className="flex items-center gap-1.5 rounded-md border border-zinc-800 bg-surface px-2.5 py-1"
+                >
+                  {icon && <GameIcon id={icon} title={buff.label} size={16} />}
+                  <span className="text-xs font-bold text-text-gold">
+                    +{(buff.bps / 100).toFixed(1)}%
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+          {lockGate.allowed && nextSlotUnlockLevel !== null && (
+            <div className="mb-2 rounded-lg border border-border-gold/40 bg-accent/10 px-3 py-2">
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
+                {maxLockedHeroes === 0 ? "Hero slots locked" : "Unlock the next slot"}
+              </div>
+              <p className="mt-1 text-[11px] leading-relaxed text-text-muted">
+                {maxLockedHeroes === 0
+                  ? "Build a Sanctuary on your estate to unlock your first hero slot."
+                  : `Upgrade to Sanctuary level ${nextSlotUnlockLevel} to unlock slot ${maxLockedHeroes + 1}.`}
+              </p>
+            </div>
+          )}
         {unlockedHeroes.length > 0 && (
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">

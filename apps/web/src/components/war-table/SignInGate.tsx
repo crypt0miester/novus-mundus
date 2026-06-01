@@ -25,9 +25,6 @@ export function SignInGate({ title, signingIn, error, onSignIn }: SignInGateProp
       <Lock className="h-6 w-6 text-text-muted" aria-hidden />
       <div className="space-y-1">
         <p className="text-sm font-semibold text-text-primary">{title}</p>
-        <p className="text-xs text-text-muted">
-          Messages are end-to-end encrypted. Sign in to read and reply.
-        </p>
       </div>
       <button
         type="button"
@@ -38,10 +35,10 @@ export function SignInGate({ title, signingIn, error, onSignIn }: SignInGateProp
         {signingIn ? (
           <>
             <LoaderCircle className="h-4 w-4 animate-spin" aria-hidden />
-            Signing in
+            signing in
           </>
         ) : (
-          "Sign in to read"
+          "sign in"
         )}
       </button>
       {error ? <p className="max-w-xs text-xs text-danger">{error}</p> : null}

@@ -16,7 +16,7 @@ use crate::{
     utils::{read_u32, read_u8},
     validation::{require_key_match, require_signer, require_writable},
 };
-use pinocchio::{sysvars::Sysvar, AccountView, Address, ProgramResult};
+use pinocchio::{error::ProgramError, sysvars::Sysvar, AccountView, Address, ProgramResult};
 use pinocchio_system::instructions::Transfer;
 
 /// Purchase a bundle from the shop
@@ -271,10 +271,17 @@ pub fn process(
 
     let item_count = bundle.item_count as usize;
 
-    // If shop_item_accounts provided, validate and use for detailed fulfillment
-    // Otherwise, use simplified fulfillment based on item_id ranges
-    if shop_item_accounts.len() >= item_count {
-        // Detailed fulfillment with item type lookup
+    // Resolving each bundle item's true item_type requires its ShopItemAccount:
+    // item_id != item_type in the catalogue (gems are item_id 1 but item_type
+    // 50), so the caller MUST pass one shop item account per bundle item. Without
+    // the full set we cannot fulfil correctly — fail loudly rather than guess the
+    // item_type from item_id and silently grant the wrong thing.
+    if shop_item_accounts.len() < item_count {
+        return Err(ProgramError::NotEnoughAccountKeys);
+    }
+
+    // Detailed fulfillment with item type lookup (one shop item account per item)
+    {
         for i in 0..item_count {
             let bundle_item = &bundle.items[i];
             if bundle_item.quantity == 0 {
@@ -313,39 +320,6 @@ pub fn process(
                 }
             } else {
                 fulfill_item(player, shop_item.item_type, amount)?;
-            }
-        }
-    } else {
-        // Simplified fulfillment - just use item_id as item_type
-        // This is a fallback when shop item accounts aren't provided
-        for i in 0..item_count {
-            let bundle_item = &bundle.items[i];
-            if bundle_item.quantity == 0 {
-                continue;
-            }
-
-            // Use item_id as a proxy for item_type (simplified)
-            let item_type = (bundle_item.item_id % 1000) as u16;
-            let amount = bundle_item.quantity as u64;
-
-            // Check if this is an inventory item
-            if is_inventory_item_type(item_type) {
-                for _ in 0..amount {
-                    add_to_inventory(
-                        program_id,
-                        buyer,
-                        player_account.address(),
-                        inventory_account,
-                        system_program,
-                        item_type,
-                        1,
-                        0,
-                        bundle_item.item_id,
-                        now as u32,
-                    )?;
-                }
-            } else {
-                fulfill_item(player, item_type, amount)?;
             }
         }
     }

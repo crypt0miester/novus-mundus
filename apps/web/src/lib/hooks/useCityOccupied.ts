@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { toGrid, OCCUPANT_CASTLE } from "novus-mundus-sdk";
+import { OCCUPANT_CASTLE } from "novus-mundus-sdk";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWorldCastles } from "@/lib/hooks/world/useWorldCastles";
@@ -73,19 +73,22 @@ export function useCityOccupied(cityId: number | null | undefined) {
   const locations = useAccountStore((s) => s.locations);
   /* Cross-reference with the encounters store so we can filter out
    * locations whose encounter just died. The chain closes the location
-   * account in the same tx as the killing blow (attack_encounter.rs:693),
-   * but Solana's onProgramAccountChange propagates the close notification
-   * as `data.length === 0`, which the subscription manager filters out —
-   * so the location lingers in this map forever otherwise. Reading the
-   * live encounter health gives us sub-second cleanup at render time. */
+   * account in the same tx as the killing blow (attack_encounter.rs:693).
+   * That close is now evicted from the store at the source (the WS manager
+   * surfaces empty-data closes via onClose, see subscriptions.ts
+   * removeClosedAccount), but there is still a brief window between the
+   * encounter's health reaching 0 and the close tx landing. Reading live
+   * encounter health gives us sub-second cleanup at render time, ahead of
+   * the close. */
   const encounters = useAccountStore((s) => s.encounters);
-  /* Same problem in reverse for players: when a player completes a walk
-   * (intracity_complete) or arrives via intercity travel, the origin
-   * location PDA is closed but the WS close-notification is dropped at
-   * the same data.length===0 bail. Without cross-referencing, every cell
-   * a player has ever stood on lingers as a black dot. Live chain truth
-   * for player positions lives in `player.account.currentLat/Long` (self)
-   * and `otherPlayers[pubkey].account.currentLat/Long` (everyone else). */
+  /* Player markers render from the Location PDA cell (the canonical on-chain
+   * occupancy record), now that closed Locations are evicted from the store
+   * at the source (the WS manager surfaces empty-data closes via onClose,
+   * see subscriptions.ts removeClosedAccount). The player account is read
+   * only to resolve cosmetics, which the Location PDA does not carry: name
+   * color, badge, frame, and title come off `player.account` (self) and
+   * `otherPlayers[pubkey].account` (everyone else), keyed by the occupant
+   * pubkey on the Location cell. */
   const localPlayer = useAccountStore((s) => s.player);
   /* Selector narrowing: the program-wide WS replaces the whole otherPlayers
    * Map on every player tick anywhere in the kingdom, which would otherwise
@@ -149,6 +152,12 @@ export function useCityOccupied(cityId: number | null | undefined) {
         for (const r of results) {
           store.upsertLocation(r.pubkey, r.account);
         }
+        /* This fetch is the authoritative occupied set for the city, so any
+         * city cell still in the store but absent here is a ghost from a close
+         * the WS never delivered (programSubscribe drops closes). Reconcile it
+         * away. Run after the upserts so the freshly-fetched cells are present
+         * and only stale ones are dropped. */
+        store.reconcileCityLocations(cityId, new Set(results.map((r) => r.pubkey.toBase58())));
         if (!cancelled) setSeededFor(cityId);
       })
       .catch((e: unknown) => {
@@ -166,13 +175,6 @@ export function useCityOccupied(cityId: number | null | undefined) {
   const data = useMemo<OccupiedCell[]>(() => {
     if (cityId == null) return [];
     const nowSec = nowTick;
-    /* Build a "live position" map keyed by player PDA. Any player location
-     * whose grid coords don't match the player's chain `currentLat/Long`
-     * is either (a) a stale entry from a closed PDA that the WS swallowed
-     * or (b) an in-flight intracity reservation — both should be hidden
-     * because the walk-line / travel marker covers the reservation case
-     * and the player's actual position is the one we want to render. */
-    const liveByPlayer = new Map<string, { gridLat: number; gridLong: number }>();
     // Per-player cosmetic snapshot, resolved through the catalog. Pushed
     // onto each cell below so the renderer doesn't have to re-do the lookup.
     interface CellCosmetics {
@@ -199,14 +201,9 @@ export function useCityOccupied(cityId: number | null | undefined) {
         titleId: equippedTitle,
       });
     };
-    if (localPlayer) {
-      const key = localPlayer.pubkey.toBase58();
-      liveByPlayer.set(key, {
-        gridLat: toGrid(localPlayer.account.currentLat),
-        gridLong: toGrid(localPlayer.account.currentLong),
-      });
+    if (localPlayer && localPlayer.account.currentCity === cityId) {
       collectCosmetics(
-        key,
+        localPlayer.pubkey.toBase58(),
         localPlayer.account.equippedNameColor,
         localPlayer.account.equippedBadge,
         localPlayer.account.equippedAvatarFrame,
@@ -217,13 +214,8 @@ export function useCityOccupied(cityId: number | null | undefined) {
     // loop only resolves cosmetics for players who can occupy a cell in the
     // city the disc is rendering.
     for (const entry of cityPlayers) {
-      const key = entry.pubkey.toBase58();
-      liveByPlayer.set(key, {
-        gridLat: toGrid(entry.account.currentLat),
-        gridLong: toGrid(entry.account.currentLong),
-      });
       collectCosmetics(
-        key,
+        entry.pubkey.toBase58(),
         entry.account.equippedNameColor,
         entry.account.equippedBadge,
         entry.account.equippedAvatarFrame,
@@ -261,19 +253,10 @@ export function useCityOccupied(cityId: number | null | undefined) {
         if (encEntry.account.health === 0n) continue;
         if (Number(encEntry.account.despawnAt) <= nowSec) continue;
       }
-      /* Player occupant (type=1) — only keep the cell that matches the
-       * player's chain-state `currentLat/Long`. Other cells with the
-       * same occupant pubkey are stale ghosts from old walks. Players
-       * not in `liveByPlayer` (not the local player and not in this
-       * city's narrowed roster) fall through unchanged — the same
-       * permissive behaviour the broad-Map version applied to any
-       * player it didn't have a live position for. */
-      if (account.occupantType === 1) {
-        const live = liveByPlayer.get(account.occupant.toBase58());
-        if (live && (live.gridLat !== account.gridLat || live.gridLong !== account.gridLong)) {
-          continue;
-        }
-      }
+      /* Player occupant (type=1) renders straight from this Location cell.
+       * The cosmetics lookup below pulls name color / badge / frame / title
+       * off the player's account (keyed by occupant pubkey); when the account
+       * is not in the store the cell still draws with the default palette. */
       const occupantKey = account.occupant.toBase58();
       const cosmetic = cosmeticsByPlayer.get(occupantKey);
       out.push({

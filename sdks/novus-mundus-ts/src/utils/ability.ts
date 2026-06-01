@@ -107,20 +107,20 @@ export function getAbilityDescription(template: HeroTemplateAccount): string {
     case AbilityKind.BuffNext: {
       const stat = getBuffStatMeta(template.abilityStat);
       const pct = (template.abilityParam1 / 100).toFixed(1);
-      return `Next combat action: +${pct}% ${stat?.name ?? "stat"}`;
+      return `combat action: +${pct}% ${stat?.name ?? "stat"}`;
     }
     case AbilityKind.CritNext:
-      return "Next attack: guaranteed critical hit";
+      return "attack: guaranteed critical hit";
     case AbilityKind.ShieldNext:
-      return "Next defense: ×2 defense";
+      return "defense: ×2 defense";
     case AbilityKind.EncounterSkip:
-      return "Next encounter: auto-success";
+      return "encounter: auto-success";
     case AbilityKind.InstantResource:
-      return `Grants ${template.abilityParam1.toLocaleString()} cash`;
+      return `grants ${template.abilityParam1.toLocaleString()} cash`;
     case AbilityKind.FragmentRefund:
-      return `Grants ${template.abilityParam1.toLocaleString()} fragments`;
+      return `grants ${template.abilityParam1.toLocaleString()} fragments`;
     default:
-      return "Unknown ability";
+      return "unknown ability";
   }
 }
 

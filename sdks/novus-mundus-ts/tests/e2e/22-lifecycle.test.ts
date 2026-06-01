@@ -1325,7 +1325,7 @@ describe('Full Game Lifecycle', () => {
       );
       await sendTx(ctx.svm, new Transaction().add(ix), [alpha.keypair], ctx.config);
 
-      const [expeditionPda] = await deriveExpeditionPda(alpha.publicKey);
+      const [expeditionPda] = await deriveExpeditionPda(alpha.playerPda);
       const exists = await accountExists(ctx.svm, expeditionPda);
       expect(exists).toBe(true);
 

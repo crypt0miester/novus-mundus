@@ -919,13 +919,14 @@ impl ExpeditionConfig {
             fishing_novi_cost: [100, 500, 2_000, 8_000, 30_000],
             fishing_fragment_bonus: [1, 2, 5, 12, 30],
 
-            rare_find_multiplier: 5,
+            rare_find_multiplier: 8, // 8x on a rare find (was 5x) — bigger, more memorable spike
             operative_tier_1_multiplier_bps: 10000, // 1.0x
             operative_tier_2_multiplier_bps: 15000, // 1.5x
             operative_tier_3_multiplier_bps: 20000, // 2.0x
 
-            mining_rare_chance_bps: [100, 300, 500, 1000, 2000],
-            fishing_rare_chance_bps: [100, 300, 500, 1000, 2000],
+            // Rare-find chance bumped per tier: 1.5%/4%/7%/12%/22% (was 1/3/5/10/20%).
+            mining_rare_chance_bps: [150, 400, 700, 1200, 2200],
+            fishing_rare_chance_bps: [150, 400, 700, 1200, 2200],
             perfect_expedition_bonus_bps: 2500, // 25%
 
             mining_duration_hours: [1, 2, 4, 8, 16],

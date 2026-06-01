@@ -31,6 +31,14 @@ async function resolveIx(ix: IxInput): Promise<TransactionInstruction[]> {
   return Promise.all(arr);
 }
 
+// Simulation error objects carry bigints under the v3 seam (u64 fields, custom
+// program error codes), which plain JSON.stringify rejects with "cannot
+// serialize BigInt" — masking the real failure. Use this for any diagnostic
+// stringify so a failing tx surfaces its actual error.
+export function safeStringify(value: unknown): string {
+  return JSON.stringify(value, (_key, v) => (typeof v === 'bigint' ? v.toString() : v));
+}
+
 // Account Helpers
 
 export async function accountExists(
@@ -107,7 +115,7 @@ export async function sendWithRetry(
     const sim = await ctx.connection.simulateTransaction(vtx);
     if (sim.value.err) {
       const logs = sim.value.logs?.join('\n') ?? '';
-      throw new Error(`Simulation failed: ${JSON.stringify(sim.value.err)}\n${logs}`);
+      throw new Error(`Simulation failed: ${safeStringify(sim.value.err)}\n${logs}`);
     }
     if (ctx.verbose) {
       log.info(`  sim: ${sim.value.unitsConsumed ?? '?'} CU`);
@@ -184,7 +192,7 @@ export async function novusSimulateTransaction(
     success: sim.value.err === null,
     unitsConsumed: Number(sim.value.unitsConsumed) ?? null,
     logs: sim.value.logs ?? [],
-    error: sim.value.err ? JSON.stringify(sim.value.err) : null,
+    error: sim.value.err ? safeStringify(sim.value.err) : null,
   };
 }
 
@@ -330,6 +338,10 @@ export const log = {
 
   error(msg: string) {
     console.error(`  ! Error: ${msg}`);
+  },
+
+  warn(msg: string) {
+    console.warn(`  ! Warning: ${msg}`);
   },
 
   dryRun(msg: string) {

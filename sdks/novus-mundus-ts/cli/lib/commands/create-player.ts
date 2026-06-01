@@ -56,7 +56,7 @@ import {
 // Idempotent "create ATA" instruction, built inline from the seam's primitives.
 // The v1 `@solana/spl-token` lib is incompatible with the web3.js-v3 seam
 // (its PublicKey has no `.toBuffer()`), and the SDK itself is already
-// spl-token-free — so we mirror the ATA program's CreateIdempotent (data `[1]`).
+// spl-token-free, so we mirror the ATA program's CreateIdempotent (data `[1]`).
 function createAtaIdempotentIx(
   payer: PublicKey,
   ata: PublicKey,
@@ -110,11 +110,21 @@ export async function handleCreatePlayer(ctx: CLIContext, args: ParsedArgs): Pro
   // city; the picker is called per-player off that cache.
   const cityCache = new Map<number, CityForSpawn>();
 
+  // When a --cities enrollment set is active, round-robin new players across
+  // those cities only. Otherwise fall back to the full catalogue. Spreading
+  // over `% CITIES.length` would assign players to un-enrolled cities that
+  // don't exist on chain yet and abort the run.
+  const spreadCities = ctx.enrolledCities
+    ? [...ctx.enrolledCities].sort((a, b) => a - b)
+    : null;
+
   for (let i = 0; i < count; i++) {
     const playerIndex = startIndex + i;
     const cityId = cityFlag !== undefined
       ? parseInt(cityFlag, 10)
-      : playerIndex % CITIES.length;
+      : spreadCities && spreadCities.length > 0
+        ? spreadCities[playerIndex % spreadCities.length]
+        : playerIndex % CITIES.length;
 
     const city = CITIES.find(c => c.id === cityId);
     if (!city) {

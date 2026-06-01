@@ -98,7 +98,7 @@ export interface JumpRecipe {
 /**
  * Lamport price of each shop item the jumps buy — mirrors `cli/data/shop-items.ts`.
  * Held as integer lamports (not SOL floats) so a summed tier price stays exact.
- *  - 5: Small NOVI Pack  — 0.05 SOL to 10,000 NOVI
+ *  - 5: Cash Pack (10,000) — 0.05 SOL to 10,000 cash (item_type 51 credits cash_on_hand)
  *  - 7: Gem Pack (10,000) — 0.8 SOL
  *  - 8: Gem Pack (100,000) — 7 SOL
  */
@@ -138,7 +138,7 @@ export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
     subscriptionTier: 0, // Rookie — modest bundle; ~100 XP keeps the player at Lv1 (Common heroes only).
     purchases: [
       { itemId: 7, quantity: 1 }, // 10k gems for build speedups + stash
-      { itemId: 5, quantity: 1 }, // 10k NOVI (cash)
+      { itemId: 5, quantity: 1 }, // 10k cash
     ],
     buildings: [BuildingType.Market, BuildingType.Barracks],
     heroes: [{ templateId: 1 }], // 1 Common
@@ -150,7 +150,7 @@ export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
     subscriptionTier: 1, // Expert — ~1,000 XP lifts the player to ~Lv5, unlocking Rare heroes.
     purchases: [
       { itemId: 7, quantity: 5 }, // 50k gems
-      { itemId: 5, quantity: 6 }, // 60k NOVI (cash)
+      { itemId: 5, quantity: 6 }, // 60k cash
     ],
     buildings: [
       BuildingType.Barracks,
@@ -172,7 +172,7 @@ export const JUMP_RECIPES: Record<JumpTier, JumpRecipe> = {
     purchases: [
       { itemId: 8, quantity: 1 }, // 100k gems
       { itemId: 7, quantity: 1 }, // 10k gems
-      { itemId: 5, quantity: 15 }, // 150k NOVI (cash)
+      { itemId: 5, quantity: 15 }, // 150k cash
     ],
     buildings: [
       BuildingType.Barracks,

@@ -207,11 +207,6 @@ export function MansionTab() {
                 </div>
               </div>
             </div>
-            <p className="mt-3 text-[11px] text-text-muted">
-              The streak holds while you return each day. The next jump is at{" "}
-              <span className="text-text-secondary">7, 14, 30, 60, 90, 180</span> days — each tier
-              raises the multiplier on every daily payout.
-            </p>
           </div>
 
           {milestone ? (

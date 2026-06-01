@@ -9,6 +9,7 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { AbilityCard } from "@/components/heroes/AbilityCard";
 import { getBuffStatByAttrKey, hasAbility, formatDurationCompact } from "novus-mundus-sdk";
 import { fragmentCost, IGNORED_ATTRS } from "./helpers";
+import { HeroImage } from "./HeroImage";
 import type { HeroData, Selection, TemplateInfo } from "./types";
 
 interface Gate {
@@ -92,6 +93,18 @@ export function HeroDetailPanel({
 
   return (
     <>
+      {/* Portrait composited from the hero's on-chain state. HeroImage keys its
+          src on level, so leveling up or locking refreshes the marks/halo. */}
+      <div className="relative aspect-square w-full overflow-hidden rounded-lg border border-border-default bg-surface">
+        <HeroImage
+          pubkey={hero.address.toBase58()}
+          level={currentLevel || 1}
+          locked={selected?.type === "locked"}
+          alt={hero.asset.name || "Hero"}
+          className="h-full w-full"
+        />
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
           <div className="text-base font-semibold text-text-primary">
@@ -102,6 +115,11 @@ export function HeroDetailPanel({
               ? `Locked · Slot ${(selected as { slot: number }).slot}`
               : "Unlocked · In Wallet"}
           </div>
+          {xp != null && (
+            <div className="text-[10px] text-text-muted">
+                XP: <span className="font-mono">{xp.toLocaleString()}</span>
+            </div>
+          )}
         </div>
         {level != null && (
           <div className="text-right">
@@ -110,12 +128,6 @@ export function HeroDetailPanel({
           </div>
         )}
       </div>
-
-      {xp != null && (
-        <div className="text-xs text-text-muted">
-          XP: <span className="font-mono">{xp.toLocaleString()}</span>
-        </div>
-      )}
 
       {buffs.length > 0 && (
         <div>

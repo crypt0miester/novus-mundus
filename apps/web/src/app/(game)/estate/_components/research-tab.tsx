@@ -157,7 +157,10 @@ export function ResearchTab() {
   const loading = templatesLoading || progressLoading;
 
   return (
-    <div className="flex h-full flex-col gap-3">
+    // Content-driven height, matching the other estate tabs. The FeatureView
+    // wrapper supplies the scroll; a former `h-full` here collapsed to 0 on
+    // desktop when the flex height-chain did not resolve, hiding everything.
+    <div className="flex flex-col gap-3">
       <BuildingShowcase buildingId={BuildingId.Academy} icon="buff-xp-gain" />
       {travelWarning && (
         <div className="rounded-lg border border-border-gold/50 bg-accent/20 p-3 text-sm text-danger">
@@ -245,7 +248,7 @@ export function ResearchTab() {
           )}
 
           {currentCategory && (
-            <div className="min-h-0 flex-1 overflow-y-auto">
+            <div>
               {academyLevel < (ACADEMY_REQUIRED[currentCategory.num] ?? 1) && (
                 <p className="mb-2 text-xs text-red-400">
                   Requires Academy Lv {ACADEMY_REQUIRED[currentCategory.num] ?? 1}

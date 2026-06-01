@@ -25,6 +25,10 @@ import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { TargetTravel } from "@/components/panels/TargetTravel";
+import { bnToSafeNumber } from "@/lib/utils";
+import { useCombatForecast } from "@/lib/hooks/useCombatForecast";
+import { useRefill } from "@/lib/hooks/useRefill";
+import { CombatForecastPanel } from "@/components/combat/CombatForecastPanel";
 
 const RARITY_LABELS = ["Common", "Uncommon", "Rare", "Epic", "Legendary"];
 const RARITY_COLORS = [
@@ -92,6 +96,32 @@ export function EncounterDetailPanel({
   const stamina = useStamina(player);
   const playerStamina = stamina.current;
   const hasStamina = staminaCost != null ? playerStamina >= staminaCost : true;
+
+  // Combat forecast: an encounter strike uses the whole army (no troop input),
+  // so the attacker force is the player's entire defensive muster + arsenal.
+  const ownedUnits: [number, number, number] = [
+    bnToSafeNumber(player?.defensiveUnit1),
+    bnToSafeNumber(player?.defensiveUnit2),
+    bnToSafeNumber(player?.defensiveUnit3),
+  ];
+  const ownedWeapons: [number, number, number] = [
+    bnToSafeNumber(player?.meleeWeapons),
+    bnToSafeNumber(player?.rangedWeapons),
+    bnToSafeNumber(player?.siegeWeapons),
+  ];
+  const forecast = useCombatForecast({
+    combat: "encounter",
+    units: ownedUnits,
+    weapons: ownedWeapons,
+    target: encounter
+      ? {
+          kind: "encounter",
+          defenseBps: encounter.account.defense,
+          health: Number(encounter.account.health),
+        }
+      : { kind: "none" },
+  });
+  const refill = useRefill(forecast.acquire?.troops ?? 0, forecast.acquire?.weapons ?? 0);
 
   // ── Handlers ──
 
@@ -260,6 +290,18 @@ export function EncounterDetailPanel({
           </div>
         </div>
       )}
+
+      {/* Combat forecast: will this strike clear it? + arm-up / refill. */}
+      <CombatForecastPanel
+        result={forecast}
+        combat="encounter"
+        refill={{
+          plan: refill.plan,
+          run: refill.run,
+          running: refill.running,
+          isLegendary: forecast.isLegendary,
+        }}
+      />
 
       <TargetTravel
         targetLat={encounter.account.locationLat}

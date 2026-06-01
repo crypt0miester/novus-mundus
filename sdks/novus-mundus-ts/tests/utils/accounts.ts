@@ -295,9 +295,9 @@ export async function fetchEncounterByCity(
 
 export async function fetchExpedition(
   svm: LiteSVM,
-  owner: PublicKey
+  playerPda: PublicKey
 ): Promise<ExpeditionAccount | null> {
-  const [expeditionPda] = await deriveExpeditionPda(owner);
+  const [expeditionPda] = await deriveExpeditionPda(playerPda);
   const info = await fetchAccount(svm, expeditionPda);
   if (!info || info.data.length === 0) return null;
   return deserializeExpedition(info.data);

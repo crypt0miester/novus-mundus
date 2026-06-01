@@ -5,6 +5,9 @@ import { Check, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useUrlIntParam, useUrlPatch } from "@/lib/hooks/useUrlParam";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { useCombatForecast } from "@/lib/hooks/useCombatForecast";
+import { useRefill } from "@/lib/hooks/useRefill";
+import { CombatForecastPanel } from "@/components/combat/CombatForecastPanel";
 import { useCastle } from "@/lib/hooks/useCastle";
 import { useWorldCastles } from "@/lib/hooks/world/useWorldCastles";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
@@ -154,6 +157,18 @@ export function CastleTab() {
     Number(player?.rangedWeapons ?? 0n),
     Number(player?.siegeWeapons ?? 0n),
   ];
+
+  // Castle assault commits the whole army; the garrison lives in separate
+  // contribution accounts not loaded here, so this is coverage-only (an arm-up
+  // warning when troops outnumber weapons) rather than a win/loss verdict.
+  const castleForecast = useCombatForecast({
+    combat: "castle",
+    units: availUnits,
+    weapons: availWeapons,
+    target: { kind: "none" },
+    driveBy,
+  });
+  const castleRefill = useRefill(0, castleForecast.coverage.deficit);
 
   // The player's locked heroes (slots 0-2); one may optionally join the garrison.
   const lockedHeroes = useLockedHeroes();
@@ -1402,6 +1417,16 @@ export function CastleTab() {
                     Drive-by
                   </button>
                 </div>
+                <CombatForecastPanel
+                  result={castleForecast}
+                  combat="castle"
+                  refill={{
+                    plan: castleRefill.plan,
+                    run: castleRefill.run,
+                    running: castleRefill.running,
+                    isLegendary: castleForecast.isLegendary,
+                  }}
+                />
                 {attackInfo.attackable && (
                   <p className="text-[10px] text-text-muted">
                     You must stand within striking range of the castle and not be traveling.

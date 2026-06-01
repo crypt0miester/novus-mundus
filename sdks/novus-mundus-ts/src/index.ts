@@ -30,6 +30,7 @@ export * from './state/encounter';
 export * from './state/expedition';
 export * from './state/arena';
 export * from './state/loot';
+export * from './state/forge';
 export * from './state/event';
 export * from './state/shop';
 export * from './state/castle';

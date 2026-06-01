@@ -206,7 +206,7 @@ pub fn process(
 
     // 14. Validate ExpeditionAccount PDA
     let (expected_expedition_pda, expedition_bump) = pinocchio::Address::find_program_address(
-        &[EXPEDITION_SEED, owner.address().as_ref()],
+        &[EXPEDITION_SEED, player_account.address().as_ref()],
         program_id,
     );
 
@@ -239,11 +239,22 @@ pub fn process(
         .checked_sub(novi_cost)
         .ok_or(GameError::MathOverflow)?;
 
+    // Snapshot the fields still needed below, then release the PlayerAccount
+    // borrow. The optional hero transfer invokes p_core with `player_account`
+    // as the signing authority (hero-locked-in-PDA path), and pinocchio rejects
+    // a CPI on an account the program still holds borrowed. Same drop-before-CPI
+    // pattern claim.rs uses.
+    let player_bump = player_data.bump;
+    let player_game_engine = player_data.game_engine;
+    let player_current_city = player_data.current_city;
+    let player_name = player_data.name;
+    drop(player_data_ref);
+
     // 18. Create ExpeditionAccount PDA
     let lamports = crate::utils::rent_exempt_const(ExpeditionAccount::LEN);
 
     let bump_seed = [expedition_bump];
-    let expedition_seeds = crate::seeds!(EXPEDITION_SEED, owner.address(), &bump_seed);
+    let expedition_seeds = crate::seeds!(EXPEDITION_SEED, player_account.address(), &bump_seed);
     let expedition_signer = pinocchio::cpi::Signer::from(&expedition_seeds);
 
     CreateAccount {
@@ -283,12 +294,13 @@ pub fn process(
             }
             .invoke()?;
         } else if current_owner_key == *player_account.address().as_array() {
-            // Hero is locked in PlayerAccount PDA - need PDA signer
-            let player_bump = player_data.bump;
+            // Hero is locked in PlayerAccount PDA - need PDA signer. Uses the
+            // snapshotted bump / game_engine; the player borrow was released
+            // above so this CPI can take player_account as the authority.
             let player_bump_seed = [player_bump];
             let player_seeds = crate::seeds!(
                 PLAYER_SEED,
-                player_data.game_engine.as_ref(),
+                player_game_engine.as_ref(),
                 owner.address(),
                 &player_bump_seed
             );
@@ -305,10 +317,13 @@ pub fn process(
             }
             .invoke_signed(&[player_signer])?;
 
-            // Clear the active_heroes slot since hero is now on expedition
+            // Clear the active_heroes slot since hero is now on expedition.
+            // Re-borrow now that the CPI (which needs player_account) is done.
+            let mut pd_ref = player_account.try_borrow_mut()?;
+            let pd = unsafe { PlayerAccount::load_mut(&mut pd_ref) };
             for i in 0..3 {
-                if player_data.active_hero_at(i as usize) == *hero_mint.address() {
-                    player_data.set_active_hero_at(i as usize, NULL_PUBKEY);
+                if pd.active_hero_at(i as usize) == *hero_mint.address() {
+                    pd.set_active_hero_at(i as usize, NULL_PUBKEY);
                     break;
                 }
             }
@@ -332,7 +347,7 @@ pub fn process(
         expedition_type,
         tier,
         expedition_bump,
-        player_data.current_city, // Store expedition location for origin city bonus
+        player_current_city, // Store expedition location for origin city bonus
         now,
         operative_unit_1,
         operative_unit_2,
@@ -342,7 +357,7 @@ pub fn process(
     // 21. Emit event
     emit!(ExpeditionStarted {
         player: *player_account.address(),
-        player_name: player_data.name,
+        player_name,
         expedition_type,
         node_id: tier,
         duration: duration_seconds as u32,

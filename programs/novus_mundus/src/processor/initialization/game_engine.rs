@@ -352,10 +352,11 @@ fn create_default_game_engine(
             // Expedition config (DAO-controlled)
             // Cap at 10k operatives, then diminishing returns via sqrt(excess)
             max_operatives_per_expedition: 10_000,
-            // Mining: gems × 100 per op per hour [Tier 0-4]: 0.01, 0.02, 0.05, 0.08, 0.10 gems/op/hr
-            mining_gems_per_op_hour: [1, 2, 5, 8, 10],
-            // Fishing: produce × 100 per op per hour [Tier 0-4]: 0.015, 0.03, 0.075, 0.12, 0.15 produce/op/hr
-            fishing_produce_per_op_hour: [2, 3, 8, 12, 15],
+            // Mining: gems × 100 per op per hour [Tier 0-4]: 0.25, 0.50, 1.25, 2.00, 2.50 gems/op/hr.
+            // ~25x the legacy rate so a full expedition is a worthwhile gem haul vs instant collect.
+            mining_gems_per_op_hour: [25, 50, 125, 200, 250],
+            // Fishing: produce × 100 per op per hour [Tier 0-4]: 0.50, 0.75, 2.00, 3.00, 3.75 produce/op/hr (~25x).
+            fishing_produce_per_op_hour: [50, 75, 200, 300, 375],
         },
 
         gameplay_config: GameplayConfig {

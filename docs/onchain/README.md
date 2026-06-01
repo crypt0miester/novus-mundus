@@ -6,7 +6,7 @@
 
 Novus Mundus ("New World") is a fully on-chain, **multi-kingdom strategy MMO** built on Solana. Players build estates, command MPL Core hero NFTs, research technologies, wage deterministic combat, and compete for territory across a persistent world. Every action — combat, crafting, travel, governance — is a Solana transaction.
 
-The program spans **181 instructions across 24 systems** (~285 Rust files) and is built on the **Pinocchio** framework — `#![no_std]`, no Anchor, manual serialization, `repr(C)` accounts, and 2-byte `u16` little-endian instruction discriminants.
+The program spans **189 instructions across 27 systems** (~285 Rust files) and is built on the **Pinocchio** framework — `#![no_std]`, no Anchor, manual serialization, `repr(C)` accounts, and 2-byte `u16` little-endian instruction discriminants.
 
 ```mermaid
 graph TB
@@ -76,7 +76,7 @@ graph LR
     IS["Inventory<br/>144 b"]
     TS["Team<br/>112 b"]
     RA["Rally<br/>80 b"]
-    HS["Heroes<br/>168 b"]
+    HS["Heroes<br/>208 b"]
     CS["Cosmetics<br/>80 b"]
     CT["Court<br/>48 b"]
     PC --> RS --> IS --> TS --> RA --> HS --> CS --> CT
@@ -145,8 +145,8 @@ graph LR
 ### [01 - Architecture](./01-architecture/)
 Program structure, account types, and instruction routing.
 - [Overview](./01-architecture/overview.md) — module layout, dispatch model, design patterns
-- [Accounts](./01-architecture/accounts.md) — all 48 account types, PDA seeds, sizes
-- [Instruction Map](./01-architecture/instruction-map.md) — complete reference of all 181 instructions
+- [Accounts](./01-architecture/accounts.md) — all 49 account types, PDA seeds, sizes
+- [Instruction Map](./01-architecture/instruction-map.md) — complete reference of all 189 instructions
 
 ### [02 - Player Journey](./02-player-journey/)
 - [Onboarding](./02-player-journey/onboarding.md) — account creation and first steps

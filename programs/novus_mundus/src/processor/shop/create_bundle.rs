@@ -8,6 +8,12 @@ use crate::{
 use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
 use pinocchio_system::instructions::CreateAccount;
 
+/// Hard ceiling on a bundle's advertised savings, mirroring the shop config's
+/// `max_total_discount_bps` (75%). `savings_bps` is display-only (the price is
+/// set explicitly), so this just stops a nonsensical ">75% off" claim — or a
+/// >100% value — from being written to the account.
+const MAX_BUNDLE_SAVINGS_BPS: u16 = 7500;
+
 /// Create a bundle (DAO only)
 ///
 /// Creates a pre-built bundle of items with bundled pricing.
@@ -92,6 +98,11 @@ pub fn process(
 
     // Validate subscription tier (0-4)
     if requires_subscription > 4 {
+        return Err(GameError::InvalidParameter.into());
+    }
+
+    // Cap advertised savings so a bad seed can't store a nonsensical discount
+    if savings_bps > MAX_BUNDLE_SAVINGS_BPS {
         return Err(GameError::InvalidParameter.into());
     }
 

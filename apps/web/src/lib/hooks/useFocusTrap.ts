@@ -51,12 +51,16 @@ export function useFocusTrap<T extends HTMLElement>(
     const previouslyFocused = document.activeElement as HTMLElement | null;
 
     // Move focus in: first focusable child, else the container itself.
+    // `preventScroll` is load-bearing: focusing a child inside a freshly-opened
+    // `position: fixed` sheet otherwise makes the browser scroll it into view,
+    // which reflows the document and janks the open-slide on the first open
+    // (later opens are already in view, so the stutter was first-load only).
     const focusables = getFocusable(node);
     if (focusables.length > 0) {
-      focusables[0]!.focus();
+      focusables[0]!.focus({ preventScroll: true });
     } else {
       if (node.tabIndex < 0) node.tabIndex = -1;
-      node.focus();
+      node.focus({ preventScroll: true });
     }
 
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -70,7 +74,7 @@ export function useFocusTrap<T extends HTMLElement>(
       if (current.length === 0) {
         // Nothing to cycle to — keep focus pinned on the container.
         event.preventDefault();
-        node.focus();
+        node.focus({ preventScroll: true });
         return;
       }
 
@@ -79,12 +83,12 @@ export function useFocusTrap<T extends HTMLElement>(
 
       if (event.shiftKey) {
         if (document.activeElement === firstElement || !node.contains(document.activeElement)) {
-          lastElement.focus();
+          lastElement.focus({ preventScroll: true });
           event.preventDefault();
         }
       } else {
         if (document.activeElement === lastElement || !node.contains(document.activeElement)) {
-          firstElement.focus();
+          firstElement.focus({ preventScroll: true });
           event.preventDefault();
         }
       }
@@ -94,8 +98,9 @@ export function useFocusTrap<T extends HTMLElement>(
 
     return () => {
       document.removeEventListener("keydown", handleKeyDown, true);
-      // Restore focus to the element that held it before the trap engaged.
-      previouslyFocused?.focus?.();
+      // Restore focus to the element that held it before the trap engaged
+      // (preventScroll so the restore doesn't jump the page on close either).
+      previouslyFocused?.focus?.({ preventScroll: true });
     };
   }, [active, ref]);
 }

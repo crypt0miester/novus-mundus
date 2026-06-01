@@ -87,7 +87,7 @@ pub fn process(
 
     // 6. Validate ExpeditionAccount PDA
     let (expected_expedition_pda, _) = pinocchio::Address::find_program_address(
-        &[EXPEDITION_SEED, owner.address().as_ref()],
+        &[EXPEDITION_SEED, player_account.address().as_ref()],
         program_id,
     );
 

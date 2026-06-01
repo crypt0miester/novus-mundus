@@ -66,7 +66,7 @@ export function ActivityForecast({ activity, verb, children }: ActivityForecastP
     >
       <div className="flex items-center justify-between gap-2">
         <span className="text-text-secondary">
-          {verb} — <span className="text-text-muted">{getTimeOfDayName(tod)}</span>
+          {verb} {">"} <span className="text-text-muted">{getTimeOfDayName(tod)}</span>
         </span>
         <span
           className={cn(

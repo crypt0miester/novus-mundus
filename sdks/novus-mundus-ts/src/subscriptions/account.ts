@@ -208,12 +208,12 @@ export function subscribeToProgramAccounts(
 ): SubscriptionHandle {
   const commitment = options.commitment ?? 'confirmed';
 
-  const id = connection.onProgramAccountChange(
-    programId,
-    callback,
+  // Pass a ProgramAccountSubscriptionConfig object; the positional
+  // (commitment, filters) overload is deprecated in @solana/web3.js v3.
+  const id = connection.onProgramAccountChange(programId, callback, {
     commitment,
-    options.filters
-  );
+    filters: options.filters,
+  });
 
   return {
     id,

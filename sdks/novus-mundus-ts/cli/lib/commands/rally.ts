@@ -27,7 +27,7 @@ import * as path from 'path';
 
 import type { CLIContext, ParsedArgs } from '../context';
 import { loadKeypair } from '../context';
-import { sendWithRetry, log } from '../helpers';
+import { sendWithRetry, log, safeStringify } from '../helpers';
 import { table, section, addr, formatNum, formatDate, formatDuration, dim, green, red, yellow, type Column } from '../format';
 import { CITIES } from '../../data/cities';
 
@@ -907,7 +907,7 @@ async function handlePrep(ctx: CLIContext, args: ParsedArgs): Promise<void> {
         viableCreator = { file: r.file!, wallet: kp.publicKey };
         break;
       }
-      lastCreateErr = JSON.stringify(sim.value.err);
+      lastCreateErr = safeStringify(sim.value.err);
     } catch (e: any) {
       lastCreateErr = String(e?.message || e).split('\n')[0];
     }

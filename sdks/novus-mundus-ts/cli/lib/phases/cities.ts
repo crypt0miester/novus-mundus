@@ -9,48 +9,74 @@ import {
   deriveCityPda,
   parseCity,
 } from '../../../src/index';
-import { CITIES, CityType, dimsFromRadius, seedForCity } from '../../data/cities';
+import { CITIES, CityType, dimsFromRadius, seedForCity, type CityData } from '../../data/cities';
 import {
   section, table, bold, dim, green, red, formatNum, check, statusBadge,
 } from '../format';
 
+// batch_init_cities assigns ids sequentially from startCityId, so a single
+// instruction must cover a contiguous id run, capped by the on-chain
+// MAX_CITIES_PER_BATCH.
+const MAX_CITIES_PER_BATCH = 8;
+
 export async function initCities(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
-  // Group into batches of 8
-  const batchSize = 8;
-  for (let i = 0; i < CITIES.length; i += batchSize) {
-    const batch = CITIES.slice(i, i + batchSize);
-    const startId = batch[0].id;
-
-    // Check if first city in batch exists
-    const [firstCityPda] = await deriveCityPda(ctx.gameEngine, startId);
-    const exists = await accountExists(ctx.connection, firstCityPda);
-
-    if (exists) {
-      // Check individually
-      let allExist = true;
-      for (const city of batch) {
-        const [pda] = await deriveCityPda(ctx.gameEngine, city.id);
-        if (!(await accountExists(ctx.connection, pda))) {
-          allExist = false;
-          break;
-        }
-      }
-      if (allExist) {
-        log.skip(`Batch: cities ${startId}-${batch[batch.length - 1].id}`);
-        stats.skipped += batch.length;
-        continue;
-      }
+  // Resolve the cities to create: the enrolled subset (or all), sorted by id.
+  // Enrolling a subset lets a kingdom open with fewer cities and add more
+  // later; later runs with a wider --cities create-or-skip the new ones.
+  const enrolled = ctx.enrolledCities;
+  let target: CityData[];
+  if (enrolled) {
+    const unknown = [...enrolled].filter((id) => !CITIES.some((c) => c.id === id));
+    if (unknown.length) {
+      throw new Error(`--cities references unknown city id(s): ${unknown.join(', ')}`);
     }
+    target = CITIES.filter((c) => enrolled.has(c.id));
+    log.info(`Enrolling ${target.length} of ${CITIES.length} cities: ${target.map((c) => c.id).join(', ')}`);
+  } else {
+    target = [...CITIES];
+  }
+  target.sort((a, b) => a.id - b.id);
+
+  // Skip cities already on chain; collect the rest.
+  const missing: CityData[] = [];
+  for (const c of target) {
+    const [pda] = await deriveCityPda(ctx.gameEngine, c.id);
+    if (await accountExists(ctx.connection, pda)) {
+      stats.skipped++;
+    } else {
+      missing.push(c);
+    }
+  }
+  if (missing.length === 0) {
+    log.skip(`All ${target.length} enrolled cities already exist`);
+    return stats;
+  }
+
+  // Group the missing cities into contiguous id-runs, each capped at the batch
+  // size. Non-contiguous enrollments (e.g. 5,9,13) become one batch per id.
+  const runs: CityData[][] = [];
+  for (const c of missing) {
+    const run = runs[runs.length - 1];
+    const prev = run?.[run.length - 1];
+    if (run && prev && c.id === prev.id + 1 && run.length < MAX_CITIES_PER_BATCH) {
+      run.push(c);
+    } else {
+      runs.push([c]);
+    }
+  }
+
+  for (const batch of runs) {
+    const startId = batch[0].id;
+    const endId = batch[batch.length - 1].id;
 
     if (ctx.dryRun) {
-      log.dryRun(`Would create batch: cities ${startId}-${batch[batch.length - 1].id}`);
+      log.dryRun(`Would create cities ${startId}-${endId} [${batch.length}]`);
       stats.created += batch.length;
       continue;
     }
 
-    // Build city PDAs for the batch
     const cityAccounts = await Promise.all(
       batch.map(async (c) => (await deriveCityPda(ctx.gameEngine, c.id))[0]),
     );
@@ -84,7 +110,7 @@ export async function initCities(ctx: CLIContext): Promise<PhaseStats> {
     );
 
     await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-    log.create(`Batch: cities ${startId}-${batch[batch.length - 1].id} [${batch.length} created]`);
+    log.create(`Cities ${startId}-${endId} [${batch.length} created]`);
     stats.created += batch.length;
   }
 

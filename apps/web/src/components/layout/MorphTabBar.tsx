@@ -3,7 +3,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { animate, createTimeline, stagger } from "animejs";
+import { animate, stagger, waapi } from "animejs";
 import { Plus, X, ChevronLeft } from "lucide-react";
 import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
 
@@ -242,7 +242,13 @@ export function MorphTabBar() {
   // flight" signal: while it exists and hasn't completed/cancelled, the
   // observer skips recording the transient widths the morph is writing, so the
   // dedicated `widthAnimating` boolean gate is no longer needed.
-  const morphTl = useRef<ReturnType<typeof createTimeline> | null>(null);
+  // Live WAAPI morph animations — transform/opacity tweens run on the compositor
+  // thread, so they don't jank a bottom sheet's open settle that fires at the
+  // same instant (when a panel registers actions). `morphActive` is the "morph
+  // in flight" gate the width ResizeObserver reads. Replaces the old single
+  // main-thread anime.js timeline.
+  const morphAnims = useRef<ReturnType<typeof waapi.animate>[]>([]);
+  const morphActive = useRef(false);
   const restWidth = useRef(0);
 
   const [overflowOpen, setOverflowOpen] = useState(false);
@@ -324,8 +330,8 @@ export function MorphTabBar() {
     const pill = pillRef.current;
     if (!pill) return;
     const sync = () => {
-      const tl = morphTl.current;
-      if (tl && !tl.completed && !tl.cancelled) return;
+      // A morph in flight is writing transient widths; don't record them.
+      if (morphActive.current) return;
       const w = pill.offsetWidth;
       if (w !== restWidth.current) restWidth.current = w;
     };
@@ -349,19 +355,21 @@ export function MorphTabBar() {
 
   // Morph whenever the shape flips. The pill is one persistent element in
   // every shape, so its buttons stay put — only what's *inside* transforms.
-  // Three things move, and they now ride ONE reversible `createTimeline`
-  // instead of five overlapping `animate()` calls plus a standalone width
-  // tween:
+  // Three things move, each its own WAAPI animation (waapi.animate) so the
+  // transform/opacity tweens run on the compositor and don't starve a bottom
+  // sheet's open settle firing at the same instant:
   //   - the pill's width — animated between the shapes' resting widths, since
-  //     CSS can't transition a content-driven `auto` width;
+  //     CSS can't transition a content-driven `auto` width (this one drives
+  //     layout, so it stays on the main thread, but as a single browser-native
+  //     tween rather than a per-frame JS loop);
   //   - the nav/action layers stacked inside — cross-fade + translateY + scale;
-  //   - the incoming layer's children — a staggered "speed dial", placed on the
-  //     timeline with a position arg so it overlaps the layer enter.
+  //   - the incoming layer's children — a staggered "speed dial", positioned
+  //     with `delay` so it overlaps the layer enter.
   // Non-wide shapes are handed back to `width: auto` once the morph settles
   // (so a later TxButton phase swap can resize the pill); the wide shape keeps
-  // its pinned width, since its buttons are fixed flex segments. Teardown uses
-  // `tl.cancel()` (freezes the committed inline styles), NOT `scope.revert()`
-  // (which would wipe the pinned width back to origin and flash `auto`).
+  // its pinned width. Teardown freezes each tween's committed values inline
+  // (commitStyles) before cancel, so an interrupting morph picks up the live
+  // width instead of snapping the pill back to auto/origin.
   useLayoutEffect(() => {
     const from = prevShape.current;
     const to = shape;
@@ -376,10 +384,13 @@ export function MorphTabBar() {
     // width, not the stale `restWidth` (the observer was gated off mid-morph),
     // is the honest start width for the new morph. A naturally completed
     // timeline leaves `completed` true, so `restWidth` is current and wins.
-    const prevTl = morphTl.current;
-    const interrupted = !!prevTl && !prevTl.completed;
-    prevTl?.cancel();
-    morphTl.current = null;
+    // A previous morph still in flight is "interrupted". React already ran its
+    // cleanup (below) before this body, freezing its committed transform/opacity/
+    // width inline via commitStyles + cancel — so the live `offsetWidth` read for
+    // `fromW` below is the honest mid-morph width to start the new morph from.
+    const interrupted = morphActive.current;
+    morphActive.current = false;
+    morphAnims.current = [];
 
     // Where the pill rests after the morph: a pinned width for wide / compose,
     // or back to content-driven `auto` for nav / 1-2 actions.
@@ -423,18 +434,35 @@ export function MorphTabBar() {
       return;
     }
 
-    const tl = createTimeline({
-      defaults: { ease: SETTLE },
-      // Hand non-pinned shapes back to `auto` so a later width change can flow.
-      onComplete: settle,
-    });
+    // Each tween is its own WAAPI animation. `delay` reproduces the old
+    // timeline's positions; `settle` runs once the last one finishes (tracked
+    // by a pending counter, since there's no timeline onComplete anymore).
+    const anims: ReturnType<typeof waapi.animate>[] = [];
+    let pending = 0;
+    let finished = false;
+    const onTweenDone = () => {
+      if (finished) return;
+      pending -= 1;
+      if (pending <= 0) {
+        finished = true;
+        morphActive.current = false;
+        settle();
+      }
+    };
+    const track = (
+      target: Parameters<typeof waapi.animate>[0],
+      params: Parameters<typeof waapi.animate>[1],
+    ) => {
+      pending += 1;
+      anims.push(waapi.animate(target, { ...params, onComplete: onTweenDone }));
+    };
 
-    // Width tween at position 0. Added even when the shape is unchanged, so a
-    // wide to wide change — a dismiss ✕ appearing or leaving — still animates.
+    // Width tween. Added even when the shape is unchanged, so a wide to wide
+    // change — a dismiss ✕ appearing or leaving — still animates.
     const animateWidth = fromW > 0 && fromW !== toW;
     if (animateWidth) {
       pill.style.width = `${fromW}px`;
-      tl.add(pill, { width: [fromW, toW], duration: ENTER_MS }, 0);
+      track(pill, { width: [`${fromW}px`, `${toW}px`], duration: ENTER_MS, ease: SETTLE });
     }
 
     if (crossfade && outgoing && incoming) {
@@ -442,84 +470,80 @@ export function MorphTabBar() {
         incoming.querySelectorAll<HTMLElement>("[data-morph-item]"),
       );
 
-      // Exit — fade + drop + slight shrink, at the head of the timeline.
-      tl.add(
-        outgoing,
-        {
-          opacity: [1, 0],
-          translateY: [0, 8],
-          scale: [1, 0.94],
-          duration: EXIT_MS,
-          ease: "out(3)",
-        },
-        0,
-      );
+      // Exit — fade + drop + slight shrink, at the head.
+      track(outgoing, {
+        opacity: [1, 0],
+        translateY: [0, 8],
+        scale: [1, 0.94],
+        duration: EXIT_MS,
+        ease: SETTLE,
+      });
 
-      // Enter — fade + rise + a tiny scale-up overshoot from the spring,
-      // positioned to begin just before the exit finishes.
+      // Enter — fade + rise + a tiny scale-up overshoot, beginning just before
+      // the exit finishes.
       incoming.style.opacity = "0";
       const enterAt = EXIT_MS - 40;
-      tl.add(
-        incoming,
-        {
-          opacity: [0, 1],
-          translateY: [8, 0],
-          scale: [0.94, 1],
-          duration: ENTER_MS,
-        },
-        enterAt,
-      );
+      track(incoming, {
+        opacity: [0, 1],
+        translateY: [8, 0],
+        scale: [0.94, 1],
+        duration: ENTER_MS,
+        delay: enterAt,
+        ease: SETTLE,
+      });
 
-      // Children "speed dial" — a per-child stagger, placed at the same
-      // position as the layer enter via the timeline position arg (compose has
-      // no [data-morph-item] children, so this is a no-op there).
+      // Children "speed dial" — a per-child stagger, offset to the layer enter
+      // via `stagger`'s start (compose has no [data-morph-item] children, so
+      // this is a no-op there).
       if (incomingChildren.length > 0) {
-        tl.add(
-          incomingChildren,
-          {
-            translateY: [14, 0],
-            opacity: [0, 1],
-            scale: [0.85, 1],
-            duration: ENTER_MS,
-            delay: stagger(36),
-          },
-          enterAt,
-        );
+        track(incomingChildren, {
+          translateY: [14, 0],
+          opacity: [0, 1],
+          scale: [0.85, 1],
+          duration: ENTER_MS,
+          delay: stagger(36, { start: enterAt }),
+          ease: SETTLE,
+        });
       }
     } else if (sameLayerRedeal && incoming) {
-      // actions to wide (or back) stay on the *same* action layer — there's no
-      // second layer to cross-fade, so the buttons just re-deal as the pill
-      // resizes, staggered on the same timeline.
+      // actions to wide (or back) stay on the *same* action layer — no second
+      // layer to cross-fade, so the buttons just re-deal as the pill resizes.
       const sameLayerChildren = Array.from(
         incoming.querySelectorAll<HTMLElement>("[data-morph-item]"),
       );
       if (sameLayerChildren.length > 0) {
-        tl.add(
-          sameLayerChildren,
-          {
-            translateY: [10, 0],
-            opacity: [0.4, 1],
-            scale: [0.94, 1],
-            duration: ENTER_MS,
-            delay: stagger(28),
-          },
-          0,
-        );
+        track(sameLayerChildren, {
+          translateY: [10, 0],
+          opacity: [0.4, 1],
+          scale: [0.94, 1],
+          duration: ENTER_MS,
+          delay: stagger(28),
+          ease: SETTLE,
+        });
       }
     }
 
-    // Nothing was scheduled (e.g. a same-shape render with no width change and
-    // no children): settle now and drop the empty timeline so the observer
-    // doesn't see it as a morph in flight.
-    if (!tl.duration) {
+    // Nothing was scheduled (same-shape render, no width change, no children):
+    // settle now so the observer doesn't see a phantom morph in flight.
+    if (pending === 0) {
       settle();
       return;
     }
 
-    morphTl.current = tl;
+    morphActive.current = true;
+    morphAnims.current = anims;
     return () => {
-      // Freeze the committed inline styles in place; never revert to origin.
-      tl.cancel();
+      // Freeze each tween's current values inline, then cancel. WAAPI `cancel`
+      // reverts to base style; `commitStyles` is what pins the live values so an
+      // interrupting morph starts from where this one visually was.
+      for (const a of anims) {
+        try {
+          if (!a.completed) a.commitStyles();
+        } catch {
+          // commitStyles throws if the effect isn't in-effect / target detached
+        }
+        a.cancel();
+      }
     };
   }, [shape, wideBarWidth, composeWidth, reduce]);
 

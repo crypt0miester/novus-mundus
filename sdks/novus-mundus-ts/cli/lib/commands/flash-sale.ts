@@ -132,8 +132,8 @@ async function handleActivate(_ctx: CLIContext, flags: string[]): Promise<void> 
   const saleId = parseInt(requireFlag(flags, '--sale-id'), 10);
   // Flash sales are created already active (createFlashSale defaults isActive=true),
   // and the on-chain activate_sale instruction now targets only seasonal /
-  // DAO-promotion sales — there is no longer an activate-by-flash-sale-id path.
-  log.info(`Flash sale #${saleId} is active on creation — no separate activation step.`);
+  // DAO-promotion sales, so there is no longer an activate-by-flash-sale-id path.
+  log.info(`Flash sale #${saleId} is active on creation: no separate activation step.`);
   log.info('  (activate_sale now applies only to seasonal / DAO-promotion sales.)');
 }
 

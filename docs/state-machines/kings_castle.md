@@ -746,9 +746,10 @@ pub struct CastleAccount {
     pub name: [u8; 32],
     pub name_len: u8,
     pub _padding2: [u8; 3],
-    pub latitude: i32,                      // degrees × 1_000_000 (fixed-point, NOT f64)
-    pub longitude: i32,                     // degrees × 1_000_000 (fixed-point, NOT f64)
-    pub _padding_loc: [u8; 8],
+    pub latitude: i32,                      // grid units ×10,000 (LocationAccount precision); anchor corner
+    pub longitude: i32,                     // grid units ×10,000 (LocationAccount precision); anchor corner
+    pub footprint_size: u8,                 // N for an N×N footprint (1–4); each cell owns a LocationAccount
+    pub _padding_loc: [u8; 7],
     pub king: Address,                      // 32 — PlayerAccount PDA (NULL if vacant)
     pub team: Address,                      // 32 — Team PDA (NULL if vacant)
     pub claimed_at: i64,
@@ -796,9 +797,12 @@ pub struct CastleAccount {
     pub _transition_reserved: [u8; 8],
     pub activates_at: i64,
     pub _activation_padding: [u8; 8],
-    pub _reserved: [u8; 16],
+    pub membership_epoch: u32,              // war-table key-rotation epoch (first 4 bytes of old _reserved)
+    pub _reserved: [u8; 12],
 }
 // PDA: [b"castle", game_engine, city_id:u16 LE, castle_id:u16 LE]
+// A city hosts MANY castles (one PDA per castle_id); the seed roster
+// gives every city a full Outpost..Citadel ladder (castle_id == tier).
 ```
 
 [Source: state/castle.rs](../../programs/novus_mundus/src/state/castle.rs)
@@ -882,7 +886,8 @@ pub struct GarrisonContributionAccount {
     pub loot_ranged: u64,
     pub loot_siege: u64,
     pub loot_claimed: bool,
-    pub _padding3: [u8; 7],
+    pub _pad_garrison_align: [u8; 3],
+    pub joined_at_epoch: u32,              // war-table membership epoch at join time
 }
 // PDA: [b"garrison", castle, contributor_player_account]
 // Created by join_garrison; closed by leave_garrison, relieve_garrison, or garrison_cleanup
@@ -948,9 +953,9 @@ The following invariants are enforced by program logic and should hold at all ti
 11. Upgrade levels (fortification, treasury, chambers, watchtower, armory) survive
     ownership transitions — they are properties of the castle, not the king
 
-12. castle.latitude and castle.longitude are i32 fixed-point (degrees × 1_000_000),
-    not f64 — the attack range check converts to float before comparing against
-    CASTLE_ATTACK_RANGE_METERS = 50.0
+12. castle.latitude and castle.longitude are i32 grid units (×10,000 =
+    LocationAccount precision), not degrees and not f64; the attack-range
+    check converts to float before comparing against CASTLE_ATTACK_RANGE_METERS
 ```
 
 **Reward constants:** `CastleAccount` reward fields are initialized by `create_castle` from `constants.rs` — `KING_CASH_PER_DAY = 10_000_000`, `COURT_CASH_PER_DAY = 1_000_000`, `MEMBER_CASH_PER_DAY = 500_000`. `CastleConfig::default()` in `game_engine.rs` is the DAO-governed template for new kingdoms and is **not** what individual castle accounts receive at creation. Per-castle rates are stored on `CastleAccount` fields and can be updated via `update_castle_config`.

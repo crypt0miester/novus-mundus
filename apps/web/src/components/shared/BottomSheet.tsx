@@ -19,9 +19,17 @@ const MAX_HEIGHT_VH = 0.92;
 const BACKDROP_MAX = 0.55;
 // On release, the drag velocity is projected this far ahead to pick a detent.
 const PROJECTION_MS = 150;
-// Collapse only once the sheet would cover 10% or less of the viewport.
+// Collapse once the sheet would cover 10% or less of the viewport. A backstop
+// for short sheets; the fraction/flick rules below dismiss tall sheets earlier.
 const DISMISS_VISIBLE_VH = 0.1;
-// Resistance applied while dragging up past the fully-open position.
+// Drag down past this fraction of the sheet's own height to dismiss it. Without
+// this, a tall sheet only dismissed once dragged nearly all the way off.
+const DISMISS_FRACTION = 0.4;
+// A release moving down at least this fast (px/ms) dismisses regardless of how
+// far it was dragged — a flick.
+const FLICK_VELOCITY = 0.5;
+// Resistance applied while dragging up past the fully-open position so it
+// rubber-bands and tracks the finger smoothly rather than hard-stopping.
 const OVERDRAG_DAMP = 0.5;
 // Programmatic settles — open, close, drag-release snap — play as Web
 // Animations on `transform`/`opacity`, which the browser runs on the
@@ -267,10 +275,23 @@ export function BottomSheet({
     remeasure();
     pos.current.y = detents.current.dismiss;
     paint(pos.current.y);
-    const id = requestAnimationFrame(() => {
-      if (openRef.current) settleTo(detents.current.full);
+    // Arm the settle only after the content has actually painted. A single rAF
+    // fires before that first paint commits, so for a heavy panel (e.g. the
+    // estate building panel, which registers morph actions and mounts a
+    // countdown) the compositor settle would start against an un-rasterized
+    // layer and stutter. Waiting a second frame lets that first paint land, so
+    // the slide animates a ready layer. Closing doesn't need this — its content
+    // is already painted, which is why only entry janked.
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => {
+        if (openRef.current) settleTo(detents.current.full);
+      });
     });
-    return () => cancelAnimationFrame(id);
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
   }, [mounted, remeasure, paint, settleTo]);
 
   // Keep snap points honest when the content or viewport resizes under us.
@@ -357,11 +378,9 @@ export function BottomSheet({
   // breakpoint, where the sheet (not an inline panel) is what renders.
   useEffect(() => {
     if (!mounted || !isMobile) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
+    const { lockScroll, unlockScroll } = useSheetStore.getState();
+    lockScroll();
+    return unlockScroll;
   }, [mounted, isMobile]);
 
   if (!mounted) return null;
@@ -375,6 +394,10 @@ export function BottomSheet({
     sheetAnim.current = null;
     backdropAnim.current = null;
     animating.current = false;
+    // Grabbing interrupts any in-flight close; this gesture now owns the outcome
+    // (onPointerUp re-settles or dismisses). Clearing the flag here stops a
+    // re-grabbed close from getting stuck "closing" and refusing to dismiss.
+    closing.current = false;
     pos.current.y = y;
     paint(y);
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -392,8 +415,9 @@ export function BottomSheet({
     if (!d) return;
     const det = detents.current;
     let y = d.sheetStartY + (e.clientY - d.pointerStartY);
-    // Dragging up past full is allowed — the filler background covers it — but
-    // rubber-banded so it springs back. Down hard-stops at fully dismissed.
+    // Dragging up past full is rubber-banded (damped) so it tracks the finger
+    // smoothly and springs back on release, instead of hard-stopping with a
+    // dead-zone. Down hard-stops at fully dismissed.
     if (y < det.full) y = det.full + (y - det.full) * OVERDRAG_DAMP;
     if (y > det.dismiss) y = det.dismiss;
     const now = performance.now();
@@ -414,11 +438,15 @@ export function BottomSheet({
     // Project the release velocity ahead, the way iOS picks a resting detent.
     const projected = Math.min(det.dismiss, pos.current.y + d.velocity * PROJECTION_MS);
 
-    // Collapse only once dragged (or flung) down far enough that 10% or less
-    // of the viewport still shows the sheet — but never demand more than 60%
-    // of the sheet's own height, so short sheets stay dismissable.
+    // Dismiss on any of: a downward flick, dragging past ~40% of the sheet's own
+    // height, or the projected position leaving <=10vh visible (the near-gone
+    // backstop, capped so short sheets stay dismissable). The fraction is what
+    // lets a tall sheet go with a normal half-drag instead of an almost-full one.
+    const draggedFraction = det.dismiss > 0 ? pos.current.y / det.dismiss : 0;
+    const flicked = d.velocity >= FLICK_VELOCITY;
     const minVisible = Math.min(DISMISS_VISIBLE_VH * window.innerHeight, det.dismiss * 0.6);
-    if (projected >= det.dismiss - minVisible) {
+    const nearlyGone = projected >= det.dismiss - minVisible;
+    if (flicked || draggedFraction >= DISMISS_FRACTION || nearlyGone) {
       // Closing routes through `open` so the parent's state stays in sync;
       // the effect above then settles the sheet shut.
       onClose();
@@ -458,26 +486,28 @@ export function BottomSheet({
           className="flex flex-col"
           style={{ maxHeight: `${MAX_HEIGHT_VH * 100}vh` }}
         >
-          {/* Drag handle — the grab zone for the spring drag. Closing is the
-              MorphTabBar's ✕ (plus drag-down / backdrop / Escape). */}
+          {/* Draggable header: the handle and title together are the grab zone
+              for the drag-to-dismiss gesture (closing is also the MorphTabBar's
+              ✕, drag-down, backdrop, and Escape). */}
           <div
-            className="flex shrink-0 cursor-grab items-center justify-center pb-2 pt-3 active:cursor-grabbing"
+            className="shrink-0 cursor-grab active:cursor-grabbing"
             style={{ touchAction: "none" }}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             onPointerCancel={onPointerUp}
           >
-            <div className="h-1 w-10 rounded-full bg-zinc-600" />
-          </div>
-
-          {title && (
-            <div className="shrink-0 px-4 pb-2">
-              <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                {title}
-              </h3>
+            <div className="flex items-center justify-center pb-2 pt-3">
+              <div className="h-1 w-10 rounded-full bg-zinc-600" />
             </div>
-          )}
+            {title && (
+              <div className="px-4 pb-2">
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  {title}
+                </h3>
+              </div>
+            )}
+          </div>
 
           <div className="min-h-0 space-y-4 overflow-y-auto px-2 pb-18">{children}</div>
         </div>

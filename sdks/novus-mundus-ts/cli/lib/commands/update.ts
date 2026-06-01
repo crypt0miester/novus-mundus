@@ -9,6 +9,7 @@ import { updateSubscriptions } from '../phases/subscriptions';
 import { updateShop } from '../phases/shop';
 import { updateHeroSupplyCaps } from '../phases/heroes';
 import { CASTLES } from '../../data/castles';
+import { assertSeedDataValid } from '../validate-data';
 import {
   createUpdateCastleConfigInstruction,
   deriveCastlePda,
@@ -79,6 +80,14 @@ export async function handleUpdate(ctx: CLIContext, args: ParsedArgs): Promise<v
   if (!entry) {
     log.error(`Unknown update target: ${target}`);
     log.info(`Valid targets: ${UPDATE_TARGETS.map(t => t.key).join(', ')}`);
+    return;
+  }
+
+  // Preflight: reject internally-inconsistent seed data before any chain write.
+  try {
+    assertSeedDataValid();
+  } catch (error: any) {
+    log.error(error.message);
     return;
   }
 

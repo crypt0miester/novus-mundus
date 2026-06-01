@@ -20,6 +20,9 @@ export * from './travel';
 // Combat calculations (damage, weapons, casualties)
 export * from './combat';
 
+// Battle forecasting (client-side outcome prediction + force recommendation)
+export * from './battle';
+
 // Reward calculations (loot pools, XP, fragments, gems)
 export * from './rewards';
 

@@ -21,6 +21,15 @@ import {
   ExpeditionType,
   BuildingType,
   type PlayerAccount,
+  createMintHeroInstruction,
+  createLockHeroInstruction,
+  createBuyPlotInstruction,
+  createTeamCreateInstruction,
+  createRallyCreateInstruction,
+  RallyTargetType,
+  deriveHeroTemplatePda,
+  deriveEstatePda,
+  deriveHeroCollectionPda,
 } from '../../src/index';
 
 import {
@@ -88,6 +97,78 @@ describe('Expedition System', () => {
     return player;
   }
 
+  // Mining-ready player that ALSO satisfies the hero-lock prerequisites
+  // (MeditationChamber lock gate + EXT_RESEARCH→INVENTORY→TEAM→RALLY chain), so a
+  // hero can be locked into the PlayerAccount PDA and then sent on an expedition —
+  // the path that previously double-borrowed player_account in start.rs.
+  let heroMiningCounter = 0;
+  async function createHeroMiningReadyPlayer(): Promise<TestPlayer> {
+    heroMiningCounter++;
+    // Plot 1: Mansion (auto) + MeditationChamber (lock gate) + Academy (research) + Mine (mining tier)
+    const player = await factory.createPlayer({
+      initialize: true,
+      createEstate: true,
+      buildings: [BuildingType.MeditationChamber, BuildingType.Academy, BuildingType.Mine],
+    });
+    await factory.completeResearch(player, 21); // mining + EXT_RESEARCH
+
+    // Plot 2: Camp (operatives) + Citadel (rally) + Barracks (units)
+    await sendTransaction(
+      ctx.svm,
+      new Transaction().add(
+        await createBuyPlotInstruction({ owner: player.publicKey, gameEngine: ctx.gameEngine }),
+      ),
+      [player.keypair],
+    );
+    await factory.buildAndCompleteBuilding(player, BuildingType.Camp);
+    await factory.buildAndCompleteBuilding(player, BuildingType.Citadel);
+    await factory.buildAndCompleteBuilding(player, BuildingType.Barracks);
+
+    // EXT_TEAM
+    const teamId = (Date.now() % 1_000_000) + heroMiningCounter;
+    await sendTransaction(
+      ctx.svm,
+      new Transaction().add(
+        await createTeamCreateInstruction(
+          { owner: player.publicKey, gameEngine: ctx.gameEngine, teamId },
+          { name: `XTeam${teamId}` },
+        ),
+      ),
+      [player.keypair],
+    );
+
+    // Units: defensive (for rally) + operatives (for the expedition)
+    await factory.hireUnits(player, 0, 500); // defensive_unit_1
+    await factory.hireUnits(player, 3, 3_000); // operative_unit_1
+
+    // EXT_RALLY
+    const rallyId = (Date.now() % 1_000_000) + heroMiningCounter + 500_000;
+    const target = (await Keypair.generate()).publicKey;
+    const rallyCityId = player.startingCityId;
+    await sendTransaction(
+      ctx.svm,
+      new Transaction().add(
+        await createRallyCreateInstruction(
+          { owner: player.publicKey, gameEngine: ctx.gameEngine, rallyId, target, teamId, rallyCityId },
+          {
+            targetType: RallyTargetType.Player,
+            gatherDuration: 3600,
+            targetCityId: rallyCityId,
+            defensiveUnit1: 1,
+            defensiveUnit2: 0,
+            defensiveUnit3: 0,
+            meleeWeapons: 0,
+            rangedWeapons: 0,
+            siegeWeapons: 0,
+          },
+        ),
+      ),
+      [player.keypair],
+    );
+
+    return player;
+  }
+
   // Start Expedition Tests
 
   describe('Starting Expeditions', () => {
@@ -107,8 +188,8 @@ describe('Expedition System', () => {
 
       await sendTransaction(ctx.svm, new Transaction().add(ix), [player.keypair]);
 
-      // Verify expedition started (fetchExpedition takes owner wallet, not PDA)
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      // Verify expedition started (expedition PDA is seeded by the player PDA)
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
     });
 
@@ -240,7 +321,7 @@ describe('Expedition System', () => {
       );
 
       // Verify expedition is active
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
     });
 
@@ -271,6 +352,65 @@ describe('Expedition System', () => {
       // Operatives should be consumed
       const afterAccount = await fetchPlayer(ctx.svm, player.playerPda);
       expect(afterAccount).not.toBeNull();
+    });
+
+    it('should start expedition with a player-locked hero (no double-borrow)', async () => {
+      const player = await createHeroMiningReadyPlayer();
+
+      // Mint + lock a hero so its owner becomes the PlayerAccount PDA.
+      const heroMintKeypair = await Keypair.generate();
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createMintHeroInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              minter: player.publicKey,
+              heroMint: heroMintKeypair.publicKey,
+              treasury: ctx.treasury.publicKey,
+            },
+            { templateId: 1 },
+          ),
+        ),
+        [player.keypair, heroMintKeypair],
+      );
+
+      const [heroTemplate] = await deriveHeroTemplatePda(1);
+      const [estateAccount] = await deriveEstatePda(player.playerPda);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createLockHeroInstruction(
+            { gameEngine: ctx.gameEngine, owner: player.publicKey, heroMint: heroMintKeypair.publicKey, heroTemplate, estateAccount },
+            { slotIndex: 0 },
+          ),
+        ),
+        [player.keypair],
+      );
+
+      // Start a mining expedition WITH the locked hero. This is the path that
+      // previously failed with "account already borrowed" — start.rs held the
+      // player_data borrow across the p_core TransferV1 CPI (player_account = authority).
+      const [heroCollection] = await deriveHeroCollectionPda();
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createExpeditionStartInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              owner: player.publicKey,
+              heroMint: heroMintKeypair.publicKey,
+              heroCollection,
+            },
+            { expeditionType: ExpeditionType.Mining, tier: 0, operativeUnit1: 10n, operativeUnit2: 0n, operativeUnit3: 0n },
+          ),
+        ),
+        [player.keypair],
+      );
+
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
+      expect(expedition).not.toBeNull();
+      expect(expedition!.heroMint.toBase58()).toBe(heroMintKeypair.publicKey.toBase58());
     });
   });
 
@@ -311,7 +451,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
 
       // Verify strike recorded
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
     });
 
@@ -421,7 +561,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(strikeIx), [player.keypair, ctx.daoAuthority]);
 
       // Fetch expedition account and verify strike was recorded with score
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
       expect(expedition!.strikes).toBeGreaterThan(0);
       expect(expedition!.score).toBeGreaterThan(0);
@@ -476,8 +616,8 @@ describe('Expedition System', () => {
         [unbuffed.keypair, ctx.daoAuthority],
       );
 
-      const buffedExp = await fetchExpedition(ctx.svm, buffed.publicKey);
-      const unbuffedExp = await fetchExpedition(ctx.svm, unbuffed.publicKey);
+      const buffedExp = await fetchExpedition(ctx.svm, buffed.playerPda);
+      const unbuffedExp = await fetchExpedition(ctx.svm, unbuffed.playerPda);
       expect(buffedExp).not.toBeNull();
       expect(unbuffedExp).not.toBeNull();
       // Higher-score strike produced a strictly higher cumulative on-chain score.
@@ -537,7 +677,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
 
       // Verify expedition account closed
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       // Should be null (account closed after claim)
     });
 
@@ -620,7 +760,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(claimIx), [player.keypair]);
 
       // Verify expedition account is closed (hero would be unlocked)
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       // Account should be null after claim — hero and operatives returned
       expect(expedition).toBeNull();
 
@@ -790,7 +930,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(abortIx), [player.keypair]);
 
       // Verify expedition ended (account closed)
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       // Should be null or empty
     });
 
@@ -884,7 +1024,7 @@ describe('Expedition System', () => {
       );
 
       // Verify expedition is active
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
 
       // Abort expedition
@@ -895,7 +1035,7 @@ describe('Expedition System', () => {
       await sendTransaction(ctx.svm, new Transaction().add(abortIx), [player.keypair]);
 
       // Verify expedition account is closed (hero would be unlocked)
-      const afterExpedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const afterExpedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(afterExpedition).toBeNull();
     });
 
@@ -969,7 +1109,7 @@ describe('Expedition System', () => {
       );
 
       // Fetch expedition and verify type
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Mining);
     });
@@ -996,7 +1136,7 @@ describe('Expedition System', () => {
       );
 
       // Fetch expedition and verify type
-      const expedition = await fetchExpedition(ctx.svm, player.publicKey);
+      const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
       expect(expedition!.expeditionType).toBe(ExpeditionType.Fishing);
     });

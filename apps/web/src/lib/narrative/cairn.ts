@@ -108,6 +108,12 @@ const MEDIEVAL: CairnContent = {
       "A host moves on the seat you hold. A crown is a thing other lords come to take.",
     incomingCastleThreatMany:
       "Hosts move on the seat you hold. A crown is a thing other lords come to take.",
+    combatThinHost:
+      "This host is too thin for that gate. It marches, and it does not march home.",
+    combatUnarmed:
+      "Steel for half these hands, and no more. An unarmed soldier is a number that dies.",
+    combatCloseRun:
+      "The count runs near even. Even is the ground where a host is spent for nothing.",
   },
 };
 

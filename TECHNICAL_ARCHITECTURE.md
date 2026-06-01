@@ -65,7 +65,7 @@
 
 1. **Pinocchio, not Anchor** — every account validation is hand-written. There is no `#[account]` macro; the codebase uses `unsafe { *::load(&data) }` and a set of `*::load_checked_*` helpers.
 2. **Multi-kingdom support** — every gameplay PDA is keyed by the kingdom's `GameEngine` pubkey, so multiple kingdoms can run side-by-side. The NOVI mint PDA, however, has no kingdom_id seed and is therefore shared across kingdoms (only kingdom 0 ever becomes the mint authority).
-3. **Section-extension player layout** — `PlayerAccount` is `PlayerCore` (1056 bytes, always present) plus optional extension sections (research, heroes, inventory, rally, team, cosmetics, court) that are reallocated on demand. Total `MAX_SIZE = 1946` bytes.
+3. **Section-extension player layout** — `PlayerAccount` is `PlayerCore` (528 bytes, always present) plus optional extension sections (research, inventory, team, rally, heroes, cosmetics, court) that are reallocated on demand. Total `MAX_SIZE = 1248` bytes.
 4. **Account-type discriminator** — every account stores its `AccountKey` enum value in byte 0. (Note: `AccountKey::validate` exists but is **not invoked anywhere in production code**.)
 5. **Basis-point math, with float exceptions** — multipliers are u16/u32 basis points (10000 = 100%). Some logic (`logic/combat.rs::inflict_damage`, `logic/progression.rs`, `logic/stamina.rs`, `logic/location.rs` Haversine) still uses `f64` via `libm`, which has determinism implications.
 6. **Saturating math** — `checked_add` / `saturating_*` is the dominant pattern.
@@ -365,7 +365,7 @@ pub struct GameEngine {
 `PlayerAccount` is `PlayerCore` (always present) + optional **extension sections** appended end-to-end. Sections are reallocated on demand.
 
 ```
-┌─ PlayerCore ──────────────────────────────── 1056 bytes
+┌─ PlayerCore ──────────────────────────────── 528 bytes
 │  account_key, game_engine, owner, created_at,
 │  name (alt-name domain or "Player #N"), extensions u32 bitfield,
 │  locked_novi, units (defensive + operative tiers 1-3),
@@ -375,15 +375,16 @@ pub struct GameEngine {
 │  stamina, gems, fragments, stats, protection,
 │  mirrored research/hero buff bps, rally aggregates, reinforcement aggregates.
 │
-├─ ResearchSection           (96 b, EXT_RESEARCH   = 0x0001)
-├─ HeroesSection            (130 b, EXT_HEROES     = 0x0002)
-├─ InventorySection         (424 b, EXT_INVENTORY  = 0x0004)
+│  (Sections are appended in unlock order — the offset chain in player.rs:)
+├─ ResearchSection           (48 b, EXT_RESEARCH   = 0x0001)
+├─ InventorySection         (144 b, EXT_INVENTORY  = 0x0004)
+├─ TeamSection              (112 b, EXT_TEAM       = 0x0010)
 ├─ RallySection              (80 b, EXT_RALLY      = 0x0008)
-├─ TeamSection               (40 b, EXT_TEAM       = 0x0010)
+├─ HeroesSection            (208 b, EXT_HEROES     = 0x0002)
 ├─ CosmeticsSection          (80 b, EXT_COSMETICS  = 0x0020)
 └─ CourtSection              (48 b, EXT_COURT      = 0x0040)
 
-MAX_SIZE = 1946 bytes (verified by static assertions in player.rs).
+MAX_SIZE = 1248 bytes (verified by static assertions in player.rs).
 ```
 
 The `extensions: u32` bitfield in `PlayerCore` records which sections are present so consumers can `unlock_extension_if_eligible` and the account is reallocated accordingly.

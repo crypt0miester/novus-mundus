@@ -1,5 +1,10 @@
 /**
- * Phase 8 — Castles (one per city)
+ * Phase 8 — Castles (full per-city tier ladder)
+ *
+ * Castles are keyed [city_id, castle_id] on-chain, so every city gets a full
+ * Outpost..Citadel ladder (castle_id == tier). This phase iterates the whole
+ * CASTLES roster and resolves each one's anchor independently — see
+ * cli/data/castles.ts for the placement model.
  */
 
 import { type CLIContext } from '../context';
@@ -176,6 +181,13 @@ export async function initCastles(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
 
   for (const castle of CASTLES) {
+    // Skip castles whose city isn't enrolled yet; they get created when that
+    // city is added in a later init run (castles are 5 per city).
+    if (ctx.enrolledCities && !ctx.enrolledCities.has(castle.cityId)) {
+      stats.skipped++;
+      continue;
+    }
+
     const [castlePda] = await deriveCastlePda(ctx.gameEngine, castle.cityId, castle.castleId);
 
     const city = CITIES.find(c => c.id === castle.cityId);

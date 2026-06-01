@@ -31,6 +31,9 @@ import {
 } from "@/components/shared/TripleCountInput";
 import { bnToSafeNumber } from "@/lib/utils";
 import { useIsMountedRef } from "@/lib/hooks/useIsMountedRef";
+import { useCombatForecast, type ForecastTarget } from "@/lib/hooks/useCombatForecast";
+import { useRefill } from "@/lib/hooks/useRefill";
+import { CombatForecastPanel } from "@/components/combat/CombatForecastPanel";
 
 /** Allowed gather windows, in minutes — matches the picks on the old Rally tab. */
 const GATHER_OPTIONS = [5, 15, 60];
@@ -115,24 +118,80 @@ export function RallyComposerPanel({
   // rally for an encounter that just despawned, or a castle account that
   // was closed in a transition. Stops the form from posting a tx that the
   // PDA-validation would bounce.
-  const { data: targetAlive } = useQuery({
-    queryKey: ["rally-composer", "target-alive", targetPubkey],
-    queryFn: async () => {
+  const { data: targetInfo } = useQuery({
+    queryKey: ["rally-composer", "target", targetPubkey, targetType],
+    queryFn: async (): Promise<{ alive: boolean; target: ForecastTarget }> => {
+      const dead = { alive: false, target: { kind: "none" } as ForecastTarget };
       const info = await connection.getAccountInfo(targetKey);
-      if (!info) return false;
+      if (!info) return dead;
       switch (targetType) {
-        case 0:
-          return !!parsePlayer(info);
-        case 1:
-          return !!parseEncounter(info);
-        case 2:
-          return !!parseCastle(info);
+        case 0: {
+          const p = parsePlayer(info);
+          return p ? { alive: true, target: { kind: "player", player: p } } : dead;
+        }
+        case 1: {
+          const e = parseEncounter(info);
+          return e
+            ? {
+                alive: true,
+                target: { kind: "encounter", defenseBps: e.defense, health: bnToSafeNumber(e.health) },
+              }
+            : dead;
+        }
+        case 2: {
+          // Castle defence is aggregated from garrison-contribution accounts not
+          // loaded here — coverage-only forecast, no win/loss verdict for now.
+          return parseCastle(info) ? { alive: true, target: { kind: "none" } } : dead;
+        }
         default:
-          return false;
+          return dead;
       }
     },
     staleTime: 10_000,
   });
+  const targetAlive = targetInfo?.alive;
+
+  const forecast = useCombatForecast({
+    combat: "rally",
+    units,
+    weapons,
+    target: targetInfo?.target ?? { kind: "none" },
+  });
+  const rec = forecast.recommended;
+  // "Bring up the host": raise the committed sliders to the recommended force,
+  // clamped to what the player actually owns (free, no purchase).
+  const fill = useMemo(() => {
+    if (!rec) return null;
+    // Commit up to the recommended total, drawing the tankiest owned tiers first
+    // (siege, then cavalry, then infantry). Offense is a flat headcount, so this
+    // reaches the count AND minimises losses, since siege/cavalry have more HP.
+    const u: [number, number, number] = [0, 0, 0];
+    let need = rec.totalUnits;
+    for (const tier of [2, 1, 0] as const) {
+      const take = Math.min(ownedUnits[tier], Math.max(0, need));
+      u[tier] = take;
+      need -= take;
+    }
+    // Arm the committed troops, drawing all owned weapon types.
+    const committed = u[0] + u[1] + u[2];
+    let wneed = Math.min(committed, ownedWeapons[0] + ownedWeapons[1] + ownedWeapons[2]);
+    const w: [number, number, number] = [0, 0, 0];
+    for (let i = 0; i < 3 && wneed > 0; i++) {
+      const take = Math.min(ownedWeapons[i], wneed);
+      w[i] = take;
+      wneed -= take;
+    }
+    const changes =
+      u[0] !== units[0] ||
+      u[1] !== units[1] ||
+      u[2] !== units[2] ||
+      w[0] !== weapons[0] ||
+      w[1] !== weapons[1] ||
+      w[2] !== weapons[2];
+    return { u, w, changes };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rec, JSON.stringify(ownedUnits), JSON.stringify(ownedWeapons), JSON.stringify(units), JSON.stringify(weapons)]);
+  const refill = useRefill(forecast.acquire?.troops ?? 0, forecast.acquire?.weapons ?? 0);
 
   const traveling = player ? isTraveling(player) : false;
   // Chain rally::create rejects with InsufficientUnits when units sum to
@@ -284,6 +343,28 @@ export function RallyComposerPanel({
           dense
         />
       </div>
+
+      {/* Combat forecast: soft, Cairn-voiced read of the odds + refill. */}
+      <CombatForecastPanel
+        result={forecast}
+        combat="rally"
+        rally={{ pooled: 0 }}
+        onFillFromInventory={
+          fill?.changes
+            ? () => {
+                setUnits(fill.u);
+                setWeapons(fill.w);
+              }
+            : undefined
+        }
+        fillAvailable={!!fill?.changes}
+        refill={{
+          plan: refill.plan,
+          run: refill.run,
+          running: refill.running,
+          isLegendary: forecast.isLegendary,
+        }}
+      />
 
       {/* Hero buttons — only when the player has at least one locked hero. */}
       {lockedHeroes.some((h) => h !== null) && (

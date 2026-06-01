@@ -37,6 +37,10 @@ export interface CLIContext {
   heroCollection: PublicKey;
   dryRun: boolean;
   verbose: boolean;
+  /* City ids the cities/castles phases create. null = all cities. Heroes are
+   * always created in full; the web marks heroes pinned to an un-opened city
+   * as "Undiscovered" rather than deferring their creation. */
+  enrolledCities: Set<number> | null;
 }
 
 export interface ParsedArgs {
@@ -54,6 +58,8 @@ export interface ParsedArgs {
   dryRun: boolean;
   verbose: boolean;
   from: number;
+  /* --cities spec: "0-4", "5,9,13", "0-4,7". Absent = all cities. */
+  cities?: string;
   flags: string[];
 }
 
@@ -84,6 +90,32 @@ function parseTimestamp(v: string): number {
     throw new Error(`Invalid timestamp "${v}". Pass unix seconds or an ISO date.`);
   }
   return Math.floor(ms / 1000);
+}
+
+/**
+ * Parse a `--cities` spec into a set of city ids. Accepts comma-separated ids
+ * and inclusive ranges, e.g. "0-4", "5,9,13", "0-4,7,9". Returns null for an
+ * absent/empty spec, meaning "all cities".
+ */
+export function parseCitySpec(spec: string | undefined): Set<number> | null {
+  if (!spec || !spec.trim()) return null;
+  const ids = new Set<number>();
+  for (const part of spec.split(',')) {
+    const token = part.trim();
+    if (!token) continue;
+    const range = token.match(/^(\d+)-(\d+)$/);
+    if (range) {
+      const lo = parseInt(range[1], 10);
+      const hi = parseInt(range[2], 10);
+      if (lo > hi) throw new Error(`Invalid --cities range "${token}": start is greater than end`);
+      for (let id = lo; id <= hi; id++) ids.add(id);
+    } else if (/^\d+$/.test(token)) {
+      ids.add(parseInt(token, 10));
+    } else {
+      throw new Error(`Invalid --cities token "${token}". Use ids and ranges like "5,9,13" or "0-4".`);
+    }
+  }
+  return ids.size ? ids : null;
 }
 
 const RPC_URLS: Record<Environment, string> = {
@@ -144,6 +176,9 @@ export function parseArgs(argv: string[]): ParsedArgs {
         break;
       case '--from':
         args.from = parseInt(argv[++i], 10);
+        break;
+      case '--cities':
+        args.cities = argv[++i];
         break;
       default:
         if (arg.startsWith('--')) {
@@ -227,6 +262,7 @@ export async function buildContext(args: ParsedArgs): Promise<CLIContext> {
     heroCollection,
     dryRun: args.dryRun,
     verbose: args.verbose,
+    enrolledCities: parseCitySpec(args.cities),
   };
 
   if (args.env === 'localnet') {

@@ -45,6 +45,7 @@ import type {
   AllowedTokenAccount,
   PlayerPurchaseAccount,
 } from "novus-mundus-sdk";
+import { OCCUPANT_PLAYER } from "novus-mundus-sdk";
 
 // Account Store Types
 
@@ -190,6 +191,16 @@ interface AccountsState {
   upsertCourtPosition: (pubkey: PublicKey, account: CourtPositionAccount) => void;
   upsertTeamCastleReward: (pubkey: PublicKey, account: TeamCastleRewardAccount) => void;
   upsertLocation: (pubkey: PublicKey, account: LocationAccount) => void;
+  removeLocation: (key: string) => void;
+  // Reconcile the store's locations for one city against an authoritative
+  // fetched set (the on-chain occupied cells). Removes any city cell the chain
+  // no longer reports: this clears ghosts left by closes the WS never
+  // delivered (programSubscribe drops closes of accounts reassigned to System).
+  reconcileCityLocations: (cityId: number, presentKeys: Set<string>) => void;
+  // Evict a closed PDA from every short-lived map that may hold it. The close
+  // notification carries no discriminator, so we cannot route by AccountKey;
+  // this checks each closable map by pubkey and rebuilds only the ones that hit.
+  removeClosedAccount: (key: string) => void;
   upsertResearchTemplate: (pubkey: PublicKey, account: ResearchTemplateAccount) => void;
   upsertHeroTemplate: (pubkey: PublicKey, account: HeroTemplateAccount) => void;
   upsertDaoPromotion: (pubkey: PublicKey, account: DAOPromotionAccount) => void;
@@ -366,7 +377,69 @@ export const useAccountStore = create<AccountsState>()(
     upsertTeamCastleReward: (pubkey, account) =>
       set((s) => ({ teamCastleRewards: upsertMap(s.teamCastleRewards, pubkey, account) })),
     upsertLocation: (pubkey, account) =>
-      set((s) => ({ locations: upsertMap(s.locations, pubkey, account) })),
+      set((s) => {
+        const key = pubkey.toBase58();
+        const next = new Map(s.locations);
+        // One player occupies exactly one cell on-chain (the old cell's PDA is
+        // closed on move). programSubscribe does not reliably deliver that
+        // close, so the old entry can linger as a ghost. When a player cell
+        // arrives, evict any other cell the same player held: the new cell's
+        // arrival is reliable even when the old cell's close is not.
+        if (account.occupantType === OCCUPANT_PLAYER) {
+          const occ = account.occupant.toBase58();
+          for (const [k, entry] of next) {
+            if (
+              k !== key &&
+              entry.account.occupantType === OCCUPANT_PLAYER &&
+              entry.account.occupant.toBase58() === occ
+            ) {
+              next.delete(k);
+            }
+          }
+        }
+        next.set(key, { pubkey, account });
+        return { locations: next };
+      }),
+    removeLocation: (key) => set((s) => ({ locations: removeFromMap(s.locations, key) })),
+    reconcileCityLocations: (cityId, presentKeys) =>
+      set((s) => {
+        let next: Map<string, AccountEntry<LocationAccount>> | null = null;
+        for (const [k, entry] of s.locations) {
+          if (entry.account.cityId === cityId && !presentKeys.has(k)) {
+            if (!next) next = new Map(s.locations);
+            next.delete(k);
+          }
+        }
+        return next ? { locations: next } : {};
+      }),
+    removeClosedAccount: (key) =>
+      set((s) => {
+        // Only the maps that mirror closable PDAs. Pubkeys are globally unique,
+        // so a key can hit at most one map; rebuild just those (usually one,
+        // often zero). Returning an empty patch is a no-op for zustand.
+        const patch: Partial<AccountsState> = {};
+        if (s.locations.has(key)) patch.locations = removeFromMap(s.locations, key);
+        if (s.encounters.has(key)) patch.encounters = removeFromMap(s.encounters, key);
+        if (s.loot.has(key)) patch.loot = removeFromMap(s.loot, key);
+        if (s.incomingRallies.has(key))
+          patch.incomingRallies = removeFromMap(s.incomingRallies, key);
+        if (s.rallyParticipants.has(key))
+          patch.rallyParticipants = removeFromMap(s.rallyParticipants, key);
+        if (s.teamMembers.has(key)) patch.teamMembers = removeFromMap(s.teamMembers, key);
+        if (s.teamInvites.has(key)) patch.teamInvites = removeFromMap(s.teamInvites, key);
+        if (s.treasuryRequests.has(key))
+          patch.treasuryRequests = removeFromMap(s.treasuryRequests, key);
+        if (s.eventParticipations.has(key))
+          patch.eventParticipations = removeFromMap(s.eventParticipations, key);
+        if (s.garrisonContributions.has(key))
+          patch.garrisonContributions = removeFromMap(s.garrisonContributions, key);
+        if (s.teamCastleRewards.has(key))
+          patch.teamCastleRewards = removeFromMap(s.teamCastleRewards, key);
+        if (s.courtPositions.has(key))
+          patch.courtPositions = removeFromMap(s.courtPositions, key);
+        if (s.allowedTokens.has(key)) patch.allowedTokens = removeFromMap(s.allowedTokens, key);
+        return patch;
+      }),
     upsertResearchTemplate: (pubkey, account) =>
       set((s) => ({ researchTemplates: upsertMap(s.researchTemplates, pubkey, account) })),
     upsertHeroTemplate: (pubkey, account) =>

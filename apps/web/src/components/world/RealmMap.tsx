@@ -24,7 +24,8 @@ import {
   useWorldGameEngine,
   useCitizenStatus,
 } from "@/lib/hooks/world";
-import { convexHull, inflate, smoothClosedPath, type Pt } from "./util/hull";
+import { convexHull, inflate, type Pt } from "./util/hull";
+import worldLand from "./data/world-land.json";
 import { useZoomPan } from "./util/useZoomPan";
 import { useChainNow } from "@/lib/hooks/useChainTime";
 import { calculateLocalTime } from "novus-mundus-sdk";
@@ -153,6 +154,34 @@ const VB_W = 1000;
 const VB_H = 720;
 const PAD = 80;
 
+// Fixed full-world equirectangular window. The whole world fills the frame at
+// one uniform scale (1° lon and 1° lat cover equal screen px, no stretch); the
+// ±120° latitude window leaves a margin so the ±90° of real land sits centered.
+// Cities and coastlines share this projection, so city dots land at their true
+// geographic positions on the world.
+const WORLD_LON0 = -180;
+const WORLD_LON_SPAN = 360;
+const WORLD_LAT0 = -120;
+const WORLD_LAT_SPAN = 240;
+const worldX = (lon: number) => PAD + ((lon - WORLD_LON0) / WORLD_LON_SPAN) * (VB_W - 2 * PAD);
+const worldY = (lat: number) => PAD + (1 - (lat - WORLD_LAT0) / WORLD_LAT_SPAN) * (VB_H - 2 * PAD);
+
+// Fog-of-war: discovery radius (viewBox px) of the soft clearing each city
+// opens in the fog. Land inside a clearing is "charted"; the rest of the world
+// stays under the parchment-shadow veil until a city is opened near it.
+const DISCOVERY_RADIUS = 85;
+
+// Simplified Natural Earth land, projected once into the viewBox as SVG path
+// strings. Rendered as ink coastline outlines, no fill colour (see render).
+const WORLD_LAND_PATHS: string[] = (worldLand.rings as [number, number][][]).map((ring) => {
+  let d = "";
+  for (let i = 0; i < ring.length; i++) {
+    const [lon, lat] = ring[i]!;
+    d += `${i === 0 ? "M" : "L"}${worldX(lon).toFixed(1)} ${worldY(lat).toFixed(1)} `;
+  }
+  return `${d}Z`;
+});
+
 // The day/night wash bleeds a full viewBox past every edge so it fills the
 // letterbox margins (in fullscreen the sheet is wider than the 7:5 viewBox, so
 // "meet" leaves bars the wash must cover) and runs off-sheet when panned — an
@@ -164,20 +193,12 @@ const WASH_Y = -VB_H;
 const WASH_W = VB_W * 3;
 const WASH_H = VB_H * 3;
 
-/** Project city lat/long into the viewBox, north up. */
-function project(cities: { account: { latitude: number; longitude: number } }[]): {
-  lat0: number;
-  lon0: number;
-  latR: number;
-  lonR: number;
-} {
-  const lats = cities.map((c) => c.account.latitude);
-  const lons = cities.map((c) => c.account.longitude);
-  const lat0 = Math.min(...lats);
-  const lon0 = Math.min(...lons);
-  const latR = Math.max(...lats) - lat0 || 1;
-  const lonR = Math.max(...lons) - lon0 || 1;
-  return { lat0, lon0, latR, lonR };
+/** The map projection window — fixed to the full world so the realm renders as
+ * a world map with cities at their true positions. Returns the same window
+ * shape the city-node and day/night mappings already consume, so they reproject
+ * onto the world with no other changes. */
+function project(): { lat0: number; lon0: number; latR: number; lonR: number } {
+  return { lat0: WORLD_LAT0, lon0: WORLD_LON0, latR: WORLD_LAT_SPAN, lonR: WORLD_LON_SPAN };
 }
 
 // Resample a closed polygon to exactly `count` evenly-spaced points along its
@@ -379,7 +400,7 @@ export function RealmMap({
   // dense clusters don't pile on top of each other.
   const nodes = useMemo(() => {
     if (!cities || cities.length === 0) return [];
-    const { lat0, lon0, latR, lonR } = project(cities);
+    const { lat0, lon0, latR, lonR } = project();
     const maxPlayers = Math.max(1, ...cities.map((c) => c.account.playersPresent));
     const placed = cities.map((c) => ({
       city: c.account,
@@ -449,14 +470,13 @@ export function RealmMap({
     return map;
   }, [nodes]);
 
-  // Keep both the inflated hull (polygon) and its smoothed SVG path. The
-  // polygon is reused for point-in-shape terrain placement; the path is the
-  // ink-wash kingdom outline.
-  const { kingdomHull, kingdomPath } = useMemo(() => {
-    if (nodes.length < 3) return { kingdomHull: [] as Pt[], kingdomPath: "" };
+  // Inflated convex hull of the cities — reused for point-in-shape terrain
+  // placement and the living territory border (a subtle region on the world).
+  const { kingdomHull } = useMemo(() => {
+    if (nodes.length < 3) return { kingdomHull: [] as Pt[] };
     const pts: Pt[] = nodes.map((n) => ({ x: n.x, y: n.y }));
     const fat = inflate(convexHull(pts), 56);
-    return { kingdomHull: fat, kingdomPath: smoothClosedPath(fat, 0.55) };
+    return { kingdomHull: fat };
   }, [nodes]);
 
   // Roads — quiet ink spokes from the King's seat (the Capital) out to every
@@ -506,7 +526,7 @@ export function RealmMap({
   const chainNow = useChainNow();
   const dayNight = useMemo(() => {
     if (!cities || cities.length < 1) return null;
-    const { lon0, lonR } = project(cities);
+    const { lon0, lonR } = project();
     const ts = Math.floor(chainNow / 60) * 60;
     const xOf = (lon: number) => PAD + ((lon - lon0) / lonR) * (VB_W - 2 * PAD);
 
@@ -1009,38 +1029,32 @@ export function RealmMap({
             aria-hidden={sheetOverride ? true : undefined}
           >
             <g transform={zoom.transform}>
-              {/* Kingdom shape + roads stay in world space — they're the
-                  geography, they should grow with zoom. */}
-              {kingdomPath && <path className={styles.kingdomShape} d={kingdomPath} />}
+              {/* World coastlines — simplified Natural Earth land, equirectangular,
+                  as ink outlines on the parchment (no fill colour). The realm's
+                  cities pin onto this at their true positions. World-space so it
+                  pans/zooms with the map; strokes stay constant width. */}
+              <g aria-hidden pointerEvents="none">
+                {WORLD_LAND_PATHS.map((d, i) => (
+                  <path
+                    key={`land-${i}`}
+                    d={d}
+                    fill="none"
+                    stroke="#6b5836"
+                    strokeWidth={0.8}
+                    strokeOpacity={0.5}
+                    strokeLinejoin="round"
+                    vectorEffect="non-scaling-stroke"
+                  />
+                ))}
+              </g>
 
-              {/* Living territory border — the chain-derived control extent.
-                  Initial "d" comes from React; the morph effect drives shifts
-                  imperatively so a control change reshapes the outline. */}
-              {borderPath && (
-                <path
-                  ref={borderRef}
-                  className={styles.controlBorder}
-                  d={borderPath}
-                  vectorEffect="non-scaling-stroke"
-                  aria-hidden
-                />
-              )}
+              {/* Territory-border hull dropped: on the world map the convex
+                  hull of the cities drew a stray diagonal quad over everything.
+                  The cities + coastlines carry the realm now. */}
 
-              {/* Roads — quiet ink spokes from the King's seat. Self-draw
-                  center-out on mount (feature 4.3). vector-effect keeps the
-                  dash widths constant under zoom. */}
-              {roads.length > 0 && (
-                <g className={styles.roadLayer} aria-hidden>
-                  {roads.map((r) => (
-                    <path
-                      key={r.key}
-                      className={`realm-road ${styles.road}`}
-                      d={r.d}
-                      vectorEffect="non-scaling-stroke"
-                    />
-                  ))}
-                </g>
-              )}
+              {/* Roads dropped: the King's-seat spokes were a stray web of lines
+                  radiating from Valdenmoor on the world map. Cities + coastlines
+                  carry the realm now. */}
 
               {/* Day/night — a continuous horizontal wash matching the game's
                   on-chain time-of-day (longitude-only, latitude-independent: a
@@ -1194,6 +1208,58 @@ export function RealmMap({
                 </g>
               )}
 
+              {/* Fog of war — uncharted world veiled by a parchment-shadow wash
+                  (no colour); each city opens a soft clearing, so the realm's
+                  known extent grows as cities are opened. Sits ABOVE the day/night
+                  wash (else the night wash swamps it) and below the cities, which
+                  always stay in their clearings. Reactive to the live city set. */}
+              {nodes.length > 0 && (
+                <g aria-hidden pointerEvents="none">
+                  <defs>
+                    {/* Feather the clearings as ONE group, so overlapping
+                        circles union first (black ∪ black = black, no internal
+                        seams) and only the merged outer edge gets a soft blur.
+                        This is why two adjacent cities read as one charted blob
+                        instead of leaving dark arcs where their circles cross. */}
+                    <filter
+                      id="realm-fog-feather"
+                      filterUnits="userSpaceOnUse"
+                      x={WASH_X}
+                      y={WASH_Y}
+                      width={WASH_W}
+                      height={WASH_H}
+                    >
+                      <feGaussianBlur stdDeviation="20" />
+                    </filter>
+                    <mask
+                      id="realm-fog-mask"
+                      maskUnits="userSpaceOnUse"
+                      maskContentUnits="userSpaceOnUse"
+                      x={WASH_X}
+                      y={WASH_Y}
+                      width={WASH_W}
+                      height={WASH_H}
+                    >
+                      <rect x={WASH_X} y={WASH_Y} width={WASH_W} height={WASH_H} fill="#fff" />
+                      <g filter="url(#realm-fog-feather)">
+                        {nodes.map((n) => (
+                          <circle key={`fog-${n.key}`} cx={n.x} cy={n.y} r={DISCOVERY_RADIUS} fill="#000" />
+                        ))}
+                      </g>
+                    </mask>
+                  </defs>
+                  <rect
+                    x={WASH_X}
+                    y={WASH_Y}
+                    width={WASH_W}
+                    height={WASH_H}
+                    fill="#161009"
+                    fillOpacity={0.82}
+                    mask="url(#realm-fog-mask)"
+                  />
+                </g>
+              )}
+
               <g>
                 {renderOrder.map((n) => {
                   const meta = TYPE_META[typeIdx(n.city.cityType)];
@@ -1281,14 +1347,36 @@ export function RealmMap({
                         r={n.size}
                       />
 
-                      <text
-                        className={styles.cityGlyph}
-                        x={n.size + 8}
-                        y={4}
-                        fontSize={n.size * 1.2}
+                      {/* City-type sigil — the real engraved map-* GameIcon
+                          (CSS mask over currentColor, tinted to --ink), the same
+                          asset the legend uses. Replaces the old Unicode glyph,
+                          which was font/platform-dependent. foreignObject lets the
+                          masked HTML icon live in the SVG and ride the counter-
+                          scale with the rest of the marker. */}
+                      <foreignObject
+                        x={8 + n.size * 0.1}
+                        y={-n.size * 0.9}
+                        width={n.size * 1.8}
+                        height={n.size * 1.8}
+                        style={{ overflow: "visible", pointerEvents: "none" }}
                       >
-                        {meta.glyph}
-                      </text>
+                        <div
+                          style={{
+                            width: "100%",
+                            height: "100%",
+                            display: "flex",
+                            alignItems: "center",
+                            justifyContent: "center",
+                            color: "var(--ink)",
+                          }}
+                        >
+                          <GameIcon
+                            id={meta.icon}
+                            title={`${meta.label} city`}
+                            size={Math.round(n.size * 1.6)}
+                          />
+                        </div>
+                      </foreignObject>
 
                       {isHome && !(travel && travel.fromCityId === homeCity) && (
                         <polygon
@@ -1564,8 +1652,8 @@ export function DefaultRealmPanel({ typeCounts, kingdom, theme, start }: RealmMa
       </dl>
 
       <p className={styles.hint}>
-        Touch a city to learn its name and its wilds. The roads run from the King&apos;s seat
-        outward; the larger the ink, the more players walk within.
+        Touch a city to learn its name and its wilds. The larger the ink, the more players
+        walk within; the charted world widens as new cities are discovered.
       </p>
     </>
   );

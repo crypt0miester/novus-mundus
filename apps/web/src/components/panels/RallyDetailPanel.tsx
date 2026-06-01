@@ -8,6 +8,9 @@ import {
   parseRally,
   parseRallyParticipant,
   parseAssetV1,
+  parsePlayer,
+  parseEncounter,
+  parseEstate,
   derivePlayerPda,
   deriveEstatePda,
   createRallyJoinInstruction,
@@ -50,6 +53,10 @@ import { formatTime, bnToSafeNumber } from "@/lib/utils";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import { useChainNow } from "@/lib/hooks/useChainTime";
 import { useIsMountedRef } from "@/lib/hooks/useIsMountedRef";
+import { useCombatForecast, type ForecastTarget } from "@/lib/hooks/useCombatForecast";
+import { useRefill } from "@/lib/hooks/useRefill";
+import { rallyLeaderBuffs } from "@/lib/combat/forecast";
+import { CombatForecastPanel } from "@/components/combat/CombatForecastPanel";
 
 const TARGET_TYPE = ["Player", "Encounter", "Castle"];
 const ENCOUNTER_RARITY = ["Common", "Uncommon", "Rare", "Epic", "Legendary", "World Event"];
@@ -186,6 +193,110 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
       cancelled = true;
     };
   }, [publicKey, rally, client.gameEngine]);
+
+  // Combat forecast for the WHOLE rally (everyone joined so far + your join),
+  // resolved with the LEADER's buffs as the chain does. The target defender and
+  // the leader's Citadel bonus are fetched here so a joiner sees the real odds.
+  const { data: forecastTarget } = useQuery({
+    queryKey: ["rally", "forecast-target", rallyPubkey, rally?.targetType ?? -1],
+    enabled: !!rally,
+    queryFn: async (): Promise<ForecastTarget> => {
+      if (!rally) return { kind: "none" };
+      const info = await connection.getAccountInfo(rally.target);
+      if (!info) return { kind: "none" };
+      switch (rally.targetType) {
+        case 0: {
+          const p = parsePlayer(info);
+          return p ? { kind: "player", player: p } : { kind: "none" };
+        }
+        case 1: {
+          const e = parseEncounter(info);
+          return e
+            ? { kind: "encounter", defenseBps: e.defense, health: bnToSafeNumber(e.health) }
+            : { kind: "none" };
+        }
+        default:
+          // Castle: garrison strength isn't aggregated client-side — coverage-only.
+          return { kind: "none" };
+      }
+    },
+    staleTime: 10_000,
+  });
+
+  const { data: leaderCitadelBps = 0 } = useQuery({
+    queryKey: ["rally", "leader-citadel", rally?.creator?.toBase58() ?? ""],
+    enabled: !!rally,
+    queryFn: async (): Promise<number> => {
+      if (!rally) return 0;
+      const [leaderPlayer] = await derivePlayerPda(client.gameEngine, rally.creator);
+      const [leaderEstate] = await deriveEstatePda(leaderPlayer);
+      const info = await connection.getAccountInfo(leaderEstate);
+      const est = info ? parseEstate(info) : null;
+      return est?.pvpDamageBps ?? 0;
+    },
+    staleTime: 30_000,
+  });
+
+  const rallyCtx = useMemo(() => {
+    if (!rally) return undefined;
+    return {
+      pooledUnits: bnToSafeNumber(rally.totalUnits),
+      pooledMelee: bnToSafeNumber(rally.totalMeleeWeapons),
+      pooledRanged: bnToSafeNumber(rally.totalRangedWeapons),
+      pooledSiege: bnToSafeNumber(rally.totalSiegeWeapons),
+      leaderBuffs: rallyLeaderBuffs(rally),
+      leaderCitadelBps,
+    };
+  }, [rally, leaderCitadelBps]);
+
+  const forecast = useCombatForecast({
+    combat: "rally",
+    units,
+    weapons,
+    target: forecastTarget ?? { kind: "none" },
+    rally: rallyCtx,
+  });
+  const refill = useRefill(forecast.acquire?.troops ?? 0, forecast.acquire?.weapons ?? 0);
+
+  // "Bring up the host": commit up to the rally's remaining need from your own
+  // stock, tankiest tiers first (siege, cavalry, infantry) to minimise losses.
+  const recForce = forecast.recommended;
+  const fill = useMemo(() => {
+    if (!recForce || !rally) return null;
+    const pooled = bnToSafeNumber(rally.totalUnits);
+    const remaining = Math.max(0, recForce.totalUnits - pooled);
+    const u: [number, number, number] = [0, 0, 0];
+    let need = remaining;
+    for (const tier of [2, 1, 0] as const) {
+      const take = Math.min(ownedUnits[tier], Math.max(0, need));
+      u[tier] = take;
+      need -= take;
+    }
+    const committed = u[0] + u[1] + u[2];
+    let wneed = Math.min(committed, ownedWeapons[0] + ownedWeapons[1] + ownedWeapons[2]);
+    const w: [number, number, number] = [0, 0, 0];
+    for (let i = 0; i < 3 && wneed > 0; i++) {
+      const take = Math.min(ownedWeapons[i], wneed);
+      w[i] = take;
+      wneed -= take;
+    }
+    const changes =
+      u[0] !== units[0] ||
+      u[1] !== units[1] ||
+      u[2] !== units[2] ||
+      w[0] !== weapons[0] ||
+      w[1] !== weapons[1] ||
+      w[2] !== weapons[2];
+    return { u, w, changes };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    recForce,
+    rally,
+    JSON.stringify(ownedUnits),
+    JSON.stringify(ownedWeapons),
+    JSON.stringify(units),
+    JSON.stringify(weapons),
+  ]);
 
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -897,6 +1008,28 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
               )}
             </select>
           </div>
+
+          {/* Whole-rally forecast (pool + your join), resolved with leader buffs. */}
+          <CombatForecastPanel
+            result={forecast}
+            combat="rally"
+            rally={{ pooled: bnToSafeNumber(rally.totalUnits) }}
+            onFillFromInventory={
+              fill?.changes
+                ? () => {
+                    setUnits(fill.u);
+                    setWeapons(fill.w);
+                  }
+                : undefined
+            }
+            fillAvailable={!!fill?.changes}
+            refill={{
+              plan: refill.plan,
+              run: refill.run,
+              running: refill.running,
+              isLegendary: forecast.isLegendary,
+            }}
+          />
 
           {traveling && (
             <p className="text-xs text-danger">You are traveling — joining may be restricted.</p>

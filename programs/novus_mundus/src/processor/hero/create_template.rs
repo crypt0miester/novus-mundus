@@ -3,7 +3,7 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     error::GameError,
-    state::{AbilityKind, BuffConfig, GameEngine, HeroTemplate},
+    state::{AbilityKind, BuffConfig, BuffStat, GameEngine, HeroCategory, HeroTemplate, HeroType},
     utils::{read_u16, read_u32, read_u64, read_u8},
     validation::{require_key_match, require_signer, require_writable},
 };
@@ -138,6 +138,21 @@ pub fn process(
     // If kind is configured, cooldown must be > 0 to prevent spam
     if ability_kind != 0 && ability_cooldown_secs == 0 {
         return Err(GameError::HeroAbilityBadParams.into());
+    }
+
+    // Validate enum-typed fields so a malformed seed fails loudly instead of
+    // writing a template whose hero_type / category / buff stat decode to a
+    // garbage value (BuffStat::from_u8 silently maps unknown ids to None).
+    if hero_type > HeroType::Hybrid as u8 {
+        return Err(GameError::InvalidParameter.into());
+    }
+    if category > HeroCategory::Original as u8 {
+        return Err(GameError::InvalidParameter.into());
+    }
+    for buff in buffs.iter() {
+        if buff.stat > BuffStat::FishingAffinity as u8 {
+            return Err(GameError::InvalidParameter.into());
+        }
     }
 
     // 5. Derive and verify PDA
