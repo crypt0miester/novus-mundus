@@ -16,6 +16,7 @@ import { GoldCountdown } from "@/components/shared/GoldCountdown";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel";
+import { InfoButton } from "@/components/shared/InfoButton";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
@@ -511,6 +512,7 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
                       <span className="text-sm font-semibold text-text-primary">
                         {RALLY_STATUS[st] ?? "Rally"}
                       </span>
+                      <InfoButton>Gathering, then Marching (army moves to target), then Combat, then Returning home, then Completed or Cancelled.</InfoButton>
                       <span className="text-xs text-text-muted">
                         {TARGET_TYPE[r.account.targetType ?? 0]}
                       </span>
@@ -524,12 +526,14 @@ export function RallyTab({ hideComposer = false }: RallyTabProps = {}) {
                       <span>
                         {joined}/{max} joined
                       </span>
+                      <InfoButton>Rally size cap by tier: 3 / 5 / 10 / 20, times hero rally buff, plus 5% per Citadel level, capped at 255.</InfoButton>
                       {st === 0 && gatherAt > 0 && (
                         <>
                           <span className="text-zinc-700">·</span>
                           <span>
                             Gathers <InlineCountdown to={gatherAt} />
                           </span>
+                          <InfoButton>Recruiting phase: teammates travel in. Default 1h (3600s); after gather_at no one can join and the march starts.</InfoButton>
                         </>
                       )}
                       {(st === 1 || st === 2) && arriveAt > 0 && (

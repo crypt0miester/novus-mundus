@@ -239,7 +239,10 @@ export function setupCityScene(args: SetupCitySceneArgs): {
     camera,
     initialMode: mapMode,
     minDistance: maxD0 / 200,
-    maxDistance: maxD0,
+    // The framing (zoom 1×). The controller derives the zoom-out cap from it
+    // (framing * ZOOM_OUT_HEADROOM) and mounts the camera at this framing, so
+    // there is no separate cap to pass or re-pin.
+    framingDistance: maxD0,
     onClick: (cx, cy) => handlersRef.current.handleClick(cx, cy),
     onDoubleClick: (cx, cy) => handlersRef.current.handleDoubleClick(cx, cy),
     onResetRequested: () => handlersRef.current.handleResetRequested(),
@@ -271,6 +274,9 @@ export function setupCityScene(args: SetupCitySceneArgs): {
     controller.applyToCamera();
     autoFocusedForCityRef.current = cityAccount.cityId;
   }
+  /* No autoFocusCell: the controller already mounts at the framing
+   * (framingDistance = maxD0), so the whole city is in frame on first
+   * paint with no explicit re-pin. */
 
   /* Make the wrap focusable so keyboard shortcuts work without
    * requiring a click-into-focus first. */

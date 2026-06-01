@@ -29,7 +29,7 @@ import {
   useState,
   type ComponentType,
 } from "react";
-import { Radar, RefreshCw, Compass } from "lucide-react";
+import { Radar, RefreshCw, Compass, Rotate3d } from "lucide-react";
 import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER, toGrid } from "novus-mundus-sdk";
 import { useSettings, type MapMode } from "@/lib/store/settings";
 import { useCityOccupied, type OccupiedCell } from "@/lib/hooks/useCityOccupied";
@@ -523,7 +523,7 @@ const CityTerrainMap3DScene = forwardRef<CityTerrainMapHandle, CityTerrainMap3DS
                   : "Two-finger drag pans (tap to enable rotate)"
               }
             >
-              ⤺
+              <Rotate3d size={15} aria-hidden />
             </button>
           )}
           {/* Reset chip — mirror the 2D fallback's `view.scale > 1.001`

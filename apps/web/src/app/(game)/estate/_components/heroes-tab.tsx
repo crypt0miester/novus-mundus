@@ -13,6 +13,9 @@ import { DetailPanel } from "@/components/shared/DetailPanel";
 import { useMorphActions } from "@/lib/hooks/useMorphActions";
 import type { PanelAction } from "@/lib/store/right-panel";
 import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
+import { InfoButton } from "@/components/shared/InfoButton";
+import { LabelWithInfo } from "@/components/shared/LabelWithInfo";
+import { HERO_SLOTS_INFO, FRAGMENT_COST_INFO, FRAGMENT_CAP_INFO } from "@/lib/copy/infoCopy";
 import { Keypair, type PublicKey } from "@solana/web3.js";
 import {
   derivePlayerPda,
@@ -511,14 +514,16 @@ export function HeroesTab() {
       {/* Left: lists — scrolls independently of the detail column */}
       <div className="space-y-4 lg:col-span-2 lg:min-h-0 lg:overflow-y-auto px-1">
         <div className="flex items-center gap-4 text-xs text-text-muted">
-          <span>
+          <LabelWithInfo info={HERO_SLOTS_INFO}>
             {filledSlots}/{maxLockedHeroes} slots
             {maxLockedHeroes < 3 && (
               <span className="text-text-muted/70"> · {3 - maxLockedHeroes} locked</span>
             )}
-          </span>
-          <span>Fragments: {fragments.toLocaleString()}</span>
-          {levelCap > 0 && <span>Cap: Lv{levelCap}</span>}
+          </LabelWithInfo>
+          <LabelWithInfo info={FRAGMENT_COST_INFO}>
+            Fragments: {fragments.toLocaleString()}
+          </LabelWithInfo>
+          {levelCap > 0 && <LabelWithInfo info={FRAGMENT_CAP_INFO}>Cap: Lv{levelCap}</LabelWithInfo>}
           {traveling && <span className="text-danger">Traveling</span>}
           {loading && <span>Loading heroes...</span>}
         </div>
@@ -526,7 +531,8 @@ export function HeroesTab() {
         <div>
           <div className="mb-2 flex items-baseline justify-between gap-2">
             <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Active Slots
+              Active Slots{" "}
+              <InfoButton>Slots holding a locked hero whose buffs are live. A meditating hero earns XP but gives no buffs.</InfoButton>
             </h3>
             <span className="font-mono text-[10px] tabular-nums text-text-muted">
               {filledSlots}/{maxLockedHeroes} filled · {maxLockedHeroes}/3 unlocked
@@ -625,7 +631,8 @@ export function HeroesTab() {
         {unlockedHeroes.length > 0 && (
           <div>
             <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Available ({unlockedHeroes.length})
+              Available ({unlockedHeroes.length}){" "}
+              <InfoButton>Heroes held in your wallet that are not locked into a slot yet.</InfoButton>
             </h3>
             <div className="grid gap-2 grid-cols-3">
               {unlockedHeroes.map((hero) => (

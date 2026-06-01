@@ -4,6 +4,9 @@ import Link from "next/link";
 import { ChevronRight, Hourglass } from "lucide-react";
 import type { PublicKey } from "@solana/web3.js";
 import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
+import { InfoButton } from "@/components/shared/InfoButton";
+import { LabelWithInfo } from "@/components/shared/LabelWithInfo";
+import { HERO_SLOTS_INFO, FRAGMENT_COST_INFO, FRAGMENT_CAP_INFO } from "@/lib/copy/infoCopy";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { AbilityCard } from "@/components/heroes/AbilityCard";
@@ -113,11 +116,11 @@ export function HeroDetailPanel({
           <div className="text-base font-semibold text-text-primary">
             {hero.asset.name || "Hero"}
           </div>
-          <div className="text-[10px] text-text-muted">
+          <LabelWithInfo as="div" className="text-[10px] text-text-muted" info={HERO_SLOTS_INFO}>
             {selected?.type === "locked"
               ? `Locked · Slot ${(selected as { slot: number }).slot}`
               : "Unlocked · In Wallet"}
-          </div>
+          </LabelWithInfo>
           {xp != null && (
             <div className="text-[10px] text-text-muted">
                 XP: <span className="font-mono">{xp.toLocaleString()}</span>
@@ -135,7 +138,8 @@ export function HeroDetailPanel({
       {buffs.length > 0 && (
         <div>
           <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-            Buffs
+            Buffs{" "}
+            <InfoButton>Persistent stat bonuses from a locked hero. They scale (sqrt phi)^level: ~1.27x at Lv1, ~11x at Lv10.</InfoButton>
           </div>
           <div className="space-y-1">
             {buffs.map(([key, value]) => {
@@ -216,7 +220,9 @@ export function HeroDetailPanel({
         ) : (
           <>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-text-muted">Cost</span>
+              <LabelWithInfo className="text-text-muted" info={FRAGMENT_COST_INFO}>
+                Cost
+              </LabelWithInfo>
               <span
                 className={`font-mono ${fragments >= cost ? "text-text-primary" : "text-red-400"}`}
               >
@@ -224,7 +230,9 @@ export function HeroDetailPanel({
               </span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="text-text-muted">Level cap</span>
+              <LabelWithInfo className="text-text-muted" info={FRAGMENT_CAP_INFO}>
+                Level cap
+              </LabelWithInfo>
               <span className="font-mono text-text-secondary">
                 {levelCap > 0 ? `Lv${levelCap} (Sanctuary Lv${sanctuaryLevel})` : "No Sanctuary"}
               </span>

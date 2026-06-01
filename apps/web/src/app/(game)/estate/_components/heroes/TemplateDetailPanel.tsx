@@ -1,6 +1,7 @@
 "use client";
 
 import { GameIcon, buffStatIcon } from "@/components/shared/GameIcon";
+import { InfoButton } from "@/components/shared/InfoButton";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { AbilityCard } from "@/components/heroes/AbilityCard";
@@ -89,7 +90,7 @@ export function TemplateDetailPanel({
           </span>
         </div>
         <div className="flex items-center justify-between text-xs">
-          <span className="text-text-muted">Origin</span>
+          <span className="text-text-muted">Origin <InfoButton>{"The hero's home city. Locking it there adds a tier bonus (+2% to +10%); some heroes can only meditate there."}</InfoButton></span>
           <span className={origin === "Undiscovered" ? "italic text-text-muted" : "text-text-secondary"}>
             {origin}
           </span>
@@ -100,14 +101,14 @@ export function TemplateDetailPanel({
         </div>
         {t.account.requiredPlayerLevel > 0 && (
           <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">Required level</span>
+            <span className="text-text-muted">Required level <InfoButton>{"The player level you need to mint this hero. It is not the hero's level."}</InfoButton></span>
             <span className={`font-mono ${meetsLevel ? "text-text-secondary" : "text-red-400"}`}>
               Lv{t.account.requiredPlayerLevel} {!meetsLevel && `(you: ${playerLevel})`}
             </span>
           </div>
         )}
         <div className="flex items-center justify-between text-xs">
-          <span className="text-text-muted">Burn value (Lv1)</span>
+          <span className="text-text-muted">Burn value (Lv1) <InfoButton>Burning an unlocked hero pays locked NOVI = tier base x level^2 (Common 50 up to Mythic 25k base).</InfoButton></span>
           <span className="font-mono text-text-secondary">
             {(burnReward(1, tier) / 10).toLocaleString()} NOVI
           </span>

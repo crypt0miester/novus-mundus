@@ -110,5 +110,6 @@ stays unobtainable. Prioritization order:
 ------------------
 
 
-7. better explanations via i button that would be clickable with a popover everywhere. (use animejs to animate the popup)
 10. castles give same rewards for every tier. very bad design.
+11. I can claim reward even if it is still contested.\
+12. ui should show countdowns. 

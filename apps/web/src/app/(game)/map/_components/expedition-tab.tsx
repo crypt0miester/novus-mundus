@@ -18,6 +18,7 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { SpeedupPanel, maxExpeditionSpeedupCount } from "@/components/shared/SpeedupPanel";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
+import { InfoButton } from "@/components/shared/InfoButton";
 import {
   TripleCountInput,
   OPERATIVE_UNIT_LABELS,
@@ -552,7 +553,7 @@ export function ExpeditionTab() {
                 <div className="flex-1 min-w-[200px]">
                   <div className="mb-1 flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                      Stamina
+                      Stamina <InfoButton>Regenerates 1 point per 5 min (more at night). Max by tier: Rookie 100, Expert 500, Epic 1000, Legendary 10000.</InfoButton>
                     </span>
                     <span className="text-xs">
                       <span className={playerStamina > 0 ? "text-green-400" : "text-red-400"}>
@@ -607,7 +608,7 @@ export function ExpeditionTab() {
             {/* Tier — higher tier = longer duration, better rewards */}
             <div className="mt-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Tier
+                Tier <InfoButton>Tiers 0-4 run 1-16h, each gating on a building level and locked NOVI (100 / 500 / 2k / 8k / 30k). Higher tiers raise rare-find odds.</InfoButton>
               </div>
               <div className="mt-2 grid grid-cols-5 gap-2">
                 {(() => {
@@ -633,7 +634,7 @@ export function ExpeditionTab() {
             {/* Operatives to send — locked for the expedition's duration */}
             <div className="mt-4">
               <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
-                Operatives to Send
+                Operatives to Send <InfoButton>Output scales with operatives but with sqrt diminishing returns, so doubling the squad does not double the yield.</InfoButton>
               </div>
               <TripleCountInput
                 labels={OPERATIVE_UNIT_LABELS}
@@ -709,7 +710,7 @@ export function ExpeditionTab() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-text-muted">Bonus Fragments</div>
+                    <div className="text-xs text-text-muted">Bonus Fragments <InfoButton>Fragments from an expedition. Fragments level your heroes (10 x 1.5^level each); they are not bought.</InfoButton></div>
                     <div className="text-text-secondary text-sm">+{rewardPreview.fragments}</div>
                   </div>
                   <div>

@@ -21,6 +21,7 @@ import { useStamina } from "@/lib/hooks/useStamina";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useCombatOutcome } from "@/lib/store/combat-outcome";
 import { useNovusMundusClient } from "@/lib/solana/provider";
+import { InfoButton } from "@/components/shared/InfoButton";
 import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -238,7 +239,10 @@ export function EncounterDetailPanel({
       {/* Stats */}
       <div className="grid grid-cols-3 gap-2">
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
-          <div className="text-[10px] text-text-muted">Stamina Cost</div>
+          <div className="text-[10px] text-text-muted">
+            Stamina Cost{" "}
+            <InfoButton>Per attack: Common 10, Uncommon 25, Rare 50, Epic 100, Legendary 250, World Event 500 stamina.</InfoButton>
+          </div>
           <div
             className={`font-mono text-sm font-bold ${hasStamina ? "text-text-primary" : "text-red-400"}`}
           >
@@ -266,7 +270,10 @@ export function EncounterDetailPanel({
       {/* Level band — cannot be fixed by travelling */}
       {levelBand && !levelBand.inBand && (
         <div className="rounded-lg border border-red-800/50 bg-red-900/10 p-3 text-center">
-          <div className="text-xs font-semibold text-red-400">Level gap too wide</div>
+          <div className="text-xs font-semibold text-red-400">
+            Level gap too wide{" "}
+            <InfoButton>You can only attack encounters within 30 levels of yours, above or below. A wider gap is blocked.</InfoButton>
+          </div>
           <div className="text-[10px] text-red-600">
             Encounter Lv {levelBand.level} · you are Lv {player.level ?? 0} — {levelBand.diff}{" "}
             apart, max {maxLevelDiff}.

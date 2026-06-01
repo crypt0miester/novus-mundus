@@ -33,12 +33,31 @@ export interface MobileTeamDockProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   children: ReactNode;
+  // Which war-table this dock peeks. Defaults to the House thread; the castle
+  // War Council passes WarTableScope.Castle so the peek decrypts and subscribes
+  // against the right thread.
+  scope?: WarTableScope;
+  // Empty-state copy shown before any message exists.
+  emptyText?: string;
+  // Tailwind class(es) controlling the collapsed strip's distance from the
+  // bottom of the viewport. Defaults to clearing the team-page bottom nav;
+  // callers on denser pages can lower it to sit closer to the nav.
+  bottomClass?: string;
 }
 
-export function MobileTeamDock({ threadPda, title, open, onOpenChange, children }: MobileTeamDockProps) {
+export function MobileTeamDock({
+  threadPda,
+  title,
+  open,
+  onOpenChange,
+  children,
+  scope = WarTableScope.Team,
+  emptyText = "Plan the next move with your House",
+  bottomClass = "bottom-[calc(5rem+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4",
+}: MobileTeamDockProps) {
   const isMobile = useIsMobile();
   const { publicKey } = useWallet();
-  const latest = useThreadPeek(threadPda, WarTableScope.Team, {
+  const latest = useThreadPeek(threadPda, scope, {
     enabled: isMobile && !!threadPda,
   });
   const threadB58 = threadPda ? threadPda.toBase58() : null;
@@ -59,10 +78,10 @@ export function MobileTeamDock({ threadPda, title, open, onOpenChange, children 
   );
 
   const peekText = useMemo(() => {
-    if (!latest) return "Plan the next move with your House";
+    if (!latest) return emptyText;
     if (latest.decrypted) return body.length > 0 ? body : "New message";
     return "New messages";
-  }, [latest, body]);
+  }, [latest, body, emptyText]);
 
   // Prefix the peek with the sender (team chat is a group, so who said it
   // matters), but only for a real decrypted message, not the empty-state copy or
@@ -91,7 +110,7 @@ export function MobileTeamDock({ threadPda, title, open, onOpenChange, children 
         type="button"
         onClick={handleOpen}
         aria-label="Open the war-table"
-        className="fixed inset-x-0 z-40 mx-auto flex max-w-2xl items-center px-3 lg:hidden bottom-[calc(5rem+env(safe-area-inset-bottom)+0.5rem)] md:bottom-4"
+        className={`fixed inset-x-0 z-40 mx-auto flex max-w-2xl items-center px-3 lg:hidden ${bottomClass}`}
       >
         <span className="flex w-full items-center gap-3 rounded-full border border-border-default bg-surface-raised/95 px-4 py-2.5 shadow-lg backdrop-blur">
           <span className="relative flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/20 text-accent">

@@ -14,6 +14,7 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { TxButton } from "./TxButton";
 import type { TxPhase } from "./TxButton";
 import { createUpdateLockedNoviInstruction } from "novus-mundus-sdk";
+import { InfoButton } from "@/components/shared/InfoButton";
 
 const TIER_NAMES = ["Rookie", "Expert", "Epic", "Legendary"];
 
@@ -194,7 +195,7 @@ export function NoviGenerator({ compact, className }: NoviGeneratorProps) {
 
       <div className="mt-5 grid grid-cols-3 gap-3">
         <div className="rounded-lg bg-surface/60 px-3 py-2 text-center">
-          <div className="text-[10px] text-zinc-500">Rate</div>
+          <div className="text-[10px] text-zinc-500">Rate <InfoButton>Locked NOVI mints once every 5 minutes at your tier's rate, until your locked-NOVI cap is reached.</InfoButton></div>
           <div className="font-mono text-sm font-bold tabular-nums text-text-primary">
             {genRate}/5m
           </div>

@@ -17,9 +17,10 @@ use pinocchio::{
 
 use crate::{
     constants::{
-        CASTLE_UPGRADE_ARMORY, CASTLE_UPGRADE_CHAMBERS, CASTLE_UPGRADE_FORTIFICATION,
-        CASTLE_UPGRADE_TREASURY, CASTLE_UPGRADE_WATCHTOWER, MAX_ARMORY_LEVEL, MAX_CHAMBERS_LEVEL,
-        MAX_FORTIFICATION_LEVEL, MAX_TREASURY_LEVEL, MAX_WATCHTOWER_LEVEL, PLAYER_SEED,
+        CASTLE_STATUS_CONTEST, CASTLE_STATUS_TRANSITIONING, CASTLE_UPGRADE_ARMORY,
+        CASTLE_UPGRADE_CHAMBERS, CASTLE_UPGRADE_FORTIFICATION, CASTLE_UPGRADE_TREASURY,
+        CASTLE_UPGRADE_WATCHTOWER, MAX_ARMORY_LEVEL, MAX_CHAMBERS_LEVEL, MAX_FORTIFICATION_LEVEL,
+        MAX_TREASURY_LEVEL, MAX_WATCHTOWER_LEVEL, PLAYER_SEED,
     },
     emit,
     error::GameError,
@@ -107,6 +108,14 @@ pub fn process(
     // Verify caller is the king
     if castle.king != *king_account.address() {
         return Err(GameError::NotKing.into());
+    }
+
+    // Reject upgrades while the seat is unsettled. During CONTEST the claim is
+    // still being challenged, and during TRANSITIONING the crown is mid-handover
+    // (the caller is still the outgoing king), so neither should be able to sink
+    // locked NOVI into walls that may be about to change hands.
+    if castle.status == CASTLE_STATUS_CONTEST || castle.status == CASTLE_STATUS_TRANSITIONING {
+        return Err(GameError::CastleInContest.into());
     }
 
     // Verify no upgrade in progress

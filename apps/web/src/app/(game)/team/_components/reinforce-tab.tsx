@@ -17,6 +17,9 @@ import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel"
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
+import { InfoButton } from "@/components/shared/InfoButton";
+import { LabelWithInfo } from "@/components/shared/LabelWithInfo";
+import { REINFORCEMENT_STATUS_INFO, REINFORCEMENT_RELIEVE_INFO } from "@/lib/copy/infoCopy";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
@@ -453,9 +456,13 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
 
       {/* In-Flight Reinforcements */}
       <div className="card">
-        <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+        <LabelWithInfo
+          as="h3"
+          className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted"
+          info={REINFORCEMENT_STATUS_INFO}
+        >
           In-Flight Reinforcements
-        </h3>
+        </LabelWithInfo>
         {reinforcements.length === 0 ? (
           <p className="text-sm text-text-muted">No active or in-flight reinforcements.</p>
         ) : (
@@ -590,21 +597,34 @@ export function ReinforceTab({ hideComposer = false }: ReinforceTabProps = {}) {
                     )}
                     {/* Process arrival is permissionless once travel completes */}
                     {status === 0 && (
-                      <TxButton onClick={(rp) => handleProcessArrival(row, rp)} variant="secondary">
-                        Process Arrival
-                      </TxButton>
+                      <>
+                        <TxButton onClick={(rp) => handleProcessArrival(row, rp)} variant="secondary">
+                          Process Arrival
+                        </TxButton>
+                        <InfoButton>
+                          Cranks an arrived reinforcement from Traveling to Active so its units start defending.
+                        </InfoButton>
+                      </>
                     )}
                     {/* Recall — only the sender can recall their own reinforcement */}
                     {row.direction === "sent" && (status === 0 || status === 1) && (
-                      <TxButton onClick={(rp) => handleRecall(row, rp)} variant="secondary">
-                        Recall
-                      </TxButton>
+                      <>
+                        <TxButton onClick={(rp) => handleRecall(row, rp)} variant="secondary">
+                          Recall
+                        </TxButton>
+                        <InfoButton>
+                          The sender pulls their own reinforcements back. Relieve is the receiver doing it. Both head home.
+                        </InfoButton>
+                      </>
                     )}
                     {/* Relieve — only the destination can send a reinforcement back */}
                     {row.direction === "received" && status === 1 && (
-                      <TxButton onClick={(rp) => handleRelieve(row, rp)} variant="secondary">
-                        Relieve
-                      </TxButton>
+                      <>
+                        <TxButton onClick={(rp) => handleRelieve(row, rp)} variant="secondary">
+                          Relieve
+                        </TxButton>
+                        <InfoButton>{REINFORCEMENT_RELIEVE_INFO}</InfoButton>
+                      </>
                     )}
                   </div>
                   {/* Speedup — sender hurries an in-flight reinforcement; works on

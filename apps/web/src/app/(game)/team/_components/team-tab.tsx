@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, type ReactNode } from "react";
 import { MapPin, MessageSquare } from "lucide-react";
 import { usePlayerActions } from "@/lib/hooks/usePlayerActions";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { usePlayer } from "@/lib/hooks/usePlayer";
+import { usePlayerPda } from "@/lib/hooks/usePlayerPda";
 import { useTeam } from "@/lib/hooks/useTeam";
 import { useTeamMembers } from "@/lib/hooks/useTeamMembers";
 import {
@@ -26,6 +27,9 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
 import { DomainPicker } from "@/components/shared/DomainPicker";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
+import { InfoButton } from "@/components/shared/InfoButton";
+import { LabelWithInfo } from "@/components/shared/LabelWithInfo";
+import { REINFORCEMENTS_HELD_INFO } from "@/lib/copy/infoCopy";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { NumberField } from "@/components/shared/NumberField";
 import { UnitGrid } from "@/components/shared/UnitGrid";
@@ -124,10 +128,18 @@ function ActionButton({
   );
 }
 
-function Stat({ label, value, highlight }: { label: string; value: number; highlight?: boolean }) {
+function Stat({
+  label,
+  value,
+  highlight,
+  info,
+}: { label: string; value: number; highlight?: boolean; info?: ReactNode }) {
   return (
     <div className="flex flex-col items-end leading-tight">
-      <span className="text-[9px] uppercase tracking-wider text-text-muted/70">{label}</span>
+      <span className="flex items-center gap-0.5 text-[9px] uppercase tracking-wider text-text-muted/70">
+        {label}
+        {info && <InfoButton size={11}>{info}</InfoButton>}
+      </span>
       <span
         className={`font-mono text-xs tabular-nums ${
           highlight ? "text-text-gold" : "text-text-secondary"
@@ -160,21 +172,8 @@ export function TeamTab() {
   const transact = useTransact();
 
   // The current player's own PlayerAccount PDA — used to detect own rank,
-  // membership and treasury request. Derived async (v3 PDA derivation).
-  const [myPlayerPda, setMyPlayerPda] = useState<PublicKey | null>(null);
-  useEffect(() => {
-    if (!publicKey) {
-      setMyPlayerPda(null);
-      return;
-    }
-    let cancelled = false;
-    derivePlayerPda(client.gameEngine, publicKey).then(([pda]) => {
-      if (!cancelled) setMyPlayerPda(pda);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [publicKey, client.gameEngine]);
+  // membership and treasury request.
+  const myPlayerPda = usePlayerPda();
 
   const hasTeam = !!player?.team && !isNullPubkey(player.team);
   const teamPubkey = hasTeam ? player!.team : null;
@@ -1084,7 +1083,7 @@ export function TeamTab() {
                   </span>
                 </div>
                 <div className="text-right">
-                  <div className="text-xs text-text-muted">Members</div>
+                  <div className="text-xs text-text-muted">Members <InfoButton>Max members follows the leader's tier: Rookie 5, Expert 10, Epic 25, Legendary 50. Refreshes on each join.</InfoButton></div>
                   <GoldNumber value={team.memberCount} suffix={`/${teamCapacity}`} />
                 </div>
               </div>
@@ -1180,10 +1179,23 @@ export function TeamTab() {
 
                           {/* Stats — always visible, wraps on mobile */}
                           <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-1 text-[11px] text-text-muted">
-                            <Stat label="PWR" value={power} highlight />
-                            <Stat label="DU" value={du} />
-                            <Stat label="OP" value={op} />
-                            <Stat label="REINF" value={reinf} />
+                            <Stat
+                              label="PWR"
+                              value={power}
+                              highlight
+                              info="Combat power sums your units by tier (power 10 / 25 / 60). It is a deterministic stat, not a roll."
+                            />
+                            <Stat
+                              label="DU"
+                              value={du}
+                              info="Defensive Units: your combat army. They fight in encounters, PvP, rallies, and defense."
+                            />
+                            <Stat
+                              label="OP"
+                              value={op}
+                              info="Operative Units: your economy and expedition workforce. They cannot fight in combat."
+                            />
+                            <Stat label="REINF" value={reinf} info={REINFORCEMENTS_HELD_INFO} />
                             <span
                               className={`ml-1 text-text-muted transition-transform ${
                                 isExpanded ? "rotate-180" : ""
@@ -1213,9 +1225,13 @@ export function TeamTab() {
 
                             {reinf > 0 && (
                               <div className="rounded-md border border-zinc-800 px-3 py-2">
-                                <div className="mb-1 text-[10px] uppercase tracking-wider text-text-muted">
+                                <LabelWithInfo
+                                  as="div"
+                                  className="mb-1 text-[10px] uppercase tracking-wider text-text-muted"
+                                  info={REINFORCEMENTS_HELD_INFO}
+                                >
                                   Reinforcements held
-                                </div>
+                                </LabelWithInfo>
                                 <div className="grid grid-cols-3 gap-2 text-xs">
                                   <span>
                                     <span className="text-text-muted">T1 </span>
@@ -1471,7 +1487,7 @@ export function TeamTab() {
                     {/* Request Withdrawal */}
                     <div className="border-t border-border-default pt-3 space-y-2">
                       <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                        Request Withdrawal
+                        Request Withdrawal <InfoButton>Amounts above your instant limit need a request; it pays out after the cooldown or when a higher rank approves it.</InfoButton>
                       </div>
                       <NumberField
                         label="Amount"
@@ -2181,6 +2197,7 @@ function TreasurySettingsPanel({
           </span>
           <NumberField
             label="Instant Limit"
+            info="Cash you can withdraw from the treasury per transaction with no wait. Set per rank; leader unlimited."
             value={limits[i]}
             onChange={(next) => {
               const updated = [...limits] as [number, number, number, number];
@@ -2192,6 +2209,7 @@ function TreasurySettingsPanel({
           />
           <NumberField
             label="Daily Cap"
+            info="Most cash a member can withdraw from the treasury per 24h day. Resets every 86,400s."
             value={caps[i]}
             onChange={(next) => {
               const updated = [...caps] as [number, number, number, number];
@@ -2205,6 +2223,7 @@ function TreasurySettingsPanel({
       ))}
       <NumberField
         label="Cooldown (hours)"
+        info="The wait before a requested withdrawal (above your instant limit) becomes executable. Default 8h, range 1-72h."
         value={cooldown}
         onChange={setCooldown}
         min={1}

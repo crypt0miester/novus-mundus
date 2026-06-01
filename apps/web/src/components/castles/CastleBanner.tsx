@@ -4,23 +4,30 @@ import {
   CASTLE_STATUS_NAMES,
   isCastleStatusDanger,
 } from "@/lib/world/castles";
+import { cn } from "@/lib/utils";
 
 interface CastleBannerProps {
   castle: CastleAccount;
+  // Sizing override. Defaults to a 16:9 block; callers can stretch it to fill
+  // a flex/grid column instead (e.g. xl:absolute xl:inset-0 on desktop).
+  className?: string;
 }
 
 // The landmark art is keyed off the chain `castleId` — the global
 // landmark index (0..=22) from sdks/.../cli/data/castles.ts, which is
 // also the export filename. Tier / status are runtime overlays on the
 // static full-color art per docs/design/CASTLE_BANNERS.md.
-export function CastleBanner({ castle }: CastleBannerProps) {
+export function CastleBanner({ castle, className }: CastleBannerProps) {
   const tier = castle.tier ?? 0;
   const status = castle.status ?? 0;
   const danger = isCastleStatusDanger(status);
 
   return (
     <div
-      className="relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-border-default"
+      className={cn(
+        "relative aspect-[16/9] w-full overflow-hidden rounded-lg border border-border-default",
+        className,
+      )}
       style={{
         backgroundImage: `url(/img/castles/${castle.castleId}.webp)`,
         backgroundSize: "cover",

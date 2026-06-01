@@ -3,6 +3,7 @@
 import { useEffect, useRef } from "react";
 import { createTimeline, spring } from "animejs";
 import { CATEGORY_COLORS, type BuildingFeatureConfig } from "@/lib/config/building-features";
+import { InfoButton } from "@/components/shared/InfoButton";
 import { formatTime, prefersReducedMotion } from "@/lib/utils";
 import { hasCenterView } from "./feature-view";
 import type { BuildingPhase } from "@/lib/narrative";
@@ -202,7 +203,8 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
         <div className="mt-1 flex items-baseline justify-between gap-2">
           {data.slot?.totalNoviInvested ? (
             <span className="text-[11px] text-text-muted tabular-nums">
-              {Number(data.slot.totalNoviInvested).toLocaleString()} invested
+              {Number(data.slot.totalNoviInvested).toLocaleString()} invested{" "}
+              <InfoButton>Locked NOVI burned to build and upgrade this slot. It is spent, not refundable.</InfoButton>
             </span>
           ) : (
             <span />

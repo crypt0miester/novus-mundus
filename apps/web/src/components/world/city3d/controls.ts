@@ -68,12 +68,29 @@ export const MAX_PITCH_3D = 85 * DEG;
 export const INITIAL_DISTANCE_2D = 8;
 export const INITIAL_DISTANCE_3D = 4.5;
 
+/* Zoom-out headroom past the initial framing. The framing distance
+ * (INITIAL_DISTANCE_*, per-city scaled) doubles as zoom 1x; without
+ * headroom it is ALSO the zoom-out cap, so the camera mounts already
+ * pinned at its farthest and any cell clipped by a narrow viewport
+ * (mobile portrait especially) can never be pulled into view. This
+ * multiplier lets the user dolly out ~30% past the framing to recover
+ * the edges. The framing itself is unchanged — only the cap loosens. */
+export const ZOOM_OUT_HEADROOM = 1.3;
+
+/* The zoom-out cap for a given framing distance — the framing pushed out by
+ * ZOOM_OUT_HEADROOM. This is the single place the framing↔cap relationship is
+ * expressed, so call sites pass the framing (zoom 1×) and never multiply by the
+ * constant themselves; the camera controller owns the cap internally. */
+export function zoomOutCap(framingDistance: number): number {
+  return framingDistance * ZOOM_OUT_HEADROOM;
+}
+
 /* Two canonical yaw presets the view-angle toggle flips between.
  * DEFAULT_YAW (0.68 rad ≈ 39°) is the angled framing the camera mounts
- * at; STRAIGHT_YAW (0) is the north-up / straight-on look. Reset now
+ * at; STRAIGHT_YAW (90°) is the side-on / straight-on look. Reset now
  * PRESERVES whichever the user is on rather than forcing a yaw. */
 export const DEFAULT_YAW = 0.68;
-export const STRAIGHT_YAW = 0;
+export const STRAIGHT_YAW = 90 * DEG;
 
 /* INITIAL_DISTANCE_* is tuned for the largest canonical city
  * (Tokyo, widthGrid ~8782). Smaller cities at the same distance feel
@@ -160,8 +177,11 @@ export interface ControllerOptions {
   /* Closest distance from camera to target. Smaller cities can zoom
    * in more aggressively; tuned at 20/radiusKm per city.js:275. */
   minDistance: number;
-  /* Farthest distance. Caps the user's zoom-out at full-plate view. */
-  maxDistance: number;
+  /* Framing distance — the camera-to-target distance at zoom 1× (the
+   * full-plate framing the camera mounts at). The controller derives the
+   * zoom-out cap from this via ZOOM_OUT_HEADROOM, so callers pass the
+   * framing, not the cap. */
+  framingDistance: number;
   /* Called when the user performs a click (NOT a drag). The
    * controller doesn't know about scene contents — the caller resolves
    * the click to a cell via raycaster. */
@@ -193,6 +213,12 @@ export class CityCameraController {
   private dom: HTMLElement;
   private camera: THREE.PerspectiveCamera;
   private cfg: ControllerOptions;
+
+  /* Framing distance (zoom 1×) and the derived zoom-out cap. The controller
+   * owns the framing↔cap relationship (cap = framing * ZOOM_OUT_HEADROOM), so
+   * callers only ever pass the framing. */
+  private framingDistance: number;
+  private maxDistance: number;
 
   /* Desired state (smoothing lerps toward these). */
   private yaw = DEFAULT_YAW;
@@ -254,8 +280,12 @@ export class CityCameraController {
     this.cfg = opts;
     this.mode = opts.initialMode;
 
+    this.framingDistance = opts.framingDistance;
+    this.maxDistance = zoomOutCap(opts.framingDistance);
     this.pitch = this.mode === "iso" ? PITCH_3D : PITCH_2D;
-    this.distance = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    // Mount at the framing (zoom 1×). Callers no longer need to re-pin the
+    // distance after construction — it lands on the full-plate framing here.
+    this.distance = this.framingDistance;
     this.target = new THREE.Vector3(0, this.mode === "iso" ? midpointElevation() : 0, 0);
 
     this.sYaw = this.yaw;
@@ -371,16 +401,17 @@ export class CityCameraController {
     this.touchOrbitEnabled = v;
   }
 
-  /* Update distance clamp bounds at runtime — fires on city change
-   * (radiusKm changes -> minDistance changes) and on mode change
-   * (maxDistance differs per mode). Existing distance is re-clamped
-   * to the new range so smaller cities don't leave the camera
-   * silently zoomed past the new max. */
-  setDistanceBounds(min: number, max: number): void {
+  /* Update the framing distance (zoom 1×) and min clamp at runtime — fires on
+   * city change (radiusKm changes -> minDistance) and on mode change (framing
+   * differs per mode). The zoom-out cap is re-derived from the framing here, so
+   * callers never compute it. Existing distance is re-clamped to the new range
+   * so smaller cities don't leave the camera silently zoomed past the new cap. */
+  setFramingDistance(min: number, framing: number): void {
     this.cfg.minDistance = min;
-    this.cfg.maxDistance = max;
-    this.distance = Math.max(min, Math.min(max, this.distance));
-    this.sDistance = Math.max(min, Math.min(max, this.sDistance));
+    this.framingDistance = framing;
+    this.maxDistance = zoomOutCap(framing);
+    this.distance = Math.max(min, Math.min(this.maxDistance, this.distance));
+    this.sDistance = Math.max(min, Math.min(this.maxDistance, this.sDistance));
   }
   getTouchOrbitEnabled(): boolean {
     return this.touchOrbitEnabled;
@@ -395,9 +426,10 @@ export class CityCameraController {
 
   reset(): void {
     // Frame the whole city again WITHOUT spinning: recenter the target
-    // and zoom out to the mode default, but PRESERVE the user's current
-    // yaw + pitch (their chosen view angle).
-    this.distance = this.mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    // and zoom back to the framing, but PRESERVE the user's current yaw +
+    // pitch (their chosen view angle). Reset lands at zoom 1× (the framing),
+    // not the looser zoom-out cap.
+    this.distance = this.framingDistance;
     this.target.set(0, this.mode === "iso" ? midpointElevation() : 0, 0);
     this.zoomVelocity = 0;
     this.cfg.onChange();
@@ -523,7 +555,7 @@ export class CityCameraController {
   }
 
   private clampDistance(d: number): number {
-    return Math.max(this.cfg.minDistance, Math.min(this.cfg.maxDistance, d));
+    return Math.max(this.cfg.minDistance, Math.min(this.maxDistance, d));
   }
 
   /* Square AABB clamp on the target's X/Z. visibleHalf depends on

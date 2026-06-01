@@ -18,6 +18,21 @@ export const CASTLE_TIER_NAMES: Record<number, string> = {
   [CastleTier.Citadel]: "Citadel",
 };
 
+// The seat-holder's title scales with the castle tier: "King" is earned only
+// by a Citadel, while lesser seats carry lesser nobility. Display-only — the
+// on-chain `king` field and reward role names are unchanged.
+export const CASTLE_RULER_TITLES: Record<number, string> = {
+  [CastleTier.Outpost]: "Warden",
+  [CastleTier.Keep]: "Knight",
+  [CastleTier.Stronghold]: "Baron",
+  [CastleTier.Fortress]: "Duke",
+  [CastleTier.Citadel]: "King",
+};
+
+export function rulerTitle(tier: number): string {
+  return CASTLE_RULER_TITLES[tier] ?? "King";
+}
+
 export const CASTLE_STATUS_NAMES: Record<number, string> = {
   [CastleStatus.Vacant]: "Vacant",
   [CastleStatus.Contest]: "Contested",

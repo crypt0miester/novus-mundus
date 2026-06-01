@@ -636,6 +636,35 @@ describe('Castle System', () => {
         castleId: CASTLE_UPGRADE,
       });
       await sendTransaction(ctx.svm, new Transaction().add(claimIx), [king.keypair]);
+
+      // A claim leaves the seat in CONTEST; initiate_upgrade rejects upgrades
+      // while contested or transitioning, so settle it to PROTECTED first.
+      await transitionCastleStatus(ctx, CITY, CASTLE_UPGRADE);
+    });
+
+    it('should reject upgrade while seat is in contest', async () => {
+      // A freshly-claimed seat is in CONTEST: upgrades must bounce.
+      const CASTLE_CONTEST_UP = 131;
+      await createCastle(ctx, CITY, CASTLE_CONTEST_UP, 2);
+      const freshKing = await factory.createPlayer({ initialize: true, createEstate: true });
+      await createTeamForPlayer(ctx, freshKing);
+      const claimIx = await createClaimVacantCastleInstruction({
+        gameEngine: ctx.gameEngine,
+        claimer: freshKing.publicKey,
+        cityId: CITY,
+        castleId: CASTLE_CONTEST_UP,
+      });
+      await sendTransaction(ctx.svm, new Transaction().add(claimIx), [freshKing.keypair]);
+
+      const upgradeIx = await createInitiateUpgradeInstruction(
+        { gameEngine: ctx.gameEngine, king: freshKing.publicKey, cityId: CITY, castleId: CASTLE_CONTEST_UP },
+        { upgradeType: 1 }
+      );
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(upgradeIx),
+        [freshKing.keypair]
+      );
     });
 
     it('should initiate castle upgrade', async () => {
@@ -1202,6 +1231,9 @@ describe('Castle System', () => {
         [king.keypair]
       );
 
+      // A claim leaves the seat in CONTEST; settle it before upgrading.
+      await transitionCastleStatus(ctx, 1, 180);
+
       // Initiate upgrade (type 1 = Fortification)
       await sendTransaction(
         ctx.svm,
@@ -1254,6 +1286,9 @@ describe('Castle System', () => {
         ),
         [king.keypair]
       );
+
+      // A claim leaves the seat in CONTEST; settle it before upgrading.
+      await transitionCastleStatus(ctx, 1, 181);
 
       await sendTransaction(
         ctx.svm,

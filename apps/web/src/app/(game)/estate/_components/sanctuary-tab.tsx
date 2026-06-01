@@ -16,6 +16,7 @@ import { useTabParam } from "@/lib/hooks/useTabParam";
 import { shortenAddress } from "@/lib/utils";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
+import { InfoButton } from "@/components/shared/InfoButton";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useAccountStore } from "@/lib/store/accounts";
 import {
@@ -375,7 +376,10 @@ function MeditationView() {
             </div>
           </div>
           <div className="text-right mt-2">
-            <div className="text-xs text-text-muted">Est. XP Earned</div>
+            <div className="text-xs text-text-muted">
+              Est. XP Earned{" "}
+              <InfoButton>Meditation XP converts to hero levels on claim, up to the meditation cap. It is not fragments.</InfoButton>
+            </div>
             <div className="text-sm font-semibold text-text-gold">
               ~{meditationXpEstimate.toLocaleString()}
             </div>
@@ -414,7 +418,10 @@ function MeditationView() {
 
           <div className="mb-4 rounded-lg bg-surface-overlay/30 px-3 py-2 text-xs">
             <div className="flex items-center justify-between gap-2">
-              <span className="text-text-muted">Meditation rate</span>
+              <span className="text-text-muted">
+                Meditation rate{" "}
+                <InfoButton>Free passive XP for a locked hero: Sanctuary level x 100 XP per hour.</InfoButton>
+              </span>
               <span className="font-mono font-semibold tabular-nums text-text-gold">
                 {meditationXpPerHour.toLocaleString()} XP / hr
               </span>
@@ -463,8 +470,9 @@ function MeditationView() {
                 heroSlots[selectedSlot]?.occupied &&
                 (!meditationCityOk && selectedTemplate && player ? (
                   <p className="rounded-lg border border-border-gold/40 bg-accent/10 px-4 py-3 text-sm text-text-gold">
-                    This hero can only meditate in {cityName(selectedTemplate.meditationCityId)},
-                    you are in {cityName(player.currentCity)}.{" "}
+                    This hero can only meditate in {cityName(selectedTemplate.meditationCityId)}{" "}
+                    <InfoButton>Some heroes meditate only in their origin city. You must be standing in that city or it is rejected.</InfoButton>
+                    , you are in {cityName(player.currentCity)}.{" "}
                     <Link
                       href="/map"
                       className="font-semibold underline underline-offset-2 hover:opacity-80"
@@ -475,9 +483,10 @@ function MeditationView() {
                   </p>
                 ) : meditationAtCap ? (
                   <p className="text-center text-sm text-red-300">
-                    This hero is at the meditation cap for Sanctuary level {sanctuaryLevel} (Lv{" "}
-                    {meditationCap}). Spend fragments in the Heroes tab to level past it, or upgrade
-                    your Sanctuary.
+                    This hero is at the meditation cap{" "}
+                    <InfoButton>Meditation only levels up to floor(10 x phi^(Sanctuary/5)): ~16 at Lv5, ~26 at Lv10. Past it, use fragments.</InfoButton>{" "}
+                    for Sanctuary level {sanctuaryLevel} (Lv {meditationCap}). Spend fragments in the
+                    Heroes tab to level past it, or upgrade your Sanctuary.
                   </p>
                 ) : (
                   <div className="space-y-3">

@@ -18,6 +18,7 @@ import {
 import { hasCenterView } from "./feature-view";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
+import { InfoButton } from "@/components/shared/InfoButton";
 
 /** Building slots a single plot holds. */
 const SLOTS_PER_PLOT = 4;
@@ -344,7 +345,7 @@ export function BuildingGrid({
                 key={`empty-${slotIdx}`}
                 className="flex min-h-[5.5rem] items-center justify-center rounded-lg border border-dashed border-border-default/60 p-3 text-[11px] text-text-muted"
               >
-                Open ground
+                Open ground <InfoButton>An empty building slot on a plot you already own. Each plot gives 4 slots.</InfoButton>
               </div>
             ))}
           </div>
@@ -355,7 +356,7 @@ export function BuildingGrid({
       {unbuilt.length > 0 && (
         <div>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Ground to Break
+            Ground to Break <InfoButton>Empty slots ready to build on. Building needs a free slot on an owned plot.</InfoButton>
           </h2>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             {unbuilt.map((data) => (
@@ -374,7 +375,7 @@ export function BuildingGrid({
       {plotsOwned < MAX_PLOTS && (
         <div>
           <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Land Beyond Your Claim
+            Land Beyond Your Claim <InfoButton>Plots you have not bought yet. Each adds 4 slots; you can own up to 5 plots (20 slots).</InfoButton>
           </h2>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
             {Array.from({ length: MAX_PLOTS - plotsOwned }).map((_, idx) => {

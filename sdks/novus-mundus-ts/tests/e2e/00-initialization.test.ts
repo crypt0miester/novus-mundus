@@ -72,7 +72,7 @@ describe('Initialization', () => {
       expect(exp.perfectScoreThreshold).toBe(80);
       expect(exp.miningDurationHours).toEqual([1, 2, 4, 8, 16]);
       expect(exp.fishingDurationHours).toEqual([1, 2, 4, 8, 16]);
-      expect(Number(exp.rareFindMultiplier)).toBe(5);
+      expect(Number(exp.rareFindMultiplier)).toBe(8); // buffed 5 -> 8 (expedition economy pass)
       expect(Number(exp.operativeTier1MultiplierBps)).toBe(10000);
       expect(Number(exp.operativeTier2MultiplierBps)).toBe(15000);
       expect(Number(exp.operativeTier3MultiplierBps)).toBe(20000);

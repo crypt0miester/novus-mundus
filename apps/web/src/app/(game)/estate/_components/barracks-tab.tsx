@@ -32,6 +32,7 @@ import {
   noviToDeci,
 } from "novus-mundus-sdk";
 import { GameIcon } from "@/components/shared/GameIcon";
+import { InfoButton } from "@/components/shared/InfoButton";
 
 const DEFENSIVE_UNITS = [
   {
@@ -149,7 +150,7 @@ export function BarracksTab() {
           )}
 
           <div className="flex items-center justify-between rounded-lg bg-surface-overlay/30 px-3 py-2 text-xs">
-            <span className="text-text-muted">Total defensive power</span>
+            <span className="text-text-muted">Total defensive power <InfoButton>Sums your defensive units by power 10 / 25 / 60 (tier 1 / 2 / 3). It is a deterministic stat.</InfoButton></span>
             <span className="font-mono font-semibold tabular-nums text-text-gold">
               {defensivePower.toLocaleString()}
             </span>

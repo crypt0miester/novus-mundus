@@ -45,9 +45,11 @@ export function ItemsView() {
   const { publicKey } = useWallet();
   const { connection } = useConnection();
   // Wallet SOL balance (lamports) — caps how many SOL-priced wares are affordable.
+  // getBalance returns a bigint under the v3 seam; coerce to number so the
+  // affordability math (solLamports / unitPrice) doesn't throw "cannot mix BigInt".
   const { data: solLamports = 0 } = useQuery({
     queryKey: ["solBalance", publicKey?.toBase58()],
-    queryFn: () => connection.getBalance(publicKey!),
+    queryFn: async () => Number(await connection.getBalance(publicKey!)),
     enabled: !!publicKey,
     staleTime: 30_000,
   });

@@ -31,6 +31,7 @@ import {
   noviToDeci,
 } from "novus-mundus-sdk";
 import { GameIcon } from "@/components/shared/GameIcon";
+import { InfoButton } from "@/components/shared/InfoButton";
 
 const OPERATIVE_UNITS = [
   {
@@ -143,7 +144,13 @@ export function CampTab() {
           )}
 
           <div className="flex items-center justify-between rounded-lg bg-surface-overlay/30 px-3 py-2 text-xs">
-            <span className="text-text-muted">Total operative power</span>
+            <span className="text-text-muted">
+              Total operative power{" "}
+              <InfoButton>
+                Sums your operatives by yield 1.0x / 1.5x / 2.0x. It drives expedition output, not
+                combat.
+              </InfoButton>
+            </span>
             <span className="font-mono font-semibold tabular-nums text-text-gold">
               {operativePower.toLocaleString()}
             </span>

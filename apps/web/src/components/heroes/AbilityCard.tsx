@@ -12,6 +12,7 @@ import {
 } from "novus-mundus-sdk";
 import { animate, svg, utils, type JSAnimation } from "animejs";
 import { TxButton } from "@/components/shared/TxButton";
+import { InfoButton } from "@/components/shared/InfoButton";
 import {
   useHeroAbilityCooldown,
   useUseAbility,
@@ -48,7 +49,7 @@ export function AbilityCard({ template, interactive }: AbilityCardProps) {
     <div className="rounded-md border border-zinc-800 bg-surface px-3 py-2">
       <div className="mb-1.5 flex items-center justify-between">
         <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Signature Ability
+          Signature Ability <InfoButton>One active ability per locked hero: a one-shot combat buff, or instant cash/fragments on use.</InfoButton>
         </div>
         <span className={`text-xs font-bold ${meta.accentClass}`}>
           {meta.icon} {meta.label}
@@ -58,7 +59,7 @@ export function AbilityCard({ template, interactive }: AbilityCardProps) {
       <p className="text-xs leading-snug text-text-secondary">{description}</p>
 
       <div className="mt-1 flex items-center justify-between text-[10px] text-text-muted">
-        <span>Cooldown</span>
+        <span>Cooldown <InfoButton>After use, that hero&apos;s ability is locked for its cooldown. The timer survives unlock and relock.</InfoButton></span>
         <span className="font-mono">{formatDurationCompact(template.abilityCooldownSecs)}</span>
       </div>
 

@@ -1,5 +1,7 @@
 "use client";
 
+import { InfoButton } from "@/components/shared/InfoButton";
+
 import type { HeroData } from "./types";
 
 interface HeroSlotCardProps {
@@ -60,6 +62,7 @@ export function HeroSlotCard({
           </div>
           <div className={`text-[10px] font-medium ${roleColor}`}>
             {roleLabel}
+            <InfoButton>DEF = your defensive hero, MED = meditating (earning XP, no buffs), ACT = locked and active.</InfoButton>
           </div>
         </div>
         {level != null && <div className="ml-2 text-lg font-bold text-text-gold">{level}</div>}

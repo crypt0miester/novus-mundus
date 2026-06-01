@@ -18,6 +18,7 @@ import {
   INITIAL_DISTANCE_3D,
   cityCameraSizeFactor,
   minDistanceForMode,
+  zoomOutCap,
 } from "../controls";
 import {
   buildTerrainMesh,
@@ -109,12 +110,13 @@ export function useSceneSync({
     r.cityLongGrid = cityLongGrid;
     r.markers.setTerrain(terrain);
     r.markers.setCenterGrid(cityLatGrid, cityLongGrid, rgu);
-    /* Distance bounds: max = mode default (zoom 1×), min = the MAX_ZOOM
-     * (500×) floor. Re-applied here so a city switch re-clamps in case
-     * the user was zoomed in at the previous city. */
+    /* Distance bounds: framing = mode default (zoom 1×), min = the MAX_ZOOM
+     * (500×) floor. The controller derives the zoom-out cap from the framing.
+     * Re-applied here so a city switch re-clamps in case the user was zoomed in
+     * at the previous city. */
     const mode = r.controller.getMode();
-    const maxD = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
-    r.controller.setDistanceBounds(minDistanceForMode(mode), maxD);
+    const framing = mode === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D;
+    r.controller.setFramingDistance(minDistanceForMode(mode), framing);
     requestRender();
 
     const job = getBakeWorker().bake({
@@ -205,16 +207,21 @@ export function useSceneSync({
       window.matchMedia &&
       window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-    /* Preserve the user's relative zoom across the mode toggle. */
+    /* Preserve the user's relative zoom across the mode toggle. The ratio is
+     * measured against the per-mode zoom-out CAP (zoomOutCap(framing)), so a
+     * user dollied out past the framing keeps that extra distance through the
+     * toggle instead of snapping back to zoom 1x. */
     const sizeFactor = cityCameraSizeFactor(props.cityAccount);
-    const oldMax = (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
-    const newMax = (to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const framingFrom = (from === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const framingTo = (to === "iso" ? INITIAL_DISTANCE_3D : INITIAL_DISTANCE_2D) * sizeFactor;
+    const oldMax = zoomOutCap(framingFrom);
+    const newMax = zoomOutCap(framingTo);
     const distanceFrom = r.controller.getDistance();
     const relativeZoom = Math.max(0, Math.min(1, distanceFrom / oldMax));
     const distanceTo = relativeZoom * newMax;
 
-    /* Update controller's distance bounds for the new mode. */
-    r.controller.setDistanceBounds(minDistanceForMode(to), newMax);
+    /* Update the controller's framing for the new mode (it derives the cap). */
+    r.controller.setFramingDistance(minDistanceForMode(to), framingTo);
 
     if (reduce) {
       r.modeTween?.cancel();

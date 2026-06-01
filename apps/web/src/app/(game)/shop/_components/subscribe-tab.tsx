@@ -8,6 +8,7 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { GoldCountdown } from "@/components/shared/GoldCountdown";
+import { InfoButton } from "@/components/shared/InfoButton";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -320,6 +321,7 @@ export function SubscribeTab() {
                 {asMultiplier(curGenRatio)} to 1×
               </span>{" "}
               and your vault shrinks to{" "}
+              <InfoButton>If your charter lapses you drop to the free tier cap; locked NOVI above it stops generating, but teammates are never kicked.</InfoButton>{" "}
               <span className="font-semibold text-text-secondary">
                 {formatNumber(deciToNovi(num(baseTier?.maxLockedNovi)))} NOVI
               </span>
@@ -470,7 +472,7 @@ export function SubscribeTab() {
                   {genRatio != null ? asMultiplier(genRatio) : perHour.toLocaleString()}
                 </div>
                 <div className="mt-1 text-[10px] uppercase tracking-wider text-text-muted">
-                  NOVI Generation
+                  NOVI Generation <InfoButton>Locked NOVI mints every 5 min by tier: Rookie 50, Expert 100, Epic 500, Legendary 2,500 (display).</InfoButton>
                 </div>
                 <div className="text-[10px] text-text-muted">
                   ≈ {perHour.toLocaleString()}/hr · {gen}/5m
@@ -482,7 +484,8 @@ export function SubscribeTab() {
                 <PerkRow icon={Database} color={th.bright} strong>
                   Vault holds{" "}
                   <span className="font-semibold text-text-gold">{formatNumber(cap)} NOVI</span>{" "}
-                  before it fills
+                  before it fills{" "}
+                  <InfoButton>Your locked-NOVI store caps by tier (3k / 6k / 30k / 150k display); generation stops at the cap. The Vault raises it.</InfoButton>
                 </PerkRow>
                 {dailyCap > 0 && (
                   <PerkRow icon={ShoppingCart} color={th.bright} strong>
@@ -490,7 +493,8 @@ export function SubscribeTab() {
                     <span className="font-semibold text-text-gold">
                       {dailyCap.toLocaleString()} NOVI
                     </span>{" "}
-                    every day
+                    every day{" "}
+                    <InfoButton>The most NOVI you can buy from the shop per day. Set by subscription tier; resets each 24h day.</InfoButton>
                   </PerkRow>
                 )}
                 {buyBonusBps > 0 && (

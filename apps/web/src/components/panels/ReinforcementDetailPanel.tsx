@@ -30,6 +30,9 @@ import { SpeedupPanel, maxSpeedupCount } from "@/components/shared/SpeedupPanel"
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
+import { InfoButton } from "@/components/shared/InfoButton";
+import { LabelWithInfo } from "@/components/shared/LabelWithInfo";
+import { REINFORCEMENT_STATUS_INFO, REINFORCEMENT_RELIEVE_INFO } from "@/lib/copy/infoCopy";
 
 const STATUS_LABEL = ["Traveling", "Active", "Returning", "Completed"];
 
@@ -238,7 +241,9 @@ export function ReinforcementDetailPanel({
           </div>
         </div>
         <div className="text-right">
-          <div className="text-xs text-text-muted">Status</div>
+          <LabelWithInfo as="div" className="text-xs text-text-muted" info={REINFORCEMENT_STATUS_INFO}>
+            Status
+          </LabelWithInfo>
           <div className="text-sm font-semibold text-text-primary">
             {STATUS_LABEL[status] ?? `Status ${status}`}
           </div>
@@ -285,7 +290,7 @@ export function ReinforcementDetailPanel({
         )}
         {direction === "received" && status === 1 && (
           <TxButton onClick={handleRelieve} variant="secondary">
-            Relieve (send back)
+            Relieve (send back) <InfoButton>{REINFORCEMENT_RELIEVE_INFO}</InfoButton>
           </TxButton>
         )}
       </div>

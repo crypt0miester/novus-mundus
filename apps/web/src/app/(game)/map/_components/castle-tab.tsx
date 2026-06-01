@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect } from "react";
-import { Check, X } from "lucide-react";
+import { Check, Hammer, MapPin, X } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { useUrlIntParam, useUrlPatch } from "@/lib/hooks/useUrlParam";
 import { usePlayer } from "@/lib/hooks/usePlayer";
@@ -27,6 +27,7 @@ import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoGrid } from "@/components/shared/InfoGrid";
+import { InfoButton } from "@/components/shared/InfoButton";
 import {
   TripleCountInput,
   DEFENSIVE_UNIT_LABELS,
@@ -36,7 +37,7 @@ import {
 } from "@/components/shared/TripleCountInput";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
 import { useTransitionStore } from "@/lib/store/transition";
-import { bpsToPercent, formatTime, shortenAddress } from "@/lib/utils";
+import { bpsToPercent, cn, formatTime, shortenAddress } from "@/lib/utils";
 import {
   createClaimVacantCastleInstruction,
   createJoinGarrisonInstruction,
@@ -51,32 +52,51 @@ import {
   createClaimGarrisonLootInstruction,
   createClaimCastleRewardsInstruction,
   createAttackCastleInstruction,
+  createFinalizeTransitionInstruction,
+  type CastleAccount,
   parsePlayer,
   parseTeamCastleReward,
-  derivePlayerPda,
   deriveGarrisonPda,
   deriveTeamCastleRewardPda,
   deriveCourtPda,
   isNullPubkey,
+  CastleStatus,
   WarTableScope,
   deciToNovi,
+  MAX_FORTIFICATION_LEVEL,
+  MAX_TREASURY_LEVEL,
+  MAX_CHAMBERS_LEVEL,
+  MAX_WATCHTOWER_LEVEL,
+  MAX_ARMORY_LEVEL,
 } from "novus-mundus-sdk";
 import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
+import { MobileTeamDock } from "@/components/war-table/MobileTeamDock";
+import { useIsMobile } from "@/lib/hooks/useMediaQuery";
+import { useChainNow } from "@/lib/hooks/useChainTime";
+import { usePlayerPda } from "@/lib/hooks/usePlayerPda";
 import {
   CASTLE_TIER_NAMES,
   CASTLE_STATUS_NAMES,
   CASTLE_STATUS_NARRATION,
+  rulerTitle,
 } from "@/lib/world/castles";
 
 const COURT_POSITIONS = ["Advisor", "Scholar", "Guardian", "Treasurer", "Marshal"];
 
 const CASTLE_FRAMING = systemFraming("castle");
-const UPGRADE_TYPES = [
-  { value: 1, label: "Fortification" },
-  { value: 2, label: "Treasury" },
-  { value: 3, label: "Chambers" },
-  { value: 4, label: "Watchtower" },
-  { value: 5, label: "Armory" },
+// Each upgrade carries its own level accessor off the castle, so the
+// value->stat correspondence lives in one table instead of a parallel lookup.
+const UPGRADE_TYPES: {
+  value: number;
+  label: string;
+  max: number;
+  level: (c: CastleAccount | null | undefined) => number;
+}[] = [
+  { value: 1, label: "Fortification", max: MAX_FORTIFICATION_LEVEL, level: (c) => c?.fortificationLevel ?? 0 },
+  { value: 2, label: "Treasury", max: MAX_TREASURY_LEVEL, level: (c) => c?.treasuryLevel ?? 0 },
+  { value: 3, label: "Chambers", max: MAX_CHAMBERS_LEVEL, level: (c) => c?.chambersLevel ?? 0 },
+  { value: 4, label: "Watchtower", max: MAX_WATCHTOWER_LEVEL, level: (c) => c?.watchtowerLevel ?? 0 },
+  { value: 5, label: "Armory", max: MAX_ARMORY_LEVEL, level: (c) => c?.armoryLevel ?? 0 },
 ];
 
 export function CastleTab() {
@@ -140,8 +160,11 @@ export function CastleTab() {
 
   const [appointPosition, setAppointPosition] = useState(0);
   const [appointeeWallet, setAppointeeWallet] = useState("");
-  const [resignPosition, setResignPosition] = useState(0);
   const [upgradeType, setUpgradeType] = useState(1);
+  // War Council chat: on mobile it lives in a MobileTeamDock (peek strip +
+  // bottom sheet), the same surface the team chat uses; desktop keeps it inline.
+  const [warCouncilOpen, setWarCouncilOpen] = useState(false);
+  const isMobile = useIsMobile();
   const [driveBy, setDriveBy] = useState(false);
 
   // Garrison contribution the player commits when joining (on-chain order).
@@ -243,10 +266,22 @@ export function CastleTab() {
     };
   }, [houseMembers, publicKey?.toBase58(), connection]);
 
+  // The wallet's PlayerAccount PDA. On-chain, castle.king and transitionNewKing
+  // store the PLAYER PDA (claim_vacant_castle.rs: king = player_account.address()),
+  // not the wallet, so kingship is decided against this PDA.
+  const myPlayerPda = usePlayerPda();
+
   const isKing = useMemo(() => {
-    if (!castle || !publicKey || !castle.hasKing) return false;
-    return castle.king.equals(publicKey);
-  }, [castle, publicKey]);
+    if (!castle || !castle.hasKing || !myPlayerPda) return false;
+    return castle.king.equals(myPlayerPda);
+  }, [castle, myPlayerPda]);
+
+  // The court seat this wallet personally holds, if any. courtRoster entries
+  // carry the resolved owner wallet, so this is a wallet-vs-wallet match.
+  const myCourtSeat = useMemo(
+    () => (publicKey ? (courtRoster.find((c) => c.ownerWallet?.equals(publicKey)) ?? null) : null),
+    [courtRoster, publicKey],
+  );
 
   const hasUpgradeInProgress = useMemo(() => {
     if (!castle) return false;
@@ -257,7 +292,10 @@ export function CastleTab() {
    * blocked instead of firing a tx that bounces with a raw GameError.
    * Claim eligibility -> claim_vacant_castle.rs (level / networth-millions /
    * troops-thousands). Attackability -> CastleAccount::can_be_attacked. */
-  const nowSec = Math.floor(Date.now() / 1000);
+  // Chain-anchored, ticks every second so countdowns/gates (protection,
+  // contest, upgrade-ready) flip live rather than waiting on an unrelated
+  // re-render.
+  const nowSec = useChainNow(1000);
 
   const claimReqs = useMemo(() => {
     if (!castle || !player) return [];
@@ -294,26 +332,33 @@ export function CastleTab() {
     !!castle && ((castle.garrisonCount ?? 0) > 0 || (castle.courtCount ?? 0) > 0);
   const canClaim = claimReqs.length > 0 && claimReqs.every((r) => r.ok) && !claimBlockedByResidue;
 
+  // Contest-window end + protection-shield end, derived once from the seat and
+  // shared by attackInfo + statusTimer. protectionEnd = contestEnd + the base
+  // protection duration scaled by the watchtower (each level adds 10% via bps).
+  const { contestEnd, protectionEnd } = useMemo(() => {
+    if (!castle) return { contestEnd: 0, protectionEnd: 0 };
+    const contestEnd = Number(castle.contestEndAt ?? 0n);
+    const watchtowerBps = (castle.watchtowerLevel ?? 0) * 1000;
+    const protSecs = Math.floor(
+      (Number(castle.protectionDuration ?? 0n) * (10_000 + watchtowerBps)) / 10_000,
+    );
+    return { contestEnd, protectionEnd: contestEnd + protSecs };
+  }, [castle]);
+
   const attackInfo = useMemo<{
     attackable: boolean;
     reason: string;
     opensAt: number | null;
   }>(() => {
     if (!castle) return { attackable: false, reason: "No castle here.", opensAt: null };
-    const contestEnd = Number(castle.contestEndAt ?? 0n);
-    const watchtowerBps = (castle.watchtowerLevel ?? 0) * 1000;
-    const protSecs = Math.floor(
-      (Number(castle.protectionDuration ?? 0n) * (10_000 + watchtowerBps)) / 10_000,
-    );
-    const protectionEnd = contestEnd + protSecs;
     switch (castle.status) {
-      case 0: // Vacant
+      case CastleStatus.Vacant:
         return {
           attackable: false,
           reason: "The seat is empty. There is no garrison to fight; claim it instead.",
           opensAt: null,
         };
-      case 1: // Contest
+      case CastleStatus.Contest:
         return nowSec < contestEnd
           ? { attackable: true, reason: "", opensAt: null }
           : {
@@ -321,7 +366,7 @@ export function CastleTab() {
               reason: "The contest has ended and protection is settling over the seat.",
               opensAt: null,
             };
-      case 2: // Protected
+      case CastleStatus.Protected:
         return nowSec >= protectionEnd
           ? { attackable: true, reason: "", opensAt: null }
           : {
@@ -329,9 +374,9 @@ export function CastleTab() {
               reason: "The seat is shielded by protection. It cannot be moved against yet.",
               opensAt: protectionEnd,
             };
-      case 3: // Vulnerable
+      case CastleStatus.Vulnerable:
         return { attackable: true, reason: "", opensAt: null };
-      case 4: // Transitioning
+      case CastleStatus.Transitioning:
         return nowSec < contestEnd
           ? { attackable: true, reason: "", opensAt: null }
           : {
@@ -346,7 +391,64 @@ export function CastleTab() {
           opensAt: null,
         };
     }
-  }, [castle, nowSec]);
+  }, [castle, nowSec, contestEnd, protectionEnd]);
+
+  // Am I the challenger who won the seat and is now waiting out the transition?
+  // While TRANSITIONING (status 4), the crown does not pass until the contest
+  // window closes AND the old garrison + court have dispersed (finalize_transition.rs).
+  // Until then the new king should see a "claim the crown" flow, not "attack".
+  const iAmNewKing =
+    !!castle &&
+    castle.status === CastleStatus.Transitioning &&
+    !!myPlayerPda &&
+    !isNullPubkey(castle.transitionNewKing) &&
+    castle.transitionNewKing.equals(myPlayerPda);
+  const transitionSettleAt = contestEnd;
+  const transitionFinalizable =
+    iAmNewKing &&
+    nowSec >= transitionSettleAt &&
+    (castle?.garrisonCount ?? 0) === 0 &&
+    (castle?.courtCount ?? 0) === 0;
+
+  // A seat is "settled" when it is neither being contested nor mid-handover.
+  // Court appointments (appoint_court.rs) and upgrades (initiate_upgrade.rs)
+  // both pause in those windows; the on-chain processors enforce the same.
+  const seatSettled =
+    castle?.status !== CastleStatus.Contest && castle?.status !== CastleStatus.Transitioning;
+
+  // Court gating: a court needs a Citadel-grade seat (max_court > 0) on a
+  // settled seat.
+  const courtSupported = (castle?.maxCourt ?? 0) > 0;
+  const courtAppointable = courtSupported && seatSettled;
+
+  // Upgrades are king-only on a settled seat.
+  const upgradeAllowed = isKing && seatSettled;
+  const selectedUpgrade = UPGRADE_TYPES.find((u) => u.value === upgradeType) ?? UPGRADE_TYPES[0];
+  const selectedUpgradeMaxed = selectedUpgrade.level(castle) >= selectedUpgrade.max;
+  const upgradeEndsAt = Number(castle?.upgradeEndAt ?? 0n);
+
+  // Headline countdown for the status chip. The two short (2h) windows —
+  // Contest and Transitioning — are the ones players must act on, so they
+  // render urgent (gold pill); the 10-day Protected shield renders quiet.
+  const statusTimer = useMemo<{ endsAt: number; label: string; urgent: boolean } | null>(() => {
+    if (!castle) return null;
+    switch (castle.status) {
+      case CastleStatus.Contest: // 2h challenge window
+        return nowSec < contestEnd
+          ? { endsAt: contestEnd, label: "Contest ends", urgent: true }
+          : null;
+      case CastleStatus.Protected: // 10d shield
+        return nowSec < protectionEnd
+          ? { endsAt: protectionEnd, label: "Protected until", urgent: false }
+          : null;
+      case CastleStatus.Transitioning: // 2h settle window
+        return nowSec < contestEnd
+          ? { endsAt: contestEnd, label: "Crown settles", urgent: true }
+          : null;
+      default:
+        return null;
+    }
+  }, [castle, nowSec, contestEnd, protectionEnd]);
 
   // Check team prerequisite
   const teamKey = player?.team;
@@ -382,20 +484,6 @@ export function CastleTab() {
    * the embed to anyone else would only render a gate that never resolves. The
    * chain's castle_predicate takes the garrison contribution account as the
    * post gate (empty for the king), derived here from the selected castle. */
-  const [myPlayerPda, setMyPlayerPda] = useState<PublicKey | null>(null);
-  useEffect(() => {
-    if (!publicKey) {
-      setMyPlayerPda(null);
-      return;
-    }
-    let cancelled = false;
-    derivePlayerPda(client.gameEngine, publicKey).then(([pda]) => {
-      if (!cancelled) setMyPlayerPda(pda);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [publicKey, client.gameEngine]);
   const canPostCastle = isKing || inGarrison;
   const [castleGate, setCastleGate] = useState<PublicKey[] | undefined>(undefined);
   useEffect(() => {
@@ -623,7 +711,7 @@ export function CastleTab() {
   };
 
   const handleResignCourt = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
+    if (!publicKey || !myCourtSeat) throw new Error("You do not hold a court seat");
     const ge = client.gameEngine;
     const ix = await createResignCourtInstruction(
       {
@@ -632,13 +720,34 @@ export function CastleTab() {
         cityId,
         castleId,
       },
-      { position: resignPosition },
+      { position: myCourtSeat.position },
     );
     return transact
       .mutateAsync({
         instructions: [ix],
         invalidateKeys: [["castle"], ["player"]],
         successMessage: "Resigned from court.",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  const handleFinalizeTransition = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey || !castle) throw new Error("Wallet not connected");
+    // Permissionless. The new king is this wallet; the old king's registry
+    // decrement (optional account) is left to a separate sweep.
+    const ix = await createFinalizeTransitionInstruction({
+      payer: publicKey,
+      gameEngine: client.gameEngine,
+      cityId,
+      castleId,
+      newKing: publicKey,
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: [["castle"], ["player"]],
+        successMessage: "The crown is yours. Long may you reign.",
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
@@ -787,58 +896,27 @@ export function CastleTab() {
         <p className="mt-1 text-xs italic text-text-muted">{CASTLE_FRAMING.line}</p>
       </div>
 
-      {/* Castle selector + Locate — Locate closes the round-trip from
-       * the inspect panel on the map. We drop `tab` so we land on the
-       * default realm view, drop `castleId` (castle-tab state), and set
-       * `castle=<pubkey>` which map-tab.tsx already consumes to preselect
-       * the entity + pan/zoom the disc onto its cell. */}
-      <div className="flex items-center gap-2">
-        <div className="flex flex-1 gap-1 rounded-lg bg-surface p-1 ">
-          {cityCastles.length === 0 ? (
-            <span className="px-3 py-1.5 text-xs text-text-muted">No castle in this city</span>
-          ) : (
-            cityCastles.map((c) => (
-              <button
-                key={c.account.castleId}
-                type="button"
-                onClick={() => setCastleId(c.account.castleId)}
-                className={`truncate rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  castleId === c.account.castleId
-                    ? "bg-surface-raised text-text-gold"
-                    : "text-text-muted hover:text-text-secondary"
-                }`}
-              >
-                {c.account.name?.trim() || `Castle ${c.account.castleId}`}
-              </button>
-            ))
-          )}
-        </div>
-        {castlePda && castle && (
-          <button
-            type="button"
-            onClick={() =>
-              /* Map-tab's deep-link consumer (map-tab.tsx ~237)
-               * early-exits unless `?city=` is present, and it only
-               * pans/selects when `?lat=` AND `?long=` are also set.
-               * Send all four so the round-trip actually focuses the
-               * camera and pops the EntityPanel on the right castle.
-               * CastleAccount.latitude / longitude are i32 grid units
-               * (degrees × 10000); the URL contract expects decimal
-               * degrees so we divide before pushing. */
-              urlPatch({
-                tab: null,
-                castleId: null,
-                cityId: null,
-                city: String(castle.cityId),
-                lat: String(castle.latitude / 10000),
-                long: String(castle.longitude / 10000),
-                castle: castlePda.toBase58(),
-              })
-            }
-            className="rounded-md border border-border-default bg-surface px-3 py-1.5 text-xs font-medium text-text-secondary hover:text-text-gold"
-          >
-            Locate
-          </button>
+      {/* Castle selector — scrollable pills, one per castle in this city. The
+          Locate action moved onto the banner (top-right) so it no longer
+          crowds this row. */}
+      <div className="flex flex-1 min-w-0 gap-1 overflow-x-auto rounded-lg bg-surface p-1">
+        {cityCastles.length === 0 ? (
+          <span className="px-3 py-1.5 text-xs text-text-muted">No castle in this city</span>
+        ) : (
+          cityCastles.map((c) => (
+            <button
+              key={c.account.castleId}
+              type="button"
+              onClick={() => setCastleId(c.account.castleId)}
+              className={`shrink-0 whitespace-nowrap rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                castleId === c.account.castleId
+                  ? "bg-surface-raised text-text-gold"
+                  : "text-text-muted hover:text-text-secondary"
+              }`}
+            >
+              {c.account.name?.trim() || `Castle ${c.account.castleId}`}
+            </button>
+          ))
         )}
       </div>
 
@@ -847,10 +925,37 @@ export function CastleTab() {
         <>
           {/* Hero header: on desktop the landmark banner sits beside the stat
               block instead of ballooning to full content width above it. They
-              stack again on narrow viewports, and items-start keeps the banner
-              at a clean 16:9 rather than stretching to the stat card height. */}
-          <div className="grid gap-4 xl:grid-cols-2 xl:items-start">
-            <CastleBanner castle={castle} />
+              stack again on narrow viewports. On desktop the banner stretches
+              to the full height of the (taller) stat column via items-stretch +
+              an absolutely-filled banner, so there is no dead space beneath it;
+              on mobile it falls back to a clean 16:9. */}
+          <div className="grid gap-4 xl:grid-cols-2 xl:items-stretch">
+            <div className="relative xl:h-full">
+              <CastleBanner castle={castle} className="xl:absolute xl:inset-0 xl:h-full" />
+              {castlePda && (
+                <button
+                  type="button"
+                  // Round-trip to the realm map: drop tab/castleId/cityId, set
+                  // city + decimal lat/long (grid units / 10000) + castle pubkey
+                  // so map-tab pans the disc and pops the EntityPanel on this seat.
+                  onClick={() =>
+                    urlPatch({
+                      tab: null,
+                      castleId: null,
+                      cityId: null,
+                      city: String(castle.cityId),
+                      lat: String(castle.latitude / 10000),
+                      long: String(castle.longitude / 10000),
+                      castle: castlePda.toBase58(),
+                    })
+                  }
+                  className="absolute right-2 top-2 inline-flex items-center gap-1 rounded-md border border-border-default bg-surface/80 px-2.5 py-1 text-xs font-medium text-text-secondary backdrop-blur-sm transition-colors hover:text-text-gold"
+                >
+                  <MapPin size={12} />
+                  Locate
+                </button>
+              )}
+            </div>
             {/* Right column: the stat block plus the daily-rewards and record
                 cards, stacked beside the banner. */}
             <div className="space-y-4">
@@ -863,13 +968,25 @@ export function CastleTab() {
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-text-muted">Status</div>
+                    <div className="text-xs text-text-muted">
+                      Status{" "}
+                      <InfoButton>
+                        Attackable only when Contest (2h window after a claim) or Vulnerable.
+                        Protected and Vacant cannot be attacked.
+                      </InfoButton>
+                    </div>
                     <div className="text-sm font-semibold text-text-primary">
                       {CASTLE_STATUS_NAMES[castle.status ?? 0]}
                     </div>
                   </div>
                   <div>
-                    <div className="text-xs text-text-muted">Garrison</div>
+                    <div className="text-xs text-text-muted">
+                      Garrison{" "}
+                      <InfoButton>
+                        Teammates defending the castle. Slots cap by king tier: Rookie 5, Expert 10,
+                        Epic 15, Legendary 25.
+                      </InfoButton>
+                    </div>
                     <GoldNumber value={castle.garrisonCount ?? 0} size="sm" />
                   </div>
                   <div>
@@ -881,13 +998,36 @@ export function CastleTab() {
                     />
                   </div>
                 </div>
-                <p className="mt-3 text-xs italic text-text-muted">
-                  {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
-                    "The condition of the seat is unclear."}
-                </p>
+                <div className="mt-3 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+                  <p className="text-xs italic text-text-muted">
+                    {CASTLE_STATUS_NARRATION[castle.status ?? 0] ??
+                      "The condition of the seat is unclear."}
+                  </p>
+                  {statusTimer &&
+                    (statusTimer.urgent ? (
+                      <div className="inline-flex shrink-0 items-center gap-2 whitespace-nowrap rounded-md border border-border-gold/50 bg-[var(--nm-accent)]/10 px-3 py-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-text-gold/80">
+                          {statusTimer.label}
+                        </span>
+                        <GoldCountdown
+                          endsAt={statusTimer.endsAt}
+                          format="compact"
+                          urgentThreshold={900}
+                          size="sm"
+                        />
+                      </div>
+                    ) : (
+                      <span className="shrink-0 whitespace-nowrap text-[11px] text-text-muted">
+                        {statusTimer.label}{" "}
+                        <span className="font-mono tabular-nums">
+                          {formatTime(Math.max(0, statusTimer.endsAt - nowSec), "compact")}
+                        </span>
+                      </span>
+                    ))}
+                </div>
                 {castle.hasKing && (
                   <div className="mt-3 border-t border-zinc-800 pt-3">
-                    <div className="text-xs text-text-muted">King</div>
+                    <div className="text-xs text-text-muted">{rulerTitle(castle.tier ?? 0)}</div>
                     <div className="text-sm text-text-primary">
                       <DomainName pubkey={castle.king} chars={6} />
                     </div>
@@ -904,7 +1044,7 @@ export function CastleTab() {
                 <div className="space-y-1.5 text-xs">
                   {[
                     {
-                      role: "King",
+                      role: rulerTitle(castle.tier ?? 0),
                       novi: deciToNovi(castle.kingNoviPerDay),
                       cash: castle.kingCashPerDay,
                     },
@@ -979,7 +1119,7 @@ export function CastleTab() {
                     <div className="text-text-primary">{castle.timesClaimed ?? 0}</div>
                   </div>
                   <div>
-                    <div className="text-text-muted">King&apos;s loot cut</div>
+                    <div className="text-text-muted">{rulerTitle(castle.tier ?? 0)}&apos;s loot cut</div>
                     <div className="text-text-primary">
                       {bpsToPercent(castle.kingLootCutBps ?? 0)}%
                     </div>
@@ -1015,8 +1155,13 @@ export function CastleTab() {
 
           {/* War Council — the castle's encrypted war-table, for the king and
            * garrison members of this seat. Hidden for everyone else (a
-           * non-member can neither read nor post). */}
-          {castlePda && canPostCastle && (
+           * non-member can neither read nor post). On desktop it sits inline;
+           * on mobile it rides the same MobileTeamDock surface as the team chat
+           * (a peek strip above the bottom nav that expands into a bottom sheet)
+           * instead of a bulky always-open card. The inline copy is gated to
+           * desktop so it doesn't mount on mobile and steal the dock's unread
+           * tracking; the dock's sheet only mounts its thread when opened. */}
+          {castlePda && canPostCastle && !isMobile && (
             <div className="card flex flex-col">
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
                 War Council
@@ -1026,18 +1171,42 @@ export function CastleTab() {
                 scope={WarTableScope.Castle}
                 gateAccounts={castleGate}
                 canPost={canPostCastle}
-                placeholder="Rally the garrison..."
+                placeholder="write a message..."
               />
             </div>
           )}
+          {castlePda && canPostCastle && (
+            <MobileTeamDock
+              threadPda={castlePda}
+              scope={WarTableScope.Castle}
+              title="War Council"
+              emptyText="Rally the garrison."
+              open={warCouncilOpen}
+              onOpenChange={setWarCouncilOpen}
+              bottomClass="bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:bottom-4"
+            >
+              <ThreadRenderer
+                threadPda={castlePda}
+                scope={WarTableScope.Castle}
+                gateAccounts={castleGate}
+                canPost={canPostCastle}
+                placeholder="write a message..."
+                maxHeightClass="max-h-[70dvh]"
+                composeInBar={warCouncilOpen}
+              />
+            </MobileTeamDock>
+          )}
 
-          {/* Court Positions */}
+          {/* Court Positions — only a Keep or larger holds a court; an Outpost
+              has none, so the card is hidden there entirely. Render only the
+              seats this seat actually grants (maxCourt grows with Chambers). */}
+          {courtSupported && (
           <div className="card">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Court Positions ({castle.courtCount ?? 0} / {castle.maxCourt ?? 5})
+              Court Positions ({castle.courtCount ?? 0} / {castle.maxCourt ?? 0})
             </h3>
             <div className="grid gap-2 md:grid-cols-5">
-              {COURT_POSITIONS.map((pos, i) => {
+              {COURT_POSITIONS.slice(0, castle.maxCourt ?? 0).map((pos, i) => {
                 const member = courtRoster.find((c) => c.position === i);
                 return (
                   <div key={pos} className="rounded-lg border border-zinc-800 p-3 text-center">
@@ -1065,7 +1234,16 @@ export function CastleTab() {
             {isKing && (
               <div className="mt-4 space-y-2">
                 <h4 className="text-xs font-semibold text-text-muted">Appoint Court Member</h4>
-                {courtCandidates.length === 0 ? (
+                {!courtSupported ? (
+                  <p className="text-xs italic text-text-muted">
+                    This seat is too modest to hold a court. Raise it to a Citadel to seat advisors.
+                  </p>
+                ) : !courtAppointable ? (
+                  <p className="text-xs italic text-text-muted">
+                    The realm is unsettled. Court appointments resume once the seat is no longer
+                    contested.
+                  </p>
+                ) : courtCandidates.length === 0 ? (
                   <p className="text-xs italic text-text-muted">
                     A court is your own people — a House must stand behind you first. Swear members
                     to your House, then call them to court.
@@ -1103,21 +1281,13 @@ export function CastleTab() {
               </div>
             )}
 
-            {!isKing && castle.hasKing && (
+            {!isKing && myCourtSeat && (
               <div className="mt-4 space-y-2">
-                <h4 className="text-xs font-semibold text-text-muted">Resign from Court</h4>
-                <div className="flex gap-2">
-                  <select
-                    value={resignPosition}
-                    onChange={(e) => setResignPosition(Number(e.target.value))}
-                    className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                  >
-                    {COURT_POSITIONS.map((pos, i) => (
-                      <option key={pos} value={i}>
-                        {pos}
-                      </option>
-                    ))}
-                  </select>
+                <h4 className="text-xs font-semibold text-text-muted">Your Court Seat</h4>
+                <div className="flex items-center justify-between gap-2 rounded-lg border border-zinc-800 px-3 py-2">
+                  <span className="text-sm text-text-primary">
+                    {COURT_POSITIONS[myCourtSeat.position] ?? `Position ${myCourtSeat.position}`}
+                  </span>
                   <TxButton onClick={handleResignCourt} variant="danger">
                     Resign
                   </TxButton>
@@ -1125,6 +1295,7 @@ export function CastleTab() {
               </div>
             )}
           </div>
+          )}
 
           {/* Castle Upgrade (King only) */}
           {isKing && (
@@ -1132,79 +1303,96 @@ export function CastleTab() {
               <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
                 Castle Upgrades
               </h3>
-              <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
-                <div>
-                  <div className="text-xs text-text-muted">Fortification</div>
-                  <div className="text-sm font-semibold text-text-primary">
-                    Lv {castle.fortificationLevel ?? 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Treasury</div>
-                  <div className="text-sm font-semibold text-text-primary">
-                    Lv {castle.treasuryLevel ?? 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Chambers</div>
-                  <div className="text-sm font-semibold text-text-primary">
-                    Lv {castle.chambersLevel ?? 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Watchtower</div>
-                  <div className="text-sm font-semibold text-text-primary">
-                    Lv {castle.watchtowerLevel ?? 0}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-xs text-text-muted">Armory</div>
-                  <div className="text-sm font-semibold text-text-primary">
-                    Lv {castle.armoryLevel ?? 0}
-                  </div>
-                </div>
+              {/* The five stat tiles double as the picker: tap one to choose
+                  what to raise. No dropdown — the grid the king already reads
+                  is the control. Tiles disable when maxed, mid-upgrade, or the
+                  seat is unsettled. */}
+              <div className="grid grid-cols-2 gap-3 md:grid-cols-5">
+                {UPGRADE_TYPES.map((u) => {
+                  const lvl = u.level(castle);
+                  const maxed = lvl >= u.max;
+                  const selected = upgradeType === u.value;
+                  const selectable = upgradeAllowed && !hasUpgradeInProgress && !maxed;
+                  return (
+                    <button
+                      key={u.value}
+                      type="button"
+                      disabled={!selectable}
+                      onClick={() => setUpgradeType(u.value)}
+                      className={cn(
+                        "rounded-lg border px-3 py-2 text-left transition-colors",
+                        selected && selectable
+                          ? "border-border-gold bg-[var(--nm-accent)]/15"
+                          : "border-zinc-800",
+                        selectable && "hover:border-border-gold/50",
+                        !selectable && "cursor-default opacity-60",
+                      )}
+                    >
+                      <div className="text-xs text-text-muted">{u.label}</div>
+                      <div className="text-sm font-semibold text-text-primary">
+                        Lv {lvl}
+                        {u.max < 255 && <span className="text-text-muted"> / {u.max}</span>}
+                      </div>
+                      {maxed && (
+                        <div className="text-[10px] uppercase tracking-wider text-text-gold">
+                          Maxed
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
               </div>
 
               {hasUpgradeInProgress ? (
                 <div className="mt-4 space-y-2">
                   <div className="flex items-center justify-between rounded-lg border border-zinc-800 px-3 py-2">
-                    <span className="text-xs text-text-muted">
-                      Upgrading:{" "}
-                      {UPGRADE_TYPES.find((u) => u.value === castle.upgradeType)?.label ??
-                        "Unknown"}
-                      {" to Lv "}
-                      {castle.upgradeTargetLevel ?? "?"}
-                    </span>
-                    <GoldCountdown
-                      endsAt={Number(castle.upgradeEndAt ?? 0n)}
-                      format="full"
-                      label="Completes"
-                    />
+                    {/* Mirrors GoldCountdown's skeleton (flex-col gap-1 ->
+                        uppercase muted label -> icon + value row) so the
+                        Upgrading block reads as a matched pair beside Completes. */}
+                    <div className="flex flex-col gap-1">
+                      <span className="text-xs uppercase tracking-wider text-zinc-500">
+                        Upgrading
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <Hammer className="h-3.5 w-3.5 shrink-0 text-zinc-500" />
+                        <span className="text-sm text-text-primary">
+                          {UPGRADE_TYPES.find((u) => u.value === castle.upgradeType)?.label ??
+                            "Unknown"}{" "}
+                          to Lv {castle.upgradeTargetLevel ?? "?"}
+                        </span>
+                      </div>
+                    </div>
+                    <GoldCountdown endsAt={upgradeEndsAt} format="full" label="Completes" />
                   </div>
                   <div className="flex gap-2">
                     <TxButton onClick={handleCancelUpgrade} variant="danger">
                       Cancel Upgrade
                     </TxButton>
-                    <TxButton onClick={handleCompleteUpgrade} variant="secondary">
-                      Complete Upgrade
+                    {/* complete_upgrade.rs rejects with CastleUpgradeNotReady
+                        until the timer elapses; disable until then so the
+                        button never fires a tx that bounces. */}
+                    <TxButton
+                      onClick={handleCompleteUpgrade}
+                      variant="secondary"
+                      disabled={nowSec < upgradeEndsAt}
+                    >
+                      {nowSec < upgradeEndsAt ? "Complete" : "Complete Upgrade"}
                     </TxButton>
                   </div>
                 </div>
-              ) : (
-                <div className="mt-4 flex gap-2">
-                  <select
-                    value={upgradeType}
-                    onChange={(e) => setUpgradeType(Number(e.target.value))}
-                    className="rounded-lg border border-zinc-800 bg-surface px-3 py-2 text-sm text-text-primary"
-                  >
-                    {UPGRADE_TYPES.map((u) => (
-                      <option key={u.value} value={u.value}>
-                        {u.label}
-                      </option>
-                    ))}
-                  </select>
-                  <TxButton onClick={handleInitiateUpgrade}>Initiate Upgrade</TxButton>
+              ) : upgradeAllowed ? (
+                <div className="mt-4">
+                  <TxButton onClick={handleInitiateUpgrade} disabled={selectedUpgradeMaxed}>
+                    {selectedUpgradeMaxed
+                      ? "Pick a stat to raise"
+                      : `Upgrade ${selectedUpgrade.label}`}
+                  </TxButton>
                 </div>
+              ) : (
+                <p className="mt-4 text-xs italic text-text-muted">
+                  The seat must settle before you can raise its walls. Upgrades pause while it is
+                  contested or changing hands.
+                </p>
               )}
             </div>
           )}
@@ -1243,7 +1431,11 @@ export function CastleTab() {
                 /* Contribute units & weapons to the castle garrison */
                 <div className="rounded-lg border border-zinc-800 p-3">
                   <h4 className="mb-2 text-xs font-semibold text-text-muted">
-                    Contribute to Garrison
+                    Contribute to Garrison{" "}
+                    <InfoButton>
+                      You commit defensive units, weapons, and one hero to defend the castle. They
+                      are held in the garrison, not consumed up front.
+                    </InfoButton>
                   </h4>
                   <div className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
                     Defensive Units
@@ -1351,9 +1543,11 @@ export function CastleTab() {
           {/* Actions — Vacant seats are claimed (gated on eligibility);
            * held seats are attacked (gated on attackability). The two are
            * mutually exclusive on-chain, so we surface only the one that
-           * applies and explain when it is blocked. */}
+           * applies and explain when it is blocked. Hidden for the seat's own
+           * ruler: you neither claim nor attack a seat you already hold. */}
+          {!isKing && (
           <div className="card space-y-3">
-            {castle.status === 0 ? (
+            {castle.status === CastleStatus.Vacant ? (
               <>
                 <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                   Claim Requirements
@@ -1387,20 +1581,29 @@ export function CastleTab() {
                   Claim Castle
                 </TxButton>
               </>
-            ) : (
+            ) : iAmNewKing ? (
               <>
-                {!attackInfo.attackable && (
-                  <p className="flex flex-wrap items-center gap-1 text-xs italic text-text-muted">
-                    {attackInfo.reason}
-                    {attackInfo.opensAt != null && (
-                      <GoldCountdown
-                        endsAt={attackInfo.opensAt}
-                        format="compact"
-                        label="Opens in"
-                      />
-                    )}
+                <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Transition
+                </h3>
+                <p className="text-xs text-text-secondary">
+                  You stormed the seat. The crown does not pass at once: once the contest window
+                  closes and the old garrison and court disperse, the castle is yours.
+                </p>
+                {nowSec < transitionSettleAt && (
+                  <GoldCountdown endsAt={transitionSettleAt} format="compact" label="Settles in" />
+                )}
+                {nowSec >= transitionSettleAt && !transitionFinalizable && (
+                  <p className="text-xs italic text-text-muted">
+                    The previous garrison and court must clear before the crown can pass.
                   </p>
                 )}
+                <TxButton onClick={handleFinalizeTransition} disabled={!transitionFinalizable}>
+                  Claim the Crown
+                </TxButton>
+              </>
+            ) : (
+              <>
                 <div className="flex items-center gap-2">
                   <TxButton
                     onClick={handleAttackCastle}
@@ -1436,6 +1639,7 @@ export function CastleTab() {
               </>
             )}
           </div>
+          )}
         </>
       ) : (
         <div className="card text-center">
@@ -1481,7 +1685,15 @@ export function CastleTab() {
                     value: bpsToPercent(cc.kingLootCutBps),
                   },
                   {
-                    label: "Protection",
+                    label: (
+                      <>
+                        Protection{" "}
+                        <InfoButton>
+                          Protected = safe from attack. A new or claimed castle gets a 10-day window,
+                          extended by the watchtower.
+                        </InfoButton>
+                      </>
+                    ),
                     value: formatTime(Number(cc.protectionDuration), "compact"),
                   },
                   {

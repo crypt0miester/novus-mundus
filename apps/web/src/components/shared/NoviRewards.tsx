@@ -12,6 +12,7 @@ import type { TxPhase } from "./TxButton";
 import { GoldNumber } from "./GoldNumber";
 import { GameIcon } from "./GameIcon";
 import { NumberField } from "./NumberField";
+import { InfoButton } from "@/components/shared/InfoButton";
 import {
   createReservedToLockedInstruction,
   createWithdrawReservedInstruction,
@@ -210,7 +211,13 @@ export function NoviRewards({ className }: NoviRewardsProps) {
       {/* Balance Display */}
       <div className="mb-5 flex items-center gap-6">
         <div className="flex-1">
-          <div className="text-[10px] uppercase tracking-wider text-zinc-500">Reserved NOVI</div>
+          <div className="text-[10px] uppercase tracking-wider text-zinc-500">
+            Reserved NOVI{" "}
+            <InfoButton>
+              Locked = in-game fuel (not withdrawable). Reserved = withdrawable after 7-day vest.
+              Wallet = on-chain SPL NOVI.
+            </InfoButton>
+          </div>
           <div className="mt-1 flex items-center gap-1.5">
             <GameIcon id="resource-novi" title="NOVI" size={22} />
             <GoldNumber
@@ -237,7 +244,13 @@ export function NoviRewards({ className }: NoviRewardsProps) {
               </div>
             ) : (
               <div>
-                <div className="text-[10px] text-zinc-500">Vesting</div>
+                <div className="text-[10px] text-zinc-500">
+                  Vesting{" "}
+                  <InfoButton>
+                    Reserved NOVI must wait 7 days after it is earned before you can withdraw it to
+                    your wallet.
+                  </InfoButton>
+                </div>
                 <div className="font-mono text-sm font-bold tabular-nums text-text-gold">
                   {formatTime(vestingRemaining, "compact")}
                 </div>

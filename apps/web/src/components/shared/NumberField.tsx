@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useId, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { Minus, Plus } from "lucide-react";
 import { cn, isFibonacci } from "@/lib/utils";
+import { InfoButton } from "@/components/shared/InfoButton";
 
 interface NumberFieldProps {
   /** Current value — a clamped integer; the single source of truth. */
@@ -19,6 +20,8 @@ interface NumberFieldProps {
   /** Increment for the − / + steppers. Default 1. */
   step?: number;
   label?: string;
+  /** Optional explanation rendered as an InfoButton next to the label. */
+  info?: ReactNode;
   /** Trailing unit shown inside the field, e.g. "NOVI". */
   suffix?: string;
   disabled?: boolean;
@@ -85,6 +88,7 @@ export function NumberField({
   min = 0,
   step = 1,
   label,
+  info,
   suffix,
   disabled = false,
   size = "md",
@@ -139,9 +143,12 @@ export function NumberField({
       {(label || (showMax && !rangeEmpty)) && (
         <div className={cn("flex items-center gap-2", label ? "justify-between" : "justify-end")}>
           {label && (
-            <label htmlFor={fieldId} className="text-xs text-text-muted">
-              {label}
-            </label>
+            <span className="flex items-center gap-1">
+              <label htmlFor={fieldId} className="text-xs text-text-muted">
+                {label}
+              </label>
+              {info && <InfoButton>{info}</InfoButton>}
+            </span>
           )}
           {showMax && !rangeEmpty && (
             <button

@@ -145,8 +145,8 @@
   position: absolute;
   top: 8px;
   height: 32px;
-  min-width: 32px;
-  padding: 0 0.5rem;
+  width: 32px;
+  padding: 0;
   border-radius: 999px;
   border: 1px solid var(--ink-faint, #b89a72);
   background: var(--parchment, #efe2c4);
@@ -184,17 +184,11 @@
 /* View-angle (yaw preset) toggle sits just right of the 2D/3D pill. */
 .anglePill {
   left: 80px;
-  width: 28px;
-  min-width: 0;
-  padding: 0;
 }
-/* Orbit-toggle (touch only) sits left of the 2D/3D pill. */
+/* Orbit-toggle (touch only) sits right of the angle pill, grouped with the
+ * other camera controls (2D/3D 44px, angle 80px, orbit 116px: even 36px steps). */
 .orbitTogglePill {
-  right: 90px;
-  width: 28px;
-  min-width: 0;
-  padding: 0;
-  font-size: 0.85rem;
+  left: 116px;
 }
 
 .scaleBar {

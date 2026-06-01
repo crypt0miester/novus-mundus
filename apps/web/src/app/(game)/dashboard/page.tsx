@@ -23,6 +23,7 @@ import { LoadingSequence, getLoadingSteps } from "@/components/loading/LoadingSe
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import Link from "next/link";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
+import { InfoButton } from "@/components/shared/InfoButton";
 import { InfoGrid } from "@/components/shared/InfoGrid";
 import { bpsToMultiplier, formatTime, formatNumber } from "@/lib/utils";
 import { xpRequiredForLevel, levelProgressPercent, deciToNovi } from "novus-mundus-sdk";
@@ -266,7 +267,13 @@ export default function DashboardPage() {
                           </span>
                         </div>
                         <div className="mt-1.5 border-t border-border-default pt-1.5 flex justify-between text-sm">
-                          <span className="text-text-secondary">Net Worth</span>
+                          <span className="text-text-secondary">
+                            Net Worth{" "}
+                            <InfoButton>
+                              Sum of your units, weapons, armor, produce, vehicles, plus cash and
+                              vault. Excludes NOVI and gems.
+                            </InfoButton>
+                          </span>
                           <GoldNumber value={networth} prefix="⊕ " size="sm" />
                         </div>
                       </div>
