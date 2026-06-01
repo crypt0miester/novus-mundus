@@ -70,18 +70,31 @@ const GROWTH_RESEARCH: ResearchNode[] = [
   { researchType: 23, name: 'Loot Magnetism',       description: 'Increases the chance of extra loot drops.',            category: 2, maxLevel: 15, baseTimeSeconds: 1800, baseNoviCost: 15_000, buffType: 23, buffPerLevelBps: 500,  prerequisiteResearch: 26,  prerequisiteLevel: 10, gemCostPerMinute: 5,  isActive: true },
   { researchType: 24, name: 'Reputation Mastery',   description: 'Increases reputation gained from all sources.',        category: 2, maxLevel: 20, baseTimeSeconds: 1800, baseNoviCost: 10_000, buffType: 24, buffPerLevelBps: 300,  prerequisiteResearch: 255, prerequisiteLevel: 0,  gemCostPerMinute: 1,  isActive: true },
   { researchType: 25, name: 'Stamina Vitality',     description: 'Raises your maximum stamina.',                         category: 2, maxLevel: 25, baseTimeSeconds: 1800, baseNoviCost: 10_000, buffType: 25, buffPerLevelBps: 400,  prerequisiteResearch: 255, prerequisiteLevel: 0,  gemCostPerMinute: 1,  isActive: true },
-  { researchType: 26, name: 'Lucky Streak',         description: 'Improves your luck across random outcomes.',           category: 2, maxLevel: 20, baseTimeSeconds: 1800, baseNoviCost: 12_000, buffType: 26, buffPerLevelBps: 50,   prerequisiteResearch: 24,  prerequisiteLevel: 5,  gemCostPerMinute: 2,  isActive: true },
+  { researchType: 26, name: 'Lucky Streak',         description: 'Improves your luck across random outcomes.',           category: 2, maxLevel: 20, baseTimeSeconds: 1800, baseNoviCost: 12_000, buffType: 26, buffPerLevelBps: 50,   prerequisiteResearch: 255, prerequisiteLevel: 0,  gemCostPerMinute: 2,  isActive: true },
   { researchType: 27, name: 'Fragment Discovery',   description: 'Unlocks fragments and increases their drop rate.',     category: 2, maxLevel: 15, baseTimeSeconds: 1800, baseNoviCost: 15_000, buffType: 27, buffPerLevelBps: 500,  prerequisiteResearch: 23,  prerequisiteLevel: 5,  gemCostPerMinute: 5,  isActive: true },
   { researchType: 28, name: 'Gem Prospecting',      description: 'Unlocks gem drops and increases their rate.',          category: 2, maxLevel: 10, baseTimeSeconds: 3600, baseNoviCost: 25_000, buffType: 28, buffPerLevelBps: 50,   prerequisiteResearch: 27,  prerequisiteLevel: 5,  gemCostPerMinute: 10, isActive: true },
   { researchType: 29, name: 'Collection Mastery',   description: 'Increases gains across all collection activities.',    category: 2, maxLevel: 20, baseTimeSeconds: 1800, baseNoviCost: 10_000, buffType: 29, buffPerLevelBps: 200,  prerequisiteResearch: 255, prerequisiteLevel: 0,  gemCostPerMinute: 1,  isActive: true },
 ];
 
-/** All 30 research nodes, ordered by researchType. */
+/** All 30 research nodes, ordered by researchType (array index == researchType,
+ * so getResearchNode can index positionally — never reorder or remove). */
 export const RESEARCH_CATALOG: ResearchNode[] = [
   ...BATTLE_RESEARCH,
   ...ECONOMY_RESEARCH,
   ...GROWTH_RESEARCH,
 ];
+
+// Trimmed research (audited 2026-06-01): nodes with no on-chain effect, marked
+// inactive so they're neither seeded nor shown. Kept in the array (positional
+// indexing) but isActive=false. The WIRED economy/growth nodes stay active:
+// Production Efficiency (10), Cash Generation (15), Construction Speed (16),
+// Stamina Vitality (25), Lucky Streak (26). Mining Output (14) is trimmed —
+// mining yield is already covered by Collection Mastery (29) + the Mining
+// Operations (21) gate.
+const TRIMMED_RESEARCH = new Set([2, 5, 8, 9, 11, 12, 13, 14, 17, 18, 19, 24]);
+for (const node of RESEARCH_CATALOG) {
+  if (TRIMMED_RESEARCH.has(node.researchType)) node.isActive = false;
+}
 
 /** Lookup a research node by its researchType (0-29). */
 export function getResearchNode(researchType: number): ResearchNode | undefined {

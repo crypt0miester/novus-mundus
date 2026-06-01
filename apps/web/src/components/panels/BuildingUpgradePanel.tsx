@@ -167,6 +167,10 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
 
   if (!config) return null;
 
+  // Building banner art (served for every building under /img/banners). Slug is
+  // the building name lowercased and hyphenated, matching the file names.
+  const bannerSlug = config.name.toLowerCase().replace(/\s+/g, "-");
+
   if (isConstructing) {
     const constructionEndsAt = Number(slot?.constructionEnds ?? 0n);
     const constructionStartedAt = Number(slot?.constructionStarted ?? 0n);
@@ -174,51 +178,62 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       <div className="flex flex-col gap-4">
         <div
           className={cn(
-            "rounded-xl border px-4 py-5 text-center",
-            ready
-              ? "tier-accent-border tier-accent-glow bg-surface-raised/40"
-              : "border-border-default bg-surface-raised/60",
+            "relative flex aspect-[16/9] flex-col items-center justify-center overflow-hidden rounded-xl border bg-surface-raised px-4 text-center",
+            ready ? "tier-accent-border" : "border-border-default",
           )}
+          style={{
+            backgroundImage: `url(/img/banners/${bannerSlug}-banner.webp)`,
+            backgroundSize: "cover",
+            backgroundPosition: "center",
+          }}
         >
-          <div
-            className={cn(
-              "mb-2 text-[10px] font-semibold uppercase tracking-[0.18em]",
-              ready ? "tier-accent-text" : "text-text-muted",
+          {/* Dark overlay so the construction text stays legible over the art. */}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/70 to-black/45" />
+          <div className="relative">
+            <div
+              className={cn(
+                "mb-2 text-[10px] font-semibold uppercase tracking-[0.18em]",
+                ready ? "tier-accent-text" : "text-zinc-300",
+              )}
+            >
+              {ready ? "Construction Complete" : `Constructing ${config.name}`}
+            </div>
+            {ready ? (
+              <p className="text-sm font-semibold text-text-gold">Ready to break ground.</p>
+            ) : (
+              <GoldCountdown
+                endsAt={constructionEndsAt}
+                startedAt={constructionStartedAt}
+                format="full"
+                size="lg"
+                showProgress
+              />
             )}
-          >
-            {ready ? "Construction Complete" : `Constructing ${config.name}`}
           </div>
+        </div>
+
+        {/* Actions live in the mobile morph bar (useMorphActions); hide the
+            inline copies below md so they aren't doubled on phone. */}
+        <div className="hidden md:block">
           {ready ? (
-            <p className="text-sm font-semibold text-text-gold">Ready to break ground.</p>
+            <TxButton
+              onClick={(rp) => handleCompleteBuilding(buildingId, rp)}
+              className="w-full px-6"
+            >
+              Complete {config.name}
+            </TxButton>
           ) : (
-            <GoldCountdown
-              endsAt={constructionEndsAt}
-              startedAt={constructionStartedAt}
-              format="full"
-              size="lg"
-              showProgress
+            <SpeedupPanel
+              visible
+              inline
+              remainingSeconds={remainingSec}
+              tiers={speedupTiers}
+              onSpeedup={(tier, rp, count) => handleBuildingSpeedup(buildingId, tier, rp, count)}
+              gemBalance={gemBalance}
+              gemsPerMinute={1}
             />
           )}
         </div>
-
-        {ready ? (
-          <TxButton
-            onClick={(rp) => handleCompleteBuilding(buildingId, rp)}
-            className="w-full px-6"
-          >
-            Complete {config.name}
-          </TxButton>
-        ) : (
-          <SpeedupPanel
-            visible
-            inline
-            remainingSeconds={remainingSec}
-            tiers={speedupTiers}
-            onSpeedup={(tier, rp, count) => handleBuildingSpeedup(buildingId, tier, rp, count)}
-            gemBalance={gemBalance}
-            gemsPerMinute={1}
-          />
-        )}
       </div>
     );
   }
@@ -335,7 +350,7 @@ export function BuildingUpgradePanel({ buildingId }: { buildingId: number }) {
       ) : (
         <TxButton
           onClick={(rp: (p: TxPhase) => void) => handleBuildOrUpgrade(buildingId, rp)}
-          className="w-full"
+          className="hidden w-full md:block"
           disabled={!hasEnough}
         >
           {!hasEnough ? "Insufficient NOVI" : isUpgrade ? `Upgrade` : `Build`}

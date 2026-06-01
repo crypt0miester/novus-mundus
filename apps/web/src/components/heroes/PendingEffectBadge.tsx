@@ -108,9 +108,9 @@ function borderForKind(kind: number): string {
     case AbilityKind.CritNext:
       return "border-red-900/40";
     case AbilityKind.ShieldNext:
-      return "border-blue-900/40";
+      return "border-border-gold/40";
     case AbilityKind.EncounterSkip:
-      return "border-fuchsia-900/40";
+      return "border-border-gold/40";
     case AbilityKind.BuffNext:
       return "border-border-gold/40";
     default:

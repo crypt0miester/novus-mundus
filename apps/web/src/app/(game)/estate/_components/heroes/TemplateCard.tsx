@@ -21,7 +21,7 @@ export function TemplateCard({ template: t, isSelected, onClick }: TemplateCardP
     <div
       onClick={onClick}
       className={`card cursor-pointer transition-all ${
-        t.minted ? "opacity-50 border-green-900/40" : ""
+        t.minted ? "opacity-50 border-border-gold/40" : ""
       } ${isSelected ? "ring-1 ring-[var(--nm-accent)]" : ""}`}
     >
       <div className="flex items-center justify-between">
@@ -32,7 +32,7 @@ export function TemplateCard({ template: t, isSelected, onClick }: TemplateCardP
           </div>
         </div>
         {t.minted && (
-          <span className="shrink-0 rounded-full bg-green-900/30 px-2 py-0.5 text-[10px] font-medium text-green-400">
+          <span className="shrink-0 rounded-full bg-[var(--nm-accent)]/20 px-2 py-0.5 text-[10px] font-medium text-text-gold">
             Minted
           </span>
         )}

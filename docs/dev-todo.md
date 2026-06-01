@@ -109,12 +109,6 @@ stays unobtainable. Prioritization order:
 
 ------------------
 
-1. travelling dot is broken in the map.
-2. we need to deploy much less cities and heroes for now. \
-3. revisit research templates. what is actually used and what is not. 
-4. unreliable-close affects the other closable types too (rally participants, team invites, treasury requests, etc.). They'd ghost the same way and need the same fetch-reconcile pattern if you see it there. Out of scope for this bug, but flagging it.
-5. drop the halos on heroes. they are ugly.
-6. categorize heroes in sanctuary hero tab
+
 7. better explanations via i button that would be clickable with a popover everywhere. (use animejs to animate the popup)
-8. reanalyse the bottomsheet I feel like something is wrong with it. 
-9. some numbers have decimals in them (members) it could never be with decimals.
+10. castles give same rewards for every tier. very bad design.

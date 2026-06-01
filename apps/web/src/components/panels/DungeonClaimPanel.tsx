@@ -153,7 +153,7 @@ export function DungeonClaimPanel() {
       </div>
 
       {won && (
-        <TxButton onClick={handleClaim} className="hidden w-full lg:block">
+        <TxButton onClick={handleClaim} className="hidden w-full md:block">
           Claim Rewards
         </TxButton>
       )}
@@ -164,10 +164,10 @@ export function DungeonClaimPanel() {
             Resume from the last checkpoint (floor {run.lastCheckpoint ?? 0}) — costs gems — or
             claim what you carried.
           </p>
-          <TxButton onClick={handleResume} className="hidden w-full lg:block">
+          <TxButton onClick={handleResume} className="hidden w-full md:block">
             Resume from Checkpoint
           </TxButton>
-          <TxButton onClick={handleClaim} variant="secondary" className="hidden w-full lg:block">
+          <TxButton onClick={handleClaim} variant="secondary" className="hidden w-full md:block">
             Claim &amp; Exit
           </TxButton>
         </div>

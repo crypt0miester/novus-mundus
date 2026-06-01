@@ -106,6 +106,10 @@ pub fn process(
         // 9. Cost & time come from the on-chain BuildingTemplate config.
         let (base_cost, construction_time, _) =
             BuildingTemplate::resolve(building_template, building_type as u8, 0)?;
+        // Construction Speed research (buff_type 16) shortens the build timer,
+        // capped at 90% so it never reaches zero.
+        let speed_bps = (player_data.research_construction_speed_bps() as i64).min(9000);
+        let construction_time = construction_time.saturating_mul(10000 - speed_bps) / 10000;
 
         // 10. Check player has enough balance
         if player_data.locked_novi < base_cost {

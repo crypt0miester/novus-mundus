@@ -110,13 +110,13 @@ pub fn process(
         9 => {} // Ambush damage - handled in combat
 
         // Economy buffs (stored in ResearchProgress)
-        10 => progress.production_efficiency_bps = total_buff,
+        10 => player.set_research_production_efficiency_bps(total_buff),
         11 => progress.resource_capacity_bps = total_buff,
         12 => progress.market_tax_reduction_bps = total_buff,
         13 => progress.trade_speed_bps = total_buff,
         14 => progress.mining_output_bps = total_buff,
-        15 => progress.cash_generation_bps = total_buff,
-        16 => progress.construction_speed_bps = total_buff,
+        15 => player.set_research_cash_generation_bps(total_buff),
+        16 => player.set_research_construction_speed_bps(total_buff),
         17 => progress.upkeep_reduction_bps = total_buff,
         18 => progress.black_market_level = total_buff,
         19 => progress.tax_collection_bps = total_buff,
@@ -145,8 +145,13 @@ pub fn process(
             progress.fishing_efficiency_bps = total_buff;
         }
         23 => player.set_research_loot_magnetism_bps(total_buff),
-        24 => player.set_research_reputation_bonus_bps(total_buff),
-        25 => player.set_research_stamina_bonus_bps(total_buff),
+        24 => {} // Reputation Mastery — trimmed; slot reused for Production Efficiency
+        25 => {
+            // Stamina Vitality — raises the stamina cap; recompute it now so the
+            // bigger pool applies immediately, not just on the next tier change.
+            player.set_research_stamina_bonus_bps(total_buff);
+            crate::logic::update_max_stamina_for_tier(player);
+        }
         26 => player.set_research_synchrony_bonus_bps(total_buff),
         27 => {
             // Fragment Discovery - unlocks feature

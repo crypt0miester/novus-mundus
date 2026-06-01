@@ -1,6 +1,24 @@
 import { PublicKey } from "@solana/web3.js";
+import type { CityAccount } from "novus-mundus-sdk";
 
 export const MPL_CORE_PROGRAM_ID = new PublicKey("CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d");
+
+/**
+ * Resolve a hero's origin city id to a display label. `0` is the "everywhere"
+ * sentinel ("Anywhere"); a city that exists on chain shows its name; a city the
+ * kingdom hasn't opened yet is "Undiscovered" (we genuinely don't know it).
+ * Keyed off the live cities store so it tracks city enrollment automatically.
+ */
+export function cityOriginLabel(
+  cityId: number,
+  cities: Map<string, { account: CityAccount }>,
+): string {
+  if (!cityId) return "Anywhere";
+  for (const { account } of cities.values()) {
+    if (account.cityId === cityId) return account.name || `City #${cityId}`;
+  }
+  return "Undiscovered";
+}
 
 // Identity + system attributes that are NOT buffs, so the buff list skips them
 // (they render in the footer / a dedicated chip instead). AbCD is the on-chain

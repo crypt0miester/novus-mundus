@@ -117,7 +117,7 @@ export function InventoryPanel() {
           {lootItems.length > 0 && (
             <TxButton
               onClick={handleClaimAll}
-              className="hidden text-[11px] px-2.5 py-1 lg:inline-flex"
+              className="hidden text-[11px] px-2.5 py-1 md:inline-flex"
             >
               Claim All
             </TxButton>

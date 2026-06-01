@@ -10,9 +10,15 @@ export function formatNumber(
   fmt: "compact" | "full" | "novi" | "percentage" = "compact",
 ): string {
   if (fmt === "compact") {
-    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}B`;
-    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
-    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}K`;
+    // One fractional digit at most, but drop a trailing ".0" so round values
+    // read clean ("1K" not "1.0K"); values under 1000 keep no decimal at all.
+    const k = (x: number) => {
+      const s = x.toFixed(1);
+      return s.endsWith(".0") ? s.slice(0, -2) : s;
+    };
+    if (n >= 1_000_000_000) return `${k(n / 1_000_000_000)}B`;
+    if (n >= 1_000_000) return `${k(n / 1_000_000)}M`;
+    if (n >= 1_000) return `${k(n / 1_000)}K`;
     return n.toLocaleString();
   }
   if (fmt === "novi") return `${n.toLocaleString()} NOVI`;

@@ -47,16 +47,17 @@ const SIZE_CLASSES: Record<Size, string> = {
 // fast path (a fresh object literal per render would invalidate the cached
 // Intl.NumberFormat instance).
 //
-// `compact` mirrors the pre-NumberFlow `formatNumber()` output by forcing one
-// decimal — "1.0K" not "1K" for exact values — so the static fallback branch
-// and the animated branch render identical glyphs.
+// `compact` matches `formatNumber()`: small exact values stay integers ("5",
+// never "5.0", since a member/unit count must not read as a decimal) and only a
+// compacted value carries a fractional digit ("1.5K", "1K"). minimumFractionDigits
+// must be 0, not 1, or compact notation pads every value with a ".0".
 //
 // `percentage` is NOT `style: "percent"` because callers pass already-scaled
 // values (`5` for "5.0%", not `0.05`) and `style: "percent"` would multiply by
 // 100.
 const FMT_COMPACT: NumberFlowFormat = {
   notation: "compact",
-  minimumFractionDigits: 1,
+  minimumFractionDigits: 0,
   maximumFractionDigits: 1,
 };
 const FMT_PERCENTAGE: NumberFlowFormat = {

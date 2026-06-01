@@ -58,7 +58,10 @@ export async function GET(
   // Pubkey + asset.seq in the ETag so CDN dedup keyed on ETag can't serve
   // hero A's PNG for hero B's URL, and updates to the AssetV1 (level-up,
   // attribute edit) bust the cache automatically.
-  const etag = `"h:${pubkey.toBase58()}:${hero.asset.seq}:${hero.state.templateId}:${hero.state.tier}:${hero.state.level}:${hero.state.locked ? 1 : 0}:v1"`;
+  // Composition version (v3): bumped when the compositor changes (halo layer +
+  // city-sigil rotation removed 2026-06-01) so cached portraits re-render
+  // instead of 304-ing to the old image.
+  const etag = `"h:${pubkey.toBase58()}:${hero.asset.seq}:${hero.state.templateId}:${hero.state.tier}:${hero.state.level}:${hero.state.locked ? 1 : 0}:v3"`;
   if (req.headers.get("if-none-match") === etag) {
     return new Response(null, { status: 304, headers: { ETag: etag } });
   }

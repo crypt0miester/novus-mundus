@@ -411,10 +411,12 @@ export function RealmMap({
       size: 5 + 5 * Math.sqrt(c.account.playersPresent / maxPlayers),
     }));
 
-    // GAP is the minimum edge-to-edge gap between any two dots. Larger values
-    // give labels room at the cost of geographic accuracy; 28 is the sweet
-    // spot for the current dataset.
-    const GAP = 28;
+    // GAP is the minimum edge-to-edge gap between any two dots. On the world
+    // map cities must sit at their true projected lat/long (aligned with the
+    // coastlines), so this is just enough to stop exact overlaps — not the old
+    // 28px de-cluster spread, which shoved tightly-grouped cities off-spot.
+    // The initial zoom (below) gives labels their breathing room instead.
+    const GAP = 3;
     for (let iter = 0; iter < 60; iter++) {
       let moved = false;
       for (let i = 0; i < placed.length; i++) {
@@ -445,6 +447,34 @@ export function RealmMap({
     }
     return placed;
   }, [cities]);
+
+  // On first load, settle the camera into the kingdom rather than showing the
+  // whole world with the cities a tiny cluster in the center. Fires once, when
+  // the cities arrive; the user can pan/zoom/double-click-reset freely after.
+  const didFocusRef = useRef(false);
+  useEffect(() => {
+    if (didFocusRef.current || nodes.length === 0) return;
+    didFocusRef.current = true;
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    for (const n of nodes) {
+      minX = Math.min(minX, n.x);
+      maxX = Math.max(maxX, n.x);
+      minY = Math.min(minY, n.y);
+      maxY = Math.max(maxY, n.y);
+    }
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    // Floor the span so a lone/tight kingdom doesn't demand an extreme zoom,
+    // then fit it to ~half the viewport and cap the zoom so the world still
+    // reads around the realm ("zoom a bit", not slam to max).
+    const w = Math.max(maxX - minX, 60);
+    const h = Math.max(maxY - minY, 60);
+    const fit = Math.min((VB_W * 0.5) / w, (VB_H * 0.5) / h);
+    zoom.focus(cx, cy, Math.max(2, Math.min(3, fit)));
+  }, [nodes, zoom]);
 
   // Larger dots first so smaller (later-painted) dots stay clickable.
   const renderOrder = useMemo(() => [...nodes].sort((a, b) => b.size - a.size), [nodes]);

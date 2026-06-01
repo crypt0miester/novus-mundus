@@ -59,6 +59,7 @@ import {
   deriveCourtPda,
   isNullPubkey,
   WarTableScope,
+  deciToNovi,
 } from "novus-mundus-sdk";
 import { ThreadRenderer } from "@/components/war-table/ThreadRenderer";
 import {
@@ -792,7 +793,7 @@ export function CastleTab() {
        * `castle=<pubkey>` which map-tab.tsx already consumes to preselect
        * the entity + pan/zoom the disc onto its cell. */}
       <div className="flex items-center gap-2">
-        <div className="flex flex-1 gap-1 rounded-lg bg-surface p-1">
+        <div className="flex flex-1 gap-1 rounded-lg bg-surface p-1 ">
           {cityCastles.length === 0 ? (
             <span className="px-3 py-1.5 text-xs text-text-muted">No castle in this city</span>
           ) : (
@@ -904,17 +905,17 @@ export function CastleTab() {
                   {[
                     {
                       role: "King",
-                      novi: castle.kingNoviPerDay,
+                      novi: deciToNovi(castle.kingNoviPerDay),
                       cash: castle.kingCashPerDay,
                     },
                     {
                       role: "Court",
-                      novi: castle.courtNoviPerDay,
+                      novi: deciToNovi(castle.courtNoviPerDay),
                       cash: castle.courtCashPerDay,
                     },
                     {
                       role: "Member",
-                      novi: castle.memberNoviPerDay,
+                      novi: deciToNovi(castle.memberNoviPerDay),
                       cash: castle.memberCashPerDay,
                     },
                   ].map((r) => (

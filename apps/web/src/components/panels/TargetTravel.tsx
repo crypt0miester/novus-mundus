@@ -318,11 +318,11 @@ export function TargetTravel({
             {isIntracity &&
               playerArrived &&
               (canArriveAttack ? (
-                <TxButton onClick={handleArriveAttack} className="w-full text-xs">
+                <TxButton onClick={handleArriveAttack} className="hidden w-full text-xs md:block">
                   Attack
                 </TxButton>
               ) : (
-                <TxButton onClick={handleIntracityComplete} className="w-full text-xs">
+                <TxButton onClick={handleIntracityComplete} className="hidden w-full text-xs md:block">
                   Complete Travel
                 </TxButton>
               ))}

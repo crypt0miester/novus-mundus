@@ -871,7 +871,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
             </p>
           )}
 
-          <TxButton onClick={handleMarch} disabled={!canMarch} className="hidden lg:block">
+          <TxButton onClick={handleMarch} disabled={!canMarch} className="hidden md:block">
             {!enoughForMarch
               ? "Missing participants"
               : !gatherDone
@@ -880,7 +880,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
                   ? "Reaching rally point…"
                   : "March Rally"}
           </TxButton>
-          <TxButton onClick={handleCancel} variant="danger" className="hidden lg:block">
+          <TxButton onClick={handleCancel} variant="danger" className="hidden md:block">
             Cancel Rally
           </TxButton>
         </div>
@@ -946,7 +946,7 @@ export function RallyDetailPanel({ rallyPubkey, onClose }: RallyDetailPanelProps
             <TxButton
               onClick={handleResolve}
               disabled={!closeable && myReturnInFlight}
-              className="hidden lg:block"
+              className="hidden md:block"
             >
               {closeable
                 ? "Close Rally"

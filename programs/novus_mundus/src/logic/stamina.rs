@@ -154,7 +154,12 @@ pub fn add_stamina(player: &mut PlayerAccount, amount: u64) -> u64 {
 /// ```
 pub fn update_max_stamina_for_tier(player: &mut PlayerAccount) {
     let tier_index = (player.subscription_tier as usize).min(MAX_STAMINA_BY_TIER.len() - 1);
-    player.max_encounter_stamina = MAX_STAMINA_BY_TIER[tier_index];
+    let base = MAX_STAMINA_BY_TIER[tier_index];
+
+    // Stamina Vitality research (buff_type 25) raises the cap multiplicatively:
+    //   max = base × (10000 + research_stamina_bonus_bps) / 10000
+    let bonus_bps = player.research_stamina_bonus_bps() as u64;
+    player.max_encounter_stamina = base.saturating_mul(10000 + bonus_bps) / 10000;
 
     // If current stamina exceeds new max (tier downgrade), cap it
     player.encounter_stamina = player.encounter_stamina.min(player.max_encounter_stamina);

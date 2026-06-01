@@ -8,7 +8,8 @@ import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { AbilityCard } from "@/components/heroes/AbilityCard";
 import { getBuffStatByAttrKey, hasAbility, formatDurationCompact } from "novus-mundus-sdk";
-import { fragmentCost, IGNORED_ATTRS } from "./helpers";
+import { fragmentCost, IGNORED_ATTRS, cityOriginLabel } from "./helpers";
+import { useAccountStore } from "@/lib/store/accounts";
 import { HeroImage } from "./HeroImage";
 import type { HeroData, Selection, TemplateInfo } from "./types";
 
@@ -62,6 +63,8 @@ export function HeroDetailPanel({
   onBurn,
 }: HeroDetailPanelProps) {
   const attrs = hero.asset?.attributes ?? {};
+  const cities = useAccountStore((s) => s.cities);
+  const originLabel = attrs.Origin != null ? cityOriginLabel(Number(attrs.Origin), cities) : null;
   const level = attrs.Level ? parseInt(attrs.Level, 10) : null;
   const xp = attrs.XP ? parseInt(attrs.XP, 10) : null;
   const heroTemplateId = parseInt(attrs.Template || "0", 10);
@@ -166,9 +169,12 @@ export function HeroDetailPanel({
             Serial: <span className="font-mono">{attrs.Serial}</span>
           </div>
         )}
-        {attrs.Origin && (
+        {originLabel && (
           <div>
-            Origin: <span className="font-mono">{attrs.Origin}</span>
+            Origin:{" "}
+            <span className={originLabel === "Undiscovered" ? "italic text-text-muted" : ""}>
+              {originLabel}
+            </span>
           </div>
         )}
       </div>

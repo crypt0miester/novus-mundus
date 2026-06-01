@@ -98,6 +98,10 @@ pub fn process(
         // 8. Cost, time & level cap come from the on-chain BuildingTemplate.
         let (upgrade_cost, construction_time, max_level) =
             BuildingTemplate::resolve(building_template, building_type as u8, building.level)?;
+        // Construction Speed research (buff_type 16) shortens the upgrade timer,
+        // capped at 90% so it never reaches zero.
+        let speed_bps = (player_data.research_construction_speed_bps() as i64).min(9000);
+        let construction_time = construction_time.saturating_mul(10000 - speed_bps) / 10000;
 
         // 9. Check max level not reached
         if building.level >= max_level {

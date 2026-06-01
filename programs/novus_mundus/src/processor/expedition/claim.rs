@@ -194,6 +194,10 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
+    // Lucky Streak research (buff_type 26, stored as the synchrony bonus) widens
+    // the expedition rare-find roll. Captured here while the player is loaded.
+    let lucky_bps = player_data.research_synchrony_bonus_bps();
+
     // 8. Get current time and verify expedition complete
     let now = Clock::get()?.unix_timestamp;
 
@@ -366,8 +370,10 @@ pub fn process(
             .unwrap_or(100)
     };
 
-    // Add observatory bonus to rare chance
-    let total_rare_chance = rare_chance_bps.saturating_add(observatory_bonus);
+    // Add observatory + Lucky Streak research to the rare-find chance.
+    let total_rare_chance = rare_chance_bps
+        .saturating_add(observatory_bonus)
+        .saturating_add(lucky_bps);
 
     // Deterministic rare check: (start_time / 3600) % 10000 < total_rare_chance
     let rare_seed = ((start_time / 3600) % 10000) as u16;

@@ -28,6 +28,7 @@ import {
   getResearchLevel,
   findBuilding,
   getResearchName,
+  getResearchNode,
   getResearchCategoryName,
 } from "novus-mundus-sdk";
 import type { ResearchTemplateAccount } from "novus-mundus-sdk";
@@ -54,7 +55,10 @@ function useResearchTemplates() {
         const info = infos[i];
         if (!info) continue;
         const parsed = parseResearchTemplate(info);
-        if (parsed?.isActive) {
+        // On-chain isActive AND catalog isActive: the catalog trims nodes with
+        // no on-chain effect, so already-seeded (still on-chain active) dead
+        // nodes stay hidden in this kingdom too.
+        if (parsed?.isActive && getResearchNode(i)?.isActive !== false) {
           templates.push({ ...parsed, pda: pdas[i].toBase58() });
         }
       }

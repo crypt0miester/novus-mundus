@@ -169,7 +169,9 @@ pub struct ResearchSection {
     pub encounter_success_bps: u16,
     // Growth buffs (12)
     pub synchrony_bonus_bps: u16,
-    pub reputation_bonus_bps: u16,
+    // Reused slot: was reputation_bonus_bps (research 24, trimmed) — now holds
+    // Production Efficiency (research 10) so collect_resources can read it.
+    pub production_efficiency_bps: u16,
     pub stamina_bonus_bps: u16,
     pub collection_bonus_bps: u16,
     pub loot_magnetism_bps: u16,
@@ -183,7 +185,10 @@ pub struct ResearchSection {
     pub _reserved_flags: [u8; 3],
     // State (16)
     pub buff_version: u32,
-    pub _pad_state: [u8; 4],
+    // Carved from former _pad_state so the section size is unchanged (existing
+    // accounts read 0): Construction Speed (16) + Cash Generation (15) research.
+    pub construction_speed_bps: u16,
+    pub cash_generation_bps: u16,
     pub last_daily_claim: i64,
 }
 
@@ -198,7 +203,7 @@ impl ResearchSection {
             loot_bonus_bps: 0,
             encounter_success_bps: 0,
             synchrony_bonus_bps: 0,
-            reputation_bonus_bps: 0,
+            production_efficiency_bps: 0,
             stamina_bonus_bps: 0,
             collection_bonus_bps: 0,
             loot_magnetism_bps: 0,
@@ -210,7 +215,8 @@ impl ResearchSection {
             has_gem_drops: false,
             _reserved_flags: [0; 3],
             buff_version: 0,
-            _pad_state: [0; 4],
+            construction_speed_bps: 0,
+            cash_generation_bps: 0,
             last_daily_claim: 0,
         }
     }
@@ -1031,13 +1037,13 @@ impl PlayerCore {
         }
     }
     #[inline]
-    pub fn research_reputation_bonus_bps(&self) -> u16 {
-        self.research().map_or(0, |r| r.reputation_bonus_bps)
+    pub fn research_production_efficiency_bps(&self) -> u16 {
+        self.research().map_or(0, |r| r.production_efficiency_bps)
     }
     #[inline]
-    pub fn set_research_reputation_bonus_bps(&mut self, v: u16) {
+    pub fn set_research_production_efficiency_bps(&mut self, v: u16) {
         if let Some(r) = self.research_mut() {
-            r.reputation_bonus_bps = v;
+            r.production_efficiency_bps = v;
         }
     }
     #[inline]
@@ -1048,6 +1054,26 @@ impl PlayerCore {
     pub fn set_research_stamina_bonus_bps(&mut self, v: u16) {
         if let Some(r) = self.research_mut() {
             r.stamina_bonus_bps = v;
+        }
+    }
+    #[inline]
+    pub fn research_construction_speed_bps(&self) -> u16 {
+        self.research().map_or(0, |r| r.construction_speed_bps)
+    }
+    #[inline]
+    pub fn set_research_construction_speed_bps(&mut self, v: u16) {
+        if let Some(r) = self.research_mut() {
+            r.construction_speed_bps = v;
+        }
+    }
+    #[inline]
+    pub fn research_cash_generation_bps(&self) -> u16 {
+        self.research().map_or(0, |r| r.cash_generation_bps)
+    }
+    #[inline]
+    pub fn set_research_cash_generation_bps(&mut self, v: u16) {
+        if let Some(r) = self.research_mut() {
+            r.cash_generation_bps = v;
         }
     }
     #[inline]

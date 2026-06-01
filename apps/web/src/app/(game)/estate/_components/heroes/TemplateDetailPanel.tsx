@@ -12,7 +12,8 @@ import {
   HERO_TYPE_NAMES,
   HERO_CATEGORY_NAMES,
 } from "novus-mundus-sdk";
-import { burnReward, tierFromMintCost } from "./helpers";
+import { burnReward, tierFromMintCost, cityOriginLabel } from "./helpers";
+import { useAccountStore } from "@/lib/store/accounts";
 import type { TemplateInfo } from "./types";
 
 interface TemplateDetailPanelProps {
@@ -28,6 +29,8 @@ export function TemplateDetailPanel({
   traveling,
   onMint,
 }: TemplateDetailPanelProps) {
+  const cities = useAccountStore((s) => s.cities);
+  const origin = cityOriginLabel(t.account.meditationCityId, cities);
   const buffs = getActiveBuffs(t.account);
   const meetsLevel = playerLevel >= t.account.requiredPlayerLevel;
   const mintable = canMintHero(t.account) && !t.minted && meetsLevel;
@@ -62,7 +65,7 @@ export function TemplateDetailPanel({
           </div>
         </div>
         {t.minted && (
-          <span className="shrink-0 rounded-full bg-green-900/30 px-2 py-0.5 text-[10px] font-medium text-green-400">
+          <span className="shrink-0 rounded-full bg-[var(--nm-accent)]/20 px-2 py-0.5 text-[10px] font-medium text-text-gold">
             Minted
           </span>
         )}
@@ -83,6 +86,12 @@ export function TemplateDetailPanel({
           <span className="text-text-muted">Category</span>
           <span className="text-text-secondary">
             {HERO_CATEGORY_NAMES[t.account.category] ?? "Unknown"}
+          </span>
+        </div>
+        <div className="flex items-center justify-between text-xs">
+          <span className="text-text-muted">Origin</span>
+          <span className={origin === "Undiscovered" ? "italic text-text-muted" : "text-text-secondary"}>
+            {origin}
           </span>
         </div>
         <div className="flex items-center justify-between text-xs">

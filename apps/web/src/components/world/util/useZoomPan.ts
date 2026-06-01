@@ -137,6 +137,17 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
     setState(IDENTITY);
   }, [ensureRig]);
 
+  // Center a viewBox point in the viewport at a given scale. Used for the
+  // initial "settle into the kingdom" framing on load. Clamped like any pan so
+  // the view never leaves the content.
+  const focus = useCallback(
+    (cx: number, cy: number, scale: number) => {
+      const s = Math.max(minScale, Math.min(maxScale, scale));
+      setState(clamp({ scale: s, tx: vbWidth / 2 - cx * s, ty: vbHeight / 2 - cy * s }));
+    },
+    [clamp, minScale, maxScale, vbWidth, vbHeight],
+  );
+
   // Zoom around a point in viewBox coords, keeping that point under the cursor.
   // `smooth` eases the dolly via the rig (wheel/double-click); pinch passes
   // raw so the gesture tracks the fingers 1:1.
@@ -365,5 +376,6 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
     transform: `translate(${state.tx} ${state.ty}) scale(${state.scale})`,
     scale: state.scale,
     reset,
+    focus,
   };
 }

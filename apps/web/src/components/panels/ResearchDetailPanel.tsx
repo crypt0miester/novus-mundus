@@ -505,7 +505,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       {isComplete && (
         <div className="rounded-lg border border-green-800/50 bg-green-900/20 p-3 text-center">
           <div className="mb-2 text-xs text-green-400">Research Complete!</div>
-          <TxButton onClick={handleComplete} className="hidden w-full lg:block">
+          <TxButton onClick={handleComplete} className="hidden w-full md:block">
             Claim Research
           </TxButton>
         </div>
@@ -537,7 +537,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       </div>
 
       {!isAnyActive && canMeetPrereqs && meetsAcademy && currentLevel < template.maxLevel && (
-        <div className="hidden flex-col gap-2 lg:flex">
+        <div className="hidden flex-col gap-2 md:flex">
           <TxButton onClick={handleStart} className="w-full" disabled={!hasEnoughNovi}>
             {hasEnoughNovi ? `Start Lv ${currentLevel + 1}` : "Insufficient NOVI"}
           </TxButton>
@@ -550,7 +550,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       {!isAnyActive && currentLevel >= template.maxLevel && (
         <TxButton
           onClick={handleAscend}
-          className="hidden w-full border-border-gold-bright bg-accent/30 text-text-gold hover:bg-accent/50 lg:block"
+          className="hidden w-full border-border-gold-bright bg-accent/30 text-text-gold hover:bg-accent/50 md:block"
         >
           Ascend {buffName}
         </TxButton>

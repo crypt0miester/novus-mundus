@@ -469,6 +469,12 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
+            // Cash Generation research (buff_type 15)
+            if player_data.research_cash_generation_bps() > 0 {
+                let m = 10000u64 + player_data.research_cash_generation_bps() as u64;
+                buffed_output = buffed_output.saturating_mul(m) / 10000;
+            }
+
             player_data.cash_on_hand = player_data
                 .cash_on_hand
                 .checked_add(buffed_output)
@@ -532,6 +538,12 @@ pub fn process(
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
+            // Production Efficiency research (buff_type 10) — produce output.
+            if player_data.research_production_efficiency_bps() > 0 {
+                let m = 10000u64 + player_data.research_production_efficiency_bps() as u64;
+                buffed_output = buffed_output.saturating_mul(m) / 10000;
+            }
+
             // Apply Dock building bonus
             let dock_bonus = dock_fishing_bonus_bps(estate);
             if dock_bonus > 0 {
@@ -572,6 +584,12 @@ pub fn process(
             if player_data.hero_produce_generation_bps() > 0 {
                 let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
+            }
+
+            // Production Efficiency research (buff_type 10) — produce output.
+            if player_data.research_production_efficiency_bps() > 0 {
+                let m = 10000u64 + player_data.research_production_efficiency_bps() as u64;
+                buffed_output = buffed_output.saturating_mul(m) / 10000;
             }
 
             // Apply Farm building bonus

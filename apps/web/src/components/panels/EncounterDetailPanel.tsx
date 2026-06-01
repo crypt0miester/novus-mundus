@@ -320,7 +320,7 @@ export function EncounterDetailPanel({
       )}
 
       {!playerTraveling && (
-        <div className="hidden space-y-2 lg:block">
+        <div className="hidden space-y-2 md:block">
           <TxButton
             onClick={handleAttack}
             className="w-full py-3 text-base font-bold"

@@ -1,18 +1,16 @@
 // Server-side hero portrait compositor. No ML at request time; pulls baked
-// silhouette + halo + frame + city sigil + ascension mark PNGs off disk and
-// layers them with @napi-rs/canvas. See docs/design/HERO_PORTRAITS.md §4 for
-// the layer stack.
+// silhouette + city sigil + ascension mark PNGs off disk and layers them with
+// @napi-rs/canvas. See docs/design/HERO_PORTRAITS.md §4 for the layer stack.
 //
-// Layers shipped: 1 background, 3 halo (Bonsai), 4 silhouette (Bonsai),
-// 5 city sigil (Bonsai, cairn fallback), 7 buff icons (existing webp),
-// 8 frame (Bonsai), 9 ascension marks (Bonsai, programmatic outline placeholder
-// for unlit), 10 state glow (programmatic). Layer 6 category banner deferred.
+// Layers shipped: 1 background, 4 silhouette (Bonsai), 5 city sigil (Bonsai,
+// cairn fallback), 7 buff icons (existing webp), 9 ascension marks (Bonsai),
+// 10 state glow (programmatic). Halo (3) and frame (8) layers were removed;
+// layer 6 category banner deferred.
 
 import { createCanvas, type Image, type SKRSContext2D } from "@napi-rs/canvas";
 import path from "node:path";
 import { BG_SOLID, STATE_GLOW, TIER_ACCENT, type HeroTier } from "./palette";
 import type { CompositionParams } from "./fingerprint";
-import { drawHalo } from "./halo";
 import { BUFF_SLUG } from "./template-map";
 import { loadImageCached } from "./image-cache";
 
@@ -98,23 +96,18 @@ export async function composeHeroImage(input: ComposeInput): Promise<Buffer> {
   const ctx = canvas.getContext("2d");
 
   drawBackground(ctx);
-  await drawHalo(input.params.haloKind, ctx, {
-    centerX: CANVAS_SIZE / 2,
-    centerY: CANVAS_SIZE / 2,
-    innerRadius: 220,
-    outerRadius: 460,
-    strokeColor: TIER_ACCENT[input.tier].primary,
-    seed: input.params.haloSeed,
-  });
+  // Halo layer removed (user 2026-06-01): the ring/aura behind the figure read
+  // as ugly. Tier now reads through the silhouette underglow + sigil + marks.
+  void input.params.haloKind;
+  void input.params.haloSeed;
   await drawSilhouette(ctx, input.templateId, input.tier, input.params);
-  await drawCitySigil(ctx, input.meditationCity, input.tier, input.params.citySigilRotateDeg);
+  await drawCitySigil(ctx, input.meditationCity, input.tier);
   await drawBuffIcons(ctx, input.buffs, input.params.buffNudges);
   await drawAscensionMarks(ctx, input.level);
   drawStateGlow(ctx, input.locked, input.threatened ?? false);
 
-  // Frame layer removed (user 2026-05-28): tier reads through halo tint +
-  // silhouette underglow + sigil + buff icons. Frame ornaments competed with
-  // the halo for the same "ring around the figure" job.
+  // Frame layer removed (user 2026-05-28) and halo removed (2026-06-01): tier
+  // now reads through the silhouette underglow + sigil + buff icons alone.
   void input.params.cornerVariant;
 
   return canvas.toBuffer("image/png");
@@ -166,7 +159,6 @@ async function drawCitySigil(
   ctx: SKRSContext2D,
   cityId: number,
   tier: HeroTier,
-  rotateDeg: number,
 ): Promise<void> {
   // City 0 (the "everywhere" sentinel) reuses the existing cairn icon.
   const primaryPath =
@@ -189,13 +181,8 @@ async function drawCitySigil(
   const tinted = tintToColor(img, TIER_ACCENT[tier].bright, SIGIL_SIZE);
   const x = SIGIL_LEFT_INSET;
   const y = CANVAS_SIZE - SIGIL_SIZE - SIGIL_BOTTOM_INSET;
-
-  ctx.save();
-  ctx.translate(x + SIGIL_SIZE / 2, y + SIGIL_SIZE / 2);
-  ctx.rotate((rotateDeg * Math.PI) / 180);
-  ctx.translate(-SIGIL_SIZE / 2, -SIGIL_SIZE / 2);
-  ctx.drawImage(tinted, 0, 0);
-  ctx.restore();
+  // Sigil draws upright — the per-hero rotation read as arbitrary/ugly.
+  ctx.drawImage(tinted, x, y);
 }
 
 async function drawBuffIcons(

@@ -29,6 +29,7 @@ import {
   isTraveling,
   parseAssetV1,
   canMintHero,
+  HERO_CATEGORY_NAMES,
 } from "novus-mundus-sdk";
 import { useAccountStore } from "@/lib/store/accounts";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
@@ -125,6 +126,32 @@ export function HeroesTab() {
         minted: mintReceipts.get(e.account.templateId) ?? false,
       }));
   }, [heroTemplatesMap, mintReceipts]);
+
+  // Group templates by hero category (Historical / Mythological / Crypto Icons
+  // / Gaming / Original) so the roster reads as themed collections rather than
+  // one long id-sorted list. Ordered by category number; templates inside each
+  // stay id-sorted from the memo above.
+  const templatesByCategory = useMemo(() => {
+    const byCat = new Map<number, TemplateInfo[]>();
+    for (const t of templates) {
+      const list = byCat.get(t.account.category) ?? [];
+      list.push(t);
+      byCat.set(t.account.category, list);
+    }
+    return [...byCat.entries()]
+      .sort((a, b) => a[0] - b[0])
+      .map(([category, items]) => ({
+        category,
+        name: HERO_CATEGORY_NAMES[category] ?? `Category ${category}`,
+        items,
+      }));
+  }, [templates]);
+
+  // Active category tab; null falls back to the first available category so the
+  // roster shows one collection at a time instead of one long list.
+  const [activeCategory, setActiveCategory] = useState<number | null>(null);
+  const currentCategory =
+    templatesByCategory.find((g) => g.category === activeCategory) ?? templatesByCategory[0] ?? null;
 
   // Fetch mint receipts (0-byte marker PDAs, not WS-tracked)
   useEffect(() => {
@@ -622,16 +649,41 @@ export function HeroesTab() {
               No hero templates found
             </div>
           ) : (
-            <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
-              {templates.map((t) => (
-                <TemplateCard
-                  key={t.account.templateId}
-                  template={t}
-                  isSelected={isTemplateSelected(t.account.templateId)}
-                  onClick={() => setSelected({ type: "template", info: t })}
-                />
-              ))}
-            </div>
+            <>
+              {/* Category tabs — one collection at a time (Historical /
+                  Mythological / Crypto Icons / Gaming / Original). */}
+              <div className="mb-2 flex flex-wrap gap-1 rounded-lg bg-surface-overlay/40 p-1">
+                {templatesByCategory.map((group) => {
+                  const active = group.category === currentCategory?.category;
+                  return (
+                    <button
+                      key={group.category}
+                      onClick={() => setActiveCategory(group.category)}
+                      className={`flex-1 whitespace-nowrap rounded-md px-2 py-1.5 text-[11px] font-semibold transition-colors ${
+                        active
+                          ? "bg-surface-raised text-text-primary"
+                          : "text-text-muted hover:text-text-secondary"
+                      }`}
+                    >
+                      {group.name}
+                      <span className="ml-1 font-normal text-text-muted">{group.items.length}</span>
+                    </button>
+                  );
+                })}
+              </div>
+              {currentCategory && (
+                <div className="grid gap-2 grid-cols-2 sm:grid-cols-3">
+                  {currentCategory.items.map((t) => (
+                    <TemplateCard
+                      key={t.account.templateId}
+                      template={t}
+                      isSelected={isTemplateSelected(t.account.templateId)}
+                      onClick={() => setSelected({ type: "template", info: t })}
+                    />
+                  ))}
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

@@ -23,7 +23,6 @@ export interface CompositionParams {
   flipX: boolean;
   rotateDeg: number;
   cornerVariant: 0 | 1 | 2 | 3;
-  citySigilRotateDeg: number;
   categoryBannerVariant: 0 | 1 | 2 | 3;
   buffNudges: [number, number, number, number];
   /** 8 dots in [0,1] coords; compose.ts maps them to the rim band. */
@@ -50,7 +49,6 @@ export function fingerprintFromPubkey(pubkey: Uint8Array, state: HeroState): Com
   const flipX = b[8] < 51; // ~20%
   const rotateDeg = byteToRange(b[9], -3, 3);
   const cornerVariant = (b[10] % 4) as 0 | 1 | 2 | 3;
-  const citySigilRotateDeg = byteToRange(b[11], -15, 15);
   const categoryBannerVariant = (b[12] % 4) as 0 | 1 | 2 | 3;
   const buffNudges: [number, number, number, number] = [
     byteToRange(b[13], -6, 6),
@@ -76,7 +74,6 @@ export function fingerprintFromPubkey(pubkey: Uint8Array, state: HeroState): Com
     flipX,
     rotateDeg,
     cornerVariant,
-    citySigilRotateDeg,
     categoryBannerVariant,
     buffNudges,
     constellation,

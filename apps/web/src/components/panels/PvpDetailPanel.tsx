@@ -323,7 +323,7 @@ export function PvpDetailPanel({
       </button>
 
       {!playerTraveling && (
-        <div className="hidden space-y-2 lg:block">
+        <div className="hidden space-y-2 md:block">
           <TxButton
             onClick={(rp) => handleAttack(false, rp)}
             variant="danger"
