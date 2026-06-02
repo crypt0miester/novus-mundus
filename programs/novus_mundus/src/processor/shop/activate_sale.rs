@@ -62,14 +62,14 @@ pub fn process(
     // 5. Process Based on Sale Type
 
     match sale_type {
-        SALE_TYPE_SEASONAL => activate_seasonal_sale(
+        SALE_TYPE_SEASONAL => activate_or_end_seasonal_sale(
             game_engine_account.address(),
             sale_account,
             instruction_data,
             now,
             program_id,
         ),
-        SALE_TYPE_DAO_PROMO => activate_dao_promotion(
+        SALE_TYPE_DAO_PROMO => activate_or_end_dao_promotion(
             game_engine_account.address(),
             sale_account,
             instruction_data,
@@ -80,7 +80,7 @@ pub fn process(
     }
 }
 
-fn activate_seasonal_sale(
+fn activate_or_end_seasonal_sale(
     game_engine_key: &Address,
     sale_account: &AccountView,
     instruction_data: &[u8],
@@ -96,7 +96,6 @@ fn activate_seasonal_sale(
         return Err(GameError::InvalidPDA.into());
     }
 
-    // SeasonalSaleAccount doesn't have load_checked - verify program ownership manually
     require_owner(sale_account, program_id)?;
     // Load and update status
     let mut sale_data_ref = sale_account.try_borrow_mut()?;
@@ -123,7 +122,7 @@ fn activate_seasonal_sale(
     Ok(())
 }
 
-fn activate_dao_promotion(
+fn activate_or_end_dao_promotion(
     game_engine_key: &Address,
     sale_account: &AccountView,
     instruction_data: &[u8],
@@ -139,7 +138,6 @@ fn activate_dao_promotion(
         return Err(GameError::InvalidPDA.into());
     }
 
-    // DAOPromotionAccount doesn't have load_checked - verify program ownership manually
     require_owner(sale_account, program_id)?;
     // Load and update status
     let mut promo_data_ref = sale_account.try_borrow_mut()?;

@@ -301,6 +301,11 @@ describe('Dungeon Leaderboard — Deep Coverage', () => {
       expect(lb.weekNumber).toBe(week);
       // Fresh leaderboard: deserialized entries length matches count, both 0.
       expect(lb.entries.length).toBe(0);
+      // claimedMask + prizePool are read off the #[repr(C)] layout — assert the
+      // parser offsets land on the right bytes (prizePool follows the u16 mask
+      // through 6 bytes of u64 alignment padding).
+      expect(lb.prizePool).toBe(BigInt(LB_PRIZE_POOL));
+      expect(lb.claimedMask).toBe(0);
     });
 
     // NOTE: create_leaderboard.rs does NOT enforce DAO authority — anyone

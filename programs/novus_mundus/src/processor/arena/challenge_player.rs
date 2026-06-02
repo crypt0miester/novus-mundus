@@ -173,11 +173,12 @@ pub fn process(
     }
 
     // Match assignment must be fresh (5 minute window)
-    if now - match_timestamp > ARENA_MATCH_EXPIRY_SECONDS {
-        return Err(GameError::ArenaMatchExpired.into());
-    }
+    // Reject future-dated timestamps first so the freshness subtraction can't underflow.
     if match_timestamp > now {
         return Err(GameError::ArenaMatchTimestampInvalid.into());
+    }
+    if now.saturating_sub(match_timestamp) > ARENA_MATCH_EXPIRY_SECONDS {
+        return Err(GameError::ArenaMatchExpired.into());
     }
 
     // Cannot challenge self
@@ -345,25 +346,25 @@ fn calculate_arena_power(
 
     // Research buffs (from PlayerCore)
     let research_bonus_bps =
-        player.research_attack_bps() as u64 + player.research_defense_bps() as u64;
+        (player.research_attack_bps() as u64).saturating_add(player.research_defense_bps() as u64);
 
     // Hero buffs (cached on PlayerCore from active heroes)
-    let hero_bonus_bps = player.hero_attack_bps() as u64
-        + player.hero_defense_bps() as u64
-        + player.hero_weapon_efficiency_bps() as u64
-        + player.hero_armor_efficiency_bps() as u64;
+    let hero_bonus_bps = (player.hero_attack_bps() as u64)
+        .saturating_add(player.hero_defense_bps() as u64)
+        .saturating_add(player.hero_weapon_efficiency_bps() as u64)
+        .saturating_add(player.hero_armor_efficiency_bps() as u64);
 
     // Location synergy (heroes at home city get bonus)
-    let location_bonus_bps = player.slot_location_bonus_at(0 as usize) as u64
-        + player.slot_location_bonus_at(1 as usize) as u64
-        + player.slot_location_bonus_at(2 as usize) as u64;
+    let location_bonus_bps = (player.slot_location_bonus_at(0 as usize) as u64)
+        .saturating_add(player.slot_location_bonus_at(1 as usize) as u64)
+        .saturating_add(player.slot_location_bonus_at(2 as usize) as u64);
 
     // Blessed hero bonus (from Sanctuary meditation)
     let blessed_bonus_bps = player.blessed_hero_bonus_bps() as u64;
 
     // Equipped item bonuses (from Forge crafted equipment)
-    let equipped_bonus_bps =
-        player.equipped_weapon_bonus_bps() as u64 + player.equipped_armor_bonus_bps() as u64;
+    let equipped_bonus_bps = (player.equipped_weapon_bonus_bps() as u64)
+        .saturating_add(player.equipped_armor_bonus_bps() as u64);
 
     // Arena-specific hero bonus (if loadout specifies a hero)
     // Heroes are Metaplex Core NFTs - parse buff data from NFT attributes
@@ -378,7 +379,7 @@ fn calculate_arena_power(
                         || buff.stat == BuffStat::DefensePower as u8
                     {
                         // Buff values are stored directly (not per-level) in NFT
-                        bonus += buff.value as u64;
+                        bonus = bonus.saturating_add(buff.value as u64);
                     }
                 }
                 bonus
@@ -397,11 +398,11 @@ fn calculate_arena_power(
         if let Ok(estate_data) = estate_account.try_borrow() {
             if estate_data.len() >= EstateAccount::LEN {
                 let estate = unsafe { &*(estate_data.as_ptr() as *const EstateAccount) };
-                estate.attack_bps as u64
-                    + estate.defense_bps as u64
-                    + estate.pvp_damage_bps as u64
-                    + estate.unit_effectiveness_bps as u64
-                    + estate.arena_damage_bps as u64
+                (estate.attack_bps as u64)
+                    .saturating_add(estate.defense_bps as u64)
+                    .saturating_add(estate.pvp_damage_bps as u64)
+                    .saturating_add(estate.unit_effectiveness_bps as u64)
+                    .saturating_add(estate.arena_damage_bps as u64)
             } else {
                 0
             }
@@ -457,13 +458,18 @@ fn calculate_battle_points(
     let winner_points = if winner_power < loser_power {
         // Calculate percentage disadvantage (capped at 50%)
         let disadvantage_bps = if loser_power > 0 {
-            ((loser_power - winner_power) * 10000 / loser_power).min(5000)
+            // u128 intermediate: loadout-derived powers are attacker-controlled
+            // and can exceed u64::MAX/10000, wrapping a plain `* 10000`.
+            ((loser_power.saturating_sub(winner_power) as u128 * 10000) / loser_power as u128)
+                .min(5000) as u64
         } else {
             0
         };
         // Apply underdog bonus (5% per 10% disadvantage)
-        let underdog_bonus =
-            (winner_base * disadvantage_bps * ARENA_UNDERDOG_BONUS_BPS) / (10000 * 1000);
+        let underdog_bonus = winner_base
+            .saturating_mul(disadvantage_bps)
+            .saturating_mul(ARENA_UNDERDOG_BONUS_BPS)
+            / (10000 * 1000);
         winner_base.saturating_add(underdog_bonus)
     } else {
         winner_base
@@ -540,8 +546,12 @@ fn update_elo(
     let defender_delta =
         (ARENA_ELO_K_FACTOR as i64 * (defender_actual - defender_expected as i64)) / 100;
 
-    let new_challenger = (challenger_elo as i64 + challenger_delta).max(100) as u32;
-    let new_defender = (defender_elo as i64 + defender_delta).max(100) as u32;
+    let new_challenger = (challenger_elo as i64)
+        .saturating_add(challenger_delta)
+        .clamp(100, u32::MAX as i64) as u32;
+    let new_defender = (defender_elo as i64)
+        .saturating_add(defender_delta)
+        .clamp(100, u32::MAX as i64) as u32;
 
     (new_challenger, new_defender)
 }

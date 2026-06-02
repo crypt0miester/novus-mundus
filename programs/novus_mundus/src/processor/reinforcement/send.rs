@@ -187,7 +187,7 @@ pub fn process(
     let current_reinforcement_total = destination.total_reinforcement_units();
     let base_capacity = MAX_REINFORCEMENT_RECEIVE;
     let boosted_capacity = if destination.hero_unit_capacity_bps() > 0 {
-        let multiplier = 10000u64 + destination.hero_unit_capacity_bps() as u64;
+        let multiplier = 10000u64.saturating_add(destination.hero_unit_capacity_bps() as u64);
         base_capacity.saturating_mul(multiplier) / 10000
     } else {
         base_capacity
@@ -298,7 +298,7 @@ pub fn process(
         ) as i32
     };
 
-    let arrives_at = now + travel_duration as i64;
+    let arrives_at = now.saturating_add(travel_duration as i64);
 
     // 14. Verify and Create ReinforcementAccount PDA (kingdom-scoped)
     let (expected_pda, bump) = ReinforcementAccount::derive_player_pda(

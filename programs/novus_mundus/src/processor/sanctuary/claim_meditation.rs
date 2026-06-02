@@ -4,6 +4,7 @@ use pinocchio::{
 };
 
 use crate::{
+    constants::{ESTATE_SEED, HERO_TEMPLATE_SEED},
     emit,
     error::GameError,
     events::MeditationClaimed,
@@ -17,7 +18,7 @@ use crate::{
         parse_hero_nft, HeroNftBuffers, HeroNftContext,
     },
     state::{BuildingType, EstateAccount, HeroTemplate, PlayerAccount},
-    validation::{require_owner, require_signer, require_writable},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Claim meditation XP and potentially level up the hero
@@ -71,7 +72,6 @@ pub fn process(
     // 2. Validate Accounts
     require_signer(owner)?;
     require_writable(player_account)?;
-    require_owner(player_account, program_id)?;
     require_writable(hero_mint)?;
     require_writable(estate_account)?;
     require_owner(estate_account, program_id)?;
@@ -80,9 +80,8 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 4. Load Player Account
-    let mut player_data = player_account.try_borrow_mut()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
+    // 4. Load Player Account (owner + discriminator + canonical PDA, self-derived).
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
 
     // Verify ownership
     if !player.is_owner(owner.address()) {
@@ -107,10 +106,16 @@ pub fn process(
     let mut estate_data = estate_account.try_borrow_mut()?;
     let estate = unsafe { EstateAccount::load_mut(&mut estate_data) };
 
-    // Verify estate ownership
+    // Verify estate ownership + bind to the player's canonical estate PDA so a
+    // look-alike estate can't spoof the Sanctuary level.
     if estate.owner != player.owner {
         return Err(GameError::Unauthorized.into());
     }
+    require_pda(
+        estate_account,
+        &[ESTATE_SEED, player_account.address().as_ref()],
+        program_id,
+    )?;
 
     let sanctuary_level = get_sanctuary_level(estate);
     if sanctuary_level == 0 {
@@ -130,7 +135,15 @@ pub fn process(
     let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
-    // 11. Load Hero Template (for buff power calculation)
+    // 11. Load Hero Template — validate program ownership + canonical PDA from
+    //     the parsed hero's template_id BEFORE trusting buff bytes.
+    require_owner(hero_template, program_id)?;
+    let template_id_bytes = parsed_hero.template_id.to_le_bytes();
+    require_pda(
+        hero_template,
+        &[HERO_TEMPLATE_SEED, &template_id_bytes],
+        program_id,
+    )?;
     let template_data = hero_template.try_borrow()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
@@ -198,8 +211,8 @@ pub fn process(
 
             // Check for mastery level up (100 XP per level, max level 100)
             while sanctuary.mastery_xp >= 100 && sanctuary.mastery_level < 100 {
-                sanctuary.mastery_xp -= 100;
-                sanctuary.mastery_level += 1;
+                sanctuary.mastery_xp = sanctuary.mastery_xp.saturating_sub(100);
+                sanctuary.mastery_level = sanctuary.mastery_level.saturating_add(1);
             }
         }
     }
@@ -212,8 +225,6 @@ pub fn process(
 
     // Save player name for event emission
     let player_name = player.name;
-
-    drop(player_data);
 
     // 19. Update NFT with new meditation state
     let game_engine_data = game_engine.try_borrow()?;

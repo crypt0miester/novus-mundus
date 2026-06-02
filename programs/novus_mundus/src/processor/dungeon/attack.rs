@@ -250,7 +250,7 @@ pub fn process_attacks(
         // Apply hero-effectiveness relic bonus (id 9, +25%)
         let hero_bonus = calculate_relic_hero_bonus(&run);
         let hero_boosted_damage = if hero_bonus > 0 {
-            apply_bp(warrior_damage, 10000u64 + hero_bonus as u64).unwrap_or(warrior_damage)
+            apply_bp(warrior_damage, 10000u64.saturating_add(hero_bonus as u64)).unwrap_or(warrior_damage)
         } else {
             warrior_damage
         };
@@ -545,7 +545,7 @@ pub fn process_attacks(
                 run.enemy_health = (floor_power as u64).saturating_mul(10);
                 run.enemy_max_health = run.enemy_health;
                 run.enemy_power = floor_power;
-                run.enemy_defense = 1000 + (run.current_floor as u16 * 100);
+                run.enemy_defense = 1000u16.saturating_add((run.current_floor as u16).saturating_mul(100));
                 run.is_boss = false;
             }
         }

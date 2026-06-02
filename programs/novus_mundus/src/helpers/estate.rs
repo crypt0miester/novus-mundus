@@ -362,13 +362,13 @@ pub fn meditation_xp_for_level(from_level: u32) -> u32 {
     if from_level < 20 {
         // Linear: 200 × level
         // Fast early game, ~24 days total for levels 1-19 at 8h/day
-        200 * from_level
+        200u32.saturating_mul(from_level)
     } else {
         // 1 week base at level 20, +10% per level after
         // Formula: 11,200 × 1.1^(level-20)
         let mut xp: u64 = MEDITATION_XP_WEEK;
         for _ in 0..(from_level - 20) {
-            xp = xp * 11 / 10; // ×1.1 per level
+            xp = xp.saturating_mul(11) / 10; // ×1.1 per level
         }
         xp.min(u32::MAX as u64) as u32
     }
@@ -380,7 +380,7 @@ pub const fn sanctuary_meditation_max_hours(sanctuary_level: u8) -> u8 {
     if sanctuary_level == 0 {
         return 0;
     }
-    let hours = 24u16 + (sanctuary_level.saturating_sub(1) as u16) * 3;
+    let hours = 24u16.saturating_add((sanctuary_level.saturating_sub(1) as u16).saturating_mul(3));
     if hours > 48 {
         48
     } else {
@@ -390,7 +390,7 @@ pub const fn sanctuary_meditation_max_hours(sanctuary_level: u8) -> u8 {
 
 /// Maximum meditation duration in seconds
 pub const fn sanctuary_meditation_max_seconds(sanctuary_level: u8) -> i64 {
-    sanctuary_meditation_max_hours(sanctuary_level) as i64 * 3600
+    (sanctuary_meditation_max_hours(sanctuary_level) as i64).saturating_mul(3600)
 }
 
 /// Calculate meditation XP earned per hour
@@ -405,7 +405,7 @@ pub const fn sanctuary_meditation_max_seconds(sanctuary_level: u8) -> i64 {
 /// - Sanctuary Lv 10: 1,000 XP/hour
 /// - Sanctuary Lv 20: 2,000 XP/hour
 pub const fn sanctuary_meditation_xp_per_hour(sanctuary_level: u8) -> u32 {
-    (sanctuary_level as u32) * 100
+    (sanctuary_level as u32).saturating_mul(100)
 }
 
 /// Calculate total XP from meditation session
@@ -447,7 +447,7 @@ pub fn meditation_level_cap(sanctuary_level: u8) -> u32 {
     let mut result: u64 = 10 * SANCTUARY_PHI_DENOM; // 10000 (scaled)
 
     for _ in 0..exponent {
-        result = result * SANCTUARY_PHI_NUM / SANCTUARY_PHI_DENOM;
+        result = result.saturating_mul(SANCTUARY_PHI_NUM) / SANCTUARY_PHI_DENOM;
     }
 
     // For partial exponents (e.g., level 7 = 1.4 exponents), add linear interpolation
@@ -455,8 +455,8 @@ pub fn meditation_level_cap(sanctuary_level: u8) -> u32 {
     if remainder > 0 {
         // Linear interpolation: add (φ - 1) × remainder / 5 × current
         // (φ - 1) = 0.618, so we use 618/1000
-        let partial = result * 618 * (remainder as u64) / (5 * 1000);
-        result = result + partial;
+        let partial = result.saturating_mul(618).saturating_mul(remainder as u64) / (5 * 1000);
+        result = result.saturating_add(partial);
     }
 
     // Unscale and return
@@ -476,9 +476,9 @@ pub fn meditation_levels_from_xp(current_level: u32, current_xp: u32) -> (u32, u
         if xp < required {
             break;
         }
-        xp -= required;
-        level += 1;
-        levels_gained += 1;
+        xp = xp.saturating_sub(required);
+        level = level.saturating_add(1);
+        levels_gained = levels_gained.saturating_add(1);
 
         // Safety: prevent infinite loops at very high levels
         if levels_gained >= 100 {
@@ -549,7 +549,7 @@ pub fn market_discount_bps(estate: &EstateAccount) -> u16 {
     if let Some(market) = estate.find_building(BuildingType::Market) {
         if market.is_active() {
             // 1% per level, max 20%
-            return (market.level as u16 * 100).min(2000);
+            return (market.level as u16).saturating_mul(100).min(2000);
         }
     }
     0
@@ -583,8 +583,8 @@ pub fn calculate_window_duration(tier: QualityTier, forge_level: u8) -> i64 {
     }
 
     // 5% per level, capped at 100% bonus (level 20)
-    let bonus_percent = (forge_level as i64 * 5).min(100);
-    base + (base * bonus_percent / 100)
+    let bonus_percent = (forge_level as i64).saturating_mul(5).min(100);
+    base.saturating_add(base.saturating_mul(bonus_percent) / 100)
 }
 
 /// Calculate stages required with Forge level reduction
@@ -626,7 +626,7 @@ pub fn get_forge_level(estate: &EstateAccount) -> u8 {
 pub fn workshop_mining_bonus_bps(estate: &EstateAccount) -> u16 {
     if let Some(workshop) = estate.find_building(BuildingType::Workshop) {
         if workshop.is_active() {
-            return workshop.level as u16 * 50;
+            return (workshop.level as u16).saturating_mul(50);
         }
     }
     0
@@ -639,7 +639,7 @@ pub fn workshop_mining_bonus_bps(estate: &EstateAccount) -> u16 {
 pub fn dock_fishing_bonus_bps(estate: &EstateAccount) -> u16 {
     if let Some(dock) = estate.find_building(BuildingType::Dock) {
         if dock.is_active() {
-            return dock.level as u16 * 50;
+            return (dock.level as u16).saturating_mul(50);
         }
     }
     0
@@ -652,7 +652,7 @@ pub fn dock_fishing_bonus_bps(estate: &EstateAccount) -> u16 {
 pub fn mine_mining_bonus_bps(estate: &EstateAccount) -> u16 {
     if let Some(mine) = estate.find_building(BuildingType::Mine) {
         if mine.is_active() {
-            return mine.level as u16 * 50;
+            return (mine.level as u16).saturating_mul(50);
         }
     }
     0
@@ -665,7 +665,7 @@ pub fn mine_mining_bonus_bps(estate: &EstateAccount) -> u16 {
 pub fn farm_produce_bonus_bps(estate: &EstateAccount) -> u16 {
     if let Some(farm) = estate.find_building(BuildingType::Farm) {
         if farm.is_active() {
-            return farm.level as u16 * 50;
+            return (farm.level as u16).saturating_mul(50);
         }
     }
     0
@@ -679,7 +679,7 @@ pub fn farm_produce_bonus_bps(estate: &EstateAccount) -> u16 {
 pub fn camp_operative_speed_bps(estate: &EstateAccount) -> u16 {
     if let Some(camp) = estate.find_building(BuildingType::Camp) {
         if camp.is_active() {
-            return camp.level as u16 * 50;
+            return (camp.level as u16).saturating_mul(50);
         }
     }
     0
@@ -692,7 +692,7 @@ pub fn camp_operative_speed_bps(estate: &EstateAccount) -> u16 {
 pub fn stables_travel_reduction_bps(estate: &EstateAccount) -> u16 {
     if let Some(stables) = estate.find_building(BuildingType::TransportBay) {
         if stables.is_active() {
-            return stables.level as u16 * 50;
+            return (stables.level as u16).saturating_mul(50);
         }
     }
     0
@@ -705,7 +705,7 @@ pub fn stables_travel_reduction_bps(estate: &EstateAccount) -> u16 {
 pub fn infirmary_recovery_bps(estate: &EstateAccount) -> u16 {
     if let Some(infirmary) = estate.find_building(BuildingType::Infirmary) {
         if infirmary.is_active() {
-            return infirmary.level as u16 * 25;
+            return (infirmary.level as u16).saturating_mul(25);
         }
     }
     0
@@ -719,7 +719,7 @@ pub fn infirmary_recovery_bps(estate: &EstateAccount) -> u16 {
 pub fn catacombs_dungeon_bonus_bps(estate: &EstateAccount) -> u16 {
     if let Some(catacombs) = estate.find_building(BuildingType::DungeonEntry) {
         if catacombs.is_active() {
-            return catacombs.level as u16 * 50;
+            return (catacombs.level as u16).saturating_mul(50);
         }
     }
     0
@@ -751,7 +751,7 @@ pub fn citadel_rally_capacity_bps(estate: &EstateAccount) -> u16 {
     if let Some(citadel) = estate.find_building(BuildingType::Citadel) {
         if citadel.is_active() {
             // 5% per level
-            return citadel.level as u16 * 500;
+            return (citadel.level as u16).saturating_mul(500);
         }
     }
     0
@@ -762,7 +762,7 @@ pub fn citadel_rally_damage_bps(estate: &EstateAccount) -> u16 {
     if let Some(citadel) = estate.find_building(BuildingType::Citadel) {
         if citadel.is_active() {
             // 0.5% per level
-            return citadel.level as u16 * 50;
+            return (citadel.level as u16).saturating_mul(50);
         }
     }
     0
@@ -863,7 +863,9 @@ pub fn academy_daily_time_reduction(score: u8, mastery: u8, building_level: u8) 
     let lvl = building_level as i64;
 
     // score × (10 + mastery / 10) × building_level / 2
-    s * (10 + m / 10) * lvl / 2
+    s.saturating_mul(10i64.saturating_add(m / 10))
+        .saturating_mul(lvl)
+        / 2
 }
 
 /// Calculate mastery cost to ascend Nth research node

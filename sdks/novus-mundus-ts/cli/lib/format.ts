@@ -69,7 +69,7 @@ export function addr(pubkey: PublicKey | string): string {
 // `uri: b"https://novusmundus.gg/heroes/"`). The route at this path returns
 // a 1024² procedural PNG (see docs/design/HERO_PORTRAITS.md).
 //
-// Override the base via WEB_BASE_URL for local dev (e.g. http://localhost:3001/heroes).
+// Override the base via WEB_BASE_URL for local dev (e.g. http://localhost:3000/heroes).
 // Pass `level` for cache-busting on level-up (?v=<level>).
 export function heroPortraitUrl(
   pubkey: PublicKey | string,

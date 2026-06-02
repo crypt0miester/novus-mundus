@@ -101,7 +101,7 @@ pub fn process(
         // Construction Speed research (buff_type 16) shortens the upgrade timer,
         // capped at 90% so it never reaches zero.
         let speed_bps = (player_data.research_construction_speed_bps() as i64).min(9000);
-        let construction_time = construction_time.saturating_mul(10000 - speed_bps) / 10000;
+        let construction_time = construction_time.saturating_mul(10000i64.saturating_sub(speed_bps)) / 10000;
 
         // 9. Check max level not reached
         if building.level >= max_level {
@@ -154,12 +154,12 @@ pub fn process(
 
     // 15. Start upgrade (building remains usable at current level)
     let from_level = building.level;
-    let to_level = building.level + 1;
-    let completes_at = now + construction_time;
+    let to_level = building.level.saturating_add(1);
+    let completes_at = now.saturating_add(construction_time);
 
     building.status = BuildingStatus::Upgrading as u8;
     building.construction_started = now;
-    building.construction_ends = now + construction_time;
+    building.construction_ends = now.saturating_add(construction_time);
     building.total_novi_invested = building.total_novi_invested.saturating_add(upgrade_cost);
 
     // 16. Update estate activity

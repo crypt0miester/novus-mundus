@@ -4,6 +4,7 @@ use pinocchio::{
 };
 
 use crate::{
+    constants::HERO_TEMPLATE_SEED,
     emit,
     error::GameError,
     events::HeroLeveledUp,
@@ -14,7 +15,7 @@ use crate::{
     },
     state::{calculate_fragment_cost, require_extension, HeroTemplate, PlayerAccount, EXT_HEROES},
     utils::hero_uri::{build_hero_uri, MAX_URI_LEN},
-    validation::{require_signer, require_writable},
+    validation::{require_owner, require_pda, require_signer, require_writable},
 };
 
 /// Level up a hero by consuming fragments (134) - Deterministic System
@@ -59,16 +60,27 @@ pub fn process(
     _instruction_data: &[u8],
 ) -> ProgramResult {
     // 1. Parse accounts
-    crate::extract_accounts!(accounts, exact [owner, player_account, hero_mint, hero_template, hero_collection, game_engine, system_program, _clock_sysvar, p_core_program, estate_account]);
+    crate::extract_accounts!(accounts, exact [
+        owner,
+        player_account,
+        hero_mint,
+        hero_template,
+        hero_collection,
+        game_engine,
+        system_program,
+        _clock_sysvar,
+        p_core_program,
+        estate_account
+    ]);
 
     // 2. Validate accounts
     require_signer(owner)?;
     require_writable(player_account)?;
     require_writable(hero_mint)?;
 
-    // 3. Load player account
-    let mut player_data = player_account.try_borrow_mut()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
+    // 3. Load + validate player account (owner + discriminator + canonical PDA,
+    //    self-derived from its stored game_engine/owner).
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
 
     // 4. SAFETY: Verify ownership
     if !player.is_owner(owner.address()) {
@@ -91,7 +103,14 @@ pub fn process(
     let parsed_hero = parse_hero_nft(&nft_data).ok_or(GameError::InvalidParameter)?;
     drop(nft_data);
 
-    // 6. Load template (read-only)
+    // 6. Load template  
+    require_owner(hero_template, program_id)?;
+    let template_id_bytes = parsed_hero.template_id.to_le_bytes();
+    require_pda(
+        hero_template,
+        &[HERO_TEMPLATE_SEED, &template_id_bytes],
+        program_id,
+    )?;
     let template_data = hero_template.try_borrow()?;
     let template = unsafe { HeroTemplate::load(&template_data) };
 
@@ -158,7 +177,6 @@ pub fn process(
 
     // Drop borrows before p-core CPI
     drop(template_data);
-    drop(player_data);
 
     // 16. Update NFT metadata with all attributes using p-core UpdatePluginV1
     // Validate game_engine account (ownership + PDA + discriminator + bump)

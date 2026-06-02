@@ -169,6 +169,24 @@ impl EventAccount {
         Ok(loaded)
     }
 
+    /// Load and verify an EventAccount mutably, deriving its canonical PDA from
+    /// the account's own stored `game_engine`/`id` via single-hash `create_pda`
+    /// with the stored bump. Use when the caller has no independent event id to
+    /// bind against (e.g. prize claims, where the id comes from the account).
+    pub fn load_checked_mut_by_key<'a>(
+        account: &'a pinocchio::AccountView,
+        program_id: &Address,
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
+
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(account, super::AccountKey::Event, "EventAccount")?
+        };
+        let expected_pda = Self::create_pda(&loaded.game_engine, loaded.id, loaded.bump)?;
+        crate::validation::require_pda_eq(account, &expected_pda, "EventAccount")?;
+        Ok(loaded)
+    }
+
     /// Check if event belongs to a specific kingdom
     pub fn is_in_kingdom(&self, game_engine: &Address) -> bool {
         &self.game_engine == game_engine

@@ -9,7 +9,7 @@ use crate::{
     logic::safe_math::apply_bp_penalty,
     state::{GameEngine, PlayerAccount, ShopConfigAccount, UserAccount},
     utils::{read_u64, read_u8, unlikely},
-    validation::{require_key_match, require_owner, require_signer, require_writable},
+    validation::{require_key_match, require_signer, require_writable},
 };
 use p_pyth::Price;
 use pinocchio::{error::ProgramError, sysvars::Sysvar, AccountView, Address, ProgramResult};
@@ -128,7 +128,7 @@ pub fn process(
     let streak_day = if user.novi_last_purchase_day == current_day {
         // Same day purchase, keep current streak
         user.novi_purchase_streak
-    } else if user.novi_last_purchase_day == current_day - 1 {
+    } else if user.novi_last_purchase_day == current_day.saturating_sub(1) {
         // Consecutive day, increment streak (max 7)
         user.novi_purchase_streak.saturating_add(1).min(7)
     } else {
@@ -297,16 +297,15 @@ fn try_oracle_price(
     base_amount: u64,
     novi_config: &crate::state::NoviPurchaseConfig,
     oracle_accounts: &[AccountView],
-    _game_engine_key: &Address,
+    game_engine_key: &Address,
     program_id: &Address,
     current_slot: u64,
     current_timestamp: i64,
 ) -> Result<u64, ProgramError> {
     let shop_config_account = &oracle_accounts[0];
 
-    require_owner(shop_config_account, program_id)?;
-    let shop_config_data = shop_config_account.try_borrow()?;
-    let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data) };
+    let shop_config =
+        ShopConfigAccount::load_checked(shop_config_account, game_engine_key, program_id)?;
 
     // Slot [1] selects the oracle program: a Pyth feed account, or this
     // program's oracle-quote PDA.

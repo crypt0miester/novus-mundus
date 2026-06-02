@@ -26,7 +26,7 @@ use crate::{
 /// # Instruction Data
 /// - [0..8] speed_up_seconds: u64 (0 = complete all remaining)
 pub fn process(
-    _program_id: &Address,
+    program_id: &Address,
     accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
@@ -52,8 +52,8 @@ pub fn process(
     let mut progress_data = research_progress.try_borrow_mut()?;
     let progress = unsafe { ResearchProgress::load_mut(&mut progress_data) };
 
-    let template_data = research_template.try_borrow()?;
-    let template = unsafe { ResearchTemplate::load(&template_data) };
+    let template =
+        ResearchTemplate::load_checked(research_template, progress.current_research, program_id)?;
 
     // 5. Verify ownership
     if !player.is_owner(player_owner.address()) {

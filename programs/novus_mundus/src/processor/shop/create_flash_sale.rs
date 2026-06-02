@@ -112,10 +112,10 @@ pub fn process(
     }
 
     // Announcement time (30 minutes before start)
-    let announced_at = starts_at - 1800; // 30 * 60 = 1800 seconds
+    let announced_at = starts_at.saturating_sub(1800); // 30 * 60 = 1800 seconds
 
     // End time
-    let ends_at = starts_at + duration_secs as i64;
+    let ends_at = starts_at.saturating_add(duration_secs as i64);
 
     // 8. Derive and Verify Flash Sale PDA
 

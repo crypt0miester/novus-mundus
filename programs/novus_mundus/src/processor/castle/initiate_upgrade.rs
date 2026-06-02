@@ -138,7 +138,7 @@ pub fn process(
         return Err(GameError::CastleUpgradeLevelMax.into());
     }
 
-    let target_level = current_level + 1;
+    let target_level = current_level.saturating_add(1);
 
     // Calculate cost: base * (1.5 ^ level)
     let mut cost = UPGRADE_COST_BASE;
@@ -180,8 +180,8 @@ pub fn process(
     let now = clock.unix_timestamp;
 
     // Calculate duration: base * target_level
-    let duration = UPGRADE_DURATION_BASE * (target_level as i64);
-    let completes_at = now + duration;
+    let duration = UPGRADE_DURATION_BASE.saturating_mul(target_level as i64);
+    let completes_at = now.saturating_add(duration);
 
     // Set upgrade in progress
     castle.upgrade_type = upgrade_type;

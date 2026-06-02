@@ -1963,7 +1963,7 @@ impl PlayerCore {
     }
 
     pub fn account_age_days(&self, now: i64) -> u32 {
-        ((now - self.created_at) / 86400) as u32
+        (now.saturating_sub(self.created_at) / 86400) as u32
     }
     pub fn is_traveling(&self) -> bool {
         self.arrival_time != -1
@@ -2141,16 +2141,16 @@ impl PlayerCore {
     pub fn get_name(&self) -> &[u8] {
         &self.name[..self.name_len as usize]
     }
-    pub fn set_name_from_domain(&mut self, domain: &[u8], tld: &[u8]) -> bool {
-        let total_len = domain.len() + tld.len();
+    pub fn set_name_from_domain(&mut self, domain: &[u8], tld: &[u8]) -> ProgramResult {
+        let total_len = domain.len().saturating_add(tld.len());
         if total_len > 48 {
-            return false;
+            return Err(crate::error::GameError::CustomNameTooLong.into());
         }
         self.name = [0u8; 48];
         self.name[..domain.len()].copy_from_slice(domain);
         self.name[domain.len()..total_len].copy_from_slice(tld);
         self.name_len = total_len as u8;
-        true
+        Ok(())
     }
     pub fn set_default_name(&mut self, player_number: u64) {
         const PREFIX: &[u8] = b"Player #";
@@ -2178,12 +2178,6 @@ impl PlayerCore {
     pub fn clear_name(&mut self) {
         self.name = [0u8; 48];
         self.name_len = 0;
-    }
-    pub fn has_custom_name(&self) -> bool {
-        if self.name_len < 8 {
-            return false;
-        }
-        &self.name[..8] != b"Player #"
     }
 }
 

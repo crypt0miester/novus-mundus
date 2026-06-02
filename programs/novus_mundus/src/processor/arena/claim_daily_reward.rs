@@ -27,7 +27,7 @@ use crate::{
     helpers::{mint_tokens, validate_token_account_owner},
     state::{ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, GameEngine, PlayerAccount},
     utils::read_u32,
-    validation::{require_data_len, require_key_match, require_owner, require_writable},
+    validation::{require_key_match, require_writable},
 };
 
 /// Instruction data for claim_daily_reward
@@ -72,16 +72,15 @@ pub fn process(
     let now = clock.unix_timestamp;
     let today = (now / SECONDS_PER_DAY) as u32;
 
-    // 5. Load Arena Season
-    require_owner(arena_season, program_id)?;
-    require_data_len(arena_season, ArenaSeasonAccount::LEN)?;
-    let mut season_data = arena_season.try_borrow_mut()?;
-    let season = unsafe { &mut *(season_data.as_mut_ptr() as *mut ArenaSeasonAccount) };
-
-    // Verify season_id
-    if season.season_id != season_id {
-        return Err(GameError::InvalidParameter.into());
-    }
+    // 5. Load + verify Arena Season — owner + discriminator + canonical PDA bound
+    //    to (game_engine, season_id), so the prize pool can't be spoofed via a
+    //    look-alike account. game_engine is itself load_checked below for the mint.
+    let season = ArenaSeasonAccount::load_checked_mut(
+        arena_season,
+        game_engine.address(),
+        season_id,
+        program_id,
+    )?;
 
     // Season must be active
     if season.status != ArenaStatus::Active as u8 {
@@ -137,8 +136,6 @@ pub fn process(
     // 9. Update season
     season.distributed_today = season.distributed_today.saturating_add(actual_reward);
     season.daily_prize_pool = season.daily_prize_pool.saturating_sub(actual_reward);
-
-    drop(season_data);
 
     // 10. Load GameEngine for mint authority (kingdom-scoped)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine, program_id)?;

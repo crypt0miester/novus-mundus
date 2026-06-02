@@ -215,13 +215,12 @@ export const DISCRIMINATORS = {
   SUBSCRIPTION_UPDATE_TIER: 101,
   SUBSCRIPTION_DOWNGRADE_EXPIRED: 102,
 
-  // Name System (110-119)
+  // Name System (110-119). Team names (111/113/115) are unsupported: a team
+  // PDA cannot hold a TLD-House MainDomain (its init funds rent via a System
+  // transfer from the payer, impossible for a program-owned PDA with data).
   NAME_SET_PLAYER: 110,
-  NAME_SET_TEAM: 111,
   NAME_REMOVE_PLAYER: 112,
-  NAME_REMOVE_TEAM: 113,
   NAME_UPDATE_PLAYER: 114,
-  NAME_UPDATE_TEAM: 115,
 
   // Research System (120-129)
   RESEARCH_INIT_TEMPLATE: 120,

@@ -83,13 +83,8 @@ pub fn process(
     }
 
     // 6. Load Research Template to get max_level
-    let template_data = research_template.try_borrow()?;
-    let template = unsafe { ResearchTemplate::load(&template_data) };
-
-    // Verify template matches
-    if template.research_type != research_type {
-        return Err(GameError::InvalidParameter.into());
-    }
+    let template =
+        ResearchTemplate::load_checked(research_template, research_type, program_id)?;
 
     // 7. Check if research can be ascended
     if !progress.can_ascend(research_type, template.max_level) {

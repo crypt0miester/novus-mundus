@@ -25,7 +25,6 @@ import { GameIcon } from "@/components/shared/GameIcon";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { DomainName } from "@/components/shared/DomainName";
-import { DomainPicker } from "@/components/shared/DomainPicker";
 import { GameInfoPanel } from "@/components/shared/GameInfoPanel";
 import { InfoButton } from "@/components/shared/InfoButton";
 import { LabelWithInfo } from "@/components/shared/LabelWithInfo";
@@ -66,9 +65,6 @@ import {
   createTeamTreasuryExecuteRequestInstruction,
   createTeamTreasuryCancelRequestInstruction,
   createTeamUpdateTreasurySettingsInstruction,
-  createSetTeamNameInstruction,
-  createUpdateTeamNameInstruction,
-  createRemoveTeamNameInstruction,
   calculateDefensivePower,
   isTraveling,
   WarTableScope,
@@ -283,21 +279,6 @@ export function TeamTab() {
     return set;
   }, [teamInvites, teamPubkey]);
 
-  const currentTeamDomainName = useMemo(() => {
-    if (!team?.name?.includes(".")) return null;
-    return team.name;
-  }, [team]);
-
-  const parsedTeamName = useMemo(() => {
-    if (!currentTeamDomainName) return null;
-    const dotIdx = currentTeamDomainName.indexOf(".");
-    if (dotIdx === -1) return null;
-    return {
-      domain: currentTeamDomainName.slice(0, dotIdx),
-      tld: currentTeamDomainName.slice(dotIdx + 1),
-    };
-  }, [currentTeamDomainName]);
-
   const handleCreate = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !teamName.trim()) throw new Error("Missing data");
     const ge = client.gameEngine;
@@ -442,58 +423,6 @@ export function TeamTab() {
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
-  };
-
-  const handleTeamNameSet = async (domain: string, tld: string) => {
-    if (!publicKey || !teamPubkey) return;
-    const ge = client.gameEngine;
-
-    if (parsedTeamName) {
-      const ix = await createUpdateTeamNameInstruction({
-        leader: publicKey,
-        gameEngine: ge,
-        team: teamPubkey,
-        tld,
-        domainName: domain,
-        oldTld: parsedTeamName.tld,
-        oldDomainName: parsedTeamName.domain,
-      });
-      transact.mutate({
-        instructions: [ix],
-        invalidateKeys: [["team"], ["owned-domains"]],
-        successMessage: "Team name updated!",
-      });
-    } else {
-      const ix = await createSetTeamNameInstruction({
-        leader: publicKey,
-        gameEngine: ge,
-        team: teamPubkey,
-        tld,
-        domainName: domain,
-      });
-      transact.mutate({
-        instructions: [ix],
-        invalidateKeys: [["team"], ["owned-domains"]],
-        successMessage: "Team name set!",
-      });
-    }
-  };
-
-  const handleTeamNameRemove = async () => {
-    if (!publicKey || !teamPubkey || !parsedTeamName) return;
-    const ge = client.gameEngine;
-    const ix = await createRemoveTeamNameInstruction({
-      leader: publicKey,
-      gameEngine: ge,
-      team: teamPubkey,
-      tld: parsedTeamName.tld,
-      domainName: parsedTeamName.domain,
-    });
-    transact.mutate({
-      instructions: [ix],
-      invalidateKeys: [["team"], ["owned-domains"]],
-      successMessage: "Team name removed.",
-    });
   };
 
   const handleKick = async (
@@ -1619,22 +1548,6 @@ export function TeamTab() {
                       )}
                     </div>
 
-                    {/* Domain Name (Leader Only) */}
-                    {isLeader && (
-                      <div className="border-t border-border-default pt-3 space-y-2">
-                        <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                          Domain Name
-                        </div>
-                        <DomainPicker
-                          currentName={currentTeamDomainName}
-                          isPending={transact.isPending}
-                          onSet={handleTeamNameSet}
-                          onRemove={handleTeamNameRemove}
-                          label="team"
-                        />
-                      </div>
-                    )}
-
                     {/* Leave / Disband */}
                     <div className="border-t border-border-default pt-3">
                       {!isLeader && (
@@ -1870,21 +1783,6 @@ export function TeamTab() {
                     </div>
                   )}
                 </div>
-
-                {isLeader && (
-                  <div className="border-t border-border-default pt-3 space-y-2">
-                    <div className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-                      Domain Name
-                    </div>
-                    <DomainPicker
-                      currentName={currentTeamDomainName}
-                      isPending={transact.isPending}
-                      onSet={handleTeamNameSet}
-                      onRemove={handleTeamNameRemove}
-                      label="team"
-                    />
-                  </div>
-                )}
 
                 <div className="border-t border-border-default pt-3">
                   {!isLeader && (

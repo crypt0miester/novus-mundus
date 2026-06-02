@@ -211,7 +211,7 @@ impl ExpeditionAccount {
                 .copied()
                 .unwrap_or(1)
         };
-        hours as i64 * SECONDS_PER_HOUR
+        (hours as i64).saturating_mul(SECONDS_PER_HOUR)
     }
 
     /// Get the expected end time of this expedition
@@ -248,7 +248,7 @@ impl ExpeditionAccount {
     /// Get the next strike window time (1 strike per hour)
     pub fn next_strike_time(&self) -> i64 {
         self.start_time
-            .saturating_add(self.strikes as i64 * SECONDS_PER_HOUR)
+            .saturating_add((self.strikes as i64).saturating_mul(SECONDS_PER_HOUR))
     }
 
     /// Check if a strike is ready to be performed

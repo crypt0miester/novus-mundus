@@ -60,7 +60,7 @@ pub use nft_parser::parse_hero_nft;
 pub use inventory::{add_to_inventory, is_inventory_item_type};
 
 // Name service validation
-pub use name_service::{compute_name_hash, get_tld_from_tld_house, validate_and_get_domain_name};
+pub use name_service::{get_tld_from_tld_house, validate_and_get_domain_name};
 
 // Kingdom validation helpers (will be used in integration tests and future cross-entity validation)
 #[allow(unused_imports)]

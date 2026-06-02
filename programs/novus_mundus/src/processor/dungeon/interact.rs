@@ -284,7 +284,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
             run.enemy_health = (floor_power as u64).saturating_mul(10);
             run.enemy_max_health = run.enemy_health;
             run.enemy_power = floor_power;
-            run.enemy_defense = 1000 + (run.current_floor as u16 * 100);
+            run.enemy_defense = 1000u16.saturating_add((run.current_floor as u16).saturating_mul(100));
             run.is_boss = false;
         }
     }

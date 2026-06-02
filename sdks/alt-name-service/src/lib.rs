@@ -15,5 +15,5 @@ pub const IMMUTABLE_OWNER_DISCRIMINATOR: [u8; 8] = [203, 139, 201, 92, 25, 75, 1
 pub const SET_TRANSFERABLE_DISCRIMINATOR: [u8; 8] = [180, 137, 54, 30, 247, 106, 207, 6];
 pub const RESIZE_DISCRIMINATOR: [u8; 8] = [74, 27, 74, 155, 56, 134, 175, 125];
 
-/// Account discriminator for NameRecordHeader
-pub const NAME_RECORD_DISCRIMINATOR: [u8; 8] = [0x4e, 0x41, 0x4d, 0x45, 0x52, 0x45, 0x43, 0x4f];
+/// Account discriminator for NameRecordHeader.
+pub const NAME_RECORD_DISCRIMINATOR: [u8; 8] = [0x44, 0x48, 0x58, 0x2c, 0x0f, 0xa7, 0x67, 0xf3];

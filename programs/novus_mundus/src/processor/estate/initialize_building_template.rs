@@ -41,9 +41,9 @@ pub fn process(
     require_writable(building_template)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // 3. Verify DAO authority
-    let game_engine_data = game_engine.try_borrow()?;
-    let game_engine_state = unsafe { GameEngine::load(&game_engine_data) };
+    // 3. Verify DAO authority — load_checked_by_key pins owner + discriminator +
+    //    canonical PDA, so the authority gate can't be spoofed with a fake engine.
+    let game_engine_state = GameEngine::load_checked_by_key(game_engine, program_id)?;
 
     if dao_authority.address() != &game_engine_state.authority {
         return Err(GameError::DaoRequired.into());

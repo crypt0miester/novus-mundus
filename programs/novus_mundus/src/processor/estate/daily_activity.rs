@@ -14,7 +14,7 @@ use crate::{
     state::{
         BuildingType, EstateAccount, GameEngine, PlayerAccount, ResearchProgress, NULL_PUBKEY,
     },
-    validation::{require_signer, require_writable},
+    validation::{require_owner, require_signer, require_writable},
 };
 
 // Time Window Constants
@@ -179,7 +179,11 @@ pub fn process(
         return Err(GameError::Unauthorized.into());
     }
 
-    // 5. Load Accounts
+    // 5. Load Accounts — owner-check before trusting bytes, matching the sibling
+    //    estate processors (build/upgrade/complete). game_authority co-signs but
+    //    these targets are still caller-supplied program state.
+    require_owner(player_account, program_id)?;
+    require_owner(estate_account, program_id)?;
     let mut player_data_ref = player_account.try_borrow_mut()?;
     let player_data = unsafe { PlayerAccount::load_mut(&mut player_data_ref) };
 
@@ -229,7 +233,7 @@ pub fn process(
     }
 
     // 9. Determine current window
-    let hours_since_dawn = (now - estate_data.dawn_timestamp) / SECONDS_PER_HOUR;
+    let hours_since_dawn = now.saturating_sub(estate_data.dawn_timestamp) / SECONDS_PER_HOUR;
     let current_window = get_current_window(hours_since_dawn);
 
     if current_window == TimeWindow::Expired {
@@ -341,39 +345,39 @@ fn grant_building_rewards(
         BuildingType::Barracks => {
             // Unit effectiveness buff: 5-15% based on score
             // score 0 = 500 bps (5%), score 100 = 1500 bps (15%)
-            let buff = 500 + (score_multiplier * 10) as u16;
+            let buff = 500u16.saturating_add(score_multiplier.saturating_mul(10) as u16);
             estate.unit_effectiveness_bps = buff;
         }
 
         BuildingType::Workshop => {
             // Materials: 10-65 common materials based on score
-            let materials = 10 + (score_multiplier * 55 / 100);
+            let materials = 10u64.saturating_add(score_multiplier.saturating_mul(55) / 100);
             player.set_common_materials(player.common_materials().saturating_add(materials));
         }
 
         BuildingType::Dock => {
             // Produce: 10-65 produce based on score (parallel to Workshop)
-            let produce = 10 + (score_multiplier * 55 / 100);
+            let produce = 10u64.saturating_add(score_multiplier.saturating_mul(55) / 100);
             player.produce = player.produce.saturating_add(produce);
         }
 
         BuildingType::Vault => {
             // Materials: 50-200 common materials based on score
-            let materials = 50 + (score_multiplier * 150 / 100);
+            let materials = 50u64.saturating_add(score_multiplier.saturating_mul(150) / 100);
             player.set_common_materials(player.common_materials().saturating_add(materials));
         }
 
         BuildingType::Forge => {
             // Mastery XP bonus: 25-100% based on score
             // score 0 = 2500 bps (25%), score 100 = 10000 bps (100%)
-            let buff = 2500 + (score_multiplier * 75) as u16;
+            let buff = 2500u16.saturating_add(score_multiplier.saturating_mul(75) as u16);
             estate.mastery_bonus_bps = buff;
         }
 
         BuildingType::Market => {
             // Shop discount: 5-20% based on score
             // score 0 = 500 bps (5%), score 100 = 2000 bps (20%)
-            let buff = 500 + (score_multiplier * 15) as u16;
+            let buff = 500u16.saturating_add(score_multiplier.saturating_mul(15) as u16);
             estate.market_discount_bps = buff;
         }
 
@@ -397,6 +401,7 @@ fn grant_building_rewards(
 
             // Apply to active research if research_progress account provided
             if let Some(research_account) = research_progress {
+                require_owner(research_account, program_id)?;
                 let mut research_data = research_account.try_borrow_mut()?;
                 let research = unsafe { ResearchProgress::load_mut(&mut research_data) };
 
@@ -405,7 +410,7 @@ fn grant_building_rewards(
                     // Reduce completion time (but never below current time + 60s minimum)
                     let clock = Clock::get()?;
                     let now = clock.unix_timestamp;
-                    let min_complete = now + 60; // Minimum 60 seconds remaining
+                    let min_complete = now.saturating_add(60); // Minimum 60 seconds remaining
 
                     research.completes_at = research
                         .completes_at
@@ -416,7 +421,7 @@ fn grant_building_rewards(
 
             // Award mastery XP to Academy building (10-50 based on score)
             // This builds up mastery for research bonuses and ascension
-            let mastery_xp = 10 + (score_multiplier * 40 / 100) as u32;
+            let mastery_xp = 10u32.saturating_add((score_multiplier.saturating_mul(40) / 100) as u32);
             if let Some(academy) = estate.find_building_mut(BuildingType::Academy) {
                 academy.mastery_xp = academy.mastery_xp.saturating_add(mastery_xp);
 
@@ -432,7 +437,7 @@ fn grant_building_rewards(
         BuildingType::Arena => {
             // Arena damage buff: 5-15% based on score
             // score 0 = 500 bps (5%), score 100 = 1500 bps (15%)
-            let buff = 500 + (score_multiplier * 10) as u16;
+            let buff = 500u16.saturating_add(score_multiplier.saturating_mul(10) as u16);
             estate.arena_damage_bps = buff;
         }
 
@@ -474,14 +479,14 @@ fn grant_building_rewards(
         BuildingType::Observatory => {
             // Loot bonus: 5-25% based on score
             // score 0 = 500 bps (5%), score 100 = 2500 bps (25%)
-            let buff = 500 + (score_multiplier * 20) as u16;
+            let buff = 500u16.saturating_add(score_multiplier.saturating_mul(20) as u16);
             estate.daily_loot_bonus_bps = buff;
         }
 
         BuildingType::Treasury => {
             // NOVI reward: 100-900 based on score
             // Actually MINT tokens instead of just updating soft balance
-            let novi = 100 + (score_multiplier * 8);
+            let novi = 100u64.saturating_add(score_multiplier.saturating_mul(8));
 
             // Require token accounts for Treasury
             let token_account = player_token_account.ok_or(GameError::MissingRequiredAccount)?;
@@ -526,39 +531,39 @@ fn grant_building_rewards(
         BuildingType::Camp => {
             // Operative cost reduction: 3-12% based on score
             // score 0 = 300 bps (3%), score 100 = 1200 bps (12%)
-            let buff = 300 + (score_multiplier * 9) as u16;
+            let buff = 300u16.saturating_add(score_multiplier.saturating_mul(9) as u16);
             estate.camp_discount_bps = buff;
         }
 
         BuildingType::Mine => {
             // Gems: 5-30 based on score
-            let gems = 5 + (score_multiplier * 25 / 100);
+            let gems = 5u64.saturating_add(score_multiplier.saturating_mul(25) / 100);
             player.gems = player.gems.saturating_add(gems);
         }
 
         BuildingType::Farm => {
             // Produce: 10-65 based on score (parallel to Dock)
-            let produce = 10 + (score_multiplier * 55 / 100);
+            let produce = 10u64.saturating_add(score_multiplier.saturating_mul(55) / 100);
             player.produce = player.produce.saturating_add(produce);
         }
 
         BuildingType::DungeonEntry => {
             // Fragments: 1-5 based on score
-            let fragments = 1 + (score_multiplier * 4 / 100);
+            let fragments = 1u64.saturating_add(score_multiplier.saturating_mul(4) / 100);
             player.fragments = player.fragments.saturating_add(fragments);
         }
 
         BuildingType::TransportBay => {
             // Travel speed bonus: 5-20% based on score
             // score 0 = 500 bps (5%), score 100 = 2000 bps (20%)
-            let buff = 500 + (score_multiplier * 15) as u16;
+            let buff = 500u16.saturating_add(score_multiplier.saturating_mul(15) as u16);
             estate.stables_speed_bps = buff;
         }
 
         BuildingType::Infirmary => {
             // Unit recovery: 2-8% based on score
             // score 0 = 200 bps (2%), score 100 = 800 bps (8%)
-            let buff = 200 + (score_multiplier * 6) as u16;
+            let buff = 200u16.saturating_add(score_multiplier.saturating_mul(6) as u16);
             estate.infirmary_recovery_daily_bps = buff;
         }
 

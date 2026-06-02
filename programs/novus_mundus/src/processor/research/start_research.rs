@@ -99,8 +99,8 @@ pub fn process(
         let progress_data = research_progress.try_borrow()?;
         let progress = unsafe { ResearchProgress::load(&progress_data) };
 
-        let template_data = research_template.try_borrow()?;
-        let template = unsafe { ResearchTemplate::load(&template_data) };
+        let template =
+            ResearchTemplate::load_checked(research_template, research_type, program_id)?;
 
         // 5. Verify ownership
         if !player.is_owner(player_owner.address()) {
@@ -113,11 +113,6 @@ pub fn process(
 
         // 5a. Require EXT_RESEARCH to be unlocked
         require_extension(player, EXT_RESEARCH)?;
-
-        // 6. Verify template matches requested research
-        if template.research_type != research_type {
-            return Err(GameError::InvalidParameter.into());
-        }
 
         // 7. Check if template is active
         if !template.is_active {
@@ -153,7 +148,7 @@ pub fn process(
         }
 
         // 11. Calculate NOVI cost with Academy mastery discount
-        let next_level = current_level + 1;
+        let next_level = current_level.saturating_add(1);
         let base_novi_cost = template.calculate_novi_cost(next_level);
 
         let mastery = get_academy_mastery(estate);
@@ -216,7 +211,7 @@ pub fn process(
     let time_adjusted_research = (base_research_time as f64 / research_multiplier) as i64;
 
     // 13b. Apply Academy research speed bonuses
-    let total_speed_bps = (building_speed_bps + mastery_speed_bps).min(9000);
+    let total_speed_bps = building_speed_bps.saturating_add(mastery_speed_bps).min(9000);
 
     let research_time = if total_speed_bps > 0 {
         let time_ratio = 10000i64.saturating_sub(total_speed_bps);

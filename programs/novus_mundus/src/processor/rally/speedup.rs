@@ -133,9 +133,9 @@ pub fn process(
             }
 
             // Calculate and apply speedup
-            let remaining_seconds = (participant_data.arrives_at_rally - now) as u64;
+            let remaining_seconds = participant_data.arrives_at_rally.saturating_sub(now) as u64;
             // Integer ceiling division: (a + b - 1) / b
-            let remaining_minutes = (remaining_seconds + 59) / 60;
+            let remaining_minutes = remaining_seconds.saturating_add(59) / 60;
 
             if remaining_minutes == 0 {
                 return Err(GameError::InvalidParameter.into());
@@ -154,7 +154,7 @@ pub fn process(
             total_gem_cost_spent = total_gem_cost;
 
             let new_remaining = (remaining_seconds as f64 * time_multiplier) as i64;
-            participant_data.arrives_at_rally = now + new_remaining;
+            participant_data.arrives_at_rally = now.saturating_add(new_remaining);
         }
 
         // MARCH: Speed up entire army's march to target
@@ -173,9 +173,9 @@ pub fn process(
             }
 
             // Calculate and apply speedup
-            let remaining_seconds = (rally_data.arrive_at - now) as u64;
+            let remaining_seconds = rally_data.arrive_at.saturating_sub(now) as u64;
             // Integer ceiling division: (a + b - 1) / b
-            let remaining_minutes = (remaining_seconds + 59) / 60;
+            let remaining_minutes = remaining_seconds.saturating_add(59) / 60;
 
             if remaining_minutes == 0 {
                 return Err(GameError::InvalidParameter.into());
@@ -194,7 +194,7 @@ pub fn process(
             total_gem_cost_spent = total_gem_cost;
 
             let new_remaining = (remaining_seconds as f64 * time_multiplier) as i64;
-            rally_data.arrive_at = now + new_remaining;
+            rally_data.arrive_at = now.saturating_add(new_remaining);
         }
 
         // RETURN: Speed up participant's return journey
@@ -230,17 +230,18 @@ pub fn process(
                 return Err(GameError::ParticipantAlreadyReturned.into());
             }
 
-            let return_completes_at =
-                participant_data.return_started_at + participant_data.return_duration as i64;
+            let return_completes_at = participant_data
+                .return_started_at
+                .saturating_add(participant_data.return_duration as i64);
 
             if now >= return_completes_at {
                 return Err(GameError::ParticipantAlreadyReturned.into());
             }
 
             // Calculate and apply speedup
-            let remaining_seconds = (return_completes_at - now) as u64;
+            let remaining_seconds = return_completes_at.saturating_sub(now) as u64;
             // Integer ceiling division: (a + b - 1) / b
-            let remaining_minutes = (remaining_seconds + 59) / 60;
+            let remaining_minutes = remaining_seconds.saturating_add(59) / 60;
 
             if remaining_minutes == 0 {
                 return Err(GameError::InvalidParameter.into());
@@ -260,8 +261,8 @@ pub fn process(
 
             // Reduce remaining duration
             let new_remaining = (remaining_seconds as f64 * time_multiplier) as i32;
-            let elapsed = (now - participant_data.return_started_at) as i32;
-            participant_data.return_duration = elapsed + new_remaining;
+            let elapsed = now.saturating_sub(participant_data.return_started_at) as i32;
+            participant_data.return_duration = elapsed.saturating_add(new_remaining);
         }
 
         _ => return Err(GameError::InvalidParameter.into()),

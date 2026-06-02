@@ -49,7 +49,7 @@ pub fn grant_xp_with_time_bonus(
     // Apply hero XP gain buff (multiplicative)
     // Formula: xp × (10000 + hero_xp_gain_bps) / 10000
     let xp_amount = if player.hero_xp_gain_bps() > 0 {
-        let hero_multiplier = 10000u64 + player.hero_xp_gain_bps() as u64;
+        let hero_multiplier = 10000u64.saturating_add(player.hero_xp_gain_bps() as u64);
         time_xp.saturating_mul(hero_multiplier) / 10000
     } else {
         time_xp
@@ -66,14 +66,19 @@ pub fn grant_xp(player: &mut PlayerAccount, xp_amount: u64) -> Result<(u8, u8, u
     let mut current_level = player.level;
     let mut levels_gained = 0u8;
 
-    // Check for level-ups
+    // Check for level-ups. Guard the 255 cap BEFORE computing the next-level
+    // cost: at current_level == 255, `current_level + 1` is a u8 overflow
+    // (panics under debug overflow-checks, wraps to 0 in release).
     loop {
-        let xp_for_next = xp_required_for_level(current_level + 1);
+        if current_level >= 255 {
+            break;
+        }
+        let xp_for_next = xp_required_for_level(current_level.saturating_add(1));
 
-        if current_xp >= xp_for_next && current_level < 255 {
+        if current_xp >= xp_for_next {
             current_xp = current_xp.saturating_sub(xp_for_next);
-            current_level += 1;
-            levels_gained += 1;
+            current_level = current_level.saturating_add(1);
+            levels_gained = levels_gained.saturating_add(1);
         } else {
             break;
         }
@@ -96,7 +101,7 @@ pub fn calculate_xp_reward(action: XpAction) -> u64 {
     match action {
         XpAction::DefeatPlayer { target_level } => {
             // More XP for defeating higher-level players
-            50 + (target_level as u64 * 10)
+            50u64.saturating_add((target_level as u64).saturating_mul(10))
         }
         XpAction::DefeatEncounter { rarity } => {
             // XP scales with encounter rarity

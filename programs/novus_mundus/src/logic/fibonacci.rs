@@ -1,49 +1,37 @@
-/// Check if a number is in the Fibonacci sequence
+/// Check if a number is in the Fibonacci sequence.
 ///
-/// Uses the mathematical property that n is Fibonacci if and only if
-/// one of (5*n² + 4) or (5*n² - 4) is a perfect square
+/// Generates Fibonacci numbers in u64 and compares against `n`. There are only
+/// ~93 Fibonacci numbers below `u64::MAX`, so this is a short, overflow-safe
+/// loop (it stops as soon as a generated value reaches `n`, or `checked_add`
+/// overflows past the largest representable Fibonacci number).
+///
+/// The closed-form test (one of `5·n²±4` is a perfect square) is mathematically
+/// equivalent but forces u128 arithmetic plus an integer square root — both
+/// division-heavy and costly in SBF compute units, since the 64-bit VM lowers
+/// 128-bit multiply/divide to compiler-rt helper calls.
 pub fn is_fibonacci(n: u64) -> bool {
-    if n == 0 || n == 1 {
-        return true;
-    }
-
-    let five_n_squared = match (5u128)
-        .checked_mul(n as u128)
-        .and_then(|x| x.checked_mul(n as u128))
-    {
-        Some(val) => val,
-        None => return false, // Overflow, not a valid Fibonacci number
-    };
-
-    is_perfect_square(five_n_squared + 4) || is_perfect_square(five_n_squared - 4)
-}
-
-/// Check if a number is a perfect square
-fn is_perfect_square(n: u128) -> bool {
     if n == 0 {
         return true;
     }
 
-    let sqrt = integer_sqrt(n);
-    sqrt * sqrt == n
-}
-
-/// Calculate integer square root using Newton's method
-fn integer_sqrt(n: u128) -> u128 {
-    if n < 2 {
-        return n;
-    }
-
-    // Seed at 2^ceil(bits/2) >= sqrt(n); Newton then converges monotonically
-    // down to floor(sqrt(n)) in ~6 iterations (vs ~128 for binary search).
-    let bits = 128 - n.leading_zeros();
-    let mut x = 1u128 << ((bits + 1) / 2);
+    // (a, b) are consecutive Fibonacci numbers; we test `b` against `n`.
+    let mut a = 0u64;
+    let mut b = 1u64;
     loop {
-        let y = (x + n / x) / 2;
-        if y >= x {
-            break;
+        if b == n {
+            return true;
         }
-        x = y;
+        if b > n {
+            return false;
+        }
+        match b.checked_add(a) {
+            Some(next) => {
+                a = b;
+                b = next;
+            }
+            // Next Fibonacci number overflows u64 and we still have b < n, so n
+            // is larger than every Fibonacci number representable in u64.
+            None => return false,
+        }
     }
-    x
 }

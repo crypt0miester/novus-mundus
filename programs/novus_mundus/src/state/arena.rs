@@ -235,7 +235,7 @@ impl ArenaSeasonAccount {
                 total_points,
             };
             self.leaderboard_claimed[idx] = false;
-            self.leaderboard_count += 1;
+            self.leaderboard_count = self.leaderboard_count.saturating_add(1);
 
             // Bubble up to correct position
             let mut i = idx;
@@ -417,7 +417,7 @@ impl ArenaParticipantAccount {
 
     /// Count battles within a time window
     pub fn count_battles_in_window(&self, now: i64, window_seconds: i64) -> u8 {
-        let cutoff = now - window_seconds;
+        let cutoff = now.saturating_sub(window_seconds);
         let mut count = 0u8;
         for i in 0..10 {
             if self.battle_timestamps[i] > cutoff {
@@ -434,7 +434,7 @@ impl ArenaParticipantAccount {
         now: i64,
         window_seconds: i64,
     ) -> u8 {
-        let cutoff = now - window_seconds;
+        let cutoff = now.saturating_sub(window_seconds);
         let mut count = 0u8;
         for i in 0..10 {
             if self.battle_timestamps[i] > cutoff && &self.battle_opponents[i] == opponent {
@@ -446,7 +446,7 @@ impl ArenaParticipantAccount {
 
     /// Count unique opponents within a time window
     pub fn count_unique_opponents_in_window(&self, now: i64, window_seconds: i64) -> u8 {
-        let cutoff = now - window_seconds;
+        let cutoff = now.saturating_sub(window_seconds);
         let mut unique: [Address; 10] = [Address::default(); 10];
         let mut unique_count: u8 = 0;
 

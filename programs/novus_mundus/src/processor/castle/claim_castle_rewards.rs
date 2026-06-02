@@ -124,7 +124,17 @@ pub fn process(
                 if unsafe { court_account.owner() } == program_id && court_account.data_len() > 0 {
                     let court_data = court_account.try_borrow()?;
                     let court = unsafe { CourtPositionAccount::load(&court_data) };
-                    court.holder == *player_account.address()
+                    // Require the real CourtPosition discriminator + canonical PDA
+                    // before granting the higher court reward rate.
+                    let disc_ok = court_data.first().copied()
+                        == Some(crate::state::AccountKey::CourtPosition as u8);
+                    let (expected_court_pda, _) = CourtPositionAccount::derive_pda(
+                        castle_account.address(),
+                        court.position_type,
+                    );
+                    disc_ok
+                        && court_account.address() == &expected_court_pda
+                        && court.holder == *player_account.address()
                         && court.castle == *castle_account.address()
                 } else {
                     false

@@ -174,7 +174,7 @@ pub fn process(
         time_adjusted as u64
     } as i64;
 
-    let arrival_time = now + travel_time_seconds;
+    let arrival_time = now.saturating_add(travel_time_seconds);
 
     // 10. RESERVE DESTINATION FIRST (prevents race condition)
     //
@@ -288,8 +288,8 @@ pub fn process(
                 }
 
                 // Calculate how far they've traveled (proportional time)
-                let bumped_total_time = bumped.arrival_time - bumped.departure_time;
-                let bumped_elapsed = now - bumped.departure_time;
+                let bumped_total_time = bumped.arrival_time.saturating_sub(bumped.departure_time);
+                let bumped_elapsed = now.saturating_sub(bumped.departure_time);
                 let progress = if bumped_total_time > 0 {
                     (bumped_elapsed as f64 / bumped_total_time as f64)
                         .min(1.0)
@@ -304,7 +304,7 @@ pub fn process(
                 // Reverse their travel - they go back to origin city
                 bumped.destination_city = bumped.origin_city;
                 bumped.departure_time = now;
-                bumped.arrival_time = now + return_time_seconds;
+                bumped.arrival_time = now.saturating_add(return_time_seconds);
                 // M-08: Reset travel_speed_locked since this is a fresh (reversed) travel.
                 bumped.travel_speed_locked = 0.0;
                 // travel_type stays Intercity - they need to run cancel to complete

@@ -213,7 +213,7 @@ pub fn process(
             .unwrap_or(1)
     };
 
-    let duration_seconds = duration_hours as i64 * 3600;
+    let duration_seconds = (duration_hours as i64).saturating_mul(3600);
     let end_time = start_time.saturating_add(duration_seconds);
 
     if now < end_time {
@@ -248,7 +248,7 @@ pub fn process(
 
     // 11. Apply research collection bonus
     let research_adjusted = if player_data.research_collection_bonus_bps() > 0 {
-        let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
+        let multiplier = 10000u64.saturating_add(player_data.research_collection_bonus_bps() as u64);
         time_adjusted.saturating_mul(multiplier) / 10000
     } else {
         time_adjusted
@@ -258,7 +258,7 @@ pub fn process(
     let hero_adjusted = if expedition_type == EXPEDITION_MINING {
         // Mining uses hero_collection_rate_bps
         if player_data.hero_collection_rate_bps() > 0 {
-            let multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
+            let multiplier = 10000u64.saturating_add(player_data.hero_collection_rate_bps() as u64);
             research_adjusted.saturating_mul(multiplier) / 10000
         } else {
             research_adjusted
@@ -266,7 +266,7 @@ pub fn process(
     } else {
         // Fishing uses hero_produce_generation_bps
         if player_data.hero_produce_generation_bps() > 0 {
-            let multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
+            let multiplier = 10000u64.saturating_add(player_data.hero_produce_generation_bps() as u64);
             research_adjusted.saturating_mul(multiplier) / 10000
         } else {
             research_adjusted
@@ -278,12 +278,12 @@ pub fn process(
         let avg_score = (score / strikes as u16).min(100) as u8;
         if avg_score >= PERFECT_SCORE_THRESHOLD {
             // Perfect expedition: +25% bonus
-            let multiplier = 10000u64 + PERFECT_EXPEDITION_BONUS_BPS as u64;
+            let multiplier = 10000u64.saturating_add(PERFECT_EXPEDITION_BONUS_BPS as u64);
             hero_adjusted.saturating_mul(multiplier) / 10000
         } else {
             // Partial bonus based on score: (score / 100) * 25%
-            let partial_bonus = (avg_score as u64 * PERFECT_EXPEDITION_BONUS_BPS as u64) / 100;
-            let multiplier = 10000u64 + partial_bonus;
+            let partial_bonus = (avg_score as u64).saturating_mul(PERFECT_EXPEDITION_BONUS_BPS as u64) / 100;
+            let multiplier = 10000u64.saturating_add(partial_bonus);
             hero_adjusted.saturating_mul(multiplier) / 10000
         }
     } else {
@@ -331,7 +331,7 @@ pub fn process(
 
         // Apply affinity bonus (if hero has the relevant affinity)
         let mut adjusted = if affinity_bonus > 0 {
-            let multiplier = 10000u64 + affinity_bonus as u64;
+            let multiplier = 10000u64.saturating_add(affinity_bonus as u64);
             strike_adjusted.saturating_mul(multiplier) / 10000
         } else {
             strike_adjusted
@@ -340,7 +340,7 @@ pub fn process(
         // Apply origin city bonus ONLY if origin matches AND has affinity
         // This is the user's explicit requirement
         if origin_matches && affinity_bonus > 0 {
-            let origin_multiplier = 10000u64 + ORIGIN_CITY_BONUS_BPS;
+            let origin_multiplier = 10000u64.saturating_add(ORIGIN_CITY_BONUS_BPS);
             adjusted = adjusted.saturating_mul(origin_multiplier) / 10000;
         }
 

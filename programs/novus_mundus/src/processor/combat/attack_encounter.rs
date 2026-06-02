@@ -328,8 +328,10 @@ pub fn process(
     // This prevents infinite siege use and creates strategic resource management
     if player_data.siege_weapons > 0 && actual_damage > 0 {
         // Calculate siege weapons consumed: damage / DAMAGE_PER_SIEGE_WEAPON (rounded up)
-        let siege_consumed =
-            (actual_damage + DAMAGE_PER_SIEGE_WEAPON - 1) / DAMAGE_PER_SIEGE_WEAPON;
+        let siege_consumed = actual_damage
+            .saturating_add(DAMAGE_PER_SIEGE_WEAPON)
+            .saturating_sub(1)
+            / DAMAGE_PER_SIEGE_WEAPON;
         // Cap at available siege weapons
         let siege_consumed = siege_consumed.min(player_data.siege_weapons);
         player_data.siege_weapons = player_data.siege_weapons.saturating_sub(siege_consumed);
@@ -480,7 +482,7 @@ pub fn process(
 
         // Apply hero loot bonus (multiplicative) - boosts all loot quantities
         if player_data.hero_loot_bonus_bps() > 0 {
-            let multiplier = 10000u64 + player_data.hero_loot_bonus_bps() as u64;
+            let multiplier = 10000u64.saturating_add(player_data.hero_loot_bonus_bps() as u64);
             loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
             loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
             loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
@@ -490,7 +492,7 @@ pub fn process(
 
         // Apply hero synchrony bonus (multiplicative) - additional loot boost
         if player_data.hero_synchrony_bonus_bps() > 0 {
-            let multiplier = 10000u64 + player_data.hero_synchrony_bonus_bps() as u64;
+            let multiplier = 10000u64.saturating_add(player_data.hero_synchrony_bonus_bps() as u64);
             loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
             loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
             loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
@@ -500,7 +502,7 @@ pub fn process(
 
         // Apply Observatory daily mini-game bonus (loot bonus 5-25%)
         if estate.daily_loot_bonus_bps > 0 {
-            let multiplier = 10000u64 + estate.daily_loot_bonus_bps as u64;
+            let multiplier = 10000u64.saturating_add(estate.daily_loot_bonus_bps as u64);
             loot_pool.total_cash = loot_pool.total_cash.saturating_mul(multiplier) / 10000;
             loot_pool.total_novi = loot_pool.total_novi.saturating_mul(multiplier) / 10000;
             loot_pool.total_weapons = loot_pool.total_weapons.saturating_mul(multiplier) / 10000;
@@ -595,7 +597,8 @@ pub fn process(
 
             // Apply loot magnetism research buff (increases all loot)
             if player_data.research_loot_magnetism_bps() > 0 {
-                let multiplier = 10000u64 + player_data.research_loot_magnetism_bps() as u64;
+                let multiplier =
+                    10000u64.saturating_add(player_data.research_loot_magnetism_bps() as u64);
                 fragments = fragments.saturating_mul(multiplier) / 10000;
                 gems = gems.saturating_mul(multiplier) / 10000;
             }
@@ -608,10 +611,10 @@ pub fn process(
             // This reflects: melee=common, ranged=tactical, siege=rare+powerful
             let total_weapons = loot_pool.total_weapons;
             // Rounded shares (basis-points + half-step) so low counts don't bias siege.
-            let melee_share = (total_weapons * 5000 + 5000) / 10000; // 50% rounded
-            let ranged_share = (total_weapons * 3000 + 5000) / 10000; // 30% rounded
+            let melee_share = (total_weapons.saturating_mul(5000).saturating_add(5000)) / 10000; // 50% rounded
+            let ranged_share = (total_weapons.saturating_mul(3000).saturating_add(5000)) / 10000; // 30% rounded
                                                                       // Siege gets the remainder; clamp in case rounding pushed melee+ranged over total.
-            let used = melee_share + ranged_share;
+            let used = melee_share.saturating_add(ranged_share);
             let siege_share = total_weapons.saturating_sub(used);
 
             *loot_data = LootAccount {

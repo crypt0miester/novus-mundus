@@ -133,10 +133,21 @@ pub fn process(
     // Verify position not already taken
     require_empty(court_position_account).map_err(|_| GameError::CourtPositionTaken)?;
 
-    // Load appointee
+    // Load appointee — it does not sign here, so self-derive the canonical player
+    // PDA from its own stored fields. (Kept inline rather than a checked loader
+    // because the court-section write below needs the raw account byte slice.)
     require_owner(appointee_account, program_id)?;
     let mut appointee_data = appointee_account.try_borrow_mut()?;
     let appointee = unsafe { PlayerAccount::load_mut(&mut appointee_data) };
+    require_pda(
+        appointee_account,
+        &[
+            PLAYER_SEED,
+            appointee.game_engine.as_ref(),
+            appointee.owner.as_ref(),
+        ],
+        program_id,
+    )?;
 
     // Verify appointee is on king's team
     if appointee.team_address() != castle.team {

@@ -24,10 +24,7 @@ pub const CYCLE_LENGTH: i64 = 86_400;
 /// Precision multiplier to avoid floating point in time calculations
 const TIME_PRECISION: i64 = 1000;
 
-// // ========================================================// ========================================================// ========================================================// ========================================================// ========================================================// ========================================================
 // Time Period Definitions
-// // ========================================================// ========================================================// ========================================================// ========================================================// ========================================================// ========================================================
-
 /// Time periods in a day cycle
 ///
 /// Each period has distinct gameplay characteristics:
@@ -151,7 +148,7 @@ pub fn calculate_local_time(timestamp: i64, longitude: f64) -> i64 {
     let cycle_position = timestamp.rem_euclid(CYCLE_LENGTH);
 
     // Normalize to 0-999 range (fraction of day)
-    let global_time = (cycle_position * TIME_PRECISION) / CYCLE_LENGTH;
+    let global_time = cycle_position.saturating_mul(TIME_PRECISION) / CYCLE_LENGTH;
 
     // Longitude offset: -180° to +180° maps to -500 to +500.
     // This means 180° east is 12 hours ahead, 180° west is 12 hours behind,
@@ -159,7 +156,7 @@ pub fn calculate_local_time(timestamp: i64, longitude: f64) -> i64 {
     let longitude_offset = (longitude / 360.0 * TIME_PRECISION as f64) as i64;
 
     // Calculate local time with wraparound
-    (global_time + longitude_offset).rem_euclid(TIME_PRECISION)
+    global_time.saturating_add(longitude_offset).rem_euclid(TIME_PRECISION)
 }
 
 /// Get the time of day period for a given timestamp and location

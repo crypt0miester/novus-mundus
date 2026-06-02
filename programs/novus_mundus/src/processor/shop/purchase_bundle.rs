@@ -98,10 +98,13 @@ pub fn process(
         return Err(GameError::GamePaused.into());
     }
 
-    // 5. Load Shop Config
+    // 5. Load Shop Config (owner + discriminator + canonical PDA).
 
-    let shop_config_data_ref = shop_config_account.try_borrow()?;
-    let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
+    let shop_config = ShopConfigAccount::load_checked(
+        shop_config_account,
+        game_engine_account.address(),
+        program_id,
+    )?;
 
     // 6. Load and Validate Bundle
 
@@ -134,8 +137,7 @@ pub fn process(
 
     // 7. Check extensions and unlock INVENTORY before loading player mutably
     {
-        let data = player_account.try_borrow()?;
-        let player = unsafe { PlayerAccount::load(&data) };
+        let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
         if player.owner != *buyer.address() {
             return Err(GameError::NotOwner.into());
         }
@@ -300,7 +302,7 @@ pub fn process(
             let shop_item_data_ref = shop_item_account.try_borrow()?;
             let shop_item = unsafe { ShopItemAccount::load(&shop_item_data_ref) };
 
-            let amount = bundle_item.quantity as u64 * shop_item.quantity_per_purchase as u64;
+            let amount = (bundle_item.quantity as u64).saturating_mul(shop_item.quantity_per_purchase as u64);
 
             // Check if this is an inventory item
             if is_inventory_item_type(shop_item.item_type) {

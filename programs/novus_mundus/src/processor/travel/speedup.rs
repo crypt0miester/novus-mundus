@@ -91,9 +91,9 @@ pub fn process(
         return Err(GameError::TravelNotComplete.into()); // Reusing error - already at destination
     }
 
-    let remaining_seconds = (player_data.arrival_time - now) as u64;
+    let remaining_seconds = player_data.arrival_time.saturating_sub(now) as u64;
     // Integer ceiling division: (a + b - 1) / b
-    let remaining_minutes = (remaining_seconds + 59) / 60;
+    let remaining_minutes = remaining_seconds.saturating_add(59) / 60;
 
     if remaining_minutes == 0 {
         // Less than a minute remaining, no need to speed up
@@ -134,7 +134,7 @@ pub fn process(
 
     // 12. Update Arrival Time
 
-    player_data.arrival_time = now + new_remaining_seconds;
+    player_data.arrival_time = now.saturating_add(new_remaining_seconds);
 
     // 13. Update LocationAccount reserved_arrival_time
     //

@@ -330,7 +330,7 @@ impl CastleAccount {
     /// Uses effective_protection_duration which includes watchtower bonus
     pub fn is_protected(&self, now: i64) -> bool {
         self.status == CASTLE_STATUS_PROTECTED
-            && now < self.contest_end_at + self.effective_protection_duration()
+            && now < self.contest_end_at.saturating_add(self.effective_protection_duration())
     }
 
     /// Check if castle is vacant
@@ -377,7 +377,7 @@ impl CastleAccount {
             CASTLE_STATUS_CONTEST => now < self.contest_end_at,
             CASTLE_STATUS_VULNERABLE => true,
             CASTLE_STATUS_PROTECTED => {
-                now >= self.contest_end_at + self.effective_protection_duration()
+                now >= self.contest_end_at.saturating_add(self.effective_protection_duration())
             }
             CASTLE_STATUS_TRANSITIONING => now < self.contest_end_at,
             _ => false,
@@ -397,26 +397,29 @@ impl CastleAccount {
     /// +500 bps (5%) per level, uncapped
     /// Returns u32 to handle high levels safely
     pub fn fortification_bonus_bps(&self) -> u32 {
-        (self.fortification_level as u32) * 500
+        (self.fortification_level as u32).saturating_mul(500)
     }
 
     /// Calculate treasury reward bonus in basis points
     /// +1000 bps (10%) per level, capped at level 20 (200%)
     pub fn treasury_bonus_bps(&self) -> u16 {
-        (self.treasury_level as u16) * 1000
+        // Compute in u32 then clamp to u16: update_castle_config can write
+        // treasury_level from an unbounded u8, and `level as u16 * 1000` wraps
+        // u16 at level >= 66.
+        (self.treasury_level as u32).saturating_mul(1000).min(u16::MAX as u32) as u16
     }
 
     /// Calculate watchtower early warning bonus in basis points
     /// +1000 bps (10%) per level, capped at level 15 (150%)
     pub fn watchtower_bonus_bps(&self) -> u16 {
-        (self.watchtower_level as u16) * 1000
+        (self.watchtower_level as u32).saturating_mul(1000).min(u16::MAX as u32) as u16
     }
 
     /// Calculate armory defense quality bonus in basis points
     /// +300 bps (3%) per level, uncapped
     /// Returns u32 to handle high levels safely
     pub fn armory_bonus_bps(&self) -> u32 {
-        (self.armory_level as u32) * 300
+        (self.armory_level as u32).saturating_mul(300)
     }
 
     /// Get max court slots from chambers level
@@ -439,7 +442,7 @@ impl CastleAccount {
         let watchtower_bonus = self.watchtower_bonus_bps() as i64;
         // protection_duration * (10000 + watchtower_bonus) / 10000
         self.protection_duration
-            .saturating_mul(10000 + watchtower_bonus)
+            .saturating_mul((10000 as i64).saturating_add(watchtower_bonus))
             / 10000
     }
 
@@ -667,7 +670,7 @@ impl KingRegistryAccount {
             tier,
             _padding: [0; 19],
         };
-        self.castle_count += 1;
+        self.castle_count = self.castle_count.saturating_add(1);
         true
     }
 
@@ -681,7 +684,7 @@ impl KingRegistryAccount {
                 }
                 // Clear last slot
                 self.castles[self.castle_count as usize - 1] = CastleReference::default();
-                self.castle_count -= 1;
+                self.castle_count = self.castle_count.saturating_sub(1);
                 return true;
             }
         }
@@ -995,7 +998,7 @@ impl TeamCastleRewardAccount {
         if now <= self.last_claim_at {
             return 0;
         }
-        ((now - self.last_claim_at) / crate::constants::SECONDS_PER_DAY) as u64
+        (now.saturating_sub(self.last_claim_at) / crate::constants::SECONDS_PER_DAY) as u64
     }
 
     /// Check if can claim (at least 1 day elapsed)
@@ -1041,7 +1044,7 @@ pub fn calculate_reward(base_rate: u64, tier_mult_bps: u16, treasury_level: u8, 
     }
 
     // Treasury bonus: +10% per level
-    let treasury_bonus_bps = treasury_level as u64 * 1000;
+    let treasury_bonus_bps = (treasury_level as u64).saturating_mul(1000);
 
     // Apply tier multiplier first
     let tier_adjusted = base_rate
@@ -1050,7 +1053,7 @@ pub fn calculate_reward(base_rate: u64, tier_mult_bps: u16, treasury_level: u8, 
 
     // Apply treasury bonus
     let with_treasury = tier_adjusted
-        .saturating_mul(10000 + treasury_bonus_bps)
+        .saturating_mul((10000 as u64).saturating_add(treasury_bonus_bps))
         .saturating_div(10000);
 
     // Multiply by days

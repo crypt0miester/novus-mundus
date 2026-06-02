@@ -81,12 +81,12 @@ pub fn deterministic_encounter_level(min_level: u8, max_level: u8, spawn_index: 
         return min_level;
     }
 
-    let range = (max_level - min_level) as u64;
+    let range = max_level.saturating_sub(min_level) as u64;
 
     // Use golden ratio for distribution
     let position = ((spawn_index as f64 * PHI) % 1.0 * range as f64) as u64;
 
-    min_level + position.min(range) as u8
+    min_level.saturating_add(position.min(range) as u8)
 }
 
 #[cfg(test)]

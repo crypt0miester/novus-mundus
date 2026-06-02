@@ -118,8 +118,8 @@ pub fn process(
 
     // Calculate timing
     let start_time = now;
-    let end_time = now + ARENA_SEASON_DURATION;
-    let claim_deadline = end_time + ARENA_CLAIM_DEADLINE;
+    let end_time = now.saturating_add(ARENA_SEASON_DURATION);
+    let claim_deadline = end_time.saturating_add(ARENA_CLAIM_DEADLINE);
     let current_day = (now / crate::constants::SECONDS_PER_DAY) as u32;
 
     *season = ArenaSeasonAccount {

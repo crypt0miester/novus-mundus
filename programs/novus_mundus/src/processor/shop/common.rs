@@ -258,9 +258,9 @@ pub fn update_streak_and_daily(player: &mut PlayerAccount, now: i64) {
 
     if inv.last_purchase_day == 0 {
         inv.loyalty_streak = 1;
-    } else if current_day == inv.last_purchase_day + 1 {
+    } else if current_day == inv.last_purchase_day.saturating_add(1) {
         inv.loyalty_streak = inv.loyalty_streak.saturating_add(1).min(7);
-    } else if current_day > inv.last_purchase_day + 1 {
+    } else if current_day > inv.last_purchase_day.saturating_add(1) {
         inv.loyalty_streak = 1;
     }
 

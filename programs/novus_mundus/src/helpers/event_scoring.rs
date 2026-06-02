@@ -90,7 +90,14 @@ pub fn update_event_score(
 
     // 7. Emit event if score changed
     if score_changed {
-        let score_delta = participation.score as i64 - old_score as i64;
+        // new_score >= old_score whenever score_changed (accumulative adds;
+        // snapshot only replaces upward), so compute the magnitude as a u64
+        // first to avoid the `as i64` of a >i64::MAX score wrapping negative,
+        // then clamp into the signed event field.
+        let score_delta = participation
+            .score
+            .saturating_sub(old_score)
+            .min(i64::MAX as u64) as i64;
         emit!(EventScoreUpdated {
             event: *event_key,
             player: *player_key,

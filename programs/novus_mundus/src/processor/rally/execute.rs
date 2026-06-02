@@ -162,11 +162,35 @@ pub fn process(
 
     for i in 0..participant_count {
         let rp_account = &rally_participant_accounts[i];
+
+        // Dedup: the same participant account passed twice would double-count its
+        // army + loot weight. Canonical participant PDAs are unique per wallet, so
+        // a repeated account address is always an attack.
+        for prev in &rally_participant_accounts[..i] {
+            if prev.address() == rp_account.address() {
+                return Err(GameError::InvalidRallyParticipantAccount.into());
+            }
+        }
+
         let mut rp_data_ref = rp_account.try_borrow_mut()?;
         let rp_data = unsafe { RallyParticipant::load_mut(&mut rp_data_ref) };
 
         // Verify RallyParticipant belongs to this rally
         if rp_data.rally_id != rally_id || rp_data.rally_creator != rally_creator {
+            return Err(GameError::InvalidRallyParticipantAccount.into());
+        }
+
+        // Bind to the canonical participant PDA (program ownership was checked
+        // above) so a non-canonical account carrying matching rally_id/creator
+        // bytes can't inflate the aggregated army / loot weighting.
+        let expected_rp_pda = RallyParticipant::create_pda(
+            game_engine_account.address(),
+            &rally_creator,
+            rally_id,
+            &rp_data.participant,
+            rp_data.bump,
+        )?;
+        if rp_account.address() != &expected_rp_pda {
             return Err(GameError::InvalidRallyParticipantAccount.into());
         }
 
@@ -179,7 +203,7 @@ pub fn process(
         // Only include participants who arrived.
         if !rp_data.arrived_at_rally {
             if rp_data.return_started_at == 0 {
-                let time_spent = (now - rp_data.travel_started_at).max(0) as i32;
+                let time_spent = now.saturating_sub(rp_data.travel_started_at).max(0) as i32;
                 rp_data.return_started_at = now;
                 rp_data.return_duration = time_spent;
             }
@@ -219,7 +243,9 @@ pub fn process(
     let total_weapons = total_melee
         .saturating_add(total_ranged)
         .saturating_add(total_siege);
-    let total_contribution: u64 = contributions[..participant_count].iter().sum();
+    let total_contribution: u64 = contributions[..participant_count]
+        .iter()
+        .fold(0u64, |acc, &c| acc.saturating_add(c));
 
     // Calculate contribution_bps for each participant
     if total_contribution > 0 {
@@ -350,7 +376,8 @@ pub fn process(
 
             // Calculate attacker casualties (simplified - proportional to defender damage)
             attacker_casualties = if total_units > 0 && defender_damage > 0 {
-                let casualty_ratio = defender_damage.min(total_units * 100) / total_units.max(1);
+                let casualty_ratio =
+                    defender_damage.min(total_units.saturating_mul(100)) / total_units.max(1);
                 (total_units as u128 * casualty_ratio as u128 / 100) as u64
             } else {
                 0
@@ -471,7 +498,7 @@ pub fn process(
                 // Split weapons by type
                 let weapons = loot_pool.total_weapons;
                 total_loot_melee = weapons / 2;
-                total_loot_ranged = (weapons * 3) / 10;
+                total_loot_ranged = weapons.saturating_mul(3) / 10;
                 total_loot_siege = weapons
                     .saturating_sub(total_loot_melee)
                     .saturating_sub(total_loot_ranged);
@@ -521,6 +548,13 @@ pub fn process(
                 }
 
                 let garrison_data = garrison_account.try_borrow()?;
+                // Skip anything that isn't a real CastleGarrison account — the raw
+                // load would otherwise reinterpret arbitrary program-owned bytes.
+                if garrison_data.first().copied()
+                    != Some(crate::state::AccountKey::CastleGarrison as u8)
+                {
+                    continue;
+                }
                 let garrison = unsafe { GarrisonContributionAccount::load(&garrison_data) };
 
                 // Verify garrison belongs to this castle
@@ -580,7 +614,8 @@ pub fn process(
 
             // Calculate attacker casualties
             attacker_casualties = if total_units > 0 && garrison_damage > 0 {
-                let casualty_ratio = garrison_damage.min(total_units * 100) / total_units.max(1);
+                let casualty_ratio =
+                    garrison_damage.min(total_units.saturating_mul(100)) / total_units.max(1);
                 (total_units as u128 * casualty_ratio as u128 / 100) as u64
             } else {
                 0
@@ -664,7 +699,7 @@ pub fn process(
                     // Set/reset transition fields - rally creator claims the pending throne
                     castle.transition_new_king = rally_creator;
                     // Start/reset 2-hour contest window for others to challenge
-                    castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
+                    castle.contest_end_at = now.saturating_add(CASTLE_CONTEST_DURATION);
                     castle.failed_defenses = castle.failed_defenses.saturating_add(1);
 
                     // Leader name not available in execute - will be filled during transition finalize

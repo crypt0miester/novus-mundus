@@ -17,7 +17,7 @@ use crate::{
     state::{CityAccount, EncounterAccount, LocationAccount, PlayerAccount, OCCUPANT_ENCOUNTER},
     types::EncounterType,
     utils::{read_i32, read_u8},
-    validation::{require_key_match, require_signer, require_writable},
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// Spawn an encounter in a city
@@ -105,8 +105,8 @@ pub fn process(
 
     // 4. Load GameEngine to Check Auto-Spawn vs Player-Spawn
 
-    let game_engine_data = game_engine_account.try_borrow()?;
-    let game_engine_data = unsafe { crate::state::GameEngine::load(&game_engine_data) };
+    let game_engine_data =
+        crate::state::GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
     // Check if this is an auto-spawn (authority is game_engine.game_authority)
     let is_auto_spawn = authority.address() == &game_engine_data.game_authority;
@@ -134,9 +134,16 @@ pub fn process(
         }
     }
 
-    // 6. Load City Data
+    // 6. Load + validate City Data — owner + discriminator (load_mut) plus the
+    //    canonical PDA and kingdom, so a forged/foreign city can't defeat the
+    //    spawn bounds + per-city encounter cap below.
 
+    require_owner(city_account, program_id)?;
     let city_data = unsafe { CityAccount::load_mut(&city_account)? };
+    CityAccount::validate_pda(city_account, city_data)?;
+    if &city_data.game_engine != game_engine_account.address() {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // Verify player is in city (skip for auto-spawn)
     if !is_auto_spawn {
@@ -421,7 +428,7 @@ pub fn process(
         location_lat: spawn_lat,
         location_long: spawn_long,
         spawned_at: now,
-        despawn_at: now + encounter_type.despawn_duration(),
+        despawn_at: now.saturating_add(encounter_type.despawn_duration()),
         health: total_health,
         max_health: total_health,
         defense,

@@ -830,7 +830,7 @@ impl DungeonLeaderboard {
 
         // Update count
         if (self.leaderboard_count as usize) < Self::MAX_LEADERBOARD {
-            self.leaderboard_count += 1;
+            self.leaderboard_count = self.leaderboard_count.saturating_add(1);
         }
 
         true

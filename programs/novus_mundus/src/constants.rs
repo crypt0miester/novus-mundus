@@ -10,11 +10,11 @@
 // feeds) or the Pyth Solana Receiver (caller-posted ephemeral updates).
 // Both produce the identical `PriceUpdateV2` layout; either owner is accepted.
 pub const PYTH_PROGRAM_ID: [u8; 32] =
-    five8_const::decode_32_const("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT");
+    pinocchio::Address::from_str_const("pythWSnswVUd12oZpeFP8e9CVaEqJg25g1Vtc2biRsT").to_bytes();
 pub const PYTH_RECEIVER_PROGRAM_ID: [u8; 32] =
-    five8_const::decode_32_const("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
+    pinocchio::Address::from_str_const("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ").to_bytes();
 pub const SWITCHBOARD_PROGRAM_ID: [u8; 32] =
-    five8_const::decode_32_const("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv");
+    pinocchio::Address::from_str_const("SBondMDrcV3K4kxZR1HNVT7osZxAHVHgYXL5Ze1oMUv").to_bytes();
 
 // Time Constants (in seconds)
 pub const SECONDS_PER_DAY: i64 = 86_400;

@@ -57,7 +57,7 @@ pub fn regenerate_stamina(player: &mut PlayerAccount, now: i64) -> Result<u64, G
     // Apply hero stamina regen buff (multiplicative)
     // Formula: stamina × (10000 + hero_stamina_regen_bps) / 10000
     let stamina_to_gain = if player.hero_stamina_regen_bps() > 0 {
-        let hero_multiplier = 10000u64 + player.hero_stamina_regen_bps() as u64;
+        let hero_multiplier = 10000u64.saturating_add(player.hero_stamina_regen_bps() as u64);
         time_stamina.saturating_mul(hero_multiplier) / 10000
     } else {
         time_stamina
@@ -159,7 +159,7 @@ pub fn update_max_stamina_for_tier(player: &mut PlayerAccount) {
     // Stamina Vitality research (buff_type 25) raises the cap multiplicatively:
     //   max = base × (10000 + research_stamina_bonus_bps) / 10000
     let bonus_bps = player.research_stamina_bonus_bps() as u64;
-    player.max_encounter_stamina = base.saturating_mul(10000 + bonus_bps) / 10000;
+    player.max_encounter_stamina = base.saturating_mul(10000u64.saturating_add(bonus_bps)) / 10000;
 
     // If current stamina exceeds new max (tier downgrade), cap it
     player.encounter_stamina = player.encounter_stamina.min(player.max_encounter_stamina);

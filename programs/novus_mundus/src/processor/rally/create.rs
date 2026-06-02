@@ -225,8 +225,8 @@ pub fn process(
 
     // Apply hero rally capacity buff
     let hero_adjusted = if creator.hero_rally_capacity_bps() > 0 {
-        let multiplier = 10000u32 + creator.hero_rally_capacity_bps() as u32;
-        (base_max * multiplier) / 10000
+        let multiplier = 10000u32.saturating_add(creator.hero_rally_capacity_bps() as u32);
+        base_max.saturating_mul(multiplier) / 10000
     } else {
         base_max
     };
@@ -235,11 +235,14 @@ pub fn process(
     // +2% capacity per Citadel level (estate already loaded above)
     let citadel_bonus_bps = citadel_rally_capacity_bps(estate);
 
+    // Cap at 20: execute.rs tracks contributions in a [u64; 20] and indexes it
+    // by participant_count, so a buffed cap above 20 would OOB-panic on execute
+    // and strand every committed troop. 20 is the structural hard limit.
     let max_participants = if citadel_bonus_bps > 0 {
-        let multiplier = 10000u32 + citadel_bonus_bps as u32;
-        ((hero_adjusted * multiplier) / 10000).min(255) as u8
+        let multiplier = 10000u32.saturating_add(citadel_bonus_bps as u32);
+        (hero_adjusted.saturating_mul(multiplier) / 10000).min(20) as u8
     } else {
-        hero_adjusted.min(255) as u8
+        hero_adjusted.min(20) as u8
     };
 
     // Store rally city from player's current city
@@ -265,7 +268,7 @@ pub fn process(
         rally_city_data.longitude,
         INTRACITY_WALKING_SPEED_KMH,
     ) as i32;
-    let leader_arrives_at = now + leader_travel_duration as i64;
+    let leader_arrives_at = now.saturating_add(leader_travel_duration as i64);
     let leader_already_arrived = leader_travel_duration == 0;
 
     // Snapshot buffs once — creator is both leader and (initially) sole participant.
@@ -439,8 +442,8 @@ pub fn process(
         target,
 
         created_at: now,
-        gather_at: now + duration,
-        execute_at: now + duration, // Legacy compatibility
+        gather_at: now.saturating_add(duration),
+        execute_at: now.saturating_add(duration), // Legacy compatibility
         march_started_at: 0,
         arrive_at: 0,
         march_duration: 0,
@@ -572,7 +575,7 @@ pub fn process(
         team_name: team.name,
         leader: *creator_player.address(),
         target,
-        gather_at: now + duration,
+        gather_at: now.saturating_add(duration),
         timestamp: now,
     });
 

@@ -60,7 +60,10 @@ pub fn process(
         CASTLE_STATUS_PROTECTED => {
             // PROTECTED → VULNERABLE when protection expires
             // Uses effective_protection_duration which includes watchtower bonus
-            if now >= castle.contest_end_at + castle.effective_protection_duration() {
+            if now >= castle
+                .contest_end_at
+                .saturating_add(castle.effective_protection_duration())
+            {
                 new_status = CASTLE_STATUS_VULNERABLE;
                 castle.status = CASTLE_STATUS_VULNERABLE;
             }

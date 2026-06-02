@@ -109,7 +109,7 @@ pub fn process(
         // Construction Speed research (buff_type 16) shortens the build timer,
         // capped at 90% so it never reaches zero.
         let speed_bps = (player_data.research_construction_speed_bps() as i64).min(9000);
-        let construction_time = construction_time.saturating_mul(10000 - speed_bps) / 10000;
+        let construction_time = construction_time.saturating_mul(10000i64.saturating_sub(speed_bps)) / 10000;
 
         // 10. Check player has enough balance
         if player_data.locked_novi < base_cost {
@@ -161,7 +161,7 @@ pub fn process(
             mastery_level: 0,
             mastery_xp: 0,
             construction_started: now,
-            construction_ends: now + construction_time,
+            construction_ends: now.saturating_add(construction_time),
             total_novi_invested: base_cost,
             _padding: [0; 4],
         };
@@ -176,7 +176,7 @@ pub fn process(
         player_name,
         building_type: building_type as u8,
         plot: slot_index as u8,
-        completes_at: now + construction_time,
+        completes_at: now.saturating_add(construction_time),
         timestamp: now,
     });
 

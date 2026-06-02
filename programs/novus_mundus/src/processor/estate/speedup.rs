@@ -95,8 +95,8 @@ pub fn process(
         return Err(GameError::InvalidParameter.into());
     }
 
-    let remaining_seconds = (building.construction_ends - now) as u64;
-    let remaining_minutes = (remaining_seconds + 59) / 60;
+    let remaining_seconds = building.construction_ends.saturating_sub(now) as u64;
+    let remaining_minutes = remaining_seconds.saturating_add(59) / 60;
 
     if remaining_minutes == 0 {
         return Err(GameError::InvalidParameter.into());
@@ -125,7 +125,7 @@ pub fn process(
     player_data.gems = player_data.gems.saturating_sub(total_gem_cost);
 
     // 12. Update Construction End Time
-    let new_construction_ends = now + new_remaining_seconds;
+    let new_construction_ends = now.saturating_add(new_remaining_seconds);
     building.construction_ends = new_construction_ends;
 
     Ok(())

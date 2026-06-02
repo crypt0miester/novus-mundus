@@ -121,30 +121,23 @@ pub fn process(
     // Verify token account belongs to the winner's PlayerAccount PDA
     validate_token_account_owner(winner_novi_ata, winner_account.address())?;
 
-    // 3. Load Accounts
+    // 3. Load + verify accounts via the checked loaders, which bundle owner +
+    //    discriminator + canonical-PDA checks (all single-hash create_pda).
 
-    let mut winner_data_ref = winner_account.try_borrow_mut()?;
-    let winner_data = unsafe { PlayerAccount::load_mut(&mut winner_data_ref) };
-
-    let mut event_data_ref = event_account.try_borrow_mut()?;
-    let event_data = unsafe { EventAccount::load_mut(&mut event_data_ref) };
-
-    let mut participation_data_ref = participation_account.try_borrow_mut()?;
-    let participation_data = unsafe { EventParticipation::load_mut(&mut participation_data_ref) };
-
-    // Verify ownership
-    if &winner_data.owner != winner_owner.address() {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    // Verify participation matches
-    if &participation_data.player != winner_owner.address() {
-        return Err(GameError::Unauthorized.into());
-    }
-
-    if participation_data.event_id != event_data.id {
-        return Err(GameError::InvalidParameter.into());
-    }
+    let event_data = EventAccount::load_checked_mut_by_key(event_account, program_id)?;
+    let winner_data = PlayerAccount::load_checked_mut(
+        winner_account,
+        &event_data.game_engine,
+        winner_owner.address(),
+        program_id,
+    )?;
+    EventParticipation::load_checked_mut(
+        participation_account,
+        &event_data.game_engine,
+        event_data.id,
+        winner_owner.address(),
+        program_id,
+    )?;
 
     // 4. Validate Event State
 
@@ -350,17 +343,12 @@ pub fn process(
 
     // 11. Close Participation Account (Rent Refund)
 
-    // Save values for event before dropping borrows
+    // Save values for the emit before the participation account is closed.
     let event_player = *winner_account.address();
     let event_player_name = winner_data.name;
     let event_event = *event_account.address();
     let event_rank = rank as u16;
     let event_prize = prize_share;
-
-    // Drop borrows before closing account
-    drop(participation_data_ref);
-    drop(winner_data_ref);
-    drop(event_data_ref);
 
     // Close participation account (refund rent to winner)
     close_account(participation_account, winner_owner)?;

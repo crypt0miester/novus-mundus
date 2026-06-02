@@ -10,7 +10,7 @@ use crate::{
     error::GameError,
     events::game_event::GameEventJoined,
     state::{require_extension, EventAccount, EventParticipation, PlayerAccount, EXT_RESEARCH},
-    validation::{require_key_match, require_owner, require_signer, require_writable},
+    validation::{require_key_match, require_signer, require_writable},
 };
 
 /// Join an event
@@ -56,11 +56,6 @@ pub fn process(
     require_writable(event_participation_account)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
 
-    // Defensive — verify player_account and event_account are
-    // owned by this program before trusting any bytes from them.
-    require_owner(player_account, program_id)?;
-    require_owner(event_account, program_id)?;
-
     // 3. Load Clock
 
     let clock = Clock::get()?;
@@ -68,15 +63,16 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut()?;
-    let mut event_account_data = event_account.try_borrow_mut()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
-    let event_data = unsafe { EventAccount::load_mut(&mut event_account_data) };
-
-    // Verify ownership
-    if &player_data.owner != player_owner.address() {
-        return Err(GameError::Unauthorized.into());
-    }
+    // Checked loaders bundle owner + discriminator + canonical PDA. The event
+    // self-derives from its stored seeds; the player binds to the event's
+    // kingdom and the player_owner wallet.
+    let event_data = EventAccount::load_checked_mut_by_key(event_account, program_id)?;
+    let player_data = PlayerAccount::load_checked_mut(
+        player_account,
+        &event_data.game_engine,
+        player_owner.address(),
+        program_id,
+    )?;
 
     // 4a. Require EXT_RESEARCH to join events (ensures player understands game)
     require_extension(player_data, EXT_RESEARCH)?;

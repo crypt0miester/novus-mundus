@@ -182,9 +182,8 @@ fn assert_is_program_authority(
     authority: &AccountView,
     program_data: &AccountView,
 ) -> Result<(), ProgramError> {
-    const BPF_LOADER_UPGRADEABLE_ID: pinocchio::Address = pinocchio::Address::new_from_array(
-        five8_const::decode_32_const("BPFLoaderUpgradeab1e11111111111111111111111"),
-    );
+    const BPF_LOADER_UPGRADEABLE_ID: pinocchio::Address =
+        pinocchio::Address::from_str_const("BPFLoaderUpgradeab1e11111111111111111111111");
 
     if unsafe { program_data.owner() } != &BPF_LOADER_UPGRADEABLE_ID {
         return Err(crate::error::GameError::Unauthorized.into());

@@ -131,13 +131,13 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
     let xp_building_bonus_bps = estate
         .find_building(crate::state::BuildingType::Academy)
         .filter(|b| b.is_active())
-        .map(|b| ((b.level as u16) * 500).min(2500)) // 5% per level, max 25%
+        .map(|b| (b.level as u16).saturating_mul(500).min(2500)) // 5% per level, max 25%
         .unwrap_or(0);
 
     let novi_building_bonus_bps = estate
         .find_building(crate::state::BuildingType::Treasury)
         .filter(|b| b.is_active())
-        .map(|b| ((b.level as u16) * 500).min(2500)) // 5% per level, max 25%
+        .map(|b| (b.level as u16).saturating_mul(500).min(2500)) // 5% per level, max 25%
         .unwrap_or(0);
 
     // Check player not traveling

@@ -747,7 +747,7 @@ impl NoviPurchaseConfig {
         let streak_index = (streak_day.saturating_sub(1) as usize).min(6);
         let streak_bonus = self.novi_streak_bonus_bps[streak_index] as u32;
 
-        bulk_bonus + sub_bonus + streak_bonus
+        bulk_bonus.saturating_add(sub_bonus).saturating_add(streak_bonus)
     }
 
     /// Get daily cap for a subscription tier

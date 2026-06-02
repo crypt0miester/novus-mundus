@@ -185,6 +185,10 @@ export interface DungeonLeaderboardAccount {
   dungeonId: number;
   weekNumber: number;
   bump: number;
+  /** Bitmask of claimed ranks: bit N set => rank N (0-indexed) already paid out. */
+  claimedMask: number;
+  /** Total NOVI prize pool, split across ranks by PRIZE_DISTRIBUTION. */
+  prizePool: bigint;
   entries: DungeonLeaderboardEntry[];
 }
 
@@ -422,9 +426,9 @@ export function deserializeDungeonLeaderboard(data: Uint8Array): DungeonLeaderbo
   const weekNumber = reader.readU16();
   const entryCount = reader.readU8();
   const bump = reader.readU8();
-  reader.skip(2); // claimed_mask u16 (skip for interface)
+  const claimedMask = reader.readU16();
   reader.skip(6); // implicit padding for u64 alignment
-  reader.skip(8); // prize_pool (skip for interface)
+  const prizePool = reader.readU64();
 
   const entries: DungeonLeaderboardEntry[] = [];
   for (let i = 0; i < entryCount; i++) {
@@ -434,7 +438,7 @@ export function deserializeDungeonLeaderboard(data: Uint8Array): DungeonLeaderbo
     entries.push({ player, score, timestamp });
   }
 
-  return { dungeonId, weekNumber, bump, entries };
+  return { dungeonId, weekNumber, bump, claimedMask, prizePool, entries };
 }
 
 // Parse Functions

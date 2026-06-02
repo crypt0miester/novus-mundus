@@ -144,7 +144,7 @@ pub fn process(
             ) as i32
         } else {
             // Mid-travel to rally, turn around
-            let time_spent = (now - participant.travel_started_at) as i32;
+            let time_spent = now.saturating_sub(participant.travel_started_at) as i32;
             time_spent.max(0)
         };
 

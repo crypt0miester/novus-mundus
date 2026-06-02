@@ -399,9 +399,10 @@ impl BuildingSlot {
 
     /// Calculate mastery XP needed for next level
     pub fn mastery_xp_for_next_level(&self) -> u32 {
-        // XP = 100 × level² (quadratic growth)
-        let next = (self.mastery_level + 1) as u32;
-        100 * next * next
+        // XP = 100 × level² (quadratic growth). Widen before +1 so mastery_level
+        // == 255 doesn't wrap the u8 to 0.
+        let next = (self.mastery_level as u32).saturating_add(1);
+        100u32.saturating_mul(next).saturating_mul(next)
     }
 }
 
@@ -659,9 +660,9 @@ impl EstateAccount {
 
         match self.plots_owned {
             1 => Some(BASE_PLOT_COST),                // Plot 2: 100k
-            2 => Some(BASE_PLOT_COST * 2618 / 1000),  // Plot 3: ~262k
-            3 => Some(BASE_PLOT_COST * 6854 / 1000),  // Plot 4: ~685k
-            4 => Some(BASE_PLOT_COST * 17944 / 1000), // Plot 5: ~1.79M
+            2 => Some(BASE_PLOT_COST.saturating_mul(2618) / 1000),  // Plot 3: ~262k
+            3 => Some(BASE_PLOT_COST.saturating_mul(6854) / 1000),  // Plot 4: ~685k
+            4 => Some(BASE_PLOT_COST.saturating_mul(17944) / 1000), // Plot 5: ~1.79M
             _ => None,                                // Max plots owned
         }
     }
@@ -956,14 +957,14 @@ impl EstateAccount {
             match BuildingType::from_u8(building.building_type) {
                 Some(BuildingType::Mansion) => {
                     // Mansion: XP and daily reward bonuses
-                    self.xp_gain_bps = self.xp_gain_bps.saturating_add(level * buff_per_level);
+                    self.xp_gain_bps = self.xp_gain_bps.saturating_add(level.saturating_mul(buff_per_level));
                 }
                 Some(BuildingType::Barracks) => {
                     // Barracks: Attack and training speed
-                    self.attack_bps = self.attack_bps.saturating_add(level * buff_per_level);
+                    self.attack_bps = self.attack_bps.saturating_add(level.saturating_mul(buff_per_level));
                     self.training_speed_bps = self
                         .training_speed_bps
-                        .saturating_add(level * buff_per_level / 2);
+                        .saturating_add(level.saturating_mul(buff_per_level) / 2);
                 }
                 Some(BuildingType::Workshop) => {
                     // Workshop: Mining bonus calculated dynamically via workshop_mining_bonus_bps()
@@ -973,31 +974,31 @@ impl EstateAccount {
                 }
                 Some(BuildingType::Vault) => {
                     // Vault: Storage and NOVI cap
-                    self.storage_bps = self.storage_bps.saturating_add(level * buff_per_level);
-                    self.novi_cap_bonus_bps = self.novi_cap_bonus_bps.saturating_add(level * 250);
+                    self.storage_bps = self.storage_bps.saturating_add(level.saturating_mul(buff_per_level));
+                    self.novi_cap_bonus_bps = self.novi_cap_bonus_bps.saturating_add(level.saturating_mul(250));
                     // 2.5% per level
                 }
                 Some(BuildingType::Forge) => {
                     // Forge: Craft success rate
                     self.craft_success_bps = self
                         .craft_success_bps
-                        .saturating_add(level * buff_per_level * 3); // 1.5% per level
+                        .saturating_add(level.saturating_mul(buff_per_level).saturating_mul(3)); // 1.5% per level
                 }
                 Some(BuildingType::Market) => {
                     // Market: Trade discount
-                    self.trade_discount_bps = self.trade_discount_bps.saturating_add(level * 100);
+                    self.trade_discount_bps = self.trade_discount_bps.saturating_add(level.saturating_mul(100));
                     // 1% per level
                 }
                 Some(BuildingType::Academy) => {
                     // Academy: Research speed
                     self.research_speed_bps = self
                         .research_speed_bps
-                        .saturating_add(level * buff_per_level * 3); // 1.5% per level
+                        .saturating_add(level.saturating_mul(buff_per_level).saturating_mul(3)); // 1.5% per level
                 }
                 Some(BuildingType::Arena) => {
                     // Arena: PvP damage
                     self.pvp_damage_bps =
-                        self.pvp_damage_bps.saturating_add(level * buff_per_level);
+                        self.pvp_damage_bps.saturating_add(level.saturating_mul(buff_per_level));
                 }
                 Some(BuildingType::MeditationChamber) => {
                     // MeditationChamber: No direct buff, enables hero slots
@@ -1006,40 +1007,42 @@ impl EstateAccount {
                     // Observatory: Loot bonus
                     self.loot_bonus_bps = self
                         .loot_bonus_bps
-                        .saturating_add(level * buff_per_level * 2); // 1% per level
+                        .saturating_add(level.saturating_mul(buff_per_level).saturating_mul(2)); // 1% per level
                 }
                 Some(BuildingType::Treasury) => {
                     // Treasury: Prize bonus
-                    self.prize_bonus_bps = self.prize_bonus_bps.saturating_add(level * 250);
+                    self.prize_bonus_bps = self.prize_bonus_bps.saturating_add(level.saturating_mul(250));
                     // 2.5% per level
                 }
                 Some(BuildingType::Citadel) => {
-                    // Citadel: Defense and rally capacity
-                    self.defense_bps = self.defense_bps.saturating_add(level * buff_per_level);
+                    // Citadel: Defense and rally capacity. level*500 wraps u16 at
+                    // building level >= 132 (level is a u16 from a u8, max 255).
+                    self.defense_bps =
+                        self.defense_bps.saturating_add(level.saturating_mul(buff_per_level));
                     self.rally_capacity_bonus_bps =
-                        self.rally_capacity_bonus_bps.saturating_add(level * 500);
+                        self.rally_capacity_bonus_bps.saturating_add(level.saturating_mul(500));
                     // 5% per level
                 }
                 Some(BuildingType::Camp) => {
                     // Camp: Operative training speed (shares field with Barracks)
                     self.training_speed_bps = self
                         .training_speed_bps
-                        .saturating_add(level * buff_per_level / 2);
+                        .saturating_add(level.saturating_mul(buff_per_level) / 2);
                 }
                 Some(BuildingType::Mine) => {
                     // Mine: Resource generation bonus (mining)
                     self.resource_gen_bps =
-                        self.resource_gen_bps.saturating_add(level * buff_per_level);
+                        self.resource_gen_bps.saturating_add(level.saturating_mul(buff_per_level));
                 }
                 Some(BuildingType::DungeonEntry) => {
                     // DungeonEntry: Loot bonus (dungeon loot, additive with Observatory)
                     self.loot_bonus_bps =
-                        self.loot_bonus_bps.saturating_add(level * buff_per_level);
+                        self.loot_bonus_bps.saturating_add(level.saturating_mul(buff_per_level));
                 }
                 Some(BuildingType::Farm) => {
                     // Farm: Resource generation bonus (farming, additive with Mine)
                     self.resource_gen_bps =
-                        self.resource_gen_bps.saturating_add(level * buff_per_level);
+                        self.resource_gen_bps.saturating_add(level.saturating_mul(buff_per_level));
                 }
                 Some(BuildingType::TransportBay) => {
                     // TransportBay: No cached buff (computed dynamically via stables_travel_reduction_bps)
@@ -1061,7 +1064,7 @@ impl EstateAccount {
             return false;
         }
 
-        if current_day == self.last_login_date + 1 {
+        if current_day == self.last_login_date.saturating_add(1) {
             // Consecutive day - increment streak
             self.login_streak = self.login_streak.saturating_add(1);
             if self.login_streak > self.longest_login_streak {
@@ -1213,7 +1216,7 @@ impl QualityCounts {
         let mut total: u64 = 0;
         for (tier, &count) in self.counts.iter().enumerate() {
             if let Some(qt) = QualityTier::from_u8(tier as u8) {
-                total = total.saturating_add((count as u64) * (qt.buff_bps() as u64));
+                total = total.saturating_add((count as u64).saturating_mul(qt.buff_bps() as u64));
             }
         }
         total
@@ -1404,13 +1407,13 @@ impl CraftedEquipmentAccount {
             return 0;
         }
 
-        let window_duration = self.window_closes_at - self.window_opens_at;
+        let window_duration = self.window_closes_at.saturating_sub(self.window_opens_at);
         if window_duration <= 0 {
             return 10000; // Edge case: instant window = perfect
         }
 
-        let window_center = self.window_opens_at + (window_duration / 2);
-        let distance_from_center = (now - window_center).abs();
+        let window_center = self.window_opens_at.saturating_add(window_duration / 2);
+        let distance_from_center = now.saturating_sub(window_center).abs();
         let max_distance = window_duration / 2;
 
         if max_distance == 0 {
@@ -1418,7 +1421,7 @@ impl CraftedEquipmentAccount {
         }
 
         // Perfect center = 10000, edge of window = 0
-        let precision = 10000i64 - ((distance_from_center * 10000) / max_distance);
+        let precision = 10000i64.saturating_sub(distance_from_center.saturating_mul(10000) / max_distance);
         precision.max(0) as u16
     }
 

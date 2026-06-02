@@ -101,6 +101,29 @@ impl ShopConfigAccount {
         )
         .map_err(|e| e.into())
     }
+
+    /// Load and verify a ShopConfigAccount: program ownership + discriminator +
+    /// canonical PDA for `game_engine`.
+    pub fn load_checked<'a>(
+        account: &'a AccountView,
+        game_engine: &Address,
+        program_id: &Address,
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
+
+        let (expected_pda, bump) = Self::derive_pda(game_engine);
+        crate::validation::require_pda_eq(account, &expected_pda, "ShopConfigAccount")?;
+
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::ShopConfig,
+                "ShopConfigAccount",
+            )?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ShopConfigAccount", account)?;
+        Ok(loaded)
+    }
 }
 
 // SHOP ITEM ACCOUNT (Individual Item Definition)
@@ -186,6 +209,26 @@ impl ShopItemAccount {
             &crate::ID,
         )
         .map_err(|e| e.into())
+    }
+
+    /// Load and verify a ShopItemAccount mutably: program ownership +
+    /// discriminator + canonical PDA for `(game_engine, item_id)`.
+    pub fn load_checked_mut<'a>(
+        account: &'a AccountView,
+        game_engine: &Address,
+        item_id: u32,
+        program_id: &Address,
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
+
+        let (expected_pda, bump) = Self::derive_pda(game_engine, item_id);
+        crate::validation::require_pda_eq(account, &expected_pda, "ShopItemAccount")?;
+
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(account, super::AccountKey::ShopItem, "ShopItemAccount")?
+        };
+        crate::validation::require_bump_eq(loaded.bump, bump, "ShopItemAccount", account)?;
+        Ok(loaded)
     }
 }
 

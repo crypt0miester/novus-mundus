@@ -53,16 +53,10 @@ pub fn process(
 
     // 4. Load Accounts
 
-    let mut player_account_data = player_account.try_borrow_mut()?;
-    let player_data = unsafe { PlayerAccount::load_mut(&mut player_account_data) };
+    let player_data = PlayerAccount::load_checked_mut(&*player_account, game_engine_account.address(), player_owner.address(),program_id)?;
 
     // Validate game_engine account (ownership + PDA + discriminator + bump)
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
-
-    // Verify ownership
-    if &player_data.owner != player_owner.address() {
-        return Err(GameError::Unauthorized.into());
-    }
 
     // 5. Check if Daily Rewards are Unlocked (Research System)
 
@@ -74,7 +68,7 @@ pub fn process(
     // 6. Check Cooldown (Using Research field)
 
     // Now using last_daily_claim field from research system
-    let time_since_last_claim = now - player_data.last_daily_claim();
+    let time_since_last_claim = now.saturating_sub(player_data.last_daily_claim());
     let cooldown = game_engine_data.gameplay_config.daily_reward_cooldown;
 
     if time_since_last_claim < cooldown {

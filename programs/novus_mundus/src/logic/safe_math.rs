@@ -154,13 +154,21 @@ pub fn isqrt(n: u64) -> u64 {
     if n == 0 {
         return 0;
     }
-    let mut x = n;
-    let mut y = (x + 1) / 2;
-    while y < x {
+    // Seed from the bit length (a power of two just above sqrt(n)) rather than
+    // (n + 1) / 2. The old seed overflowed u64 at n == u64::MAX, wrapping to 0
+    // and then trapping on the next `n / x` (divide-by-zero) — reachable via
+    // pow_three_quarters / sqrt_product when their inputs saturate to u64::MAX.
+    // `1 << ((bits + 1) / 2)` is always >= sqrt(n) and never overflows (max
+    // shift is 32).
+    let bits = 64 - n.leading_zeros();
+    let mut x = 1u64 << ((bits + 1) / 2);
+    loop {
+        let y = (x + n / x) / 2;
+        if y >= x {
+            return x;
+        }
         x = y;
-        y = (x + n / x) / 2;
     }
-    x
 }
 
 /// Safe sqrt(a * b) without u128
@@ -252,6 +260,23 @@ mod tests {
         assert_eq!(calculate_share(1000, 0, 100), Some(0)); // 0%
         assert_eq!(calculate_share(1000, 100, 100), Some(1000)); // 100%
         assert_eq!(calculate_share(1000, 50, 0), Some(0)); // div by zero -> 0
+    }
+
+    #[test]
+    fn test_isqrt() {
+        assert_eq!(isqrt(0), 0);
+        assert_eq!(isqrt(1), 1);
+        assert_eq!(isqrt(2), 1);
+        assert_eq!(isqrt(3), 1);
+        assert_eq!(isqrt(4), 2);
+        assert_eq!(isqrt(99), 9);
+        assert_eq!(isqrt(100), 10);
+        assert_eq!(isqrt(1_000_000), 1000);
+        // Regression: the old (n + 1) / 2 seed overflowed at u64::MAX, wrapping
+        // to 0 and then dividing by zero. floor(sqrt(2^64 - 1)) = 2^32 - 1.
+        assert_eq!(isqrt(u64::MAX), 4_294_967_295);
+        assert_eq!(sqrt_product(u64::MAX, 1), 4_294_967_295);
+        assert_eq!(pow_three_quarters(u64::MAX), 4_294_967_295u64.saturating_mul(65535));
     }
 
     #[test]

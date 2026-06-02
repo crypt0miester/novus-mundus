@@ -108,6 +108,32 @@ impl ResearchTemplate {
         .map_err(|e| e.into())
     }
 
+    /// Load and verify a ResearchTemplate: program ownership + discriminator +
+    /// canonical PDA for `research_type`. Use instead of the raw `load`, which
+    /// trusts caller bytes for prices/costs/buffs.
+    pub fn load_checked<'a>(
+        account: &'a pinocchio::AccountView,
+        research_type: u8,
+        program_id: &Address,
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
+
+        let (expected_pda, _bump) = Self::derive_pda(research_type);
+        crate::validation::require_pda_eq(account, &expected_pda, "ResearchTemplate")?;
+
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::ResearchTemplate,
+                "ResearchTemplate",
+            )?
+        };
+        if loaded.research_type != research_type {
+            return Err(crate::error::GameError::InvalidParameter.into());
+        }
+        Ok(loaded)
+    }
+
     /// Calculate NOVI cost for a specific level (no u128!)
     pub fn calculate_novi_cost(&self, level: u8) -> u64 {
         // Cost = base_cost * (1.25 ^ level)
@@ -138,8 +164,8 @@ impl ResearchTemplate {
             _ => 20, // Cap at 20 for levels above 25
         };
 
-        let minutes = (remaining_seconds + 59) / 60; // Round up
-        (minutes as u64) * gem_per_minute
+        let minutes = remaining_seconds.saturating_add(59) / 60; // Round up
+        (minutes as u64).saturating_mul(gem_per_minute)
     }
 }
 
@@ -332,13 +358,13 @@ impl ResearchProgress {
             }
 
             // Base buff from levels
-            let base_buff = template.buff_per_level_bps as u32 * level as u32;
+            let base_buff = (template.buff_per_level_bps as u32).saturating_mul(level as u32);
 
             // Apply ascension bonus (+25% if ascended)
             let ascension_bonus = self.ascension_bonus_bps(i as u8) as u32;
             let total_buff = if ascension_bonus > 0 {
                 // buff × (10000 + 2500) / 10000 = buff × 1.25
-                (base_buff * (10000 + ascension_bonus) / 10000) as u16
+                (base_buff.saturating_mul((10000 as u32).saturating_add(ascension_bonus)) / 10000) as u16
             } else {
                 base_buff as u16
             };

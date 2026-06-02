@@ -125,7 +125,7 @@ pub fn process(
 
     // 9. Calculate base rewards (scaled by Mansion level)
     // Mansion bonus: +5% per level
-    let mansion_bonus_bps = (mansion_level as u16) * 500;
+    let mansion_bonus_bps = (mansion_level as u16).saturating_mul(500);
 
     // Base rewards
     let base_materials: u64 = 100;

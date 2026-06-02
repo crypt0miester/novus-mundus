@@ -131,7 +131,7 @@ pub fn process(
 
     // 8. Initialize Weekly Sale Data
 
-    let ends_at = starts_at + (duration_days as i64 * 86400);
+    let ends_at = starts_at.saturating_add((duration_days as i64).saturating_mul(86400));
 
     let mut weekly_sale_data_ref = weekly_sale_account.try_borrow_mut()?;
     let weekly_sale = unsafe { WeeklySaleAccount::load_mut(&mut weekly_sale_data_ref) };

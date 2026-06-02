@@ -98,7 +98,9 @@ pub fn process(
     let mut offset = 3usize; // skip header (start_city_id + count)
 
     for i in 0..count {
-        let city_id = start_city_id + i as u16;
+        let city_id = start_city_id
+            .checked_add(i as u16)
+            .ok_or(GameError::InvalidParameter)?;
         let city_account = &city_accounts[i];
 
         // Parse the 1-byte-length-prefixed name. read_len_prefixed bounds-checks

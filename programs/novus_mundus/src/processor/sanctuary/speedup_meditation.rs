@@ -110,7 +110,7 @@ pub fn process(
         .ok_or(GameError::MathOverflow)?;
 
     // 11. Apply speedup by moving meditation_started_at backwards
-    let seconds_to_add = (minutes_to_add * 60) as i64;
+    let seconds_to_add = minutes_to_add.saturating_mul(60) as i64;
     player.set_meditation_started_at(
         player
             .meditation_started_at()

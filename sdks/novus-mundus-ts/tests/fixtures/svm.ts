@@ -7,7 +7,7 @@
 
 import { LiteSVM, Clock, FailedTransactionMetadata, type TransactionMetadata, type AccountInfoBytes } from 'litesvm';
 import { PublicKey, SYSVAR_SLOT_HASHES_PUBKEY, VersionedTransaction, type AccountInfo } from '@solana/web3.js';
-import { deriveOracleQuotePda } from '../../src/pda';
+import { deriveOracleQuotePda, deriveNameAccountPda, deriveReverseNameAccountPda } from '../../src/pda';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -55,8 +55,10 @@ const TLD_HOUSE_PROGRAM_ID = new PublicKey('TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAd
 const ALT_NAME_SERVICE_PROGRAM_ID = new PublicKey('ALTNSZ46uaAUU7XUV6awvdorLGqAsPwa9shm7h4uP2FK');
 
 // TLD accounts (mainnet snapshots)
-const TLD_STATE = new PublicKey('VmmhRjr64KbpTZpgmeiVSWmR8H8RyqgigF1XQf8AvET');
-const TLD_HOUSE_SOLANA = new PublicKey('8Y1BpwTwqwFXpLDiTmjQKm1RNR8pdhB7VFfEayaSddVz');
+export const TLD_HOUSE_SOLANA = new PublicKey('8Y1BpwTwqwFXpLDiTmjQKm1RNR8pdhB7VFfEayaSddVz');
+// The `.solana` TLD registry NameRecord — the parent of every `.solana` domain
+// (tld_house.tld_registry_pubkey), owned (NameRecord.owner) by the house above.
+export const TLD_REGISTRY_SOLANA = new PublicKey('4meCH5JCqAZC5BmVy8yiXRXAh8Ge3oSm4uSjzUiqwL7m');
 
 /**
  * Create a fresh LiteSVM instance with all programs loaded and TLD accounts seeded.
@@ -73,10 +75,11 @@ export function createTestSvm(): LiteSVM {
   svm.addProgramFromFile(svmKey(TLD_HOUSE_PROGRAM_ID), path.join(BIN_DIR, 'tld_house.so'));
   svm.addProgramFromFile(svmKey(ALT_NAME_SERVICE_PROGRAM_ID), path.join(BIN_DIR, 'alt_name_service.so'));
 
-  // Seed TLD accounts from mainnet snapshots
+  // Seed TLD accounts from mainnet snapshots. tld_house feeds the on-chain TLD
+  // read + reverse-record nclass check; the registry is the domain's parent.
   const dataDir = path.join(__dirname, 'data');
-  loadAccountFromJson(svm, TLD_STATE, path.join(dataDir, 'tld-state.json'));
   loadAccountFromJson(svm, TLD_HOUSE_SOLANA, path.join(dataDir, 'tld-house-solana.json'));
+  loadAccountFromJson(svm, TLD_REGISTRY_SOLANA, path.join(dataDir, 'tld-registry-solana.json'));
 
   // Pin the initial clock to a deterministic Midday-at-Americas timestamp.
   const now = BigInt(Math.floor(Date.UTC(2024, 0, 15, 4, 48, 0) / 1000));
@@ -115,6 +118,66 @@ export function toAccountInfo(account: AccountInfoBytes): AccountInfo<Buffer> {
     data: Buffer.from(account.data),
     rentEpoch: BigInt(account.rentEpoch as unknown as number),
   };
+}
+
+// alt-name-service NameRecordHeader — a 200-byte Anchor account. Discriminator
+// is sha256("account:NameRecordHeader")[..8]; layout: disc[8], parent_name[32]@8,
+// owner[32]@40, nclass[32]@72, expires_at(u64)@104, created_at(u64)@112,
+// non_transferable(bool)@120, _reserved[79]@121. A reverse record appends its
+// label string after byte 200.
+const ANS_NAME_RECORD_DISCRIMINATOR = Buffer.from([0x44, 0x48, 0x58, 0x2c, 0x0f, 0xa7, 0x67, 0xf3]);
+const ANS_NAME_RECORD_LEN = 200;
+
+/**
+ * Mint a `<domainName>.solana` domain to `wallet`, the way AllDomains would, by
+ * injecting the forward + reverse NameRecords directly. Mirrors exactly what the
+ * on-chain `validate_and_get_domain_name` checks so set/remove player-name txs
+ * accept it:
+ * - forward record at `deriveNameAccountPda(domainName, registry)` — parent = the
+ *   `.solana` registry, owner = `wallet`, nclass = NULL, never expires;
+ * - reverse record at `deriveReverseNameAccountPda(forward, house)` — nclass = the
+ *   `.solana` house, parent = NULL, label = `domainName`.
+ *
+ * Returns the derived forward + reverse name accounts.
+ */
+export async function mintDomainToWallet(
+  svm: LiteSVM,
+  domainName: string,
+  wallet: PublicKey,
+): Promise<{ nameAccount: PublicKey; reverseNameAccount: PublicKey }> {
+  const [nameAccount] = await deriveNameAccountPda(domainName, TLD_REGISTRY_SOLANA);
+  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, TLD_HOUSE_SOLANA);
+
+  const forward = Buffer.alloc(ANS_NAME_RECORD_LEN);
+  ANS_NAME_RECORD_DISCRIMINATOR.copy(forward, 0);
+  Buffer.from(TLD_REGISTRY_SOLANA.toBytes()).copy(forward, 8); // parent_name
+  Buffer.from(wallet.toBytes()).copy(forward, 40); // owner
+  // nclass @72 = NULL, expires_at @104 = 0 (never), non_transferable @120 = 0.
+
+  const label = Buffer.from(domainName, 'utf8');
+  const reverse = Buffer.alloc(ANS_NAME_RECORD_LEN + label.length);
+  ANS_NAME_RECORD_DISCRIMINATOR.copy(reverse, 0);
+  // parent_name @8 = NULL.
+  Buffer.from(TLD_HOUSE_SOLANA.toBytes()).copy(reverse, 40); // owner (cosmetic; unchecked)
+  Buffer.from(TLD_HOUSE_SOLANA.toBytes()).copy(reverse, 72); // nclass = house
+  label.copy(reverse, ANS_NAME_RECORD_LEN);
+
+  svm.setAccount(svmKey(nameAccount), svmAccount({
+    data: forward,
+    executable: false,
+    lamports: Number(svm.minimumBalanceForRentExemption(BigInt(forward.length))),
+    owner: ALT_NAME_SERVICE_PROGRAM_ID,
+    rentEpoch: 0,
+  }));
+  svm.setAccount(svmKey(reverseNameAccount), svmAccount({
+    data: reverse,
+    executable: false,
+    lamports: Number(svm.minimumBalanceForRentExemption(BigInt(reverse.length))),
+    owner: ALT_NAME_SERVICE_PROGRAM_ID,
+    rentEpoch: 0,
+  }));
+
+  return { nameAccount, reverseNameAccount };
 }
 
 /** BPFLoaderUpgradeab1e11111111111111111111111 — owns `ProgramData` PDAs. */

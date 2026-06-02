@@ -190,7 +190,6 @@ dependencies = [
  "alt-name-service",
  "const-crypto",
  "five8 0.1.0",
- "five8_const 0.1.4",
  "libm",
  "p-core",
  "p-pyth",
@@ -203,7 +202,6 @@ dependencies = [
  "sha2",
  "solana-address",
  "solana-sha256-hasher",
- "tld-house",
 ]
 
 [[package]]
@@ -479,14 +477,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "tld-house"
-version = "0.2.0"
-dependencies = [
- "pinocchio",
- "solana-address",
 ]
 
 [[package]]

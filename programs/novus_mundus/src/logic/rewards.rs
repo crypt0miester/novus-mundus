@@ -35,7 +35,7 @@ pub fn calculate_oscillation_multiplier(
     // Map oscillation [-1, 1] to [base - amplitude, base + amplitude]
     // oscillation * amplitude_bp gives the deviation from 10000 (1.0x)
     let deviation = (oscillation * amplitude_bp as f64) as i32;
-    let multiplier = (10000i32 + deviation) as u32;
+    let multiplier = 10000i32.saturating_add(deviation) as u32;
 
     // Clamp to reasonable range (0.2x to 2.0x)
     multiplier.max(2000).min(20000)
@@ -375,7 +375,7 @@ pub fn calculate_fragment_amount(
     let level_mult_bp = (level_mult * 10000.0) as u64;
 
     // Apply synchrony bonus
-    let synchrony_mult = 10000u64 + synchrony_bonus_bps as u64;
+    let synchrony_mult = 10000u64.saturating_add(synchrony_bonus_bps as u64);
 
     // Apply time-of-day bonus
     let time_mult_bp = (time_mult * 10000.0) as u64;
@@ -426,7 +426,7 @@ pub fn calculate_gem_amount(
     let level_mult_bp = (level_mult * 10000.0) as u64;
 
     // Apply synchrony bonus
-    let synchrony_mult = 10000u64 + synchrony_bonus_bps as u64;
+    let synchrony_mult = 10000u64.saturating_add(synchrony_bonus_bps as u64);
 
     // Apply time-of-day bonus
     let time_mult_bp = (time_mult * 10000.0) as u64;

@@ -39,6 +39,7 @@ pub fn process(
     require_writable(research_progress)?;
     require_writable(player_account)?;
     require_owner(player_account, program_id)?; // CRITICAL: Verify program ownership
+    require_owner(research_progress, program_id)?;
 
     // 3. Load accounts
     let mut progress_data = research_progress.try_borrow_mut()?;
@@ -61,19 +62,19 @@ pub fn process(
         return Err(ProgramError::InvalidSeeds);
     }
 
-    let template_data = research_template.try_borrow()?;
-    let template = unsafe { ResearchTemplate::load(&template_data) };
+    // Bind the (otherwise unvalidated) progress account to this player.
+    if progress.player != player.owner {
+        return Err(GameError::Unauthorized.into());
+    }
+
+    let template =
+        ResearchTemplate::load_checked(research_template, progress.current_research, program_id)?;
 
     // 3a. Require EXT_RESEARCH to be unlocked
     require_extension(player, EXT_RESEARCH)?;
 
     // 4. Verify research is active
     if !progress.is_researching() {
-        return Err(GameError::InvalidParameter.into());
-    }
-
-    // 5. Verify template matches current research
-    if template.research_type != progress.current_research {
         return Err(GameError::InvalidParameter.into());
     }
 
@@ -93,7 +94,8 @@ pub fn process(
     // 8. Apply the buff from this specific research
     let total_buff = (template.buff_per_level_bps as u32)
         .checked_mul(new_level as u32)
-        .unwrap_or(u32::MAX) as u16;
+        .unwrap_or(u32::MAX)
+        .min(u16::MAX as u32) as u16;
 
     // Apply to appropriate buff field based on buff_type
     match template.buff_type {

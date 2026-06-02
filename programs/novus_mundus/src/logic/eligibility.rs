@@ -67,7 +67,7 @@ pub fn check_transfer_ratio(
 /// check_account_age(now - (5 * 86400), now, 7 * 86400)   // FAIL
 /// ```
 pub fn check_account_age(created_at: i64, now: i64, min_age_seconds: i64) -> Result<(), GameError> {
-    let age = now - created_at;
+    let age = now.saturating_sub(created_at);
 
     if age < min_age_seconds {
         return Err(GameError::AccountTooNew);

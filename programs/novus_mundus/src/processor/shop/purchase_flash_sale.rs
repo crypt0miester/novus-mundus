@@ -120,10 +120,12 @@ pub fn process(
         return Err(GameError::GamePaused.into());
     }
 
-    // 5. Load Shop Config
-    require_owner(shop_config_account, program_id)?;
-    let shop_config_data_ref = shop_config_account.try_borrow()?;
-    let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
+    // 5. Load Shop Config (owner + discriminator + canonical PDA).
+    let shop_config = ShopConfigAccount::load_checked(
+        shop_config_account,
+        game_engine_account.address(),
+        program_id,
+    )?;
 
     // 6. Load and Validate Flash Sale
 

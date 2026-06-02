@@ -236,7 +236,7 @@ pub fn process(
             theme_speed,
         ) as i32
     };
-    let arrives_at = now + travel_duration as i64;
+    let arrives_at = now.saturating_add(travel_duration as i64);
     let already_arrived = travel_duration == 0; // Only if exactly at rally point
 
     // Snapshot player buffs

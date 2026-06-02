@@ -12,7 +12,7 @@ use crate::{
     emit,
     error::GameError,
     events::PlayerNameRemoved,
-    helpers::{compute_name_hash, validate_and_get_domain_name},
+    helpers::validate_and_get_domain_name,
     state::PlayerAccount,
     utils::read_bytes32,
     validation::{require_key_match, require_owner, require_signer, require_writable},
@@ -26,17 +26,17 @@ use crate::{
 /// 1. [writable] name_account: The domain's name account (owned by player PDA)
 /// 2. [] reverse_name_account: The domain's reverse lookup account
 /// 3. [] name_class: Name class account (NULL_PUBKEY for standard domains)
-/// 4. [] name_parent: Parent TLD account (.tld)
-/// 5. [] tld_house: TldHouse account that owns the parent TLD
-/// 6. [signer] owner: Player wallet
+/// 4. [] name_parent: Parent TLD registry account
+/// 5. [] tld_house: TldHouse account
+/// 6. [signer] owner: Player wallet (receives the domain back)
 /// 7. [] alt_name_service_program: Alt Name Service program
 ///
 /// # Instruction Data
-/// - reverse_acc_hashed_name: [u8; 32] - Pre-computed hash of the reverse account
+/// - reverse_acc_hashed_name: [u8; 32]
 ///
 /// # Effects
 /// - Transfers domain ownership from player PDA → user wallet
-/// - Clears domain name from player account (reverts to default "Player #X")
+/// - Clears the domain name from the player account
 pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> ProgramResult {
     // 1. Parse Accounts
     crate::extract_accounts!(accounts, exact [
@@ -65,25 +65,21 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         return Err(ProgramError::InvalidAccountData);
     }
 
-    // 4. Load and validate player
-    let mut player_data = player_account.try_borrow_mut()?;
-    let player = unsafe { PlayerAccount::load_mut(&mut player_data) };
+    // 4. Load + validate player (program-owned, canonical PDA, discriminator).
+    let player = PlayerAccount::load_checked_mut_by_key(player_account, program_id)?;
 
     if &player.owner != owner.address() {
         return Err(GameError::Unauthorized.into());
     }
 
-    // 5. Derive player PDA and get bump for signing
+    // 5. Player PDA + bump for signing — the loader validated both, so the
+    //    stored bump is canonical and the account address is the PDA.
     let player_ge = player.game_engine;
-    let player_seeds: &[&[u8]] = &[PLAYER_SEED, player_ge.as_ref(), owner.address().as_ref()];
-    let (player_pda, bump) = pinocchio::Address::find_program_address(player_seeds, program_id);
+    let bump = player.bump;
+    let player_pda = *player_account.address();
 
-    if player_pda != *player_account.address() {
-        return Err(ProgramError::InvalidSeeds);
-    }
-
-    // 6. Validate name accounts - player PDA must be current owner
-    let domain_name = validate_and_get_domain_name(
+    // 6. Validate name accounts - player PDA must currently own the domain
+    let (_domain_name, name_account_bump, hashed_name) = validate_and_get_domain_name(
         name_account,
         reverse_name_account,
         name_parent,
@@ -92,13 +88,9 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         &reverse_acc_hashed_name,
     )?;
 
-    // 7. Compute hashed name for transfer
-    let hashed_name = compute_name_hash(domain_name);
-
-    // 8. Transfer domain ownership: player PDA → user wallet
+    // 7. Transfer domain ownership: player PDA → user wallet
     let bump_seed = [bump];
     let seeds = crate::seeds!(PLAYER_SEED, player_ge.as_ref(), owner.address(), &bump_seed);
-    let signer = Signer::from(&seeds);
 
     Transfer {
         owner: player_account, // Player PDA is the current owner
@@ -106,20 +98,19 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         name_class,
         parent_name: name_parent,
         hashed_name,
+        name_account_bump,
         new_owner: owner.address(), // Transfer back to user
     }
-    .invoke_signed(&[signer])?;
+    .invoke_signed(&[Signer::from(&seeds)])?;
 
     // 9. Clear domain name from player account
-    // Note: The player will need to re-call set_player_name to get a new name
-    // or they can keep the default "Player #X" name
     player.clear_name();
 
     // 10. Emit event
     let now = Clock::get()?.unix_timestamp;
     emit!(PlayerNameRemoved {
         player: *player_account.address(),
-        player_name: [0u8; 48], // Name was just cleared
+        player_name: player.name,
         timestamp: now,
     });
 

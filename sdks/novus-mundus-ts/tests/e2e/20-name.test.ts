@@ -1,49 +1,38 @@
 /**
  * Name Service E2E Tests
  *
- * Tests for player and team naming using domain names:
- * - Setting names (domain transfer to player PDA)
- * - Updating names (swap domains)
- * - Removing names (domain transfer back)
+ * Player display names backed by an AllDomains (ANS) `.solana` domain:
+ * - Set name    (domain transfer: wallet → player PDA)
+ * - Update name (swap domains)
+ * - Remove name (domain transfer: player PDA → wallet)
  *
- * Note: Domain operations require real domain accounts from
- * TLD House / ALT Name Service. Without actual domains registered,
- * all set/update/remove operations fail with account errors.
- * We test the failure paths and validate instruction construction.
+ * Negative paths assert the on-chain validation rejects unregistered/unowned
+ * domains. The positive path mints a domain to the wallet (injected NameRecords)
+ * and runs a full set → remove cycle against the real ANS + TLD-House programs.
+ *
+ * Team names are intentionally unsupported: a team PDA cannot hold a TLD-House
+ * MainDomain, and domains held directly by the player PDA need no MainDomain.
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import { Transaction } from '@solana/web3.js';
 
 import {
   createSetPlayerNameInstruction,
   createUpdatePlayerNameInstruction,
   createRemovePlayerNameInstruction,
-  createSetTeamNameInstruction,
-  createUpdateTeamNameInstruction,
-  createRemoveTeamNameInstruction,
-  derivePlayerPda,
-  deriveTeamPda,
 } from '../../src/index';
 
+import { type TestContext, beforeAllTests } from '../fixtures/setup';
 import {
-  type TestContext,
-  beforeAllTests,
-} from '../fixtures/setup';
-import {
-  PlayerFactory,
-  type TestPlayer,
-} from '../fixtures/players';
-import {
-  assertBnEquals,
-} from '../utils/assertions';
-import {
-  sendTransaction,
-  expectTransactionToFail,
-} from '../utils/transactions';
-import {
-  fetchPlayer,
-} from '../utils/accounts';
+  mintDomainToWallet,
+  TLD_HOUSE_SOLANA,
+  TLD_REGISTRY_SOLANA,
+  svmKey,
+} from '../fixtures/svm';
+import { PlayerFactory } from '../fixtures/players';
+import { sendTransaction, expectTransactionToFail } from '../utils/transactions';
+import { fetchPlayer } from '../utils/accounts';
 import { log } from '../utils/logger';
 
 // Test Suite
@@ -68,7 +57,6 @@ describe('Name Service', () => {
     it('should reject set name without real domain', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Name service requires real domain accounts - fails without them
       const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -76,17 +64,12 @@ describe('Name Service', () => {
         domainName: 'testplayer',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject set name with non-owned domain', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Try to set a domain we don't own
       const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -94,37 +77,26 @@ describe('Name Service', () => {
         domainName: 'someoneelsesdomain',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject update without existing name', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Update requires existing name set first
       const ix = await createUpdatePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
         tld: 'sol',
         domainName: 'newname',
-        oldTld: 'sol',
         oldDomainName: 'oldname',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject remove without existing name', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Remove transfers domain back - fails if no domain set
       const ix = await createRemovePlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -132,11 +104,7 @@ describe('Name Service', () => {
         domainName: 'myname',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject remove when no name set', async () => {
@@ -149,100 +117,7 @@ describe('Name Service', () => {
         domainName: 'nonexistent',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
-    });
-  });
-
-  // Team Name Tests
-
-  describe('Team Names', () => {
-    it('should reject set team name without real domain', async () => {
-      const leaderPlayer = await factory.createPlayer({ initialize: true });
-      const teamId = Date.now();
-      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
-
-      // Requires real domain + team account
-      const ix = await createSetTeamNameInstruction({
-        gameEngine: ctx.gameEngine,
-        leader: leaderPlayer.publicKey,
-        team: teamPda,
-        tld: 'sol',
-        domainName: 'myteam',
-      });
-
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [leaderPlayer.keypair]
-      );
-    });
-
-    it('should reject update team name without real domain', async () => {
-      const leaderPlayer = await factory.createPlayer({ initialize: true });
-      const teamId = Date.now();
-      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
-
-      const ix = await createUpdateTeamNameInstruction({
-        gameEngine: ctx.gameEngine,
-        leader: leaderPlayer.publicKey,
-        team: teamPda,
-        tld: 'sol',
-        domainName: 'newteamname',
-        oldTld: 'sol',
-        oldDomainName: 'oldteamname',
-      });
-
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [leaderPlayer.keypair]
-      );
-    });
-
-    it('should reject remove team name without real domain', async () => {
-      const leaderPlayer = await factory.createPlayer({ initialize: true });
-      const teamId = Date.now();
-      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
-
-      const ix = await createRemoveTeamNameInstruction({
-        gameEngine: ctx.gameEngine,
-        leader: leaderPlayer.publicKey,
-        team: teamPda,
-        tld: 'sol',
-        domainName: 'teamname',
-      });
-
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [leaderPlayer.keypair]
-      );
-    });
-
-    it('should reject non-leader setting team name', async () => {
-      const leaderPlayer = await factory.createPlayer({ initialize: true });
-      const memberPlayer = await factory.createPlayer({ initialize: true });
-      const teamId = Date.now();
-      const [teamPda] = await deriveTeamPda(ctx.gameEngine, teamId);
-
-      // Only team leader/officer can set team name
-      const ix = await createSetTeamNameInstruction({
-        gameEngine: ctx.gameEngine,
-        leader: memberPlayer.publicKey, // Not the leader
-        team: teamPda,
-        tld: 'sol',
-        domainName: 'unauthorized',
-      });
-
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [memberPlayer.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
   });
 
@@ -252,7 +127,6 @@ describe('Name Service', () => {
     it('should reject invalid TLD', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Only supported TLDs work
       const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -260,17 +134,12 @@ describe('Name Service', () => {
         domainName: 'myname',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject domain not owned by caller', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Domain ownership verification
       const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -278,18 +147,13 @@ describe('Name Service', () => {
         domainName: 'notmydomain',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject unregistered domains for both TLDs', async () => {
       const player1 = await factory.createPlayer({ initialize: true });
       const player2 = await factory.createPlayer({ initialize: true });
 
-      // Different TLDs supported (sol, bonk, etc.) but domains must exist
       const ix1 = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player1.publicKey,
@@ -304,17 +168,8 @@ describe('Name Service', () => {
         domainName: 'player2',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix1),
-        [player1.keypair]
-      );
-
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix2),
-        [player2.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix1), [player1.keypair]);
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix2), [player2.keypair]);
     });
   });
 
@@ -324,7 +179,6 @@ describe('Name Service', () => {
     it('should reject storing name without real domain', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Player account stores domain reference - requires real domain
       const ix = await createSetPlayerNameInstruction({
         gameEngine: ctx.gameEngine,
         owner: player.publicKey,
@@ -332,20 +186,14 @@ describe('Name Service', () => {
         domainName: 'fullname',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should allow reverse lookup', async () => {
       const player = await factory.createPlayer({ initialize: true });
 
-      // Can find player by domain name
       const account = await fetchPlayer(ctx.svm, player.playerPda);
       expect(account).not.toBeNull();
-      // Reverse lookup would query domain registry to find player PDA
     });
   });
 
@@ -362,11 +210,7 @@ describe('Name Service', () => {
         domainName: 'transfertest',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject transfer back without real domain on remove', async () => {
@@ -379,11 +223,7 @@ describe('Name Service', () => {
         domainName: 'returndomain',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
     });
 
     it('should reject swap without real domains on update', async () => {
@@ -394,15 +234,67 @@ describe('Name Service', () => {
         owner: player.publicKey,
         tld: 'sol',
         domainName: 'newdomain',
-        oldTld: 'sol',
         oldDomainName: 'olddomain',
       });
 
-      await expectTransactionToFail(
-        ctx.svm,
-        new Transaction().add(ix),
-        [player.keypair]
-      );
+      await expectTransactionToFail(ctx.svm, new Transaction().add(ix), [player.keypair]);
+    });
+  });
+
+  // Positive path — exercised against real `.solana` mainnet snapshots
+  // (TLD house/state/registry + the ANS & TLD-House programs), with the
+  // domain "minted" to the wallet via injected NameRecords. The domain lives
+  // directly on the player PDA; there is no MainDomain.
+
+  describe('Set + Remove (real .solana mint)', () => {
+    // NameRecordHeader.owner lives at byte offset 40, 32 bytes wide.
+    const ownerOf = (data: Uint8Array): Buffer => Buffer.from(data).subarray(40, 72);
+
+    it('sets then removes a player name (domain moves wallet <-> PDA)', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+      const domainName = 'cairnhero';
+      const { nameAccount } = await mintDomainToWallet(ctx.svm, domainName, player.publicKey);
+
+      // The .solana house/registry differ from the canonical deriveTldHousePda
+      // address, so the builders take them as explicit overrides.
+      const solanaOverride = { tldHouse: TLD_HOUSE_SOLANA, nameParent: TLD_REGISTRY_SOLANA };
+
+      // SET — transfers the domain to the player PDA.
+      const setIx = await createSetPlayerNameInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        tld: 'solana',
+        domainName,
+        ...solanaOverride,
+      });
+      await sendTransaction(ctx.svm, new Transaction().add(setIx), [player.keypair]);
+
+      // Domain now owned by the player PDA, name stored on the player account.
+      const forwardAfterSet = ctx.svm.getAccount(svmKey(nameAccount));
+      expect(forwardAfterSet).not.toBeNull();
+      expect(ownerOf(forwardAfterSet!.data).equals(Buffer.from(player.playerPda.toBytes()))).toBe(true);
+
+      const named = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(named).not.toBeNull();
+      expect(named!.name).toBe(`${domainName}.solana`);
+
+      // REMOVE — transfers the domain back to the wallet.
+      const removeIx = await createRemovePlayerNameInstruction({
+        gameEngine: ctx.gameEngine,
+        owner: player.publicKey,
+        tld: 'solana',
+        domainName,
+        ...solanaOverride,
+      });
+      await sendTransaction(ctx.svm, new Transaction().add(removeIx), [player.keypair]);
+
+      // Domain returned to the wallet, name cleared.
+      const forwardAfterRemove = ctx.svm.getAccount(svmKey(nameAccount));
+      expect(forwardAfterRemove).not.toBeNull();
+      expect(ownerOf(forwardAfterRemove!.data).equals(Buffer.from(player.publicKey.toBytes()))).toBe(true);
+
+      const cleared = await fetchPlayer(ctx.svm, player.playerPda);
+      expect(cleared!.name).toBe('');
     });
   });
 });

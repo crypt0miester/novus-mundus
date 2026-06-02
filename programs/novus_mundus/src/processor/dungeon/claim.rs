@@ -1,4 +1,4 @@
-use pinocchio::{
+ use pinocchio::{
     sysvars::{clock::Clock, Sysvar},
     AccountView, Address, ProgramResult,
 };
@@ -122,7 +122,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> 
 
     // Apply building bonuses
     let xp = if run.xp_building_bonus_bps > 0 {
-        crate::logic::safe_math::apply_bp(base_xp, 10000u64 + run.xp_building_bonus_bps as u64)
+        crate::logic::safe_math::apply_bp(base_xp, 10000u64.saturating_add(run.xp_building_bonus_bps as u64))
             .unwrap_or(base_xp)
     } else {
         base_xp
@@ -130,7 +130,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> 
 
     // Apply building bonus first, then time bonus (Night +25% NOVI)
     let novi_with_building = if run.novi_building_bonus_bps > 0 {
-        crate::logic::safe_math::apply_bp(base_novi, 10000u64 + run.novi_building_bonus_bps as u64)
+        crate::logic::safe_math::apply_bp(base_novi, 10000u64.saturating_add(run.novi_building_bonus_bps as u64))
             .unwrap_or(base_novi)
     } else {
         base_novi
@@ -182,7 +182,23 @@ pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> 
                 require_owner(lb_account, program_id)?;
 
                 let mut lb_data_ref = lb_account.try_borrow_mut()?;
+                crate::state::AccountKey::validate(
+                    &lb_data_ref,
+                    crate::state::AccountKey::DungeonLeaderboard,
+                )?;
                 let leaderboard = unsafe { DungeonLeaderboard::load_mut(&mut lb_data_ref) };
+
+                // Bind to a canonical DungeonLeaderboard PDA (kingdom + dungeon +
+                // its own week) so a look-alike account can't be scribbled over by
+                // the score insert below.
+                let (expected_lb_pda, _) = DungeonLeaderboard::derive_pda(
+                    &leaderboard.game_engine,
+                    leaderboard.dungeon_id,
+                    leaderboard.week_number,
+                );
+                if lb_account.address() != &expected_lb_pda {
+                    return Err(GameError::InvalidPDA.into());
+                }
 
                 // Only update if this is the correct leaderboard
                 if leaderboard.dungeon_id == dungeon_id {
@@ -199,7 +215,8 @@ pub fn process(program_id: &Address, accounts: &[AccountView], _data: &[u8]) -> 
                         true, // is_victory, so full clear bonus
                     );
 
-                    leaderboard.try_insert(*owner.address(), score);
+                    // Key the entry by the PlayerAccount PDA.
+                    leaderboard.try_insert(*player_account.address(), score);
                 }
             }
         }

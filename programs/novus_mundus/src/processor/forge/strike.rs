@@ -221,8 +221,8 @@ pub fn process(
                 while forge.mastery_level < 100 {
                     let xp_needed = forge.mastery_xp_for_next_level();
                     if forge.mastery_xp >= xp_needed {
-                        forge.mastery_xp -= xp_needed;
-                        forge.mastery_level += 1;
+                        forge.mastery_xp = forge.mastery_xp.saturating_sub(xp_needed);
+                        forge.mastery_level = forge.mastery_level.saturating_add(1);
                     } else {
                         break;
                     }
@@ -243,8 +243,8 @@ pub fn process(
 
     // Next stage
     crafted.current_stage = crafted.current_stage.saturating_add(1);
-    crafted.window_opens_at = now + stage_interval;
-    crafted.window_closes_at = crafted.window_opens_at + window_duration;
+    crafted.window_opens_at = now.saturating_add(stage_interval);
+    crafted.window_closes_at = crafted.window_opens_at.saturating_add(window_duration);
 
     Ok(())
 }

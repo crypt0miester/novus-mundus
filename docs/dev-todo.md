@@ -111,5 +111,7 @@ stays unobtainable. Prioritization order:
 
 
 10. castles give same rewards for every tier. very bad design.
-11. I can claim reward even if it is still contested.\
-12. ui should show countdowns. 
+13. arena full api and cli for other players to run.
+14. small dummy event for quick testing
+15. create a robust shop system in the cli, make it validate after and before that data is correct. full list of isntructions tested, and audited.
+16. analyze cranks and permissionless apis, create if missing. maybe using https://vercel.com/docs/queues/quickstart

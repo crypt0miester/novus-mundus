@@ -488,7 +488,9 @@ pub fn inflict_damage(
         )
         .unwrap_or(0) as u32;
         let capped_reduction_bp = reduction_bp.min(gameplay_config.armor_damage_reduction_cap_bps);
-        total_damage * (10000 - capped_reduction_bp) as f64 / 10000.0
+        // saturating_sub: a DAO-set cap > 10000 would make this u32 subtraction
+        // underflow-panic on every attack. Clamp to 0 (reduction maxes at 100%).
+        total_damage * 10000u32.saturating_sub(capped_reduction_bp) as f64 / 10000.0
     } else {
         total_damage
     };
@@ -552,13 +554,13 @@ pub fn inflict_damage(
     // Overkill damage that would have killed already-dead units. Redistribute
     // once across surviving tiers, weighted by the same damage % the config
     // uses for the base allocation.
-    let overkill_dmg = ((kills_1_raw - kills_1) as f64) * hp_1
-        + ((kills_2_raw - kills_2) as f64) * hp_2
-        + ((kills_3_raw - kills_3) as f64) * hp_3;
+    let overkill_dmg = ((kills_1_raw.saturating_sub(kills_1)) as f64) * hp_1
+        + ((kills_2_raw.saturating_sub(kills_2)) as f64) * hp_2
+        + ((kills_3_raw.saturating_sub(kills_3)) as f64) * hp_3;
 
-    let mut rem_1 = unit_1 - kills_1;
-    let mut rem_2 = unit_2 - kills_2;
-    let mut rem_3 = unit_3 - kills_3;
+    let mut rem_1 = unit_1.saturating_sub(kills_1);
+    let mut rem_2 = unit_2.saturating_sub(kills_2);
+    let mut rem_3 = unit_3.saturating_sub(kills_3);
 
     if overkill_dmg > 0.0 {
         let mut weight_sum = 0.0;

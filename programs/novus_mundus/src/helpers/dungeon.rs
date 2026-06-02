@@ -419,19 +419,19 @@ pub fn calculate_dungeon_damage(
 
     // Apply hero attack buff
     if hero_attack_bps > 0 {
-        damage = apply_bp(damage, 10000u64 + hero_attack_bps as u64).unwrap_or(damage);
+        damage = apply_bp(damage, 10000u64.saturating_add(hero_attack_bps as u64)).unwrap_or(damage);
     }
 
     // Apply relic attack bonus
     let relic_attack = calculate_relic_attack_bonus(run);
     if relic_attack > 0 {
-        damage = apply_bp(damage, 10000u64 + relic_attack as u64).unwrap_or(damage);
+        damage = apply_bp(damage, 10000u64.saturating_add(relic_attack as u64)).unwrap_or(damage);
     }
 
     // Apply synergy bonuses
     let synergies = calculate_synergy_bonuses(run);
     if synergies.attack_bps > 0 {
-        damage = apply_bp(damage, 10000u64 + synergies.attack_bps as u64).unwrap_or(damage);
+        damage = apply_bp(damage, 10000u64.saturating_add(synergies.attack_bps as u64)).unwrap_or(damage);
     }
 
     // Apply darkness penalty (scaled by time of day)
@@ -454,19 +454,19 @@ pub fn calculate_dungeon_damage(
 
         // Apply boss reduction as damage bonus (equivalent to reducing boss defense)
         if total_boss_reduction > 0 {
-            damage = apply_bp(damage, 10000u64 + total_boss_reduction as u64).unwrap_or(damage);
+            damage = apply_bp(damage, 10000u64.saturating_add(total_boss_reduction as u64)).unwrap_or(damage);
         }
 
         // Additional boss damage from 3-piece BOSS synergy
         if synergies.boss_damage_bps > 0 {
             damage =
-                apply_bp(damage, 10000u64 + synergies.boss_damage_bps as u64).unwrap_or(damage);
+                apply_bp(damage, 10000u64.saturating_add(synergies.boss_damage_bps as u64)).unwrap_or(damage);
         }
     }
 
     // Apply camp buff if active (from found supplies)
     if run.camp_bonus_bps > 0 && run.current_floor <= run.camp_expires_floor {
-        damage = apply_bp(damage, 10000u64 + run.camp_bonus_bps as u64).unwrap_or(damage);
+        damage = apply_bp(damage, 10000u64.saturating_add(run.camp_bonus_bps as u64)).unwrap_or(damage);
     }
 
     damage
@@ -483,7 +483,7 @@ pub fn calculate_enemy_damage(run: &DungeonRun, enemy_power: u32, is_boss: bool)
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
     let enemy_buff = calculate_darkness_with_time(base_enemy_buff, time_period, false);
     if enemy_buff > 0 {
-        damage = apply_bp(damage, 10000u64 + enemy_buff as u64).unwrap_or(damage);
+        damage = apply_bp(damage, 10000u64.saturating_add(enemy_buff as u64)).unwrap_or(damage);
     }
 
     // Boss gets power reduction from relics/synergies
@@ -536,7 +536,7 @@ pub fn calculate_damage_taken(
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
     let defense_penalty = calculate_darkness_with_time(base_defense_penalty, time_period, false);
     if defense_penalty > 0 {
-        damage = apply_bp(damage, 10000u64 + defense_penalty as u64).unwrap_or(damage);
+        damage = apply_bp(damage, 10000u64.saturating_add(defense_penalty as u64)).unwrap_or(damage);
     }
 
     damage
@@ -605,18 +605,18 @@ pub fn calculate_loot_with_bonuses(
     // Apply relic loot bonus
     let relic_bonus = calculate_relic_loot_bonus(run);
     if relic_bonus > 0 {
-        loot = apply_bp(loot, 10000u64 + relic_bonus as u64).unwrap_or(loot);
+        loot = apply_bp(loot, 10000u64.saturating_add(relic_bonus as u64)).unwrap_or(loot);
     }
 
     // Apply synergy loot bonus
     let synergies = calculate_synergy_bonuses(run);
     if synergies.loot_bps > 0 {
-        loot = apply_bp(loot, 10000u64 + synergies.loot_bps as u64).unwrap_or(loot);
+        loot = apply_bp(loot, 10000u64.saturating_add(synergies.loot_bps as u64)).unwrap_or(loot);
     }
 
     // Apply building (Observatory/Treasury/Catacombs) bonus
     if building_bonus_bps > 0 {
-        loot = apply_bp(loot, 10000u64 + building_bonus_bps as u64).unwrap_or(loot);
+        loot = apply_bp(loot, 10000u64.saturating_add(building_bonus_bps as u64)).unwrap_or(loot);
     }
 
     loot
@@ -820,7 +820,7 @@ pub fn calculate_enemy_power_with_time(
 
     // Apply theme modifier (can be positive or negative)
     if theme_mod > 0 {
-        power = apply_bp(power, 10000u64 + theme_mod as u64).unwrap_or(power);
+        power = apply_bp(power, 10000u64.saturating_add(theme_mod as u64)).unwrap_or(power);
     } else if theme_mod < 0 {
         let reduction = apply_bp(power, (-theme_mod) as u64).unwrap_or(0);
         power = power.saturating_sub(reduction);
@@ -852,7 +852,7 @@ pub fn calculate_xp_with_time(base_xp: u64, period: TimePeriod, is_first_light: 
 
     // Apply time period XP bonus
     if time_mods.xp_bonus_bps > 0 {
-        xp = apply_bp(xp, 10000u64 + time_mods.xp_bonus_bps as u64).unwrap_or(xp);
+        xp = apply_bp(xp, 10000u64.saturating_add(time_mods.xp_bonus_bps as u64)).unwrap_or(xp);
     }
 
     // First Light bonus (+50% for 30 minutes)
@@ -868,7 +868,7 @@ pub fn calculate_novi_with_time(base_novi: u64, period: TimePeriod) -> u64 {
     let time_mods = get_time_modifiers(period);
 
     if time_mods.novi_bonus_bps > 0 {
-        apply_bp(base_novi, 10000u64 + time_mods.novi_bonus_bps as u64).unwrap_or(base_novi)
+        apply_bp(base_novi, 10000u64.saturating_add(time_mods.novi_bonus_bps as u64)).unwrap_or(base_novi)
     } else {
         base_novi
     }
@@ -904,7 +904,7 @@ pub fn get_boss_wrath_damage(wrath: u8, run: &DungeonRun) -> (u16, u8) {
     let has_defense_3 = synergies.defense_bps >= 3000; // 3-piece DEFENSE
 
     // Base damage multiplier and attacks
-    let (base_mult, base_attacks) = if wrath >= WRATH_DEATH_THROES {
+    let (base_mult, base_attacks): (u16, u8) = if wrath >= WRATH_DEATH_THROES {
         (15000, 2u8) // +50% damage, 2 attacks
     } else if wrath >= WRATH_DESPERATE {
         (13000, 2u8) // +30% damage, 2 attacks
@@ -916,8 +916,8 @@ pub fn get_boss_wrath_damage(wrath: u8, run: &DungeonRun) -> (u16, u8) {
 
     // DEFENSE 3-piece halves wrath damage bonuses
     let final_mult = if has_defense_3 && base_mult > 10000 {
-        let bonus = base_mult - 10000;
-        10000 + bonus / 2
+        let bonus = base_mult.saturating_sub(10000);
+        10000u16.saturating_add(bonus / 2)
     } else {
         base_mult
     };
@@ -970,7 +970,7 @@ use crate::state::HeroSpecialization;
 pub fn apply_warrior_attack_bonus(damage: u64, spec: HeroSpecialization) -> u64 {
     let bonus = spec.attack_bonus_bps();
     if bonus > 0 {
-        apply_bp(damage, 10000u64 + bonus as u64).unwrap_or(damage)
+        apply_bp(damage, 10000u64.saturating_add(bonus as u64)).unwrap_or(damage)
     } else if bonus < 0 {
         let reduction = apply_bp(damage, (-bonus) as u64).unwrap_or(0);
         damage.saturating_sub(reduction)
@@ -999,7 +999,7 @@ pub fn get_scout_darkness_reduction(spec: HeroSpecialization) -> u16 {
 pub fn apply_scout_loot_bonus(loot: u64, spec: HeroSpecialization) -> u64 {
     let bonus = spec.loot_bonus_bps();
     if bonus > 0 {
-        apply_bp(loot, 10000u64 + bonus as u64).unwrap_or(loot)
+        apply_bp(loot, 10000u64.saturating_add(bonus as u64)).unwrap_or(loot)
     } else {
         loot
     }
@@ -1025,7 +1025,7 @@ pub fn apply_healing_modifier(heal_amount: u64, spec: HeroSpecialization) -> u64
         let reduction = apply_bp(heal_amount, (-modifier) as u64).unwrap_or(0);
         heal_amount.saturating_sub(reduction)
     } else if modifier > 0 {
-        apply_bp(heal_amount, 10000u64 + modifier as u64).unwrap_or(heal_amount)
+        apply_bp(heal_amount, 10000u64.saturating_add(modifier as u64)).unwrap_or(heal_amount)
     } else {
         heal_amount
     }
@@ -1066,7 +1066,7 @@ pub fn get_boss_ability(theme: DungeonTheme, boss_max_hp: u64, run: &DungeonRun)
             defense_pierce_bps: 10000, // Ignores all defense
             darkness_mult: 1,
             shield_hp: 0,
-            remaining_attacks: 3 * duration_mult, // 3 attacks (or 6 without counter)
+            remaining_attacks: 3u8.saturating_mul(duration_mult), // 3 attacks (or 6 without counter)
         },
         DungeonTheme::DarknessVulnerable => BossAbility {
             active: true,
@@ -1081,7 +1081,7 @@ pub fn get_boss_ability(theme: DungeonTheme, boss_max_hp: u64, run: &DungeonRun)
             lifesteal_bps: 0,
             defense_pierce_bps: 0,
             darkness_mult: 1,
-            shield_hp: boss_max_hp * 30 / 100, // 30% max HP shield
+            shield_hp: boss_max_hp.saturating_mul(30) / 100, // 30% max HP shield
             remaining_attacks: 255,            // Until shield broken
         },
     }

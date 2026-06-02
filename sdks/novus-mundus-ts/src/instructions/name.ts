@@ -1,28 +1,25 @@
 /**
  * Name Instructions
  *
- * Instructions for name service integration (ANS/TLD House):
- * - Set player name
- * - Update player name
- * - Remove player name
- * - Set team name
- * - Update team name
- * - Remove team name
+ * Player display names backed by an AllDomains (ANS) domain:
+ * - Set player name   (transfer domain: wallet → player PDA)
+ * - Update player name (swap domains: old → wallet, new → player PDA)
+ * - Remove player name (transfer domain: player PDA → wallet)
+ *
+ * The domain is held directly by the player PDA. We do NOT register a TLD-House
+ * MainDomain: set_main_domain funds its `init` with a System transfer from the
+ * payer (which must be the domain owner — the player PDA), and a System transfer
+ * cannot debit a program-owned account that carries data. Team names are
+ * unsupported for the same reason.
  */
 
-import {
-  PublicKey,
-  TransactionInstruction,
-  SystemProgram,
-} from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS, ALT_NAME_SERVICE_PROGRAM_ID, TLD_HOUSE_PROGRAM_ID } from '../program';
+import { PublicKey, TransactionInstruction } from '@solana/web3.js';
+import { PROGRAM_ID, DISCRIMINATORS, ALT_NAME_SERVICE_PROGRAM_ID } from '../program';
 import { BufferWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveNameAccountPda,
   deriveReverseNameAccountPda,
-  deriveMainDomainPda,
-  deriveTldStatePda,
   deriveTldHousePda,
   getHashedName,
 } from '../pda';
@@ -38,43 +35,42 @@ export interface SetPlayerNameAccounts {
   tld: string;
   /** Domain name without TLD (e.g., "myname") */
   domainName: string;
+  /**
+   * Override the TldHouse account. Defaults to `deriveTldHousePda(tld)`, which
+   * is correct for houses created at the canonical PDA. Some legacy TLDs (e.g.
+   * `.solana`) live at a non-canonical house address and must be passed here.
+   */
+  tldHouse?: PublicKey;
+  /**
+   * Override the name_parent (the TLD's registry NameRecord). Defaults to the
+   * TldHouse PDA. For TLDs whose `tld_registry_pubkey` differs from the house
+   * (e.g. `.solana`), pass the registry record here.
+   */
+  nameParent?: PublicKey;
 }
 
-/** ~10,000 CU */
+/** ~7,000 CU */
 /**
  * Set a domain name as the player's display name.
  *
- * Transfers the domain to the player account PDA.
- * Domain must be owned by the player's wallet.
- * Also sets the main domain via TLD House CPI so the player PDA's primary name is set.
+ * Transfers the domain to the player account PDA. Domain must be owned by the
+ * player's wallet.
  */
 export async function createSetPlayerNameInstruction(
   accounts: SetPlayerNameAccounts
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [tldHouse] = await deriveTldHousePda(accounts.tld);
-  const [tldState] = await deriveTldStatePda();
-  const [mainDomain] = await deriveMainDomainPda(player);
-  const [nameParent] = await deriveTldHousePda(accounts.tld); // TLD account (same as tldHouse)
+  const tldHouse = accounts.tldHouse ?? (await deriveTldHousePda(accounts.tld))[0];
+  const nameParent = accounts.nameParent ?? tldHouse;
   const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
   const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
-  // NULL_PUBKEY for standard domains (name_class)
-  const nameClass = PublicKey.default;
+  const nameClass = PublicKey.default; // NULL_PUBKEY for standard domains
 
-  // Rust account order:
-  // 0. player (WRITE)
-  // 1. name_account (WRITE)
-  // 2. reverse_name_account (READ)
-  // 3. name_class (READ) - NULL_PUBKEY for standard domains
-  // 4. name_parent (READ)
-  // 5. tld_house (READ)
-  // 6. tld_state (READ)
-  // 7. main_domain (WRITE)
-  // 8. owner (SIGNER)
-  // 9. system_program (READ)
-  // 10. alt_name_service_program (READ)
-  // 11. tld_house_program (READ)
+  // Rust account order (8):
+  // 0. player (WRITE)  1. name_account (WRITE)  2. reverse_name_account
+  // 3. name_class  4. name_parent  5. tld_house
+  // 6. owner (SIGNER, WRITE)  7. alt_name_service_program
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: nameAccount, isSigner: false, isWritable: true },
@@ -82,28 +78,18 @@ export async function createSetPlayerNameInstruction(
     { pubkey: nameClass, isSigner: false, isWritable: false },
     { pubkey: nameParent, isSigner: false, isWritable: false },
     { pubkey: tldHouse, isSigner: false, isWritable: false },
-    { pubkey: tldState, isSigner: false, isWritable: false },
-    { pubkey: mainDomain, isSigner: false, isWritable: true },
-    { pubkey: accounts.owner, isSigner: true, isWritable: false },
-    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    // owner is the mut signer of the ANS domain transfer.
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
-    { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: reverse_acc_hashed_name (32 bytes)
-  // This is the hash used to derive/verify the reverse name account
-  const reverseAccHashedName = getHashedName(nameAccount.toBase58());
-
+  // Instruction data: reverse_acc_hashed_name (32 bytes), used to derive/verify
+  // the reverse name account on-chain.
   const writer = new BufferWriter(32);
-  writer.writeBytes(reverseAccHashedName);
+  writer.writeBytes(getHashedName(nameAccount.toBase58()));
 
   const data = createInstructionData(DISCRIMINATORS.NAME_SET_PLAYER, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }
 
 // Update Player Name
@@ -113,70 +99,63 @@ export interface UpdatePlayerNameAccounts {
   owner: PublicKey;
   /** GameEngine PDA */
   gameEngine: PublicKey;
-  /** New TLD */
+  /** TLD shared by both old and new domains (the processor takes one name_parent) */
   tld: string;
   /** New domain name */
   domainName: string;
-  /** Old domain name (for transfer back) */
+  /** Old domain name (transferred back to the wallet) */
   oldDomainName: string;
-  /** Old TLD */
-  oldTld: string;
+  /** Override the TldHouse account (see {@link SetPlayerNameAccounts.tldHouse}). */
+  tldHouse?: PublicKey;
+  /** Override the name_parent registry record (see {@link SetPlayerNameAccounts.nameParent}). */
+  nameParent?: PublicKey;
 }
 
-/** ~10,000 CU */
+/** ~12,000 CU */
 /**
- * Update player's display name to a different domain.
+ * Update the player's display name to a different domain under the same TLD.
  *
- * Transfers old domain back to wallet, sets new domain.
+ * Transfers the old domain back to the wallet and the new domain to the PDA.
  */
 export async function createUpdatePlayerNameInstruction(
   accounts: UpdatePlayerNameAccounts
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [tldHouse] = await deriveTldHousePda(accounts.tld);
-  const [tldState] = await deriveTldStatePda();
-  const [mainDomain] = await deriveMainDomainPda(player);
-  const [nameParent] = await deriveTldHousePda(accounts.tld);
-  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
+  const tldHouse = accounts.tldHouse ?? (await deriveTldHousePda(accounts.tld))[0];
+  const nameParent = accounts.nameParent ?? tldHouse;
+  const [oldNameAccount] = await deriveNameAccountPda(accounts.oldDomainName, nameParent);
+  const [oldReverseNameAccount] = await deriveReverseNameAccountPda(oldNameAccount, tldHouse);
+  const [newNameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
+  const [newReverseNameAccount] = await deriveReverseNameAccountPda(newNameAccount, tldHouse);
 
-  // Old domain accounts
-  const [oldNameParent] = await deriveTldHousePda(accounts.oldTld);
-  const [oldNameAccount] = await deriveNameAccountPda(accounts.oldDomainName, oldNameParent);
+  const nameClass = PublicKey.default;
 
+  // Rust account order (10):
+  // 0. player (WRITE)  1. old_name_account (WRITE)  2. old_reverse_name_account
+  // 3. new_name_account (WRITE)  4. new_reverse_name_account
+  // 5. name_class  6. name_parent  7. tld_house
+  // 8. owner (SIGNER, WRITE)  9. alt_name_service_program
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
-    { pubkey: accounts.owner, isSigner: true, isWritable: true },
-    { pubkey: nameAccount, isSigner: false, isWritable: true },
-    { pubkey: reverseNameAccount, isSigner: false, isWritable: true },
+    { pubkey: oldNameAccount, isSigner: false, isWritable: true },
+    { pubkey: oldReverseNameAccount, isSigner: false, isWritable: false },
+    { pubkey: newNameAccount, isSigner: false, isWritable: true },
+    { pubkey: newReverseNameAccount, isSigner: false, isWritable: false },
+    { pubkey: nameClass, isSigner: false, isWritable: false },
     { pubkey: nameParent, isSigner: false, isWritable: false },
     { pubkey: tldHouse, isSigner: false, isWritable: false },
-    { pubkey: tldState, isSigner: false, isWritable: false },
-    { pubkey: mainDomain, isSigner: false, isWritable: true },
-    { pubkey: oldNameAccount, isSigner: false, isWritable: true },
+    // owner is the mut signer of the new-domain transfer.
+    { pubkey: accounts.owner, isSigner: true, isWritable: true },
     { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
-    { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: same as set_player
-  const nameBytes = new TextEncoder().encode(accounts.domainName);
-  const tldBytes = new TextEncoder().encode(accounts.tld);
-  const hashedName = getHashedName(accounts.domainName);
-
-  const writer = new BufferWriter(1 + nameBytes.length + 1 + tldBytes.length + 32);
-  writer.writeU8(nameBytes.length);
-  writer.writeBytes(nameBytes);
-  writer.writeU8(tldBytes.length);
-  writer.writeBytes(tldBytes);
-  writer.writeBytes(hashedName);
+  // Instruction data: old_reverse_acc_hashed_name (32) + new_reverse_acc_hashed_name (32)
+  const writer = new BufferWriter(64);
+  writer.writeBytes(getHashedName(oldNameAccount.toBase58()));
+  writer.writeBytes(getHashedName(newNameAccount.toBase58()));
 
   const data = createInstructionData(DISCRIMINATORS.NAME_UPDATE_PLAYER, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }
 
 // Remove Player Name
@@ -190,35 +169,32 @@ export interface RemovePlayerNameAccounts {
   tld: string;
   /** Current domain name */
   domainName: string;
+  /** Override the TldHouse account (see {@link SetPlayerNameAccounts.tldHouse}). */
+  tldHouse?: PublicKey;
+  /** Override the name_parent registry record (see {@link SetPlayerNameAccounts.nameParent}). */
+  nameParent?: PublicKey;
 }
 
-/** ~5,000 CU */
+/** ~6,000 CU */
 /**
- * Remove player's display name (transfer domain back to wallet).
+ * Remove the player's display name, transferring the domain back to the wallet.
  *
  * Rust account order (8):
- * 0. [writable] player: PlayerAccount PDA
- * 1. [writable] name_account: The domain's name account
- * 2. [] reverse_name_account: The domain's reverse lookup account
- * 3. [] name_class: Name class account (NULL_PUBKEY for standard domains)
- * 4. [] name_parent: Parent TLD account
- * 5. [] tld_house: TldHouse account
- * 6. [signer] owner: Player wallet
- * 7. [] alt_name_service_program: Alt Name Service program
+ * 0. [writable] player  1. [writable] name_account  2. reverse_name_account
+ * 3. name_class  4. name_parent  5. tld_house
+ * 6. [signer] owner  7. alt_name_service_program
  *
- * Instruction data (32 bytes):
- * - reverse_acc_hashed_name: [u8; 32]
+ * Instruction data (32 bytes): reverse_acc_hashed_name
  */
 export async function createRemovePlayerNameInstruction(
   accounts: RemovePlayerNameAccounts
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
-  const [tldHouse] = await deriveTldHousePda(accounts.tld);
-  const [nameParent] = await deriveTldHousePda(accounts.tld);
+  const tldHouse = accounts.tldHouse ?? (await deriveTldHousePda(accounts.tld))[0];
+  const nameParent = accounts.nameParent ?? tldHouse;
   const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
   const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
 
-  // NULL_PUBKEY for standard domains (name_class)
   const nameClass = PublicKey.default;
 
   const keys = [
@@ -228,208 +204,15 @@ export async function createRemovePlayerNameInstruction(
     { pubkey: nameClass, isSigner: false, isWritable: false },
     { pubkey: nameParent, isSigner: false, isWritable: false },
     { pubkey: tldHouse, isSigner: false, isWritable: false },
+    // The player PDA owns the domain and signs the transfer; the wallet just
+    // receives it back, so owner is a read-only signer.
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  // Instruction data: reverse_acc_hashed_name (32 bytes)
-  const reverseAccHashedName = getHashedName(nameAccount.toBase58());
-
   const writer = new BufferWriter(32);
-  writer.writeBytes(reverseAccHashedName);
+  writer.writeBytes(getHashedName(nameAccount.toBase58()));
 
   const data = createInstructionData(DISCRIMINATORS.NAME_REMOVE_PLAYER, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
-}
-
-// Set Team Name
-
-export interface SetTeamNameAccounts {
-  /** Leader's wallet (signer) */
-  leader: PublicKey;
-  /** GameEngine PDA */
-  gameEngine: PublicKey;
-  /** Team account */
-  team: PublicKey;
-  /** TLD */
-  tld: string;
-  /** Domain name */
-  domainName: string;
-}
-
-/** ~10,000 CU */
-/**
- * Set a domain name as the team's display name.
- *
- * Only team leader can set team name.
- */
-export async function createSetTeamNameInstruction(
-  accounts: SetTeamNameAccounts
-): Promise<TransactionInstruction> {
-  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [tldHouse] = await deriveTldHousePda(accounts.tld);
-  const [tldState] = await deriveTldStatePda();
-  const [mainDomain] = await deriveMainDomainPda(accounts.team);
-  const [nameParent] = await deriveTldHousePda(accounts.tld);
-  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
-
-  const keys = [
-    { pubkey: leaderPlayer, isSigner: false, isWritable: false },
-    { pubkey: accounts.leader, isSigner: true, isWritable: true },
-    { pubkey: accounts.team, isSigner: false, isWritable: true },
-    { pubkey: nameAccount, isSigner: false, isWritable: true },
-    { pubkey: reverseNameAccount, isSigner: false, isWritable: true },
-    { pubkey: nameParent, isSigner: false, isWritable: false },
-    { pubkey: tldHouse, isSigner: false, isWritable: false },
-    { pubkey: tldState, isSigner: false, isWritable: false },
-    { pubkey: mainDomain, isSigner: false, isWritable: true },
-    { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
-    { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
-  ];
-
-  const nameBytes = new TextEncoder().encode(accounts.domainName);
-  const tldBytes = new TextEncoder().encode(accounts.tld);
-  const hashedName = getHashedName(accounts.domainName);
-
-  const writer = new BufferWriter(1 + nameBytes.length + 1 + tldBytes.length + 32);
-  writer.writeU8(nameBytes.length);
-  writer.writeBytes(nameBytes);
-  writer.writeU8(tldBytes.length);
-  writer.writeBytes(tldBytes);
-  writer.writeBytes(hashedName);
-
-  const data = createInstructionData(DISCRIMINATORS.NAME_SET_TEAM, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
-}
-
-// Update Team Name
-
-export interface UpdateTeamNameAccounts {
-  /** Leader's wallet (signer) */
-  leader: PublicKey;
-  /** GameEngine PDA */
-  gameEngine: PublicKey;
-  /** Team account */
-  team: PublicKey;
-  /** New TLD */
-  tld: string;
-  /** New domain name */
-  domainName: string;
-  /** Old TLD */
-  oldTld: string;
-  /** Old domain name */
-  oldDomainName: string;
-}
-
-/** ~10,000 CU */
-/**
- * Update team's display name to a different domain.
- */
-export async function createUpdateTeamNameInstruction(
-  accounts: UpdateTeamNameAccounts
-): Promise<TransactionInstruction> {
-  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [tldHouse] = await deriveTldHousePda(accounts.tld);
-  const [tldState] = await deriveTldStatePda();
-  const [mainDomain] = await deriveMainDomainPda(accounts.team);
-  const [nameParent] = await deriveTldHousePda(accounts.tld);
-  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
-  const [reverseNameAccount] = await deriveReverseNameAccountPda(nameAccount, tldHouse);
-
-  // Old domain
-  const [oldNameParent] = await deriveTldHousePda(accounts.oldTld);
-  const [oldNameAccount] = await deriveNameAccountPda(accounts.oldDomainName, oldNameParent);
-
-  const keys = [
-    { pubkey: leaderPlayer, isSigner: false, isWritable: false },
-    { pubkey: accounts.leader, isSigner: true, isWritable: true },
-    { pubkey: accounts.team, isSigner: false, isWritable: true },
-    { pubkey: nameAccount, isSigner: false, isWritable: true },
-    { pubkey: reverseNameAccount, isSigner: false, isWritable: true },
-    { pubkey: nameParent, isSigner: false, isWritable: false },
-    { pubkey: tldHouse, isSigner: false, isWritable: false },
-    { pubkey: tldState, isSigner: false, isWritable: false },
-    { pubkey: mainDomain, isSigner: false, isWritable: true },
-    { pubkey: oldNameAccount, isSigner: false, isWritable: true },
-    { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
-    { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
-  ];
-
-  const nameBytes = new TextEncoder().encode(accounts.domainName);
-  const tldBytes = new TextEncoder().encode(accounts.tld);
-  const hashedName = getHashedName(accounts.domainName);
-
-  const writer = new BufferWriter(1 + nameBytes.length + 1 + tldBytes.length + 32);
-  writer.writeU8(nameBytes.length);
-  writer.writeBytes(nameBytes);
-  writer.writeU8(tldBytes.length);
-  writer.writeBytes(tldBytes);
-  writer.writeBytes(hashedName);
-
-  const data = createInstructionData(DISCRIMINATORS.NAME_UPDATE_TEAM, writer.toBuffer());
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
-}
-
-// Remove Team Name
-
-export interface RemoveTeamNameAccounts {
-  /** Leader's wallet (signer) */
-  leader: PublicKey;
-  /** GameEngine PDA */
-  gameEngine: PublicKey;
-  /** Team account */
-  team: PublicKey;
-  /** Current TLD */
-  tld: string;
-  /** Current domain name */
-  domainName: string;
-}
-
-/** ~5,000 CU */
-/**
- * Remove team's display name (transfer domain back to leader).
- */
-export async function createRemoveTeamNameInstruction(
-  accounts: RemoveTeamNameAccounts
-): Promise<TransactionInstruction> {
-  const [leaderPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.leader);
-  const [tldHouse] = await deriveTldHousePda(accounts.tld);
-  const [mainDomain] = await deriveMainDomainPda(accounts.team);
-  const [nameParent] = await deriveTldHousePda(accounts.tld);
-  const [nameAccount] = await deriveNameAccountPda(accounts.domainName, nameParent);
-
-  const keys = [
-    { pubkey: leaderPlayer, isSigner: false, isWritable: false },
-    { pubkey: accounts.leader, isSigner: true, isWritable: true },
-    { pubkey: accounts.team, isSigner: false, isWritable: true },
-    { pubkey: nameAccount, isSigner: false, isWritable: true },
-    { pubkey: tldHouse, isSigner: false, isWritable: false },
-    { pubkey: mainDomain, isSigner: false, isWritable: true },
-    { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
-    { pubkey: TLD_HOUSE_PROGRAM_ID, isSigner: false, isWritable: false },
-  ];
-
-  const data = createInstructionData(DISCRIMINATORS.NAME_REMOVE_TEAM);
-
-  return new TransactionInstruction({
-    keys,
-    programId: PROGRAM_ID,
-    data,
-  });
+  return new TransactionInstruction({ keys, programId: PROGRAM_ID, data });
 }

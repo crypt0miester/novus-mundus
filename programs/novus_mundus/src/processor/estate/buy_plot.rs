@@ -123,7 +123,7 @@ pub fn process(
     //     recalculate_estate_level, daily activity scans) would attempt to index
     //     into building slots whose bytes are not yet allocated on the account
     //     — undefined behavior.
-    let new_slot_count = (plot_index as usize).saturating_add(1) * SLOTS_PER_PLOT;
+    let new_slot_count = (plot_index as usize).saturating_add(1).saturating_mul(SLOTS_PER_PLOT);
     let new_size = EstateAccount::size_for_slots(new_slot_count);
 
     let rent = Rent::get()?;

@@ -107,9 +107,9 @@ pub fn process(
         return Err(GameError::ExpeditionAlreadyComplete.into());
     }
 
-    let remaining_seconds = (end_time - now) as u64;
+    let remaining_seconds = end_time.saturating_sub(now) as u64;
     // Integer ceiling division: (a + b - 1) / b
-    let remaining_minutes = (remaining_seconds + 59) / 60;
+    let remaining_minutes = remaining_seconds.saturating_add(59) / 60;
 
     if remaining_minutes == 0 {
         return Err(GameError::InvalidParameter.into());

@@ -114,8 +114,9 @@ pub fn process(
         return Err(GameError::CastleIneligible.into());
     }
 
-    // Check networth (stored in millions)
-    let networth_millions = (player.networth / 1_000_000) as u8;
+    // Check networth (stored in millions). Clamp before the u8 cast: a player
+    // with >=256M networth would otherwise wrap mod 256 and misread the gate.
+    let networth_millions = (player.networth / 1_000_000).min(255) as u8;
     if networth_millions < castle.min_networth_millions {
         return Err(GameError::CastleIneligible.into());
     }
@@ -125,7 +126,7 @@ pub fn process(
         .defensive_unit_1
         .saturating_add(player.defensive_unit_2)
         .saturating_add(player.defensive_unit_3);
-    let troops_thousands = (total_troops / 1_000) as u8;
+    let troops_thousands = (total_troops / 1_000).min(255) as u8;
     if troops_thousands < castle.min_troops_thousands {
         return Err(GameError::CastleIneligible.into());
     }
@@ -191,7 +192,7 @@ pub fn process(
     castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on ownership change
     castle.team = player.team_address();
     castle.claimed_at = now;
-    castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
+    castle.contest_end_at = now.saturating_add(CASTLE_CONTEST_DURATION);
     castle.status = CASTLE_STATUS_CONTEST;
 
     // Set garrison cap based on king's subscription tier

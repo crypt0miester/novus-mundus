@@ -94,18 +94,20 @@ pub fn process(
         if now >= arrival {
             return Err(GameError::TravelNotComplete.into()); // Already arrived
         }
-        arrival - now
+        arrival.saturating_sub(now)
     } else {
         // Return travel
-        let return_arrival = reinf.return_started_at + reinf.return_duration as i64;
+        let return_arrival = reinf
+            .return_started_at
+            .saturating_add(reinf.return_duration as i64);
         if now >= return_arrival {
             return Err(GameError::ReturnNotComplete.into()); // Already returned
         }
-        return_arrival - now
+        return_arrival.saturating_sub(now)
     };
 
     // Integer ceiling division: (a + b - 1) / b
-    let remaining_minutes = (remaining_seconds as u64 + 59) / 60;
+    let remaining_minutes = (remaining_seconds as u64).saturating_add(59) / 60;
     if remaining_minutes == 0 {
         // Less than a minute remaining
         return Err(GameError::InvalidParameter.into());
@@ -139,18 +141,18 @@ pub fn process(
     // 12. Update Arrival Time based on status
     let (speedup_type_value, new_eta) = if status == ReinforcementStatus::Traveling {
         // Update outbound arrival
-        let new_arrival = now + new_remaining_seconds;
+        let new_arrival = now.saturating_add(new_remaining_seconds);
         reinf.arrives_at = new_arrival;
         // Also update travel_duration to reflect the speedup
         // (so has_arrived() calculates correctly)
-        let elapsed = now - reinf.sent_at;
-        reinf.travel_duration = (elapsed + new_remaining_seconds) as i32;
+        let elapsed = now.saturating_sub(reinf.sent_at);
+        reinf.travel_duration = elapsed.saturating_add(new_remaining_seconds) as i32;
         (1u8, new_arrival)
     } else {
         // Update return arrival by adjusting return_duration
-        let elapsed = now - reinf.return_started_at;
-        let new_arrival = now + new_remaining_seconds;
-        reinf.return_duration = (elapsed + new_remaining_seconds) as i32;
+        let elapsed = now.saturating_sub(reinf.return_started_at);
+        let new_arrival = now.saturating_add(new_remaining_seconds);
+        reinf.return_duration = elapsed.saturating_add(new_remaining_seconds) as i32;
         (2u8, new_arrival)
     };
 

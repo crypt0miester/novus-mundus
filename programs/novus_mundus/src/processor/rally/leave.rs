@@ -157,7 +157,7 @@ pub fn process(
     } else {
         // Mid-travel to rally - turn around
         // Return time = time already spent traveling (go back the distance covered)
-        let time_spent = (now - participant.travel_started_at) as i32;
+        let time_spent = now.saturating_sub(participant.travel_started_at) as i32;
         time_spent.max(0)
     };
 

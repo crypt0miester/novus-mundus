@@ -76,6 +76,7 @@ pub fn process(
     require_initialized(court_position_account).map_err(|_| GameError::NotCourtMember)?;
 
     let court_data = court_position_account.try_borrow()?;
+    crate::state::AccountKey::validate(&court_data, crate::state::AccountKey::CourtPosition)?;
     let court = unsafe { CourtPositionAccount::load(&court_data) };
 
     // Verify player is the holder
@@ -89,6 +90,14 @@ pub fn process(
     }
 
     let position_type = court.position_type;
+
+    // Bind to the canonical court PDA (the sibling closers already do this) so a
+    // look-alike account can't be substituted and closed for its rent.
+    let (expected_court_pda, _) =
+        CourtPositionAccount::derive_pda(castle_account.address(), position_type);
+    if court_position_account.address() != &expected_court_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
 
     // Get current timestamp
     let clock = Clock::get()?;

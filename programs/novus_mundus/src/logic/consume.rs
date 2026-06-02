@@ -102,14 +102,14 @@ pub fn calculate_synchrony(
 
     // 1. Subscription tier bonus (from tier config, using effective tier for expiration)
     let tier_index = player.get_effective_tier(now) as usize;
-    synchrony_bp += subscription_tiers[tier_index].synchrony_bonus;
+    synchrony_bp = synchrony_bp.saturating_add(subscription_tiers[tier_index].synchrony_bonus);
 
     // 2. Happiness bonus (0 to happiness_synchrony_max based on average happiness)
     // Average both defensive and operative happiness (0.0-1.0 scale)
     let avg_happiness = (player.happiness_defensive + player.happiness_operative) / 2.0;
     let happiness_bonus = ((avg_happiness * gameplay_config.happiness_synchrony_max as f32) as u32)
         .min(gameplay_config.happiness_synchrony_max);
-    synchrony_bp += happiness_bonus;
+    synchrony_bp = synchrony_bp.saturating_add(happiness_bonus);
 
     // 3. Reputation bonus (from config array)
     // Reputation ranks: Novice(0), Skilled(1k), Veteran(5k), Elite(20k), Legendary(100k)
@@ -124,12 +124,12 @@ pub fn calculate_synchrony(
     } else {
         gameplay_config.reputation_synchrony_bonuses[0] // Novice
     };
-    synchrony_bp += reputation_bonus;
+    synchrony_bp = synchrony_bp.saturating_add(reputation_bonus);
 
     // 4. Level bonus (level * level_synchrony_bonus_per_level)
     let level_bonus =
         (player.level as u32).saturating_mul(gameplay_config.level_synchrony_bonus_per_level);
-    synchrony_bp += level_bonus;
+    synchrony_bp = synchrony_bp.saturating_add(level_bonus);
 
     // Synchrony multiplier in basis points (10000 = 1.0x).
     synchrony_bp

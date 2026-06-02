@@ -5,7 +5,7 @@ use crate::{
     events::KingdomEventCreated,
     state::{player::NULL_PUBKEY, EventAccount, GameEngine, LeaderboardEntry},
     types::{EventType, PrizeType},
-    utils::{read_i64, read_u64, read_u8},
+    utils::{read_bytes32, read_i64, read_u64, read_u8},
     validation::{require_key_match, require_signer, require_writable},
 };
 use pinocchio::{error::ProgramError, AccountView, Address, ProgramResult};
@@ -73,7 +73,11 @@ pub fn process(
         return Err(GameError::EventNameTooLong.into());
     }
 
-    if instruction_data.len() < 9 + name_len + 58 {
+    // Fixed tail after the name: start_time(8) + end_time(8) + event_type(1) +
+    // min_level(1) + min_reputation(8) + required_subscription_tier(1) +
+    // prize_type(1) + prize_amount(8) + prize_token_mint(32) = 68 bytes mandatory
+    // (auto_activate at offset+68 is optional). Must cover the 32-byte mint read.
+    if instruction_data.len() < 9 + name_len + 68 {
         return Err(ProgramError::InvalidInstructionData);
     }
 
@@ -92,8 +96,8 @@ pub fn process(
     )?;
     let prize_type = read_u8(instruction_data, offset + 27, "event_create.prize_type")?;
     let prize_amount = read_u64(instruction_data, offset + 28, "event_create.prize_amount")?;
-    let mut prize_token_mint_bytes = [0u8; 32];
-    prize_token_mint_bytes.copy_from_slice(&instruction_data[offset + 36..offset + 68]);
+    let prize_token_mint_bytes =
+        read_bytes32(instruction_data, offset + 36, "event_create.prize_token_mint")?;
     let prize_token_mint = Address::from(prize_token_mint_bytes);
     let auto_activate = instruction_data.get(offset + 68).copied().unwrap_or(1) != 0; // default true
 

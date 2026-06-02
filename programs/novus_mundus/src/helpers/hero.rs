@@ -89,12 +89,14 @@ pub fn add_hero_buffs_to_player_with_location(
         // Calculate base buff value deterministically: base × (√φ)^level
         let base_value = calculate_buff_at_level(buff_config.base_bps as u64, level);
 
-        // Apply location bonus: value × (10000 + bonus) / 10000
+        // Apply location bonus: value × (10000 + bonus) / 10000. Buffs cache as
+        // u16, so clamp (not truncate) — a high-level hero's base_value can well
+        // exceed u16::MAX, and a plain `*` would wrap before the cast.
         let boosted_value = if location_bonus_bps > 0 {
-            let multiplier = 10000u64 + location_bonus_bps as u64;
-            (base_value * multiplier / 10000) as u16
+            (base_value.saturating_mul(10000u64.saturating_add(location_bonus_bps as u64)) / 10000)
+                .min(u16::MAX as u64) as u16
         } else {
-            base_value as u16
+            base_value.min(u16::MAX as u64) as u16
         };
 
         apply_buff_to_player(player, stat, boosted_value, true);
@@ -127,12 +129,14 @@ pub fn subtract_hero_buffs_from_player_with_location(
         // Calculate base buff value deterministically: base × (√φ)^level
         let base_value = calculate_buff_at_level(buff_config.base_bps as u64, level);
 
-        // Apply same location bonus that was used during lock
+        // Apply same location bonus that was used during lock. Clamp to u16
+        // identically to the add path so lock/unlock stay symmetric and the
+        // cached totals can't desync on a wrapped/truncated value.
         let boosted_value = if location_bonus_bps > 0 {
-            let multiplier = 10000u64 + location_bonus_bps as u64;
-            (base_value * multiplier / 10000) as u16
+            (base_value.saturating_mul(10000u64.saturating_add(location_bonus_bps as u64)) / 10000)
+                .min(u16::MAX as u64) as u16
         } else {
-            base_value as u16
+            base_value.min(u16::MAX as u64) as u16
         };
 
         apply_buff_to_player(player, stat, boosted_value, false);
@@ -190,7 +194,9 @@ pub fn add_buff_delta_to_player(
             continue;
         }
 
-        apply_buff_to_player(player, stat, delta as u16, true);
+        // Clamp the narrowing cast: a high-level delta can exceed u16::MAX,
+        // and a bare `as u16` would wrap. Mirrors the add/subtract paths above.
+        apply_buff_to_player(player, stat, delta.min(u16::MAX as u64) as u16, true);
     }
 }
 

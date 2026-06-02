@@ -340,30 +340,18 @@ pub fn process_instruction(
             )
         }
 
-        // Name System (110-119)
+        // Name System (110-119). 
         110 => {
             msg!("set player name");
             processor::name::set_player::process(program_id, accounts, instruction_data)
-        }
-        111 => {
-            msg!("set team name");
-            processor::name::set_team::process(program_id, accounts, instruction_data)
         }
         112 => {
             msg!("remove player name");
             processor::name::remove_player::process(program_id, accounts, instruction_data)
         }
-        113 => {
-            msg!("remove team name");
-            processor::name::remove_team::process(program_id, accounts, instruction_data)
-        }
         114 => {
             msg!("update player name");
             processor::name::update_player::process(program_id, accounts, instruction_data)
-        }
-        115 => {
-            msg!("update team name");
-            processor::name::update_team::process(program_id, accounts, instruction_data)
         }
 
         // Research System (120-129)

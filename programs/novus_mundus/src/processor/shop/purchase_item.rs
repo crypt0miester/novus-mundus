@@ -123,15 +123,20 @@ pub fn process(
         return Err(GameError::GamePaused.into());
     }
 
-    // 5. Load Shop Config
-    require_owner(shop_config_account, program_id)?;
-    let shop_config_data_ref = shop_config_account.try_borrow()?;
-    let shop_config = unsafe { ShopConfigAccount::load(&shop_config_data_ref) };
+    // 5. Load Shop Config (owner + discriminator + canonical PDA).
+    let shop_config = ShopConfigAccount::load_checked(
+        shop_config_account,
+        game_engine_account.address(),
+        program_id,
+    )?;
 
-    // 6. Load and Validate Shop Item
-    require_owner(shop_item_account, program_id)?;
-    let mut shop_item_data_ref = shop_item_account.try_borrow_mut()?;
-    let shop_item = unsafe { ShopItemAccount::load_mut(&mut shop_item_data_ref) };
+    // 6. Load Shop Item (owner + discriminator + canonical PDA for item_id).
+    let shop_item = ShopItemAccount::load_checked_mut(
+        shop_item_account,
+        game_engine_account.address(),
+        item_id,
+        program_id,
+    )?;
 
     // Check item is active
     if !shop_item.is_active {
@@ -367,7 +372,7 @@ pub fn process(
 
     // 11. Fulfill Order - Add Items to Player
 
-    let items_to_add = shop_item.quantity_per_purchase as u64 * quantity;
+    let items_to_add = (shop_item.quantity_per_purchase as u64).saturating_mul(quantity);
 
     // Check if this is an inventory item
     let is_inventory_item = is_inventory_item_type(shop_item.item_type);
@@ -536,7 +541,7 @@ fn check_daily_deal(
     if daily_deal.started_at <= 0 || daily_deal.started_at > now {
         return None;
     }
-    if now > daily_deal.started_at + day_seconds {
+    if now > daily_deal.started_at.saturating_add(day_seconds) {
         return None;
     }
 

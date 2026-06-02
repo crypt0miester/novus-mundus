@@ -92,8 +92,8 @@ pub fn process(
 
     let now = Clock::get()?.unix_timestamp;
 
-    let elapsed = now - player_data.departure_time;
-    let total_duration = player_data.arrival_time - player_data.departure_time;
+    let elapsed = now.saturating_sub(player_data.departure_time);
+    let total_duration = player_data.arrival_time.saturating_sub(player_data.departure_time);
 
     // Prevent division by zero
     if total_duration <= 0 {
@@ -116,8 +116,16 @@ pub fn process(
 
     // 9. Calculate Return Travel Time (using locked speed)
 
-    let return_travel_time_seconds =
-        ((distance_traveled_km / player_data.travel_speed_locked as f64) * 3600.0) as i64;
+    // A bumped player has travel_speed_locked == 0.0 (set in intercity_start),
+    // and is steered here to cancel — guard the divide so it doesn't become inf
+    // and saturate the `as i64` cast to i64::MAX (which then overflows the later
+    // `now + return_travel_time_seconds`). Zero speed -> send them home now.
+    let speed = player_data.travel_speed_locked as f64;
+    let return_travel_time_seconds = if speed > 0.0 {
+        ((distance_traveled_km / speed) * 3600.0) as i64
+    } else {
+        0
+    };
 
     // 10. VALIDATE DESTINATION LOCATION
     //
@@ -224,7 +232,7 @@ pub fn process(
         return_location.occupant = *player_account.address();
         return_location.occupied_since = now;
         return_location.location_creator = *owner.address();
-        return_location.reserved_arrival_time = now + return_travel_time_seconds;
+        return_location.reserved_arrival_time = now.saturating_add(return_travel_time_seconds);
     } else {
         // Return location exists - check if available
         let mut return_data = return_location_account.try_borrow_mut()?;
@@ -251,7 +259,7 @@ pub fn process(
         return_location.occupant = *player_account.address();
         return_location.occupied_since = now;
         return_location.location_creator = *owner.address();
-        return_location.reserved_arrival_time = now + return_travel_time_seconds;
+        return_location.reserved_arrival_time = now.saturating_add(return_travel_time_seconds);
     }
 
     // 11b. Close Destination Location (deferred from step 10)
@@ -264,7 +272,7 @@ pub fn process(
 
     player_data.destination_city = player_data.origin_city; // Going back now
     player_data.departure_time = now; // Reset departure to now
-    player_data.arrival_time = now + return_travel_time_seconds;
+    player_data.arrival_time = now.saturating_add(return_travel_time_seconds);
     // Repoint the stored destination at the reserved return cell (origin city
     // centre). intercity_complete and any later cancel re-derive the
     // LocationAccount from these fields; left stale they would still target

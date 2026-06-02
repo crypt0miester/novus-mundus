@@ -117,7 +117,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
                     /* No surplus — silent no-op. Borrow drops here. */
                     return Ok(());
                 }
-                surplus = ata_balance - player.locked_novi;
+                surplus = ata_balance.saturating_sub(player.locked_novi);
                 bump = player.bump;
                 owner_addr = player.owner;
                 ge_addr = player.game_engine;
@@ -149,7 +149,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
                 if ata_balance <= user_data.reserved_novi {
                     return Ok(());
                 }
-                surplus = ata_balance - user_data.reserved_novi;
+                surplus = ata_balance.saturating_sub(user_data.reserved_novi);
                 bump = user_data.bump;
                 owner_addr = user_data.owner;
             }

@@ -1,5 +1,5 @@
 use super::{discriminator, Event, PackBytes};
-/// Name service events - player and team name operations
+/// Name service events - player name operations
 use pinocchio::Address;
 
 /// Emitted when a player name is set
@@ -79,79 +79,3 @@ impl Event for PlayerNameUpdated {
     }
 }
 
-/// Emitted when a team name is set
-pub struct TeamNameSet {
-    /// Team account pubkey
-    pub team: Address,
-    /// Team name (32 bytes UTF-8)
-    pub team_name: [u8; 32],
-    /// Domain hash (for lookup)
-    pub domain_hash: [u8; 32],
-    /// Unix timestamp
-    pub timestamp: i64,
-}
-
-impl Event for TeamNameSet {
-    const DISCRIMINATOR: [u8; 8] = discriminator("event:TeamNameSet");
-
-    fn serialize(&self, buf: &mut [u8]) -> usize {
-        let mut offset = 0;
-        offset += self.team.pack(&mut buf[offset..]);
-        offset += self.team_name.pack(&mut buf[offset..]);
-        buf[offset..offset + 32].copy_from_slice(&self.domain_hash);
-        offset += 32;
-        offset += self.timestamp.pack(&mut buf[offset..]);
-        offset
-    }
-}
-
-/// Emitted when a team name is removed
-pub struct TeamNameRemoved {
-    /// Team account pubkey
-    pub team: Address,
-    /// Team name (32 bytes UTF-8) - the old name being removed
-    pub team_name: [u8; 32],
-    /// Unix timestamp
-    pub timestamp: i64,
-}
-
-impl Event for TeamNameRemoved {
-    const DISCRIMINATOR: [u8; 8] = discriminator("event:TeamNameRemoved");
-
-    fn serialize(&self, buf: &mut [u8]) -> usize {
-        let mut offset = 0;
-        offset += self.team.pack(&mut buf[offset..]);
-        offset += self.team_name.pack(&mut buf[offset..]);
-        offset += self.timestamp.pack(&mut buf[offset..]);
-        offset
-    }
-}
-
-/// Emitted when a team name is updated (changed)
-pub struct TeamNameUpdated {
-    /// Team account pubkey
-    pub team: Address,
-    /// Old team name (32 bytes UTF-8)
-    pub old_name: [u8; 32],
-    /// New team name (32 bytes UTF-8)
-    pub new_name: [u8; 32],
-    /// New domain hash
-    pub new_domain_hash: [u8; 32],
-    /// Unix timestamp
-    pub timestamp: i64,
-}
-
-impl Event for TeamNameUpdated {
-    const DISCRIMINATOR: [u8; 8] = discriminator("event:TeamNameUpdated");
-
-    fn serialize(&self, buf: &mut [u8]) -> usize {
-        let mut offset = 0;
-        offset += self.team.pack(&mut buf[offset..]);
-        offset += self.old_name.pack(&mut buf[offset..]);
-        offset += self.new_name.pack(&mut buf[offset..]);
-        buf[offset..offset + 32].copy_from_slice(&self.new_domain_hash);
-        offset += 32;
-        offset += self.timestamp.pack(&mut buf[offset..]);
-        offset
-    }
-}

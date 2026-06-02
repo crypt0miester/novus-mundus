@@ -10,7 +10,6 @@ use crate::{
     helpers::estate::{load_estate_for_player, require_vault, vault_transfer_bonus_bps},
     state::{team::TeamAccount, GameEngine, PlayerAccount, NULL_PUBKEY},
     utils::read_u64,
-    validation::require_owner,
 };
 
 /// Transfer cash between team members
@@ -102,11 +101,13 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         program_id,
     )?;
 
-    // Receiver: manual load (we don't have receiver's wallet key in accounts)
-    // Must verify program ownership to prevent fake account attacks
-    require_owner(receiver_player_account, program_id)?;
-    let mut receiver_data_ref = receiver_player_account.try_borrow_mut()?;
-    let receiver_player = unsafe { PlayerAccount::load_mut(&mut receiver_data_ref) };
+    // Receiver: self-deriving checked load (we don't hold the receiver's wallet),
+    // then bind it to the sender's kingdom.
+    let receiver_player =
+        PlayerAccount::load_checked_mut_by_key(receiver_player_account, program_id)?;
+    if &receiver_player.game_engine != game_engine_account.address() {
+        return Err(GameError::KingdomMismatch.into());
+    }
 
     // Team: load_checked (verifies PDA + ownership using team_id, kingdom-scoped)
     let _team = TeamAccount::load_checked(
@@ -124,11 +125,11 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
 
     let min_account_age = game_engine.caps.min_account_age_for_events;
 
-    if now - sender_player.created_at < min_account_age {
+    if now.saturating_sub(sender_player.created_at) < min_account_age {
         return Err(GameError::AccountTooNew.into());
     }
 
-    if now - receiver_player.created_at < min_account_age {
+    if now.saturating_sub(receiver_player.created_at) < min_account_age {
         return Err(GameError::AccountTooNew.into());
     }
 

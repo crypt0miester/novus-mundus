@@ -321,7 +321,7 @@ pub fn process(
 
     // Apply biome combat advantage to attacker damage (positive net = attacker bonus).
     let attacker_damage = if combat_bps_net != 0 {
-        let m = (10000i32 + combat_bps_net).max(5000) as u64;
+        let m = 10000i32.saturating_add(combat_bps_net).max(5000) as u64;
         attacker_damage.saturating_mul(m) / 10000
     } else {
         attacker_damage
@@ -388,7 +388,7 @@ pub fn process(
     // 10b. Apply biome combat advantage to defender (inverse of attacker's swing).
     // If attacker's biome favours them, defender's counterattack is weaker.
     let defender_damage = if combat_bps_net != 0 {
-        let m = (10000i32 - combat_bps_net).max(5000) as u64;
+        let m = 10000i32.saturating_sub(combat_bps_net).max(5000) as u64;
         defender_damage.saturating_mul(m) / 10000
     } else {
         defender_damage
@@ -442,9 +442,9 @@ pub fn process(
                 let lost_2 = combined_def_2.saturating_sub(remaining_2);
                 let lost_3 = combined_def_3.saturating_sub(remaining_3);
                 (
-                    remaining_1.saturating_add(lost_1 * recovery_bps as u64 / 10000),
-                    remaining_2.saturating_add(lost_2 * recovery_bps as u64 / 10000),
-                    remaining_3.saturating_add(lost_3 * recovery_bps as u64 / 10000),
+                    remaining_1.saturating_add(lost_1.saturating_mul(recovery_bps as u64) / 10000),
+                    remaining_2.saturating_add(lost_2.saturating_mul(recovery_bps as u64) / 10000),
+                    remaining_3.saturating_add(lost_3.saturating_mul(recovery_bps as u64) / 10000),
                 )
             } else {
                 (remaining_1, remaining_2, remaining_3)
@@ -543,9 +543,12 @@ pub fn process(
                         .operative_unit_3
                         .saturating_sub(op_remaining_3);
                     (
-                        op_remaining_1.saturating_add(lost_1 * recovery_bps as u64 / 10000),
-                        op_remaining_2.saturating_add(lost_2 * recovery_bps as u64 / 10000),
-                        op_remaining_3.saturating_add(lost_3 * recovery_bps as u64 / 10000),
+                        op_remaining_1
+                            .saturating_add(lost_1.saturating_mul(recovery_bps as u64) / 10000),
+                        op_remaining_2
+                            .saturating_add(lost_2.saturating_mul(recovery_bps as u64) / 10000),
+                        op_remaining_3
+                            .saturating_add(lost_3.saturating_mul(recovery_bps as u64) / 10000),
                     )
                 } else {
                     (op_remaining_1, op_remaining_2, op_remaining_3)
@@ -583,9 +586,9 @@ pub fn process(
                 let lost_2 = attacker_data.defensive_unit_2.saturating_sub(att_unit_2);
                 let lost_3 = attacker_data.defensive_unit_3.saturating_sub(att_unit_3);
                 (
-                    att_unit_1.saturating_add(lost_1 * recovery_bps as u64 / 10000),
-                    att_unit_2.saturating_add(lost_2 * recovery_bps as u64 / 10000),
-                    att_unit_3.saturating_add(lost_3 * recovery_bps as u64 / 10000),
+                    att_unit_1.saturating_add(lost_1.saturating_mul(recovery_bps as u64) / 10000),
+                    att_unit_2.saturating_add(lost_2.saturating_mul(recovery_bps as u64) / 10000),
+                    att_unit_3.saturating_add(lost_3.saturating_mul(recovery_bps as u64) / 10000),
                 )
             } else {
                 (att_unit_1, att_unit_2, att_unit_3)
@@ -728,13 +731,13 @@ pub fn process(
 
         // Apply research loot bonus (multiplicative)
         if attacker_data.research_loot_bonus_bps() > 0 {
-            let multiplier = 10000u64 + attacker_data.research_loot_bonus_bps() as u64;
+            let multiplier = 10000u64.saturating_add(attacker_data.research_loot_bonus_bps() as u64);
             loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
         }
 
         // Apply hero loot bonus (multiplicative)
         if attacker_data.hero_loot_bonus_bps() > 0 {
-            let multiplier = 10000u64 + attacker_data.hero_loot_bonus_bps() as u64;
+            let multiplier = 10000u64.saturating_add(attacker_data.hero_loot_bonus_bps() as u64);
             loot_bps = loot_bps.saturating_mul(multiplier) / 10000;
         }
 

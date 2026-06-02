@@ -168,7 +168,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
     let per_floor_darkness = template.darkness_per_floor_bps;
     run.darkness_level = (base_darkness / 100)
         .saturating_add((run.current_floor as u16).saturating_mul(per_floor_darkness / 100))
-        as u8;
+        .min(u8::MAX as u16) as u8;
 
     // Increment resume count
     run.resume_count = run.resume_count.saturating_add(1);
@@ -186,7 +186,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         run.enemy_health = (floor_power as u64).saturating_mul(10);
         run.enemy_max_health = run.enemy_health;
         run.enemy_power = floor_power;
-        run.enemy_defense = 1000 + (run.current_floor as u16 * 100);
+        run.enemy_defense = 1000u16.saturating_add((run.current_floor as u16).saturating_mul(100));
         run.is_boss = false;
     }
 

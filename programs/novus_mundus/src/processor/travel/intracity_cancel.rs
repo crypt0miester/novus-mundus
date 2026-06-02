@@ -83,8 +83,8 @@ pub fn process(
 
     let now = Clock::get()?.unix_timestamp;
 
-    let elapsed = now - player_data.departure_time;
-    let total_duration = player_data.arrival_time - player_data.departure_time;
+    let elapsed = now.saturating_sub(player_data.departure_time);
+    let total_duration = player_data.arrival_time.saturating_sub(player_data.departure_time);
 
     // Prevent division by zero
     if total_duration <= 0 {
@@ -205,7 +205,7 @@ pub fn process(
         return_location.occupant = *player_account.address();
         return_location.occupied_since = now;
         return_location.location_creator = *owner.address();
-        return_location.reserved_arrival_time = now + return_travel_time_seconds;
+        return_location.reserved_arrival_time = now.saturating_add(return_travel_time_seconds);
     } else {
         // Return location exists - check if available
         let mut return_data = return_location_account.try_borrow_mut()?;
@@ -232,7 +232,7 @@ pub fn process(
         return_location.occupant = *player_account.address();
         return_location.occupied_since = now;
         return_location.location_creator = *owner.address();
-        return_location.reserved_arrival_time = now + return_travel_time_seconds;
+        return_location.reserved_arrival_time = now.saturating_add(return_travel_time_seconds);
     }
 
     // 10b. Close Destination Location (deferred from step 9)
@@ -253,7 +253,7 @@ pub fn process(
     player_data.traveling_to_lat = origin_lat;
     player_data.traveling_to_long = origin_long;
     player_data.departure_time = now;
-    player_data.arrival_time = now + return_travel_time_seconds;
+    player_data.arrival_time = now.saturating_add(return_travel_time_seconds);
     // travel_type stays Intracity
     // travel_speed_locked stays the same
 

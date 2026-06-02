@@ -128,7 +128,6 @@ export default function SettingsPage() {
         gameEngine,
         tld,
         domainName: domain,
-        oldTld: parsedCurrentName.tld,
         oldDomainName: parsedCurrentName.domain,
       });
       transact.mutate({

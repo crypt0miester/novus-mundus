@@ -186,6 +186,9 @@ pub fn process(
         seen_count += 1;
 
         let garrison_data = garrison_account.try_borrow()?;
+        if garrison_data.first().copied() != Some(crate::state::AccountKey::CastleGarrison as u8) {
+            continue;
+        }
         let garrison = unsafe { GarrisonContributionAccount::load(&garrison_data) };
 
         // Verify garrison belongs to this castle
@@ -417,6 +420,11 @@ pub fn process(
             }
 
             let mut garrison_data = garrison_account.try_borrow_mut()?;
+            if garrison_data.first().copied()
+                != Some(crate::state::AccountKey::CastleGarrison as u8)
+            {
+                continue;
+            }
             let garrison = unsafe { GarrisonContributionAccount::load_mut(&mut garrison_data) };
 
             // Skip if not this castle
@@ -490,7 +498,7 @@ pub fn process(
             // Update transition fields - new attacker claims the pending throne
             castle.transition_new_king = *attacker_player.address();
             // Reset 2-hour contest window for others to challenge
-            castle.contest_end_at = now + CASTLE_CONTEST_DURATION;
+            castle.contest_end_at = now.saturating_add(CASTLE_CONTEST_DURATION);
 
             // Emit conquest event
             emit!(CastleConquered {

@@ -51,7 +51,6 @@ pub fn process(
     require_writable(sender_player)?;
     require_writable(sender_owner)?;
     require_writable(estate_account)?;
-    require_owner(reinforcement_account, program_id)?;
     require_owner(sender_player, program_id)?;
     require_owner(estate_account, program_id)?;
 
@@ -59,9 +58,8 @@ pub fn process(
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 4. Load Reinforcement
-    let reinf_data_ref = reinforcement_account.try_borrow()?;
-    let reinf = unsafe { ReinforcementAccount::load(&reinf_data_ref) };
+    // 4. Load Reinforcement (owner + discriminator + canonical PDA, self-derived).
+    let reinf = ReinforcementAccount::load_checked_player_by_key(reinforcement_account, program_id)?;
 
     // 5. Validate Sender Account
     if &reinf.sender != sender_owner.address() {
@@ -105,9 +103,6 @@ pub fn process(
     let wounded_1 = reinf.wounded_def_1;
     let wounded_2 = reinf.wounded_def_2;
     let wounded_3 = reinf.wounded_def_3;
-
-    // Drop the borrow before modifying
-    drop(reinf_data_ref);
 
     // 10. Return Units and Weapons to Sender
     sender.defensive_unit_1 = sender.defensive_unit_1.saturating_add(return_units_1);

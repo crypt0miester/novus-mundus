@@ -166,8 +166,9 @@ pub fn process(
             return Err(GameError::NotReturningYet.into());
         }
 
-        let return_completes_at =
-            participant.return_started_at + participant.return_duration as i64;
+        let return_completes_at = participant
+            .return_started_at
+            .saturating_add(participant.return_duration as i64);
         if now < return_completes_at {
             return Err(GameError::ReturnNotComplete.into());
         }
@@ -220,7 +221,7 @@ pub fn process(
             }
         } else {
             // Mid-travel to rally - turn around
-            let time_spent = (now - participant.travel_started_at) as i32;
+            let time_spent = now.saturating_sub(participant.travel_started_at) as i32;
             time_spent.max(0)
         };
 

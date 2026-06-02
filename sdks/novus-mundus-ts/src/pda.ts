@@ -553,11 +553,6 @@ export async function deriveMainDomainPda(owner: PublicKey): Promise<[PublicKey,
   return derive(TLD_HOUSE_PROGRAM_ID, [strBytes('main_domain'), owner.toBytes()]);
 }
 
-/** Derive TLD State PDA */
-export async function deriveTldStatePda(): Promise<[PublicKey, number]> {
-  return derive(TLD_HOUSE_PROGRAM_ID, [strBytes('tld_pda')]);
-}
-
 /** Derive TLD House PDA for a specific TLD */
 export async function deriveTldHousePda(tld: string): Promise<[PublicKey, number]> {
   return derive(TLD_HOUSE_PROGRAM_ID, [strBytes('tld_house'), strBytes(tld.toLowerCase())]);

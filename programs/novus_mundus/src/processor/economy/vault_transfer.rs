@@ -90,7 +90,7 @@ pub fn process(
 
         // Apply hero resource capacity buff (increases vault storage limit)
         let max_in_vault = if player.hero_resource_capacity_bps() > 0 {
-            let multiplier = 10000u64 + player.hero_resource_capacity_bps() as u64;
+            let multiplier = 10000u64.saturating_add(player.hero_resource_capacity_bps() as u64);
             base_max_in_vault.saturating_mul(multiplier) / 10000
         } else {
             base_max_in_vault

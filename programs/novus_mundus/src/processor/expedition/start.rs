@@ -231,7 +231,7 @@ pub fn process(
             .copied()
             .unwrap_or(1)
     };
-    let duration_seconds = duration_hours as i64 * 3600;
+    let duration_seconds = (duration_hours as i64).saturating_mul(3600);
 
     // 17. Deduct locked NOVI
     player_data.locked_novi = player_data

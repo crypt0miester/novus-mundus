@@ -250,7 +250,7 @@ pub fn process(
             now
         };
 
-    let duration_seconds = tier.duration_days as i64 * 86400; // days to seconds
+    let duration_seconds = (tier.duration_days as i64).saturating_mul(86400); // days to seconds
     let new_expiration = expiration_base
         .checked_add(duration_seconds)
         .ok_or(GameError::MathOverflow)?;

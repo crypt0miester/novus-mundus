@@ -37,6 +37,7 @@ import { useDungeonTemplates } from "@/lib/hooks/useDungeonTemplates";
 import { THEMES } from "@/lib/dungeon-lore";
 import { DungeonSplash } from "@/components/dungeons/DungeonSplash";
 import { RunView } from "./catacombs/RunView";
+import { WeeklyLeaderboard } from "./catacombs/WeeklyLeaderboard";
 
 // Hero specialization is chosen per run — it drives the run's combat bonuses
 // on-chain (see HeroSpecialization in the program). No hero NFT carries it.
@@ -383,6 +384,8 @@ export function CatacombsTab() {
           playerMaxStamina={playerMaxStamina}
         />
       )}
+
+      <WeeklyLeaderboard dungeonId={selectedDungeon} />
 
       {geData?.account &&
         (() => {

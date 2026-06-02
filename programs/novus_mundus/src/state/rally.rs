@@ -481,7 +481,7 @@ impl RallyParticipant {
         if self.return_started_at == 0 {
             return false;
         }
-        now >= self.return_started_at + self.return_duration as i64
+        now >= self.return_started_at.saturating_add(self.return_duration as i64)
     }
 
     /// Check if was a late joiner (didn't make it in time)

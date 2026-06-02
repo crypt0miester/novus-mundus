@@ -233,12 +233,12 @@ impl ReinforcementAccount {
         if self.return_started_at == 0 {
             return false;
         }
-        now >= self.return_started_at + self.return_duration as i64
+        now >= self.return_started_at.saturating_add(self.return_duration as i64)
     }
 
     /// Get return completion timestamp
     pub fn return_completes_at(&self) -> i64 {
-        self.return_started_at + self.return_duration as i64
+        self.return_started_at.saturating_add(self.return_duration as i64)
     }
 
     // PDA Derivation
@@ -380,6 +380,54 @@ impl ReinforcementAccount {
             "ReinforcementAccount",
             account,
         )?;
+        Ok(loaded)
+    }
+
+    /// Load and verify a player ReinforcementAccount immutably, deriving its PDA
+    /// from the account's own stored game_engine/sender/destination — use on
+    /// cranks that don't independently hold those keys.
+    pub fn load_checked_player_by_key<'a>(
+        account: &'a pinocchio::AccountView,
+        program_id: &Address,
+    ) -> Result<&'a Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
+        let loaded = unsafe {
+            super::AccountKey::cast::<Self>(
+                account,
+                super::AccountKey::Reinforcement,
+                "ReinforcementAccount",
+            )?
+        };
+        let expected_pda = Self::create_player_pda(
+            &loaded.game_engine,
+            &loaded.sender,
+            &loaded.destination,
+            loaded.bump,
+        )?;
+        crate::validation::require_pda_eq(account, &expected_pda, "ReinforcementAccount")?;
+        Ok(loaded)
+    }
+
+    /// Mutable [`Self::load_checked_player_by_key`].
+    pub fn load_checked_player_mut_by_key<'a>(
+        account: &'a pinocchio::AccountView,
+        program_id: &Address,
+    ) -> Result<&'a mut Self, ProgramError> {
+        crate::validation::require_owner(account, program_id)?;
+        let loaded = unsafe {
+            super::AccountKey::cast_mut::<Self>(
+                account,
+                super::AccountKey::Reinforcement,
+                "ReinforcementAccount",
+            )?
+        };
+        let expected_pda = Self::create_player_pda(
+            &loaded.game_engine,
+            &loaded.sender,
+            &loaded.destination,
+            loaded.bump,
+        )?;
+        crate::validation::require_pda_eq(account, &expected_pda, "ReinforcementAccount")?;
         Ok(loaded)
     }
 

@@ -149,7 +149,7 @@ impl TeamAccount {
             .treasury_cooldown_hours
             .max(Self::MIN_COOLDOWN_HOURS)
             .min(Self::MAX_COOLDOWN_HOURS);
-        (hours as i64) * 3600
+        (hours as i64).saturating_mul(3600)
     }
 
     /// Check if rank has any treasury access (has permission AND has non-zero limits)
@@ -812,7 +812,7 @@ impl TreasuryRequest {
     /// Check if request has been pending too long (optional expiry - 7 days)
     pub fn is_expired(&self, now: i64) -> bool {
         const MAX_PENDING_SECONDS: i64 = 7 * 24 * 3600; // 7 days
-        now > self.created_at + MAX_PENDING_SECONDS
+        now > self.created_at.saturating_add(MAX_PENDING_SECONDS)
     }
 
     /// Initialize a new treasury request
@@ -830,7 +830,7 @@ impl TreasuryRequest {
             requester,
             amount,
             created_at,
-            executable_at: created_at + cooldown_seconds,
+            executable_at: created_at.saturating_add(cooldown_seconds),
             bump,
             _reserved: [0; 15],
         }

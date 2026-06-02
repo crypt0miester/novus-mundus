@@ -340,7 +340,7 @@ pub fn process(
                         _ => 0,
                     };
                     if bonus > 0 {
-                        let m = 10000u64 + bonus as u64;
+                        let m = 10000u64.saturating_add(bonus as u64);
                         base_output.saturating_mul(m) / 10000
                     } else {
                         base_output
@@ -405,7 +405,10 @@ pub fn process(
     // Integer round-half-up of unit × units_to_abandon / total_operative.
     if units_to_abandon > 0 {
         let share = |units: u64| -> u64 {
-            (units.saturating_mul(units_to_abandon) + total_operative / 2) / total_operative
+            units
+                .saturating_mul(units_to_abandon)
+                .saturating_add(total_operative / 2)
+                / total_operative
         };
         let abandon_unit_1 = share(player_data.operative_unit_1);
         let abandon_unit_2 = share(player_data.operative_unit_2);
@@ -457,7 +460,8 @@ pub fn process(
         CollectionType::Cash => {
             // Apply research buff for cash generation
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
+                let multiplier =
+                    10000u64.saturating_add(player_data.research_collection_bonus_bps() as u64);
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
@@ -465,13 +469,13 @@ pub fn process(
 
             // Apply hero economy buff (multiplicative)
             if player_data.hero_economy_bps() > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_economy_bps() as u64;
+                let hero_multiplier = 10000u64.saturating_add(player_data.hero_economy_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
             // Cash Generation research (buff_type 15)
             if player_data.research_cash_generation_bps() > 0 {
-                let m = 10000u64 + player_data.research_cash_generation_bps() as u64;
+                let m = 10000u64.saturating_add(player_data.research_cash_generation_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(m) / 10000;
             }
 
@@ -484,7 +488,8 @@ pub fn process(
         CollectionType::Mining => {
             // Apply research buff for mining output
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
+                let multiplier =
+                    10000u64.saturating_add(player_data.research_collection_bonus_bps() as u64);
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
@@ -492,14 +497,15 @@ pub fn process(
 
             // Apply hero collection rate buff (gems + fragments)
             if player_data.hero_collection_rate_bps() > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
+                let hero_multiplier =
+                    10000u64.saturating_add(player_data.hero_collection_rate_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
             // Apply Mine building bonus (split from Workshop)
             let mine_bonus = mine_mining_bonus_bps(estate);
             if mine_bonus > 0 {
-                let mine_multiplier = 10000u64 + mine_bonus as u64;
+                let mine_multiplier = 10000u64.saturating_add(mine_bonus as u64);
                 buffed_output = buffed_output.saturating_mul(mine_multiplier) / 10000;
             }
 
@@ -512,7 +518,8 @@ pub fn process(
             if player_data.has_fragment_drops() {
                 let mut fragments = MINING_FRAGMENT_DROP;
                 if player_data.hero_collection_rate_bps() > 0 {
-                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
+                    let hero_multiplier =
+                        10000u64.saturating_add(player_data.hero_collection_rate_bps() as u64);
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
                 player_data.fragments = player_data
@@ -526,7 +533,8 @@ pub fn process(
         CollectionType::Fishing => {
             // Apply research buff for fishing output
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
+                let multiplier =
+                    10000u64.saturating_add(player_data.research_collection_bonus_bps() as u64);
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
@@ -534,20 +542,22 @@ pub fn process(
 
             // Apply hero produce generation buff (multiplicative)
             if player_data.hero_produce_generation_bps() > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
+                let hero_multiplier =
+                    10000u64.saturating_add(player_data.hero_produce_generation_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
             // Production Efficiency research (buff_type 10) — produce output.
             if player_data.research_production_efficiency_bps() > 0 {
-                let m = 10000u64 + player_data.research_production_efficiency_bps() as u64;
+                let m =
+                    10000u64.saturating_add(player_data.research_production_efficiency_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(m) / 10000;
             }
 
             // Apply Dock building bonus
             let dock_bonus = dock_fishing_bonus_bps(estate);
             if dock_bonus > 0 {
-                let dock_multiplier = 10000u64 + dock_bonus as u64;
+                let dock_multiplier = 10000u64.saturating_add(dock_bonus as u64);
                 buffed_output = buffed_output.saturating_mul(dock_multiplier) / 10000;
             }
 
@@ -560,7 +570,8 @@ pub fn process(
             if player_data.has_fragment_drops() {
                 let mut fragments = FISHING_FRAGMENT_DROP;
                 if player_data.hero_collection_rate_bps() > 0 {
-                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
+                    let hero_multiplier =
+                        10000u64.saturating_add(player_data.hero_collection_rate_bps() as u64);
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
                 player_data.fragments = player_data
@@ -574,7 +585,8 @@ pub fn process(
         CollectionType::Farming => {
             // Apply research buff for farming output
             let mut buffed_output = if player_data.research_collection_bonus_bps() > 0 {
-                let multiplier = 10000u64 + player_data.research_collection_bonus_bps() as u64;
+                let multiplier =
+                    10000u64.saturating_add(player_data.research_collection_bonus_bps() as u64);
                 base_output.saturating_mul(multiplier) / 10000
             } else {
                 base_output
@@ -582,20 +594,22 @@ pub fn process(
 
             // Apply hero produce generation buff (multiplicative)
             if player_data.hero_produce_generation_bps() > 0 {
-                let hero_multiplier = 10000u64 + player_data.hero_produce_generation_bps() as u64;
+                let hero_multiplier =
+                    10000u64.saturating_add(player_data.hero_produce_generation_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(hero_multiplier) / 10000;
             }
 
             // Production Efficiency research (buff_type 10) — produce output.
             if player_data.research_production_efficiency_bps() > 0 {
-                let m = 10000u64 + player_data.research_production_efficiency_bps() as u64;
+                let m =
+                    10000u64.saturating_add(player_data.research_production_efficiency_bps() as u64);
                 buffed_output = buffed_output.saturating_mul(m) / 10000;
             }
 
             // Apply Farm building bonus
             let farm_bonus = farm_produce_bonus_bps(estate);
             if farm_bonus > 0 {
-                let farm_multiplier = 10000u64 + farm_bonus as u64;
+                let farm_multiplier = 10000u64.saturating_add(farm_bonus as u64);
                 buffed_output = buffed_output.saturating_mul(farm_multiplier) / 10000;
             }
 
@@ -608,7 +622,8 @@ pub fn process(
             if player_data.has_fragment_drops() {
                 let mut fragments = 1u64;
                 if player_data.hero_collection_rate_bps() > 0 {
-                    let hero_multiplier = 10000u64 + player_data.hero_collection_rate_bps() as u64;
+                    let hero_multiplier =
+                        10000u64.saturating_add(player_data.hero_collection_rate_bps() as u64);
                     fragments = fragments.saturating_mul(hero_multiplier) / 10000;
                 }
                 player_data.fragments = player_data

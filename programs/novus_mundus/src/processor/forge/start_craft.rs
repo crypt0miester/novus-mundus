@@ -211,8 +211,8 @@ pub fn process(
 
     // First window opens after the stage interval
     let stage_interval = quality_tier.stage_interval_secs();
-    let window_opens = now + stage_interval;
-    let window_closes = window_opens + window_duration;
+    let window_opens = now.saturating_add(stage_interval);
+    let window_closes = window_opens.saturating_add(window_duration);
 
     // 14. Initialize staged craft state on CraftedEquipmentAccount
     let mut crafted_data_ref = crafted_equipment.try_borrow_mut()?;

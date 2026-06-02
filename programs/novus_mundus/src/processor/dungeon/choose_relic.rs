@@ -144,7 +144,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
         run_data.enemy_health = (boss_power as u64).saturating_mul(20); // Boss has 2x HP multiplier
         run_data.enemy_max_health = run_data.enemy_health;
         run_data.enemy_power = boss_power;
-        run_data.enemy_defense = 2000 + (run_data.current_floor as u16 * 200);
+        run_data.enemy_defense = 2000u16.saturating_add((run_data.current_floor as u16).saturating_mul(200));
         run_data.is_boss = true;
         run_data.room_type = RoomType::Combat as u8;
 
@@ -168,7 +168,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
             run_data.enemy_health = (floor_power as u64).saturating_mul(10);
             run_data.enemy_max_health = run_data.enemy_health;
             run_data.enemy_power = floor_power;
-            run_data.enemy_defense = 1000 + (run_data.current_floor as u16 * 100);
+            run_data.enemy_defense = 1000u16.saturating_add((run_data.current_floor as u16).saturating_mul(100));
             run_data.is_boss = false;
         }
     }

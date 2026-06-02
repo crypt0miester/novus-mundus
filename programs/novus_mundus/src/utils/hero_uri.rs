@@ -10,7 +10,7 @@
 //! LOCALHOST FOR LOCALNET TESTING — bump `URI_PREFIX` to
 //! `b"https://novusmundus.gg/heroes/"` before any non-local deploy.
 
-pub const URI_PREFIX: &[u8] = b"http://localhost:3001/heroes/";
+pub const URI_PREFIX: &[u8] = b"http://localhost:3000/heroes/";
 pub const URI_LEVEL_SEP: &[u8] = b"?v=";
 
 /// Maximum total URI length:

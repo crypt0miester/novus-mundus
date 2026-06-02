@@ -33,13 +33,11 @@ pub fn process(
     ]);
 
     // 2. Validate Accounts
-
     require_signer(authority)?;
     require_writable(authority)?;
     require_writable(allowed_token_account)?;
 
     // 3. Verify DAO Authority
-
     // Validate game_engine account (ownership + PDA + discriminator + bump)
     let game_engine = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
 
@@ -48,7 +46,6 @@ pub fn process(
     }
 
     // 4. Verify AllowedToken Account
-
     require_owner(allowed_token_account, program_id)?;
 
     // Verify PDA matches
@@ -60,6 +57,5 @@ pub fn process(
     }
 
     // 5. Close Account and Return Rent to Authority
-
     close_account(allowed_token_account, authority)
 }

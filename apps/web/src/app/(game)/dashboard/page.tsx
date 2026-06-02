@@ -18,6 +18,7 @@ import { UnitGrid } from "@/components/shared/UnitGrid";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { NoviGenerator } from "@/components/shared/NoviGenerator";
 import { NoviRewards } from "@/components/shared/NoviRewards";
+import { DailyLoginReward } from "@/components/shared/DailyLoginReward";
 import { ActivityFeed } from "@/components/shared/ActivityFeed";
 import { LoadingSequence, getLoadingSteps } from "@/components/loading/LoadingSequence";
 import { useRightPanelStore } from "@/lib/store/right-panel";
@@ -359,6 +360,9 @@ export default function DashboardPage() {
 
                 {/* `display:contents` on mobile (see left column) so these interleave. */}
                 <div className="contents lg:flex lg:flex-col lg:gap-3">
+                  <div className="order-1 lg:order-none">
+                    <DailyLoginReward />
+                  </div>
                   <div className="order-2 lg:order-none">
                     <NoviGenerator />
                   </div>

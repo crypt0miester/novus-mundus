@@ -28,9 +28,8 @@ pub fn compute_name_hash(name: &[u8]) -> [u8; 32] {
 }
 
 /// TLD House Program ID: TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S
-pub const TLD_HOUSE_PROGRAM_ID: Address = Address::new_from_array(five8_const::decode_32_const(
-    "TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S",
-));
+pub const TLD_HOUSE_PROGRAM_ID: Address =
+    Address::from_str_const("TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S");
 
 /// TldHouse account layout (Anchor):
 /// - 8 bytes: discriminator
@@ -100,7 +99,11 @@ pub fn get_tld_from_tld_house(tld_house: &AccountView) -> Result<&[u8], ProgramE
 /// 4. reverse_name_account: valid header, nclass=tld_house, parent=NULL, PDA matches
 /// 5. Forward PDA derivation: domain name in reverse derives to name_account
 ///
-/// Returns the domain name bytes on success.
+/// Returns `(domain_name, name_account_bump, hashed_name)` on success — all three
+/// are needed to drive the ANS `transfer` CPI: the bump satisfies its seeds
+/// constraint and `hashed_name` (SHA256("ALT Name Service" + domain_name)) is its
+/// instruction data. Both are produced while verifying the forward PDA here, so
+/// callers reuse them instead of recomputing the hash.
 pub fn validate_and_get_domain_name<'a>(
     name_account: &AccountView,
     reverse_name_account: &'a AccountView,
@@ -108,7 +111,7 @@ pub fn validate_and_get_domain_name<'a>(
     tld_house: &AccountView,
     owner: &Address,
     reverse_acc_hashed_name: &[u8; 32],
-) -> Result<&'a [u8], ProgramError> {
+) -> Result<(&'a [u8], u8, [u8; 32]), ProgramError> {
     // === 1. Validate tld_house is owned by TLD House program ===
     if unsafe { tld_house.owner() } != &TLD_HOUSE_PROGRAM_ID {
         return Err(ProgramError::IncorrectProgramId);
@@ -224,12 +227,12 @@ pub fn validate_and_get_domain_name<'a>(
         name_parent.address().as_ref(),
     ];
 
-    let (derived_forward_pda, _) =
+    let (derived_forward_pda, forward_bump) =
         pinocchio::Address::find_program_address(forward_seeds, &alt_name_service::ID);
 
     if derived_forward_pda != *name_account.address() {
         return Err(ProgramError::InvalidAccountData);
     }
 
-    Ok(domain_name)
+    Ok((domain_name, forward_bump, hashed_name))
 }

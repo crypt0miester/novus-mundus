@@ -26,10 +26,8 @@ p-core = { path = "../../sdks/p-core" }
 p-pyth = { path = "../../sdks/p-pyth", features = ["no-panic-handler"] }
 p-switchboard = { path = "../../sdks/p-switchboard", features = ["no-panic-handler"] }
 alt-name-service = { path = "../../sdks/alt-name-service" }
-tld-house = { path = "../../sdks/tld-house" }
 libm = "0.2"
 five8 = "0.1"
-five8_const = "0.1"
 const-crypto = "0.3.0"
 solana-address = { version = "2.2.0", features = ["curve25519", "decode"] }
 solana-sha256-hasher = { version = "3.1.0", default-features = false }

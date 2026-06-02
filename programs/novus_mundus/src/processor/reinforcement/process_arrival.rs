@@ -38,16 +38,16 @@ pub fn process(
     // 2. Validate Accounts
     require_writable(reinforcement_account)?;
     require_writable(destination_player)?;
-    require_owner(reinforcement_account, program_id)?;
     require_owner(destination_player, program_id)?;
 
     // 3. Get Clock
     let clock = Clock::get()?;
     let now = clock.unix_timestamp;
 
-    // 4. Load Reinforcement
-    let mut reinf_data_ref = reinforcement_account.try_borrow_mut()?;
-    let reinf = unsafe { ReinforcementAccount::load_mut(&mut reinf_data_ref) };
+    // 4. Load Reinforcement (owner + discriminator + canonical PDA, self-derived
+    //    from its stored game_engine/sender/destination).
+    let reinf =
+        ReinforcementAccount::load_checked_player_mut_by_key(reinforcement_account, program_id)?;
 
     // 5. Validate Status is Traveling
     if reinf.get_status() != ReinforcementStatus::Traveling {

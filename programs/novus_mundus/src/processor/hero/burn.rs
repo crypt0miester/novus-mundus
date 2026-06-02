@@ -61,9 +61,9 @@ pub fn process(
     // 3. Parse instruction data
     let template_id = read_u16(instruction_data, 0, "burn.template_id")?;
 
-    // 4. Load player account and verify ownership
-    let player_data = player_account.try_borrow()?;
-    let player = unsafe { PlayerAccount::load(&player_data) };
+    // 4. Load + validate player account (owner + discriminator + canonical PDA,
+    //    self-derived) before trusting its locked-hero list / payout target.
+    let player = PlayerAccount::load_checked_by_key(player_account, program_id)?;
 
     if !player.is_owner(owner.address()) {
         return Err(GameError::Unauthorized.into());
@@ -75,8 +75,6 @@ pub fn process(
             return Err(GameError::HeroIsLocked.into());
         }
     }
-    drop(player_data);
-
     // 6. Verify NFT ownership (hero must be in wallet, not locked)
     let asset_data = hero_asset.try_borrow()?;
     let asset = p_core::state::AssetV1::from_borsh(&asset_data);
