@@ -951,7 +951,13 @@ export function parseInstructionData(data: Uint8Array): ParsedInstruction | null
 
 /** Parse instruction from base64 string */
 export function parseInstructionFromBase64(base64Data: string): ParsedInstruction | null {
-  const bytes = new Uint8Array(base64Encoder.encode(base64Data));
+  let bytes: Uint8Array;
+  try {
+    bytes = new Uint8Array(base64Encoder.encode(base64Data));
+  } catch {
+    // Invalid base64 (chars outside the alphabet) — not a parseable instruction
+    return null;
+  }
   return parseInstructionData(bytes);
 }
 

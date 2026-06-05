@@ -314,4 +314,82 @@ mod tests {
         assert!(!is_valid_longitude(181.0));
         assert!(!is_valid_longitude(-181.0));
     }
+
+    // Equivalence proof for the attack_castle range-gate optimization
+    // (processor/castle/attack_castle.rs).
+    #[test]
+    fn castle_range_clamp_matches_loop_min() {
+        use crate::state::LocationAccount as L;
+        const RANGE_M: f64 = 50.0; // CASTLE_ATTACK_RANGE_METERS
+
+        // Old behaviour: min Haversine over the whole N×N footprint.
+        fn loop_min(at_lat: f64, at_lon: f64, a_lat: i32, a_lon: i32, fp: i32) -> f64 {
+            let mut min = f64::MAX;
+            for dlat in 0..fp {
+                for dlon in 0..fp {
+                    let d = calculate_distance_meters(
+                        at_lat,
+                        at_lon,
+                        L::from_grid(a_lat + dlat),
+                        L::from_grid(a_lon + dlon),
+                    );
+                    if d < min {
+                        min = d;
+                    }
+                }
+            }
+            min
+        }
+
+        // New behaviour: clamp into the AABB, one Haversine.
+        fn clamp_min(at_lat: f64, at_lon: f64, a_lat: i32, a_lon: i32, fp: i32) -> f64 {
+            let last = fp - 1;
+            let nlat = L::to_grid(at_lat).clamp(a_lat, a_lat + last);
+            let nlon = L::to_grid(at_lon).clamp(a_lon, a_lon + last);
+            calculate_distance_meters(at_lat, at_lon, L::from_grid(nlat), L::from_grid(nlon))
+        }
+
+        // Anchors in grid units (degrees * 10000); cos(lat) spans ~1 (equator)
+        // to ~0.014 (near pole), exercising the term the monotonicity argument
+        // treats as negligible.
+        let anchors = [
+            (515_074i32, -1_278i32), // London
+            (407_128, -740_060),     // NYC
+            (-338_688, 1_512_093),   // Sydney
+            (0, 0),                  // equator / prime meridian
+            (896_000, 1_799_000),    // near pole / antimeridian
+        ];
+        let mut checked = 0u64;
+        for &(a_lat, a_lon) in &anchors {
+            for fp in 1..=4i32 {
+                for olat in -6..=10 {
+                    for olon in -6..=10 {
+                        for &frac in &[0.0f64, 0.5, 0.25, 0.75] {
+                            let at_lat = L::from_grid(a_lat) + (olat as f64 + frac) / 10_000.0;
+                            let at_lon = L::from_grid(a_lon) + (olon as f64 + frac) / 10_000.0;
+                            let lm = loop_min(at_lat, at_lon, a_lat, a_lon, fp);
+                            let cm = clamp_min(at_lat, at_lon, a_lat, a_lon, fp);
+                            // The gate decision must always agree.
+                            assert_eq!(
+                                lm <= RANGE_M,
+                                cm <= RANGE_M,
+                                "gate mismatch: loop={lm} clamp={cm} anchor=({a_lat},{a_lon}) fp={fp} off=({olat},{olon},{frac})"
+                            );
+                            // Distance: exact away from ties; at an exact half-grid
+                            // latitude tie with a large longitude offset the clamp may
+                            // pick the other equidistant-in-lat cell, differing only by
+                            // the cos(lat) term (~tens of microns). The 1 cm bound
+                            // tolerates that while still catching a gross argmin bug.
+                            assert!(
+                                (lm - cm).abs() < 1e-2,
+                                "distance mismatch: loop={lm} clamp={cm} anchor=({a_lat},{a_lon}) fp={fp} off=({olat},{olon},{frac})"
+                            );
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert!(checked > 20_000, "sweep too small: {checked}");
+    }
 }

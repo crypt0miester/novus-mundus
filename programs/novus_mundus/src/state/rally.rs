@@ -1,4 +1,5 @@
 use crate::constants::{RALLY_PARTICIPANT_SEED, RALLY_SEED};
+use crate::logic::safe_math::{apply_bp, mul_div};
 use pinocchio::{error::ProgramError, Address};
 
 // Rally Status
@@ -451,13 +452,14 @@ impl RallyParticipant {
         }
 
         let surviving = self.total_surviving_units();
-        let survival_ratio_bps = ((surviving as u128 * 10000) / total_units as u128) as u64;
+        // u64 throughout (bit-identical to the old u128 in range): a ratio via
+        // mul_div (runtime divisor), then apply_bp for the × ratio / 10000 step.
+        let survival_ratio_bps = mul_div(surviving, 10000, total_units).unwrap_or(0);
 
         // Melee and ranged proportional to survival
-        let melee_returned =
-            (self.melee_weapons_committed as u128 * survival_ratio_bps as u128 / 10000) as u64;
+        let melee_returned = apply_bp(self.melee_weapons_committed, survival_ratio_bps).unwrap_or(0);
         let ranged_returned =
-            (self.ranged_weapons_committed as u128 * survival_ratio_bps as u128 / 10000) as u64;
+            apply_bp(self.ranged_weapons_committed, survival_ratio_bps).unwrap_or(0);
         // Siege is consumed during combat - calculated separately
         let siege_returned = 0u64; // Siege consumed in execute
 

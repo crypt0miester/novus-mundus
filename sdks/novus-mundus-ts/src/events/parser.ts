@@ -1792,7 +1792,13 @@ export function parseNovusMundusEvent(data: Uint8Array): NovusMundusEvent | null
  * @returns Parsed event or null
  */
 export function parseEventFromBase64(base64Data: string): NovusMundusEvent | null {
-  const bytes = base64Encoder.encode(base64Data) as Uint8Array;
+  let bytes: Uint8Array;
+  try {
+    bytes = base64Encoder.encode(base64Data) as Uint8Array;
+  } catch {
+    // Invalid base64 (chars outside the alphabet) — not a parseable event
+    return null;
+  }
   return parseNovusMundusEvent(bytes);
 }
 

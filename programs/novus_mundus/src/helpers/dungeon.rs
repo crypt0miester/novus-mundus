@@ -372,10 +372,14 @@ pub fn calculate_darkness_enemy_buff(floor: u8, mitigation_bps: u16) -> u16 {
     }
 }
 
-/// Calculate total darkness mitigation from relics and synergies
-pub fn calculate_total_darkness_mitigation(run: &DungeonRun) -> u16 {
+/// Calculate total darkness mitigation from relics and synergies.
+/// Takes the caller's already-computed `SynergyBonuses` so it doesn't re-run the
+/// 9×20 synergy scan (the caller needs `synergies` anyway).
+pub fn calculate_total_darkness_mitigation(
+    run: &DungeonRun,
+    synergy_bonuses: &SynergyBonuses,
+) -> u16 {
     let relic_mitigation = calculate_relic_darkness_reduction(run);
-    let synergy_bonuses = calculate_synergy_bonuses(run);
     // Scout specialization: -25% darkness effects
     let scout_mitigation = get_scout_darkness_reduction(run.get_specialization());
 
@@ -413,6 +417,8 @@ pub fn calculate_dungeon_damage(
     hero_attack_bps: u16,
     weapon_power: u64,
     is_boss: bool,
+    synergies: &SynergyBonuses,
+    darkness_mitigation: u16,
 ) -> u64 {
     // Start with unit power + weapon power
     let mut damage = base_unit_power.saturating_add(weapon_power);
@@ -428,15 +434,14 @@ pub fn calculate_dungeon_damage(
         damage = apply_bp(damage, 10000u64.saturating_add(relic_attack as u64)).unwrap_or(damage);
     }
 
-    // Apply synergy bonuses
-    let synergies = calculate_synergy_bonuses(run);
+    // Apply synergy bonuses (precomputed by caller)
     if synergies.attack_bps > 0 {
         damage = apply_bp(damage, 10000u64.saturating_add(synergies.attack_bps as u64)).unwrap_or(damage);
     }
 
     // Apply darkness penalty (scaled by time of day)
-    let mitigation = calculate_total_darkness_mitigation(run);
-    let base_darkness_penalty = calculate_darkness_damage_penalty(run.current_floor, mitigation);
+    let base_darkness_penalty =
+        calculate_darkness_damage_penalty(run.current_floor, darkness_mitigation);
     // Apply time-based darkness modifier (Day -50%, Night +50%)
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
     let darkness_penalty = calculate_darkness_with_time(base_darkness_penalty, time_period, false);
@@ -473,12 +478,17 @@ pub fn calculate_dungeon_damage(
 }
 
 /// Calculate enemy counterattack damage
-pub fn calculate_enemy_damage(run: &DungeonRun, enemy_power: u32, is_boss: bool) -> u64 {
+pub fn calculate_enemy_damage(
+    run: &DungeonRun,
+    enemy_power: u32,
+    is_boss: bool,
+    synergies: &SynergyBonuses,
+    darkness_mitigation: u16,
+) -> u64 {
     let mut damage = enemy_power as u64;
 
     // Apply darkness enemy buff (scaled by time of day)
-    let mitigation = calculate_total_darkness_mitigation(run);
-    let base_enemy_buff = calculate_darkness_enemy_buff(run.current_floor, mitigation);
+    let base_enemy_buff = calculate_darkness_enemy_buff(run.current_floor, darkness_mitigation);
     // Apply time-based darkness modifier (Day -50%, Night +50%)
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
     let enemy_buff = calculate_darkness_with_time(base_enemy_buff, time_period, false);
@@ -489,7 +499,6 @@ pub fn calculate_enemy_damage(run: &DungeonRun, enemy_power: u32, is_boss: bool)
     // Boss gets power reduction from relics/synergies
     if is_boss {
         let boss_reduction = calculate_relic_boss_reduction(run);
-        let synergies = calculate_synergy_bonuses(run);
         let total_reduction = boss_reduction.saturating_add(synergies.boss_reduction_bps);
 
         if total_reduction > 0 {
@@ -506,6 +515,8 @@ pub fn calculate_damage_taken(
     run: &DungeonRun,
     incoming_damage: u64,
     player_defense_bps: u16,
+    synergies: &SynergyBonuses,
+    darkness_mitigation: u16,
 ) -> u64 {
     let mut damage = incoming_damage;
 
@@ -522,16 +533,15 @@ pub fn calculate_damage_taken(
         damage = damage.saturating_sub(reduction);
     }
 
-    // Apply synergy defense bonus
-    let synergies = calculate_synergy_bonuses(run);
+    // Apply synergy defense bonus (precomputed by caller)
     if synergies.defense_bps > 0 {
         let reduction = apply_bp(damage, synergies.defense_bps as u64).unwrap_or(0);
         damage = damage.saturating_sub(reduction);
     }
 
     // Apply darkness defense penalty (increases damage taken, scaled by time of day)
-    let mitigation = calculate_total_darkness_mitigation(run);
-    let base_defense_penalty = calculate_darkness_defense_penalty(run.current_floor, mitigation);
+    let base_defense_penalty =
+        calculate_darkness_defense_penalty(run.current_floor, darkness_mitigation);
     // Apply time-based darkness modifier (Day -50%, Night +50%)
     let time_period = TimePeriod::from_u8(run.time_period).unwrap_or(TimePeriod::Day);
     let defense_penalty = calculate_darkness_with_time(base_defense_penalty, time_period, false);
@@ -899,8 +909,7 @@ pub fn calculate_boss_wrath(damage_taken: u64, max_hp: u64) -> u8 {
 
 /// Get boss damage multiplier based on wrath level
 /// Returns (damage_mult_bps, attacks_per_turn)
-pub fn get_boss_wrath_damage(wrath: u8, run: &DungeonRun) -> (u16, u8) {
-    let synergies = calculate_synergy_bonuses(run);
+pub fn get_boss_wrath_damage(wrath: u8, synergies: &SynergyBonuses) -> (u16, u8) {
     let has_defense_3 = synergies.defense_bps >= 3000; // 3-piece DEFENSE
 
     // Base damage multiplier and attacks

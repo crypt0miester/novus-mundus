@@ -14,7 +14,7 @@ use crate::{
         calculate_damage_output, calculate_encounter_loot_pool, calculate_networth,
         combat::{resolve_weapon_combat, WeaponSet},
         inflict_damage,
-        safe_math::{calculate_share, mul_div},
+        safe_math::{apply_bp, calculate_share, mul_div},
     },
     state::{
         CastleAccount, EncounterAccount, EstateAccount, GarrisonContributionAccount, PlayerAccount,
@@ -378,7 +378,7 @@ pub fn process(
             attacker_casualties = if total_units > 0 && defender_damage > 0 {
                 let casualty_ratio =
                     defender_damage.min(total_units.saturating_mul(100)) / total_units.max(1);
-                (total_units as u128 * casualty_ratio as u128 / 100) as u64
+                mul_div(total_units, casualty_ratio, 100).unwrap_or(0)
             } else {
                 0
             };
@@ -443,7 +443,7 @@ pub fn process(
                 total_loot_fragments = target_player.fragments / 4;
                 total_loot_gems = target_player.gems / 4;
 
-                // Apply fallback bonus (φ = 1.618x) on cash if no garrison
+                // Apply fallback bonus (φ = 1.618x) on cash if no garrison.
                 if fallback_triggered {
                     total_loot_cash = (total_loot_cash as u128 * 16180 / 10000) as u64;
                 }
@@ -607,7 +607,8 @@ pub fn process(
             // Higher armory = more damage output from garrison
             let armory_bonus = castle.armory_bonus_bps();
             let garrison_damage = if armory_bonus > 0 {
-                (base_garrison_damage as u128 * (10000 + armory_bonus as u128) / 10000) as u64
+                apply_bp(base_garrison_damage, 10000 + armory_bonus as u64)
+                    .unwrap_or(base_garrison_damage)
             } else {
                 base_garrison_damage
             };
@@ -616,7 +617,7 @@ pub fn process(
             attacker_casualties = if total_units > 0 && garrison_damage > 0 {
                 let casualty_ratio =
                     garrison_damage.min(total_units.saturating_mul(100)) / total_units.max(1);
-                (total_units as u128 * casualty_ratio as u128 / 100) as u64
+                mul_div(total_units, casualty_ratio, 100).unwrap_or(0)
             } else {
                 0
             };
@@ -626,7 +627,7 @@ pub fn process(
             // Formula: effective_damage = base_damage * 10000 / (10000 + fortification_bonus_bps)
             let fortification_bonus = castle.fortification_bonus_bps();
             let effective_total_damage = if fortification_bonus > 0 {
-                (total_damage as u128 * 10000 / (10000 + fortification_bonus as u128)) as u64
+                mul_div(total_damage, 10000, 10000 + fortification_bonus as u64).unwrap_or(total_damage)
             } else {
                 total_damage
             };
@@ -638,17 +639,16 @@ pub fn process(
             // matching comment.
             let garrison_casualty_ratio = if total_garrison_units > 0 && effective_total_damage > 0
             {
-                ((effective_total_damage as u128 * 10000) / (total_garrison_units as u128 * 10))
-                    .min(10000) as u64
+                mul_div(effective_total_damage, 10000, total_garrison_units.saturating_mul(10))
+                    .unwrap_or(0)
+                    .min(10000)
             } else {
                 0
             };
 
-            let garrison_casualties = if total_garrison_units > 0 {
-                (total_garrison_units as u128 * garrison_casualty_ratio as u128 / 10000) as u64
-            } else {
-                0
-            };
+            // units == 0 ⇒ numerator 0 ⇒ result 0, so the > 0 guard is redundant.
+            let garrison_casualties =
+                apply_bp(total_garrison_units, garrison_casualty_ratio).unwrap_or(0);
 
             // Weapon combat resolution
             let attacker_weapons = WeaponSet::new(total_melee, total_ranged, total_siege);

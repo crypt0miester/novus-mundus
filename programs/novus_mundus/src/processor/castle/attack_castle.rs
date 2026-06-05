@@ -24,7 +24,7 @@ use crate::{
         calculate_damage_output, calculate_distance_meters, calculate_networth,
         combat::{resolve_weapon_combat, WeaponSet},
         inflict_damage,
-        safe_math::calculate_share,
+        safe_math::{apply_bp, calculate_share, mul_div},
     },
     state::{
         CastleAccount, GameEngine, GarrisonContributionAccount, LocationAccount, PlayerAccount,
@@ -106,14 +106,13 @@ pub fn process(
         return Err(GameError::InActiveRally.into());
     }
 
-    // Verify attacker is within attack range of the castle. Under the
-    // multi-cell footprint model an attacker is in range if they're
-    // within `CASTLE_ATTACK_RANGE_METERS` of ANY footprint cell — not
-    // just the anchor. Take the minimum distance across the N×N grid.
+    // Verify attacker is within attack range of the castle.
     //
-    // castle.latitude/longitude are grid units (×10,000); `from_grid`
-    // (÷10,000) lands at degrees for the comparison with
-    // attacker.current_lat/long.
+    // The footprint is a full N×N Cartesian grid of cells at
+    // (anchor_lat + dlat, anchor_long + dlong).
+    //
+    // castle.latitude/longitude are grid units (×10,000); `to_grid` /
+    // `from_grid` convert against attacker.current_lat/long in degrees.
     let anchor_grid_lat = castle.latitude;
     let anchor_grid_long = castle.longitude;
     let footprint = if castle.footprint_size == 0 {
@@ -121,30 +120,27 @@ pub fn process(
     } else {
         castle.footprint_size as i32
     };
-    let mut min_distance_meters = f64::MAX;
-    for dlat in 0..footprint {
-        for dlong in 0..footprint {
-            let cell_lat =
-                LocationAccount::from_grid(anchor_grid_lat.saturating_add(dlat));
-            let cell_long =
-                LocationAccount::from_grid(anchor_grid_long.saturating_add(dlong));
-            let d = calculate_distance_meters(
-                attacker.current_lat,
-                attacker.current_long,
-                cell_lat,
-                cell_long,
-            );
-            if d < min_distance_meters {
-                min_distance_meters = d;
-            }
-        }
-    }
+    let last_cell = footprint.saturating_sub(1);
+    let near_grid_lat = LocationAccount::to_grid(attacker.current_lat).clamp(
+        anchor_grid_lat,
+        anchor_grid_lat.saturating_add(last_cell),
+    );
+    let near_grid_long = LocationAccount::to_grid(attacker.current_long).clamp(
+        anchor_grid_long,
+        anchor_grid_long.saturating_add(last_cell),
+    );
+    let min_distance_meters = calculate_distance_meters(
+        attacker.current_lat,
+        attacker.current_long,
+        LocationAccount::from_grid(near_grid_lat),
+        LocationAccount::from_grid(near_grid_long),
+    );
 
     if min_distance_meters > CASTLE_ATTACK_RANGE_METERS {
         return Err(GameError::OutOfRange.into());
     }
 
-    // Verify attacker has defensive units (castle attacks use defensive forces, not operatives)
+    // Verify attacker has defensive units
     let attacker_defensive_total = attacker.total_defensive_units();
     if attacker_defensive_total == 0 {
         return Err(GameError::InsufficientUnits.into());
@@ -264,7 +260,8 @@ pub fn process(
     // Higher armory = more damage output from garrison
     let armory_bonus = castle.armory_bonus_bps();
     let garrison_damage = if armory_bonus > 0 {
-        (base_garrison_damage as u128 * (10000 + armory_bonus as u128) / 10000) as u64
+        // value × (10000 + bonus) / 10000 in u64; bit-identical in range.
+        apply_bp(base_garrison_damage, 10000 + armory_bonus as u64).unwrap_or(base_garrison_damage)
     } else {
         base_garrison_damage
     };
@@ -296,7 +293,9 @@ pub fn process(
     // Formula: effective_damage = base_damage * 10000 / (10000 + fortification_bonus_bps)
     let fortification_bonus = castle.fortification_bonus_bps();
     let effective_attacker_damage = if fortification_bonus > 0 {
-        (attacker_damage as u128 * 10000 / (10000 + fortification_bonus as u128)) as u64
+        // u64 mul_div: runtime divisor (10000 + bonus) > 0; bit-identical
+        // (attacker_damage × 10000 ≪ u64::MAX for any reachable damage).
+        mul_div(attacker_damage, 10000, 10000 + fortification_bonus as u64).unwrap_or(attacker_damage)
     } else {
         attacker_damage
     };
@@ -309,17 +308,17 @@ pub fn process(
     // with `inflict_damage` here: garrison aggregates multiple players and we
     // don't carry per-tier breakdowns through the castle path.
     let garrison_casualty_ratio = if total_garrison_units > 0 && effective_attacker_damage > 0 {
-        ((effective_attacker_damage as u128 * 10000) / (total_garrison_units as u128 * 10))
-            .min(10000) as u64
+        // u64 mul_div then cap; bit-identical (the `× 10` and `× 10000` only
+        // overflow u64 past unreachable unit/damage magnitudes).
+        mul_div(effective_attacker_damage, 10000, total_garrison_units.saturating_mul(10))
+            .unwrap_or(0)
+            .min(10000)
     } else {
         0
     };
 
-    let garrison_casualties = if total_garrison_units > 0 {
-        (total_garrison_units as u128 * garrison_casualty_ratio as u128 / 10000) as u64
-    } else {
-        0
-    };
+    // units == 0 ⇒ numerator 0 ⇒ result 0, so the > 0 guard is redundant.
+    let garrison_casualties = apply_bp(total_garrison_units, garrison_casualty_ratio).unwrap_or(0);
 
     // Weapon combat resolution
     let attacker_weapons = WeaponSet::new(
@@ -378,18 +377,12 @@ pub fn process(
             .saturating_add(looted.siege);
     } else {
         // Attacker lost - loses weapons proportional to casualties
-        let casualty_ratio_bps = if attacker_defensive_total > 0 {
-            ((attacker_casualties as u128 * 10000) / attacker_defensive_total as u128) as u64
-        } else {
-            0
-        };
+        let casualty_ratio_bps =
+            mul_div(attacker_casualties, 10000, attacker_defensive_total).unwrap_or(0);
 
-        let melee_lost =
-            (attacker_weapons.melee as u128 * casualty_ratio_bps as u128 / 10000) as u64;
-        let ranged_lost =
-            (attacker_weapons.ranged as u128 * casualty_ratio_bps as u128 / 10000) as u64;
-        let siege_lost =
-            (attacker_weapons.siege as u128 * casualty_ratio_bps as u128 / 10000) as u64;
+        let melee_lost = apply_bp(attacker_weapons.melee, casualty_ratio_bps).unwrap_or(0);
+        let ranged_lost = apply_bp(attacker_weapons.ranged, casualty_ratio_bps).unwrap_or(0);
+        let siege_lost = apply_bp(attacker_weapons.siege, casualty_ratio_bps).unwrap_or(0);
 
         attacker.melee_weapons = attacker.melee_weapons.saturating_sub(melee_lost);
         attacker.ranged_weapons = attacker.ranged_weapons.saturating_sub(ranged_lost);
@@ -432,11 +425,11 @@ pub fn process(
                 continue;
             }
 
-            let contribution_bps = if total_garrison_power > 0 {
-                ((garrison_powers[i] as u128 * 10000) / total_garrison_power as u128) as u64
-            } else {
-                0
-            };
+            // u64 mul_div instead of u128: bit-identical while garrison powers
+            // stay ≪ 1.8e15 (garrison_powers[i] × 10000 never overflows u64 in
+            // any reachable game state, so the divide-first fallback never fires).
+            // Outer block already gates total_garrison_power > 0.
+            let contribution_bps = mul_div(garrison_powers[i], 10000, total_garrison_power).unwrap_or(0);
 
             // Distribute casualties proportionally
             let their_casualties =
@@ -445,10 +438,9 @@ pub fn process(
             // Reduce units (simplified - reduce proportionally across tiers)
             let their_total_units = garrison.total_units();
             if their_total_units > 0 {
-                let unit_1_share =
-                    (garrison.units_1 as u128 * 10000 / their_total_units as u128) as u64;
-                let unit_2_share =
-                    (garrison.units_2 as u128 * 10000 / their_total_units as u128) as u64;
+                // u64 mul_div: bit-identical to the old u128 path for unit counts ≪ 1.8e15.
+                let unit_1_share = mul_div(garrison.units_1, 10000, their_total_units).unwrap_or(0);
+                let unit_2_share = mul_div(garrison.units_2, 10000, their_total_units).unwrap_or(0);
 
                 garrison.units_1 = garrison.units_1.saturating_sub(
                     calculate_share(their_casualties, unit_1_share, 10000).unwrap_or(0),

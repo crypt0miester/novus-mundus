@@ -21,7 +21,7 @@ use crate::{
         calculate_networth, calculate_xp_reward,
         combat::{resolve_weapon_combat, WeaponSet},
         get_time_of_day, grant_xp_with_time_bonus, inflict_damage,
-        safe_math::apply_bp,
+        safe_math::{apply_bp, mul_div},
         update_happiness_defensive, ActivityType, XpAction,
     },
     state::{require_extension, CityAccount, PlayerAccount, EXT_RESEARCH},
@@ -782,11 +782,10 @@ pub fn process(
         let recovered = weapon_result.attacker_weapons_returned;
 
         // Calculate defender's weapon casualty ratio (weapons die with units)
-        let defender_casualty_bps = if defender_defensive_total > 0 {
-            ((defender_units_lost as u128 * 10000) / defender_defensive_total as u128) as u64
-        } else {
-            0
-        };
+        // u64 mul_div: bit-identical to the old u128 path (result is a bps ≤
+        // 10000, units ≪ 1.8e15) and returns 0 when the divisor is 0.
+        let defender_casualty_bps =
+            mul_div(defender_units_lost, 10000, defender_defensive_total).unwrap_or(0);
 
         // Reinforcement weapons (die proportionally, not lootable)
         let reinf_melee_lost =
@@ -842,11 +841,8 @@ pub fn process(
         let defender_looted = weapon_result.defender_weapons_looted;
 
         // Deduct lost weapons from attacker (proportional to casualties)
-        let casualty_ratio_bps = if attacker_defensive_total > 0 {
-            ((attacker_units_lost as u128 * 10000) / attacker_defensive_total as u128) as u64
-        } else {
-            0
-        };
+        let casualty_ratio_bps =
+            mul_div(attacker_units_lost, 10000, attacker_defensive_total).unwrap_or(0);
 
         let attacker_melee_lost = apply_bp(attacker_weapons.melee, casualty_ratio_bps).unwrap_or(0);
         let attacker_ranged_lost =
@@ -864,11 +860,10 @@ pub fn process(
             .saturating_sub(attacker_siege_lost);
 
         // Calculate defender's weapon casualty ratio (weapons die with units even if defender wins)
-        let defender_casualty_bps = if defender_defensive_total > 0 {
-            ((defender_units_lost as u128 * 10000) / defender_defensive_total as u128) as u64
-        } else {
-            0
-        };
+        // u64 mul_div: bit-identical to the old u128 path (result is a bps ≤
+        // 10000, units ≪ 1.8e15) and returns 0 when the divisor is 0.
+        let defender_casualty_bps =
+            mul_div(defender_units_lost, 10000, defender_defensive_total).unwrap_or(0);
 
         // Apply weapon losses to defender's own weapons
         let own_melee_lost =

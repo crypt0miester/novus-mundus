@@ -1,4 +1,3 @@
-use crate::constants::GOLDEN_ROOT;
 use crate::logic::safe_math::{apply_bp, chain_bp};
 use crate::logic::{get_time_multiplier, get_time_of_day, ActivityType};
 use crate::state::{EconomicConfig, EncounterAccount, GameplayConfig};
@@ -60,7 +59,14 @@ pub fn calculate_level_multiplier(level: u8, scaling_exp: f32, scaling_divisor: 
 
     // Use f64 for precision
     let level_f = level as f64;
-    let scaled = libm::pow(level_f, scaling_exp as f64);
+    // Fast path: every shipped config uses exponent 1.5, and level^1.5 is
+    // exactly level * sqrt(level) — one libm::sqrt instead of the full
+    // libm::pow log/exp path.
+    let scaled = if scaling_exp == 1.5 {
+        level_f * libm::sqrt(level_f)
+    } else {
+        libm::pow(level_f, scaling_exp as f64)
+    };
     let multiplier_f = scaled / scaling_divisor as f64;
 
     // Convert to basis points (1.0 = 10000)
@@ -366,13 +372,8 @@ pub fn calculate_fragment_amount(
         _ => 2,
     };
 
-    // Level scaling: √φ per 10 levels (deterministic)
-    // Level 10: √φ ≈ 1.27x
-    // Level 20: φ ≈ 1.62x
-    // Level 40: φ² ≈ 2.62x
-    let level_exponent = level as f64 / 10.0;
-    let level_mult = libm::pow(GOLDEN_ROOT, level_exponent);
-    let level_mult_bp = (level_mult * 10000.0) as u64;
+    // Level scaling: √φ per 10 levels (deterministic).
+    let level_mult_bp = FRAGMENT_LEVEL_MULT_BP[level as usize];
 
     // Apply synchrony bonus
     let synchrony_mult = 10000u64.saturating_add(synchrony_bonus_bps as u64);
@@ -417,13 +418,12 @@ pub fn calculate_gem_amount(
         _ => 1,
     };
 
-    // Level scaling: √φ per 20 levels (slower than fragments)
-    // Level 20: √φ ≈ 1.27x
-    // Level 40: φ ≈ 1.62x
-    // Level 80: φ² ≈ 2.62x
-    let level_exponent = level as f64 / 20.0;
-    let level_mult = libm::pow(GOLDEN_ROOT, level_exponent);
-    let level_mult_bp = (level_mult * 10000.0) as u64;
+    // Level scaling: √φ per 20 levels (slower than fragments).
+    // Level 20: √φ ≈ 1.27x · Level 40: φ ≈ 1.62x · Level 80: φ² ≈ 2.62x.
+    // Precomputed LUT baked from (libm::pow(GOLDEN_ROOT, level/20.0) * 10000.0)
+    // as u64 — identical output, TS mirror at calculators/rewards.ts:289 stays
+    // in parity. See the bit-equality test below.
+    let level_mult_bp = GEM_LEVEL_MULT_BP[level as usize];
 
     // Apply synchrony bonus
     let synchrony_mult = 10000u64.saturating_add(synchrony_bonus_bps as u64);
@@ -434,6 +434,82 @@ pub fn calculate_gem_amount(
     // Calculate final amount using interleaved multiply/divide (no u128!)
     chain_bp(base as u64, &[level_mult_bp, synchrony_mult, time_mult_bp]).unwrap_or(base as u64)
 }
+
+// Fragment level multiplier in bp, indexed by level (u8): √φ per 10 levels.
+// = (libm::pow(GOLDEN_ROOT, level/10.0) * 10000.0) as u64, baked bit-for-bit.
+#[rustfmt::skip]
+const FRAGMENT_LEVEL_MULT_BP: [u64; 256] = [
+    10000, 10243, 10492, 10748, 11010, 11278, 11553, 11834,
+    12122, 12417, 12720, 13029, 13347, 13672, 14005, 14346,
+    14695, 15053, 15420, 15795, 16180, 16574, 16977, 17391,
+    17814, 18248, 18693, 19148, 19614, 20092, 20581, 21082,
+    21596, 22122, 22660, 23212, 23778, 24357, 24950, 25557,
+    26180, 26817, 27470, 28139, 28825, 29527, 30246, 30982,
+    31737, 32510, 33301, 34112, 34943, 35794, 36666, 37559,
+    38473, 39410, 40370, 41353, 42360, 43392, 44448, 45531,
+    46640, 47776, 48939, 50131, 51352, 52602, 53883, 55195,
+    56539, 57916, 59327, 60772, 62251, 63767, 65320, 66911,
+    68541, 70210, 71919, 73671, 75465, 77303, 79185, 81114,
+    83089, 85112, 87185, 89308, 91483, 93711, 95993, 98331,
+    100725, 103178, 105691, 108265, 110901, 113602, 116368, 119202,
+    122105, 125079, 128125, 131245, 134441, 137715, 141069, 144504,
+    148023, 151628, 155320, 159103, 162977, 166946, 171012, 175176,
+    179442, 183812, 188288, 192874, 197571, 202382, 207310, 212359,
+    217530, 222828, 228254, 233813, 239507, 245339, 251314, 257434,
+    263703, 270125, 276703, 283441, 290344, 297414, 304657, 312076,
+    319676, 327461, 335436, 343604, 351972, 360543, 369323, 378317,
+    387530, 396967, 406635, 416537, 426681, 437071, 447715, 458618,
+    469787, 481227, 492946, 504951, 517247, 529844, 542746, 555964,
+    569503, 583371, 597578, 612130, 627037, 642307, 657949, 673971,
+    690384, 707197, 724419, 742060, 760131, 778642, 797604, 817027,
+    836924, 857305, 878183, 899568, 921475, 943915, 966902, 990448,
+    1014568, 1039275, 1064584, 1090509, 1117066, 1144269, 1172135, 1200679,
+    1229918, 1259870, 1290550, 1321978, 1354172, 1387149, 1420930, 1455533,
+    1490978, 1527287, 1564480, 1602579, 1641606, 1681583, 1722533, 1764481,
+    1807450, 1851466, 1896554, 1942739, 1990050, 2038512, 2088155, 2139006,
+    2191096, 2244455, 2299113, 2355101, 2412454, 2471203, 2531383, 2593028,
+    2656174, 2720858, 2787118, 2854991, 2924517, 2995735, 3068689, 3143419,
+    3219968, 3298382, 3378706, 3460985, 3545269, 3631604, 3720043, 3810635,
+    3903433, 3998490, 4095863, 4195607, 4297780, 4402442, 4509652, 4619472,
+];
+
+// Gem level multiplier in bp, indexed by level (u8): √φ per 20 levels.
+// = (libm::pow(GOLDEN_ROOT, level/20.0) * 10000.0) as u64, baked bit-for-bit.
+#[rustfmt::skip]
+const GEM_LEVEL_MULT_BP: [u64; 256] = [
+    10000, 10121, 10243, 10367, 10492, 10619, 10748, 10878,
+    11010, 11143, 11278, 11414, 11553, 11692, 11834, 11977,
+    12122, 12269, 12417, 12568, 12720, 12874, 13029, 13187,
+    13347, 13508, 13672, 13837, 14005, 14174, 14346, 14519,
+    14695, 14873, 15053, 15235, 15420, 15606, 15795, 15986,
+    16180, 16376, 16574, 16774, 16977, 17183, 17391, 17601,
+    17814, 18030, 18248, 18469, 18693, 18919, 19148, 19380,
+    19614, 19852, 20092, 20335, 20581, 20830, 21082, 21338,
+    21596, 21857, 22122, 22390, 22660, 22935, 23212, 23493,
+    23778, 24065, 24357, 24651, 24950, 25252, 25557, 25867,
+    26180, 26497, 26817, 27142, 27470, 27803, 28139, 28480,
+    28825, 29174, 29527, 29884, 30246, 30612, 30982, 31357,
+    31737, 32121, 32510, 32903, 33301, 33704, 34112, 34525,
+    34943, 35366, 35794, 36227, 36666, 37110, 37559, 38013,
+    38473, 38939, 39410, 39887, 40370, 40859, 41353, 41854,
+    42360, 42873, 43392, 43917, 44448, 44986, 45531, 46082,
+    46640, 47204, 47776, 48354, 48939, 49531, 50131, 50737,
+    51352, 51973, 52602, 53239, 53883, 54535, 55195, 55863,
+    56539, 57224, 57916, 58617, 59327, 60045, 60772, 61507,
+    62251, 63005, 63767, 64539, 65320, 66111, 66911, 67721,
+    68541, 69370, 70210, 71059, 71919, 72790, 73671, 74563,
+    75465, 76378, 77303, 78238, 79185, 80144, 81114, 82095,
+    83089, 84095, 85112, 86142, 87185, 88240, 89308, 90389,
+    91483, 92590, 93711, 94845, 95993, 97155, 98331, 99521,
+    100725, 101944, 103178, 104427, 105691, 106970, 108265, 109575,
+    110901, 112243, 113602, 114977, 116368, 117777, 119202, 120645,
+    122105, 123583, 125079, 126593, 128125, 129675, 131245, 132833,
+    134441, 136068, 137715, 139382, 141069, 142776, 144504, 146253,
+    148023, 149815, 151628, 153463, 155320, 157200, 159103, 161028,
+    162977, 164950, 166946, 168967, 171012, 173081, 175176, 177296,
+    179442, 181614, 183812, 186037, 188288, 190567, 192874, 195208,
+    197571, 199962, 202382, 204831, 207310, 209819, 212359, 214929,
+];
 
 #[inline]
 fn apply_multiplier(base: u64, multiplier: u64) -> u64 {
@@ -553,5 +629,20 @@ mod tests {
         // Should be approximately 1.618x (φ)
         let ratio = with_phi as f64 / baseline as f64;
         assert!(ratio > 1.5 && ratio < 1.7);
+    }
+
+    #[test]
+    fn level_mult_tables_match_libm() {
+        // The baked LUTs must reproduce (libm::pow(GOLDEN_ROOT, level/d) *
+        // 10000.0) as u64 bit-for-bit over the whole u8 range — anti-drift /
+        // paste-typo guard, and proof the on-chain output is unchanged (so the
+        // Math.pow mirror in calculators/rewards.ts stays in parity).
+        use crate::constants::GOLDEN_ROOT;
+        for level in 0u32..256 {
+            let frag = (libm::pow(GOLDEN_ROOT, level as f64 / 10.0) * 10000.0) as u64;
+            let gem = (libm::pow(GOLDEN_ROOT, level as f64 / 20.0) * 10000.0) as u64;
+            assert_eq!(FRAGMENT_LEVEL_MULT_BP[level as usize], frag, "fragment level {level}");
+            assert_eq!(GEM_LEVEL_MULT_BP[level as usize], gem, "gem level {level}");
+        }
     }
 }

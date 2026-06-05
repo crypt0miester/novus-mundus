@@ -25,6 +25,7 @@ use crate::{
         calculate_relic_lifesteal,
         calculate_room_xp,
         calculate_synergy_bonuses,
+        calculate_total_darkness_mitigation,
         calculate_unit_power,
         calculate_xp_with_time,
         double_attack_chance,
@@ -174,7 +175,12 @@ pub fn process_attacks(
     let base_unit_power = calculate_unit_power(&run.remaining_units);
     let weapon_power = run.total_remaining_weapons();
 
+    // Hoisted out of the per-attack loop: all relic-derived (relic_mask +
+    // specialization are fixed during combat). The damage helpers used to re-run
+    // the 9×20 synergy scan + darkness mitigation + hero bonus every iteration.
     let synergies = calculate_synergy_bonuses(&run);
+    let darkness_mitigation = calculate_total_darkness_mitigation(&run, &synergies);
+    let hero_bonus = calculate_relic_hero_bonus(&run);
     let lifesteal_bps = calculate_relic_lifesteal(&run).saturating_add(synergies.lifesteal_bps);
 
     // Check for double-attack relic (id 14, 15% chance, verified by backend)
@@ -243,12 +249,13 @@ pub fn process_attacks(
             player_hero_attack_bps,
             weapon_power,
             run.is_boss,
+            &synergies,
+            darkness_mitigation,
         );
         // Apply Warrior attack bonus (+20%) or Guardian penalty (-15%)
         let warrior_damage = apply_warrior_attack_bonus(base_damage, hero_spec);
 
-        // Apply hero-effectiveness relic bonus (id 9, +25%)
-        let hero_bonus = calculate_relic_hero_bonus(&run);
+        // Apply hero-effectiveness relic bonus (id 9, +25%) — hoisted above loop
         let hero_boosted_damage = if hero_bonus > 0 {
             apply_bp(warrior_damage, 10000u64.saturating_add(hero_bonus as u64)).unwrap_or(warrior_damage)
         } else {
@@ -344,12 +351,18 @@ pub fn process_attacks(
 
         // Enemy counterattack (if still alive)
         if run.enemy_health > 0 {
-            let mut enemy_damage = calculate_enemy_damage(&run, run.enemy_power, run.is_boss);
+            let mut enemy_damage = calculate_enemy_damage(
+                &run,
+                run.enemy_power,
+                run.is_boss,
+                &synergies,
+                darkness_mitigation,
+            );
 
             // BOSS WRATH: Apply wrath damage multiplier
             if run.is_boss {
                 let (wrath_damage_mult, wrath_attacks) =
-                    get_boss_wrath_damage(run.boss_wrath, &run);
+                    get_boss_wrath_damage(run.boss_wrath, &synergies);
 
                 // Apply wrath damage multiplier
                 if wrath_damage_mult > 10000 {
@@ -385,8 +398,13 @@ pub fn process_attacks(
                         player_research_defense_bps
                     };
 
-                    let base_damage_taken =
-                        calculate_damage_taken(&run, enemy_damage, effective_defense);
+                    let base_damage_taken = calculate_damage_taken(
+                        &run,
+                        enemy_damage,
+                        effective_defense,
+                        &synergies,
+                        darkness_mitigation,
+                    );
                     // Apply Guardian survival bonus (+25% damage reduction)
                     let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);
 
@@ -406,8 +424,13 @@ pub fn process_attacks(
                 }
             } else {
                 // Regular enemy (non-boss) - single attack
-                let base_damage_taken =
-                    calculate_damage_taken(&run, enemy_damage, player_research_defense_bps);
+                let base_damage_taken = calculate_damage_taken(
+                    &run,
+                    enemy_damage,
+                    player_research_defense_bps,
+                    &synergies,
+                    darkness_mitigation,
+                );
                 // Apply Guardian survival bonus (+25% damage reduction)
                 let damage_taken = apply_guardian_survival(base_damage_taken, hero_spec);
 
