@@ -11,10 +11,10 @@
 import { PublicKey } from '@solana/web3.js';
 
 /**
- * BufferWriter for sequential byte writes.
+ * ByteWriter for sequential byte writes.
  * Preallocates a Uint8Array and writes sequentially.
  */
-export class BufferWriter {
+export class ByteWriter {
   private buffer: Uint8Array;
   private view: DataView;
   private offset = 0;

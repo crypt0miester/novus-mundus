@@ -13,7 +13,7 @@
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import { PublicKey as PK } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { TravelType, SubscriptionTier } from '../types/enums';
 
 // Extension Flags
@@ -315,7 +315,7 @@ export const PLAYER_CORE_SIZE = CORE_SIZE;
 
 // Deserialization
 
-function deserializeRallyStats(reader: BufferReader): RallyStats {
+function deserializeRallyStats(reader: ByteReader): RallyStats {
   const currentRalliesJoined = reader.readU8();
   const ralliesCreatedToday = reader.readU8();
   reader.skip(6);
@@ -340,7 +340,7 @@ function deserializeRallyStats(reader: BufferReader): RallyStats {
   };
 }
 
-function deserializePlayerRallyCaps(reader: BufferReader): PlayerRallyCaps {
+function deserializePlayerRallyCaps(reader: ByteReader): PlayerRallyCaps {
   const maxConcurrentRallies = reader.readU8();
   const maxRalliesPerDay = reader.readU8();
   reader.skip(6);
@@ -372,7 +372,7 @@ interface ResearchSection {
 }
 
 function deserializeResearchSection(buf: Uint8Array): ResearchSection {
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
   const researchAttackBps = reader.readU16();
   const researchDefenseBps = reader.readU16();
   const researchCritChanceBps = reader.readU16();
@@ -416,7 +416,7 @@ interface InventorySection {
 }
 
 function deserializeInventorySection(buf: Uint8Array): InventorySection {
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
   const staminaPotions = reader.readU16();
   const xpBoosters = reader.readU16();
   const lootMagnets = reader.readU16();
@@ -473,7 +473,7 @@ interface TeamSection {
 }
 
 function deserializeTeamSection(buf: Uint8Array): TeamSection {
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
   const team = reader.readPubkey();
   const teamSlotIndex = reader.readU16();
   reader.skip(6);
@@ -506,7 +506,7 @@ interface RallySection {
 }
 
 function deserializeRallySection(buf: Uint8Array): RallySection {
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
   const rallyCaps = deserializePlayerRallyCaps(reader);
   const rallyStats = deserializeRallyStats(reader);
   return { rallyCaps, rallyStats };
@@ -536,7 +536,7 @@ interface HeroesSection {
 }
 
 function deserializeHeroesSection(buf: Uint8Array): HeroesSection {
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
   const activeHeroes = reader.readPubkeyArray(3);
   const defensiveHeroSlot = reader.readU8();
   const meditatingHeroSlot = reader.readU8();
@@ -642,7 +642,7 @@ export interface CosmeticsSection {
 }
 
 function deserializeCosmeticsSection(buf: Uint8Array): CosmeticsSection {
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
   const equippedAvatarFrame = reader.readU16();
   const equippedNameColor = reader.readU16();
   const equippedTitle = reader.readU16();
@@ -714,7 +714,7 @@ function defaultRallyProjection() {
 /** Deserialize PlayerCore from raw bytes (lean core + appended sections). */
 export function deserializePlayer(data: Uint8Array): PlayerCore {
   const buf = data instanceof Uint8Array ? data : new Uint8Array(data);
-  const reader = new BufferReader(buf);
+  const reader = new ByteReader(buf);
 
   // === LEAN CORE ===
 

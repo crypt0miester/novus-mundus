@@ -9,7 +9,7 @@
  */
 
 import type { AccountInfo, PublicKey } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 import { EquipmentSlot } from '../types/enums';
 
 /** `active_craft_equipment` sentinel for "no craft in progress". */
@@ -63,7 +63,7 @@ export interface CraftedEquipmentAccount {
 
 /** Decode raw account data into a CraftedEquipmentAccount. */
 export function deserializeCraftedEquipment(data: Uint8Array): CraftedEquipmentAccount {
-  const r = new BufferReader(data);
+  const r = new ByteReader(data);
 
   const owner = r.readPubkey(); // 32
   const meleeWeapons = r.readU32Array(QUALITY_TIER_COUNT); // 32

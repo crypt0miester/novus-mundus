@@ -8,7 +8,7 @@
  */
 
 import type { AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Buff Config
 
@@ -51,7 +51,7 @@ export const HERO_TEMPLATE_SIZE = 112;
 // Deserialization
 
 /** Deserialize a single HeroBuffConfig (6 bytes in repr(C) layout) */
-function deserializeHeroBuffConfig(reader: BufferReader): HeroBuffConfig {
+function deserializeHeroBuffConfig(reader: ByteReader): HeroBuffConfig {
   const stat = reader.readU8();
   reader.skip(1); // implicit padding for u16 alignment
   const baseBps = reader.readU16();
@@ -61,7 +61,7 @@ function deserializeHeroBuffConfig(reader: BufferReader): HeroBuffConfig {
 
 /** Deserialize HeroTemplate from raw bytes */
 export function deserializeHeroTemplate(data: Uint8Array): HeroTemplateAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   reader.skip(1); // implicit padding for u16 alignment (offset 1 -> 2)

@@ -18,7 +18,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import {
   deriveGameEnginePda,
@@ -170,7 +170,7 @@ export async function createRallyCreateInstruction(
   // - siege: u64 (8)
   // - team_id: u64 (8)
   // - hero_slot_index: u8 (1) - 255=no hero, 0-2=commit hero from slot
-  const writer = new BufferWriter(108);
+  const writer = new ByteWriter(108);
   writer.writeU64(accounts.rallyId);
   writer.writePubkey(accounts.target);
   writer.writeU8(params.targetType);
@@ -300,7 +300,7 @@ export async function createRallyJoinInstruction(
   // - siege: u64 (8)
   // - team_id: u64 (8)
   // - hero_slot_index: u8 (1) - 255=no hero, 0-2=commit hero from slot
-  const writer = new BufferWriter(57);
+  const writer = new ByteWriter(57);
   writer.writeU64(params.defensiveUnit1);
   writer.writeU64(params.defensiveUnit2);
   writer.writeU64(params.defensiveUnit3);
@@ -672,7 +672,7 @@ export async function createRallySpeedupInstruction(
   ];
 
   // Instruction data (2 bytes): speedup_type + speedup_tier
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(params.speedupType);
   writer.writeU8(params.speedupTier);
 

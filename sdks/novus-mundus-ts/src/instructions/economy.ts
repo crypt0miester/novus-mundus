@@ -17,7 +17,7 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -120,7 +120,7 @@ export async function createHireUnitsInstruction(
   }
 
   // Instruction data: unit_type (u8) + novi_amount (u64)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU8(params.unitType);
   writer.writeU64(params.noviAmount);
 
@@ -190,7 +190,7 @@ export async function createCollectResourcesInstruction(
   }
 
   // Instruction data: novi_amount (u64) + collection_type (u8)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU64(params.noviAmount);
   writer.writeU8(params.collectionType);
 
@@ -250,7 +250,7 @@ export async function createPurchaseEquipmentInstruction(
   }
 
   // Instruction data: equipment_type (u8) + quantity (u64) + pay_with_cash (bool)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU8(params.equipmentType);
   writer.writeU64(params.quantity);
   writer.writeBool(params.payWithCash);
@@ -310,7 +310,7 @@ export async function createPurchaseStaminaInstruction(
   ];
 
   // Instruction data: amount (u64)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(params.amount);
 
   const data = createInstructionData(DISCRIMINATORS.PURCHASE_STAMINA, writer.toBuffer());
@@ -393,7 +393,7 @@ export async function createTransferCashInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64)
-  const writer = new BufferWriter(16);
+  const writer = new ByteWriter(16);
   writer.writeU64(params.amount);
   writer.writeU64(accounts.teamId);
 
@@ -452,7 +452,7 @@ export async function createVaultTransferInstruction(
 
   // Instruction data: direction (u8) + amount (u64)
   // direction: 0 = deposit (hand→vault), 1 = withdraw (vault→hand)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU8(params.toVault ? 0 : 1);
   writer.writeU64(params.amount);
 
@@ -618,7 +618,7 @@ export async function createMintForPrizeInstruction(
   ];
 
   // Instruction data: amount (u64) + purpose (u8)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU64(params.amount);
   writer.writeU8(params.purpose);
 

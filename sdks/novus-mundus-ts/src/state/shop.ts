@@ -14,7 +14,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Shop Enums
 
@@ -198,7 +198,7 @@ export const FLASH_SALE_ACCOUNT_SIZE = 120;
 
 /** Deserialize ShopConfigAccount from raw bytes */
 export function deserializeShopConfig(data: Uint8Array): ShopConfigAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(1); // implicit padding for u16 alignment
@@ -293,7 +293,7 @@ export function deserializeShopConfig(data: Uint8Array): ShopConfigAccount {
 
 /** Deserialize ShopItemAccount from raw bytes */
 export function deserializeShopItem(data: Uint8Array): ShopItemAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(1); // implicit padding for u16 alignment
@@ -348,7 +348,7 @@ export function deserializeShopItem(data: Uint8Array): ShopItemAccount {
 
 /** Deserialize BundleAccount from raw bytes */
 export function deserializeBundle(data: Uint8Array): BundleAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -402,7 +402,7 @@ export function deserializeBundle(data: Uint8Array): BundleAccount {
 
 /** Deserialize DailyDealAccount from raw bytes */
 export function deserializeDailyDeal(data: Uint8Array): DailyDealAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(3); // implicit padding for u32 alignment
@@ -437,7 +437,7 @@ export function deserializeDailyDeal(data: Uint8Array): DailyDealAccount {
 
 /** Deserialize FlashSaleAccount from raw bytes */
 export function deserializeFlashSale(data: Uint8Array): FlashSaleAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -698,7 +698,7 @@ export const ALLOWED_TOKEN_ACCOUNT_SIZE = 122;
 
 /** Deserialize WeeklySaleAccount from raw bytes */
 export function deserializeWeeklySale(data: Uint8Array): WeeklySaleAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -734,7 +734,7 @@ export function deserializeWeeklySale(data: Uint8Array): WeeklySaleAccount {
 
 /** Deserialize SeasonalSaleAccount from raw bytes */
 export function deserializeSeasonalSale(data: Uint8Array): SeasonalSaleAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -782,7 +782,7 @@ export function deserializeSeasonalSale(data: Uint8Array): SeasonalSaleAccount {
 
 /** Deserialize DAOPromotionAccount from raw bytes */
 export function deserializeDaoPromotion(data: Uint8Array): DAOPromotionAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -836,7 +836,7 @@ export function deserializeDaoPromotion(data: Uint8Array): DAOPromotionAccount {
 
 /** Deserialize PlayerPurchaseAccount from raw bytes */
 export function deserializePlayerPurchase(data: Uint8Array): PlayerPurchaseAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(7); // implicit padding for u64 alignment
@@ -857,7 +857,7 @@ export function deserializePlayerPurchase(data: Uint8Array): PlayerPurchaseAccou
 
 /** Deserialize AllowedTokenAccount from raw bytes */
 export function deserializeAllowedToken(data: Uint8Array): AllowedTokenAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 

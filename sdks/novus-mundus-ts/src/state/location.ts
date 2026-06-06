@@ -9,7 +9,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 
 // Occupant Type Constants
 
@@ -46,7 +46,7 @@ export const LOCATION_ACCOUNT_SIZE = 128;
 
 /** Deserialize LocationAccount from raw bytes */
 export function deserializeLocation(data: Uint8Array): LocationAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const gameEngine = reader.readPubkey();

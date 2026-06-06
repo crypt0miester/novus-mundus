@@ -7,7 +7,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Progression Account Interface
 
@@ -25,7 +25,7 @@ export const PROGRESSION_ACCOUNT_SIZE = 56;
 
 /** Deserialize ProgressionAccount from raw bytes */
 export function deserializeProgression(data: Uint8Array): ProgressionAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const player = reader.readPubkey();

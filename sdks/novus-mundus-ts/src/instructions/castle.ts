@@ -17,7 +17,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -146,7 +146,7 @@ export async function createCreateCastleInstruction(
   const namePadded = new Uint8Array(32);
   namePadded.set(nameBytes);
 
-  const writer = new BufferWriter(17 + 32 + 1);
+  const writer = new ByteWriter(17 + 32 + 1);
   writer.writeU16(params.cityId);
   writer.writeU16(params.castleId);
   writer.writeU8(params.tier);
@@ -209,7 +209,7 @@ export async function createClaimVacantCastleInstruction(
   ];
 
   // Instruction data: city_id (u16), castle_id (u16)
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU16(accounts.cityId);
   writer.writeU16(accounts.castleId);
 
@@ -274,7 +274,7 @@ export async function createAppointCourtInstruction(
   ];
 
   // Instruction data: position_type (u8) - city_id/castle_id derived from castle PDA
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.position);
 
   const data = createInstructionData(DISCRIMINATORS.CASTLE_APPOINT_COURT, writer.toBuffer());
@@ -340,7 +340,7 @@ export async function createDismissCourtInstruction(
   ];
 
   // Instruction data: position_type (u8) - city_id/castle_id derived from castle PDA
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.position);
 
   const data = createInstructionData(DISCRIMINATORS.CASTLE_DISMISS_COURT, writer.toBuffer());
@@ -458,7 +458,7 @@ export async function createInitiateUpgradeInstruction(
   ];
 
   // Instruction data: upgrade_type (u8) - city_id/castle_id derived from castle PDA
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.upgradeType);
 
   const data = createInstructionData(DISCRIMINATORS.CASTLE_INITIATE_UPGRADE, writer.toBuffer());
@@ -638,7 +638,7 @@ export async function createJoinGarrisonInstruction(
 
   // Instruction data: units_1-3 (u64×3), melee/ranged/siege (u64×3), hero_slot (u8)
   // city_id/castle_id derived from castle PDA
-  const writer = new BufferWriter(49);
+  const writer = new ByteWriter(49);
   writer.writeU64(params.units[0]);
   writer.writeU64(params.units[1]);
   writer.writeU64(params.units[2]);
@@ -975,7 +975,7 @@ export async function createAttackCastleInstruction(
   }
 
   // Instruction data: drive_by (u8) - city_id/castle_id derived from castle PDA
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.driveBy ? 1 : 0);
 
   const data = createInstructionData(DISCRIMINATORS.CASTLE_ATTACK, writer.toBuffer());
@@ -1051,7 +1051,7 @@ export async function createFinalizeTransitionInstruction(
   }
 
   // Instruction data: city_id (u16), castle_id (u16)
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU16(accounts.cityId);
   writer.writeU16(accounts.castleId);
 
@@ -1151,7 +1151,7 @@ export async function createForceRemoveKingInstruction(
   ];
 
   // Instruction data: city_id (u16), castle_id (u16)
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU16(accounts.cityId);
   writer.writeU16(accounts.castleId);
 
@@ -1284,7 +1284,7 @@ export async function createCourtCleanupInstruction(
   ];
 
   // Instruction data: position (u8) - city_id/castle_id derived from castle PDA
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.position);
 
   const data = createInstructionData(DISCRIMINATORS.CASTLE_COURT_CLEANUP, writer.toBuffer());
@@ -1393,7 +1393,7 @@ export async function createUpdateCastleConfigInstruction(
   switch (params.configType) {
     case 0: {
       // reward_rates: config_type (u8) + 6×u64
-      const writer = new BufferWriter(49);
+      const writer = new ByteWriter(49);
       writer.writeU8(0);
       writer.writeU64(params.rewardRates.kingNovi);
       writer.writeU64(params.rewardRates.kingCash);
@@ -1406,7 +1406,7 @@ export async function createUpdateCastleConfigInstruction(
     }
     case 1: {
       // tier_multiplier: config_type (u8) + u16
-      const writer = new BufferWriter(3);
+      const writer = new ByteWriter(3);
       writer.writeU8(1);
       writer.writeU16(params.tierMultiplier);
       paramData = writer.toBuffer();
@@ -1414,7 +1414,7 @@ export async function createUpdateCastleConfigInstruction(
     }
     case 2: {
       // treasury_level: config_type (u8) + u8
-      const writer = new BufferWriter(2);
+      const writer = new ByteWriter(2);
       writer.writeU8(2);
       writer.writeU8(params.treasuryLevel);
       paramData = writer.toBuffer();
@@ -1425,7 +1425,7 @@ export async function createUpdateCastleConfigInstruction(
       const nameBytes = new TextEncoder().encode(params.name).subarray(0, 32);
       const namePadded = new Uint8Array(32);
       namePadded.set(nameBytes);
-      const writer = new BufferWriter(33);
+      const writer = new ByteWriter(33);
       writer.writeU8(3);
       writer.writeBytes(namePadded);
       paramData = writer.toBuffer();

@@ -7,7 +7,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { ArenaSeasonStatus } from '../types/enums';
 
 // Arena Leaderboard Entry
@@ -120,7 +120,7 @@ export const ARENA_LOADOUT_ACCOUNT_SIZE = 168;
  * 608: END
  */
 export function deserializeArenaSeason(data: Uint8Array): ArenaSeasonAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -229,7 +229,7 @@ export function deserializeArenaSeason(data: Uint8Array): ArenaSeasonAccount {
  * 536: END
  */
 export function deserializeArenaParticipant(data: Uint8Array): ArenaParticipantAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -305,7 +305,7 @@ export function deserializeArenaParticipant(data: Uint8Array): ArenaParticipantA
  * 168: END
  */
 export function deserializeArenaLoadout(data: Uint8Array): ArenaLoadoutAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 

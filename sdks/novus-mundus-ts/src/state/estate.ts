@@ -10,7 +10,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 import { BuildingType } from '../types/enums';
 
 // Building Status (local enum matching Rust)
@@ -127,7 +127,7 @@ export const ESTATE_HEADER_SIZE = 192;
 // Deserialization
 
 /** Deserialize a single BuildingSlot from the reader (40 bytes) */
-export function deserializeBuildingSlot(reader: BufferReader): BuildingSlot {
+export function deserializeBuildingSlot(reader: ByteReader): BuildingSlot {
   const buildingType = reader.readU8();
   const status = reader.readU8();
   const level = reader.readU8();
@@ -153,7 +153,7 @@ export function deserializeBuildingSlot(reader: BufferReader): BuildingSlot {
 
 /** Deserialize EstateAccount from raw bytes */
 export function deserializeEstate(data: Uint8Array): EstateAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   // offset 0: account_key (u8)
   reader.readU8(); // account_key discriminator

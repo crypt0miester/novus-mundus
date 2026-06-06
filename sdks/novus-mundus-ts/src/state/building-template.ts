@@ -7,7 +7,7 @@
  */
 
 import type { AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Building Template Interface
 
@@ -34,7 +34,7 @@ export const BUILDING_TEMPLATE_SIZE = 32;
 
 /** Deserialize BuildingTemplate from raw bytes */
 export function deserializeBuildingTemplate(data: Uint8Array): BuildingTemplateAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const buildingType = reader.readU8();

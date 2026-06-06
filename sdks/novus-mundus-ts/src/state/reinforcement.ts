@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { ReinforcementStatus } from '../types/enums';
 
 // Reinforcement Target Type
@@ -74,7 +74,7 @@ export const REINFORCEMENT_ACCOUNT_SIZE = 256;
 
 /** Deserialize ReinforcementAccount from raw bytes */
 export function deserializeReinforcement(data: Uint8Array): ReinforcementAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
 

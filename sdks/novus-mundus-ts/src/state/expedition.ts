@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { ExpeditionType } from '../types/enums';
 import {
   MINING_DURATION_HOURS,
@@ -56,7 +56,7 @@ export const EXPEDITION_ACCOUNT_SIZE = 112;
 
 /** Deserialize ExpeditionAccount from raw bytes */
 export function deserializeExpedition(data: Uint8Array): ExpeditionAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const player = reader.readPubkey();

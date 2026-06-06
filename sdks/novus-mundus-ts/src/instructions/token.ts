@@ -12,7 +12,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -81,7 +81,7 @@ export async function createReservedToLockedInstruction(
   ];
 
   // Instruction data: amount (u64)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(params.amount);
 
   const data = createInstructionData(DISCRIMINATORS.RESERVED_TO_LOCKED, writer.toBuffer());
@@ -155,7 +155,7 @@ export async function createWithdrawReservedInstruction(
   ];
 
   // Instruction data: amount (u64)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(params.amount);
 
   const data = createInstructionData(DISCRIMINATORS.WITHDRAW_RESERVED, writer.toBuffer());
@@ -222,7 +222,7 @@ export async function createDepositNoviInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(params.amount);
   const data = createInstructionData(DISCRIMINATORS.DEPOSIT_NOVI, writer.toBuffer());
 

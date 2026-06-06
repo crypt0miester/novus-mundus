@@ -17,7 +17,7 @@ import {
   type RallyJoinData,
 } from '../../src/parser/instruction';
 import { DISCRIMINATORS } from '../../src/program';
-import { BufferWriter, createInstructionData } from '../../src/utils/serialize';
+import { ByteWriter, createInstructionData } from '../../src/utils/serialize';
 
 describe('Instruction Parser', () => {
   describe('parseInstructionData', () => {
@@ -34,7 +34,7 @@ describe('Instruction Parser', () => {
 
     it('should parse HireUnits instruction', () => {
       // Build instruction data: discriminator (2) + unitType (1) + noviAmount (8)
-      const writer = new BufferWriter(9);
+      const writer = new ByteWriter(9);
       writer.writeU8(3); // unitType
       writer.writeU64(1000n);
       const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
@@ -52,7 +52,7 @@ describe('Instruction Parser', () => {
     });
 
     it('should parse IntercityStart instruction', () => {
-      const writer = new BufferWriter(2);
+      const writer = new ByteWriter(2);
       writer.writeU16(5); // targetCityId
       const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, writer.toBuffer());
 
@@ -67,7 +67,7 @@ describe('Instruction Parser', () => {
     });
 
     it('should parse IntracityStart instruction', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeI32(40712800); // targetLat (fixed-point)
       writer.writeI32(-74006000); // targetLong (fixed-point)
       const data = createInstructionData(DISCRIMINATORS.INTRACITY_START, writer.toBuffer());
@@ -84,7 +84,7 @@ describe('Instruction Parser', () => {
 
     it('should parse TeamCreate instruction', () => {
       const teamName = 'TestTeam';
-      const writer = new BufferWriter(1 + teamName.length);
+      const writer = new ByteWriter(1 + teamName.length);
       writer.writeU8(teamName.length);
       writer.writeBytes(Buffer.from(teamName, 'utf8'));
       const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, writer.toBuffer());
@@ -100,7 +100,7 @@ describe('Instruction Parser', () => {
     });
 
     it('should parse RallyJoin instruction', () => {
-      const writer = new BufferWriter(48);
+      const writer = new ByteWriter(48);
       writer.writeU64(100n); // du1
       writer.writeU64(200n); // du2
       writer.writeU64(300n); // du3
@@ -149,7 +149,7 @@ describe('Instruction Parser', () => {
 
   describe('parseInstructionFromBase64', () => {
     it('should parse base64-encoded instruction', () => {
-      const writer = new BufferWriter(9);
+      const writer = new ByteWriter(9);
       writer.writeU8(2);
       writer.writeU64(500n);
       const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
@@ -218,7 +218,7 @@ describe('Instruction Parser', () => {
     });
 
     it('should categorize Travel instructions', () => {
-      const writer = new BufferWriter(2);
+      const writer = new ByteWriter(2);
       writer.writeU16(1);
       const data = createInstructionData(DISCRIMINATORS.INTERCITY_START, writer.toBuffer());
       const parsed = parseInstructionData(data);
@@ -227,7 +227,7 @@ describe('Instruction Parser', () => {
 
     it('should categorize Team instructions', () => {
       const teamName = 'Test';
-      const writer = new BufferWriter(1 + teamName.length);
+      const writer = new ByteWriter(1 + teamName.length);
       writer.writeU8(teamName.length);
       writer.writeBytes(Buffer.from(teamName));
       const data = createInstructionData(DISCRIMINATORS.TEAM_CREATE, writer.toBuffer());
@@ -236,7 +236,7 @@ describe('Instruction Parser', () => {
     });
 
     it('should categorize Rally instructions', () => {
-      const writer = new BufferWriter(48);
+      const writer = new ByteWriter(48);
       for (let i = 0; i < 6; i++) writer.writeU64(0n);
       const data = createInstructionData(DISCRIMINATORS.RALLY_JOIN, writer.toBuffer());
       const parsed = parseInstructionData(data);
@@ -251,7 +251,7 @@ describe('Instruction Roundtrip', () => {
     const originalAmount = 12345n;
 
     // Create instruction
-    const writer = new BufferWriter(9);
+    const writer = new ByteWriter(9);
     writer.writeU8(originalUnitType);
     writer.writeU64(originalAmount);
     const data = createInstructionData(DISCRIMINATORS.HIRE_UNITS, writer.toBuffer());
@@ -268,7 +268,7 @@ describe('Instruction Roundtrip', () => {
     const originalLat = -40712800;
     const originalLong = 74006000;
 
-    const writer = new BufferWriter(8);
+    const writer = new ByteWriter(8);
     writer.writeI32(originalLat);
     writer.writeI32(originalLong);
     const data = createInstructionData(DISCRIMINATORS.INTRACITY_START, writer.toBuffer());

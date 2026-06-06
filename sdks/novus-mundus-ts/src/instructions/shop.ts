@@ -16,7 +16,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
@@ -80,7 +80,7 @@ export async function createInitializeConfigInstruction(
   ];
 
   // Optional overrides (zeros use defaults)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU16(params.maxBaseDiscountBps ?? 0);
   writer.writeU16(params.maxBundleDiscountBps ?? 0);
   writer.writeU16(params.maxFibDiscountBps ?? 0);
@@ -158,7 +158,7 @@ export async function createCreateItemInstruction(
   ];
 
   // Instruction data
-  const writer = new BufferWriter(52);
+  const writer = new ByteWriter(52);
   writer.writeU32(params.itemId);
   writer.writeU16(params.itemType);
   writer.writeU8(params.category);
@@ -270,7 +270,7 @@ export async function createUpdateItemInstruction(
     dataSize += 16; // max_global_stock + current_global_stock
   }
 
-  const writer = new BufferWriter(dataSize);
+  const writer = new ByteWriter(dataSize);
   writer.writeU32(accounts.itemId);
   writer.writeU8(updateFlags);
 
@@ -469,7 +469,7 @@ export async function createPurchaseItemInstruction(
   }
 
   // Instruction data
-  const writer = new BufferWriter(16);
+  const writer = new ByteWriter(16);
   writer.writeU32(accounts.itemId);
   writer.writeU16(params.quantity);
   writer.writeU8(params.paymentType ?? 0);
@@ -552,7 +552,7 @@ export async function createCreateBundleInstruction(
   ];
 
   // Header: 35 bytes + items (8 bytes each)
-  const writer = new BufferWriter(35 + params.items.length * 8);
+  const writer = new ByteWriter(35 + params.items.length * 8);
   writer.writeU32(params.bundleId);
   writer.writeU8(params.tier);
   writer.writeU8(params.category);
@@ -651,7 +651,7 @@ export async function createUpdateBundleInstruction(
     dataSize += 2;
   }
 
-  const writer = new BufferWriter(dataSize);
+  const writer = new ByteWriter(dataSize);
   writer.writeU32(accounts.bundleId);
   writer.writeU8(updateFlags);
 
@@ -748,7 +748,7 @@ export async function createPurchaseBundleInstruction(
     appendTokenPaymentKeys(keys, accounts.tokenPayment);
   }
 
-  const writer = new BufferWriter(5);
+  const writer = new ByteWriter(5);
   writer.writeU32(accounts.bundleId);
   writer.writeU8(params.paymentType ?? 0);
 
@@ -811,7 +811,7 @@ export async function createCreateFlashSaleInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(27);
+  const writer = new ByteWriter(27);
   writer.writeU32(params.itemId);
   writer.writeBool(params.isBundle);
   writer.writeU16(params.discountBps);
@@ -899,7 +899,7 @@ export async function createPurchaseFlashSaleInstruction(
   }
 
   // Instruction data: sale_id (u64) + quantity (u16) + payment_type (u8)
-  const writer = new BufferWriter(11);
+  const writer = new ByteWriter(11);
   writer.writeU64(accounts.saleId);
   writer.writeU16(params.quantity);
   writer.writeU8(params.paymentType ?? 0);
@@ -990,7 +990,7 @@ export async function createCloseSaleInstruction(
   if (extraKey) keys.push(extraKey);
 
   // Payload: sale_type (u8) + sale_id (u64 LE)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU8(params.saleType);
   writer.writeU64(saleIdU64);
 
@@ -1044,7 +1044,7 @@ export async function createCreateDailyDealInstruction(
   ];
 
   // slot(1) + item_id(4) + discount(2) + next_item(4) + next_discount(2) = 13
-  const writer = new BufferWriter(13);
+  const writer = new ByteWriter(13);
   writer.writeU8(params.slotIndex);
   writer.writeU32(params.itemId);
   writer.writeU16(params.discountBps);
@@ -1097,7 +1097,7 @@ export async function createRotateDailyDealInstruction(
   ];
 
   // slot_index(1) + new_next_item_id(4) + new_next_discount_bps(2) = 7
-  const writer = new BufferWriter(7);
+  const writer = new ByteWriter(7);
   writer.writeU8(accounts.slotIndex);
   writer.writeU32(params.newItemId);
   writer.writeU16(params.newDiscountBps);
@@ -1160,7 +1160,7 @@ export async function createCreateWeeklySaleInstruction(
   ];
 
   // week(8) + theme(1) + bonus_type(1) + bonus_value(2) + cats(8) + starts(8) + duration(1) = 29
-  const writer = new BufferWriter(29);
+  const writer = new ByteWriter(29);
   writer.writeU64(params.weekNumber);
   writer.writeU8(params.theme);
   writer.writeU8(params.bonusType);
@@ -1233,7 +1233,7 @@ export async function createCreateSeasonalSaleInstruction(
 
   // name(32) + global_discount(2) + starts(8) + ends(8) + threshold(8) + cosmetic(4) + count(1) + items(6*n)
   const featuredCount = params.featuredItems.length;
-  const writer = new BufferWriter(63 + featuredCount * 6);
+  const writer = new ByteWriter(63 + featuredCount * 6);
 
   // Write name as fixed 32-byte buffer
   writer.writeString(params.name, 32);
@@ -1316,7 +1316,7 @@ export async function createCreateDaoPromotionInstruction(
   ];
 
   // proposal_id(8) + title(32) + discounts(12) + starts(8) + ends(8) + budget(8) = 76
-  const writer = new BufferWriter(76);
+  const writer = new ByteWriter(76);
   writer.writeU64(params.proposalId);
 
   writer.writeString(params.title, 32);
@@ -1424,7 +1424,7 @@ export async function createUpdateConfigInstruction(
   // pyth feed id (32) + switchboard feed id (32) + switchboard queue (32)
   // + max staleness (u16) + confidence bps (u16).
   const dataLen = 1 + (setsSolOracle ? 100 : 0);
-  const writer = new BufferWriter(dataLen);
+  const writer = new ByteWriter(dataLen);
   writer.writeU8(updateFlags);
 
   if (setsSolOracle) {
@@ -1494,7 +1494,7 @@ export async function createActivateSaleInstruction(
   switch (params.saleType) {
     case 0: {
       [salePda] = await deriveSeasonalSalePda(accounts.gameEngine, params.event);
-      const w = new BufferWriter(33);
+      const w = new ByteWriter(33);
       w.writeU8(0);
       w.writeBytes(params.event.toBytes());
       payload = w.toBuffer();
@@ -1502,7 +1502,7 @@ export async function createActivateSaleInstruction(
     }
     case 1: {
       [salePda] = await deriveDaoPromotionPda(accounts.gameEngine, params.proposalId);
-      const w = new BufferWriter(9);
+      const w = new ByteWriter(9);
       w.writeU8(1);
       w.writeU64(BigInt(params.proposalId));
       payload = w.toBuffer();
@@ -1596,7 +1596,7 @@ export async function createCreateAllowedTokenInstruction(
 
   // Rust expects: pyth_feed(32) + switchboard_feed(32) + max_staleness_slots(u16)
   // + confidence_threshold_bps(u16) + discount_bps(u16) + pegged_to_usd(u8) = 71 bytes
-  const writer = new BufferWriter(71);
+  const writer = new ByteWriter(71);
   if (params.pythFeed) {
     writer.writeBytes(feedIdBuffer(params.pythFeed));
   } else {
@@ -1676,7 +1676,7 @@ export async function createUpdateAllowedTokenInstruction(
   // Switchboard feed update appends the feed account in slot 4 so the
   // program can validate owner + layout at DAO config time.
   if (params.pythFeed) {
-    const writer = new BufferWriter(33);
+    const writer = new ByteWriter(33);
     writer.writeU8(0); // PythFeed
     writer.writeBytes(feedIdBuffer(params.pythFeed));
     instructions.push(new TransactionInstruction({
@@ -1686,7 +1686,7 @@ export async function createUpdateAllowedTokenInstruction(
     }));
   }
   if (params.switchboardFeed) {
-    const writer = new BufferWriter(33);
+    const writer = new ByteWriter(33);
     writer.writeU8(1); // SwitchboardFeed
     writer.writePubkey(params.switchboardFeed);
     instructions.push(new TransactionInstruction({
@@ -1696,7 +1696,7 @@ export async function createUpdateAllowedTokenInstruction(
     }));
   }
   if (params.maxStalenessSlots !== undefined) {
-    const writer = new BufferWriter(3);
+    const writer = new ByteWriter(3);
     writer.writeU8(2); // MaxStalenessSlots
     writer.writeU16(params.maxStalenessSlots);
     instructions.push(new TransactionInstruction({
@@ -1705,7 +1705,7 @@ export async function createUpdateAllowedTokenInstruction(
     }));
   }
   if (params.confidenceThresholdBps !== undefined) {
-    const writer = new BufferWriter(3);
+    const writer = new ByteWriter(3);
     writer.writeU8(3); // ConfidenceThresholdBps
     writer.writeU16(params.confidenceThresholdBps);
     instructions.push(new TransactionInstruction({
@@ -1714,7 +1714,7 @@ export async function createUpdateAllowedTokenInstruction(
     }));
   }
   if (params.discountBps !== undefined) {
-    const writer = new BufferWriter(3);
+    const writer = new ByteWriter(3);
     writer.writeU8(4); // DiscountBps
     writer.writeU16(params.discountBps);
     instructions.push(new TransactionInstruction({
@@ -1723,7 +1723,7 @@ export async function createUpdateAllowedTokenInstruction(
     }));
   }
   if (params.peggedToUsd !== undefined) {
-    const writer = new BufferWriter(2);
+    const writer = new ByteWriter(2);
     writer.writeU8(5); // PeggedToUsd
     writer.writeU8(params.peggedToUsd ? 1 : 0);
     instructions.push(new TransactionInstruction({
@@ -1898,7 +1898,7 @@ export async function createPurchaseNoviInstruction(
   }
 
   // Instruction data: package_index (u8) + max_lamports (u64)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU8(params.packageIndex);
   writer.writeU64(params.maxLamports);
 

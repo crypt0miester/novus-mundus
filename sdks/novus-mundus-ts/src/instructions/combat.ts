@@ -11,7 +11,7 @@ import {
   TransactionInstruction,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveCityPda,
@@ -103,7 +103,7 @@ export async function createAttackPlayerInstruction(
   }
 
   // Instruction data: drive_by (bool, 1 byte)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeBool(params.driveBy);
 
   const data = createInstructionData(DISCRIMINATORS.ATTACK_PLAYER, writer.toBuffer());
@@ -212,7 +212,7 @@ export async function createAttackEncounterInstruction(
   }
 
   // Instruction data: encounter_id (u64, 8 bytes)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(params.encounterId);
 
   const data = createInstructionData(DISCRIMINATORS.ATTACK_ENCOUNTER, writer.toBuffer());

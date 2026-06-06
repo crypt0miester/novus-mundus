@@ -18,7 +18,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, MPL_CORE_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -129,7 +129,7 @@ export async function createCreateDungeonTemplateInstruction(
   //  [116..124] base_novi_per_floor: u64
   //  [124..126] completion_bonus_bps: u16
   //  [126..128] reward_scaling_bps: u16
-  const writer = new BufferWriter(132);
+  const writer = new ByteWriter(132);
   writer.writeU16(params.templateId);                           // [0..2]
   writer.writeU8(params.theme ?? 0);                            // [2]
   writer.writeU8(params.totalFloors);                           // [3]
@@ -224,7 +224,7 @@ export async function createCreateLeaderboardInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(12);
+  const writer = new ByteWriter(12);
   writer.writeU16(params.templateId);
   writer.writeU16(params.weekNumber);
   writer.writeU64(params.prizePool);
@@ -303,7 +303,7 @@ export async function createEnterDungeonInstruction(
   ];
 
   // Instruction data: dungeon_id (u16), first_room_type (u8), hero_specialization (u8)
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU16(params.templateId);
   writer.writeU8(params.firstRoomType);
   writer.writeU8(params.heroSpecialization);
@@ -370,7 +370,7 @@ export async function createAttackInstruction(
   ];
 
   // Instruction data: next_room_type (u8), double_strike (u8), crit (u8)
-  const writer = new BufferWriter(3);
+  const writer = new ByteWriter(3);
   writer.writeU8(params.nextRoomType);
   writer.writeU8(params.doubleStrike ? 1 : 0);
   writer.writeU8(params.crit ? 1 : 0);
@@ -433,7 +433,7 @@ export async function createAttackMultiInstruction(
   ];
 
   // Instruction data: attack_count (u8), next_room_type (u8), double_strike (u8), crit (u8)
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU8(params.attackCount);
   writer.writeU8(params.nextRoomType);
   writer.writeU8(params.doubleStrike ? 1 : 0);
@@ -500,7 +500,7 @@ export async function createInteractInstruction(
 
   // Instruction data: camp_bonus_bps (u16, optional), next_room_type (u8)
   const hasCampBonus = params.campBonusBps !== undefined && params.campBonusBps > 0;
-  const writer = new BufferWriter(hasCampBonus ? 3 : 1);
+  const writer = new ByteWriter(hasCampBonus ? 3 : 1);
   if (hasCampBonus) {
     writer.writeU16(params.campBonusBps!);
   }
@@ -568,7 +568,7 @@ export async function createChooseRelicInstruction(
   ];
 
   // Instruction data: relic_id (u8), first_room_type (u8), relic_options (u8×3-4)
-  const writer = new BufferWriter(2 + params.relicOptions.length);
+  const writer = new ByteWriter(2 + params.relicOptions.length);
   writer.writeU8(params.relicId);
   writer.writeU8(params.firstRoomType);
   for (const opt of params.relicOptions) {
@@ -775,7 +775,7 @@ export async function createResumeInstruction(
   ];
 
   // Instruction data: first_room_type (u8)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.firstRoomType);
 
   const data = createInstructionData(DISCRIMINATORS.DUNGEON_RESUME, writer.toBuffer());
@@ -838,7 +838,7 @@ export async function createClaimLeaderboardPrizeInstruction(
   ];
 
   // Instruction data: dungeon_id (u16), week_number (u16)
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU16(params.dungeonId);
   writer.writeU16(params.weekNumber);
 

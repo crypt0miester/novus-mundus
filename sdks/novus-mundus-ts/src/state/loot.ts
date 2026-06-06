@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Loot Source Type
 
@@ -59,7 +59,7 @@ export const LOOT_EXPIRATION_DURATION = 30 * 86400;
 
 /** Deserialize LootAccount from raw bytes */
 export function deserializeLoot(data: Uint8Array): LootAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
 

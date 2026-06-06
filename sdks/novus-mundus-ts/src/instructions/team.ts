@@ -15,7 +15,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -83,7 +83,7 @@ export async function createTeamCreateInstruction(
   if (nameBytes.length > 32) {
     throw new Error('Team name too long (max 32 bytes)');
   }
-  const writer = new BufferWriter(8 + 1 + nameBytes.length);
+  const writer = new ByteWriter(8 + 1 + nameBytes.length);
   writer.writeU64(teamId);
   writer.writeU8(nameBytes.length);
   writer.writeBytes(nameBytes);
@@ -148,7 +148,7 @@ export async function createTeamJoinInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
 
@@ -206,7 +206,7 @@ export async function createTeamLeaveInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
 
@@ -258,7 +258,7 @@ export async function createTeamDisbandInstruction(
   ];
 
   // Instruction data: team_id (u64)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(accounts.teamId);
 
   const data = createInstructionData(DISCRIMINATORS.TEAM_DISBAND, writer.toBuffer());
@@ -338,7 +338,7 @@ export async function createTeamInviteInstruction(
   // Instruction data: team_id (u64) + slot_index (u16) + optional expires_in_seconds (i64)
   const hasExpiry = params?.expiresInSeconds !== undefined && params.expiresInSeconds !== 0;
   const dataLen = hasExpiry ? 18 : 10;
-  const writer = new BufferWriter(dataLen);
+  const writer = new ByteWriter(dataLen);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.inviterSlotIndex);
   if (hasExpiry) {
@@ -414,7 +414,7 @@ export async function createTeamAcceptInviteInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
 
@@ -532,7 +532,7 @@ export async function createTeamCancelInviteInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.memberSlotIndex);
 
@@ -606,7 +606,7 @@ export async function createTeamKickMemberInstruction(
   ];
 
   // Instruction data: team_id (u64) + kicker_slot_index (u16) + kicked_slot_index (u16)
-  const writer = new BufferWriter(12);
+  const writer = new ByteWriter(12);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.kickerSlotIndex);
   writer.writeU16(accounts.kickedSlotIndex);
@@ -679,7 +679,7 @@ export async function createTeamPromoteMemberInstruction(
   ];
 
   // Instruction data: team_id (u64) + promoter_slot_index (u16) + target_slot_index (u16) + new_rank (u8)
-  const writer = new BufferWriter(13);
+  const writer = new ByteWriter(13);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.promoterSlotIndex);
   writer.writeU16(accounts.targetSlotIndex);
@@ -753,7 +753,7 @@ export async function createTeamDemoteMemberInstruction(
   ];
 
   // Instruction data: team_id (u64) + demoter_slot_index (u16) + target_slot_index (u16) + new_rank (u8)
-  const writer = new BufferWriter(13);
+  const writer = new ByteWriter(13);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.demoterSlotIndex);
   writer.writeU16(accounts.targetSlotIndex);
@@ -824,7 +824,7 @@ export async function createTeamTransferLeadershipInstruction(
   ];
 
   // Instruction data: team_id (u64) + current_slot_index (u16) + new_slot_index (u16)
-  const writer = new BufferWriter(12);
+  const writer = new ByteWriter(12);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.currentSlotIndex);
   writer.writeU16(accounts.newSlotIndex);
@@ -895,7 +895,7 @@ export async function createTeamSetMotdInstruction(
   if (motdBytes.length > 32) {
     throw new Error('MOTD too long (max 32 bytes)');
   }
-  const writer = new BufferWriter(11 + motdBytes.length);
+  const writer = new ByteWriter(11 + motdBytes.length);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
   writer.writeU8(motdBytes.length);
@@ -969,7 +969,7 @@ export async function createTeamUpdateSettingsInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16) + settings (u8) + min_level_to_join (u8)
-  const writer = new BufferWriter(12);
+  const writer = new ByteWriter(12);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
   writer.writeU8(params.settings);
@@ -1029,7 +1029,7 @@ export async function createTeamDepositTreasuryInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64)
-  const writer = new BufferWriter(16);
+  const writer = new ByteWriter(16);
   writer.writeU64(params.amount);
   writer.writeU64(accounts.teamId);
 
@@ -1094,7 +1094,7 @@ export async function createTeamWithdrawTreasuryInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(18);
+  const writer = new ByteWriter(18);
   writer.writeU64(params.amount);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
@@ -1166,7 +1166,7 @@ export async function createTeamTreasuryRequestWithdrawInstruction(
   ];
 
   // Instruction data: amount (u64) + team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(18);
+  const writer = new ByteWriter(18);
   writer.writeU64(params.amount);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
@@ -1243,7 +1243,7 @@ export async function createTeamTreasuryApproveRequestInstruction(
   ];
 
   // Instruction data: team_id (u64) + approver_slot_index (u16)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.approverSlotIndex);
 
@@ -1313,7 +1313,7 @@ export async function createTeamTreasuryRejectRequestInstruction(
   ];
 
   // Instruction data: team_id (u64) + rejecter_slot_index (u16) + requester_pubkey (Pubkey)
-  const writer = new BufferWriter(42);
+  const writer = new ByteWriter(42);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.rejecterSlotIndex);
   writer.writeBytes(accounts.requesterPlayer.toBytes());
@@ -1377,7 +1377,7 @@ export async function createTeamTreasuryExecuteRequestInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
 
@@ -1433,7 +1433,7 @@ export async function createTeamTreasuryCancelRequestInstruction(
   ];
 
   // Instruction data: team_id (u64)
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(accounts.teamId);
 
   const data = createInstructionData(DISCRIMINATORS.TEAM_TREASURY_CANCEL_REQUEST, writer.toBuffer());
@@ -1503,7 +1503,7 @@ export async function createTeamUpdateTreasurySettingsInstruction(
   ];
 
   // Instruction data: team_id (u64) + slot_index (u16) + instant_limits ([u64;4]) + daily_caps ([u64;4]) + cooldown_hours (u8)
-  const writer = new BufferWriter(75);
+  const writer = new ByteWriter(75);
   writer.writeU64(accounts.teamId);
   writer.writeU16(accounts.slotIndex);
   for (const limit of params.instantLimits) {

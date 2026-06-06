@@ -54,7 +54,7 @@ async function fetchParsed<T>(
   const info = await serverConnection().getAccountInfo(address);
   if (!info) return null;
   // v3 RPC returns account data as Uint8Array; the SDK parsers read it via a
-  // BufferReader that accepts Uint8Array, so the cast is structurally safe.
+  // ByteReader that accepts Uint8Array, so the cast is structurally safe.
   return parse(info as unknown as AccountInfo<Buffer>);
 }
 

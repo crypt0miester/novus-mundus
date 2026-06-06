@@ -1,12 +1,12 @@
 /**
  * Deserialization Unit Tests
  *
- * Tests for BufferReader and account data deserialization.
+ * Tests for ByteReader and account data deserialization.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
-import { BufferReader, NULL_PUBKEY, isNullPubkey } from '../../src/utils/deserialize';
+import { ByteReader, NULL_PUBKEY, isNullPubkey } from '../../src/utils/deserialize';
 
 // Encode a value as a little-endian 8-byte buffer (replaces BN.toArrayLike).
 function u64le(value: bigint): Buffer {
@@ -15,10 +15,10 @@ function u64le(value: bigint): Buffer {
   return buf;
 }
 
-describe('BufferReader', () => {
+describe('ByteReader', () => {
   describe('integer reads', () => {
     it('should read u8 correctly', () => {
-      const reader = new BufferReader(Buffer.from([0, 127, 255]));
+      const reader = new ByteReader(Buffer.from([0, 127, 255]));
 
       expect(reader.readU8()).toBe(0);
       expect(reader.readU8()).toBe(127);
@@ -26,7 +26,7 @@ describe('BufferReader', () => {
     });
 
     it('should read i8 correctly', () => {
-      const reader = new BufferReader(Buffer.from([0, 127, 128, 255]));
+      const reader = new ByteReader(Buffer.from([0, 127, 128, 255]));
 
       expect(reader.readI8()).toBe(0);
       expect(reader.readI8()).toBe(127);
@@ -35,7 +35,7 @@ describe('BufferReader', () => {
     });
 
     it('should read u16 little-endian', () => {
-      const reader = new BufferReader(Buffer.from([0x34, 0x12, 0xff, 0xff]));
+      const reader = new ByteReader(Buffer.from([0x34, 0x12, 0xff, 0xff]));
 
       expect(reader.readU16()).toBe(0x1234);
       expect(reader.readU16()).toBe(0xffff);
@@ -46,13 +46,13 @@ describe('BufferReader', () => {
       buf.writeInt16LE(1000, 0);
       buf.writeInt16LE(-1000, 2);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readI16()).toBe(1000);
       expect(reader.readI16()).toBe(-1000);
     });
 
     it('should read u32 little-endian', () => {
-      const reader = new BufferReader(Buffer.from([0x78, 0x56, 0x34, 0x12]));
+      const reader = new ByteReader(Buffer.from([0x78, 0x56, 0x34, 0x12]));
 
       expect(reader.readU32()).toBe(0x12345678);
     });
@@ -62,43 +62,43 @@ describe('BufferReader', () => {
       buf.writeInt32LE(1000000, 0);
       buf.writeInt32LE(-1000000, 4);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readI32()).toBe(1000000);
       expect(reader.readI32()).toBe(-1000000);
     });
 
     it('should read u64 as bigint', () => {
       // Zero
-      const zeroReader = new BufferReader(Buffer.alloc(8));
+      const zeroReader = new ByteReader(Buffer.alloc(8));
       expect(Number(zeroReader.readU64())).toBe(0);
 
       // Max u64
-      const maxReader = new BufferReader(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
+      const maxReader = new ByteReader(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
       expect(maxReader.readU64().toString()).toBe('18446744073709551615');
 
       // Regular value
       const buf = Buffer.alloc(8);
       buf.writeUInt32LE(1000000, 0);
       buf.writeUInt32LE(0, 4);
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(Number(reader.readU64())).toBe(1000000);
     });
 
     it('should read i64 with negative values', () => {
       // -1 (all 0xFF)
-      const negOneReader = new BufferReader(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
+      const negOneReader = new ByteReader(Buffer.from([0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]));
       expect(Number(negOneReader.readI64())).toBe(-1);
 
       // Positive value
       const buf = Buffer.alloc(8);
       u64le(1000000n).copy(buf);
-      const posReader = new BufferReader(buf);
+      const posReader = new ByteReader(buf);
       expect(Number(posReader.readI64())).toBe(1000000);
 
       // Large negative
       const negBuf = Buffer.alloc(8);
       u64le(-1000000n).copy(negBuf);
-      const negReader = new BufferReader(negBuf);
+      const negReader = new ByteReader(negBuf);
       expect(Number(negReader.readI64())).toBe(-1000000);
     });
   });
@@ -109,7 +109,7 @@ describe('BufferReader', () => {
       const view = new DataView(buf.buffer);
       view.setFloat32(0, 3.14159, true);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readF32()).toBeCloseTo(3.14159, 4);
     });
 
@@ -118,14 +118,14 @@ describe('BufferReader', () => {
       const view = new DataView(buf.buffer);
       view.setFloat64(0, 3.141592653589793, true);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readF64()).toBeCloseTo(3.141592653589793, 10);
     });
   });
 
   describe('bool and pubkey reads', () => {
     it('should read bool correctly', () => {
-      const reader = new BufferReader(Buffer.from([0, 1, 2, 255]));
+      const reader = new ByteReader(Buffer.from([0, 1, 2, 255]));
 
       expect(reader.readBool()).toBe(false);
       expect(reader.readBool()).toBe(true);
@@ -137,7 +137,7 @@ describe('BufferReader', () => {
       const keypair = await Keypair.generate();
       const buf = keypair.publicKey.toBytes();
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       const pubkey = reader.readPubkey();
 
       expect(pubkey.equals(keypair.publicKey)).toBe(true);
@@ -150,14 +150,14 @@ describe('BufferReader', () => {
       buf.write('Hello', 0, 'utf8');
       buf[5] = 0; // null terminator
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readString(32)).toBe('Hello');
     });
 
     it('should read full string without null terminator', () => {
       const buf = Buffer.from('HelloWorld');
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readString(10)).toBe('HelloWorld');
     });
 
@@ -165,12 +165,12 @@ describe('BufferReader', () => {
       const buf = Buffer.alloc(32);
       buf.write('Hello', 0, 'utf8');
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readStringWithLength(32, 5)).toBe('Hello');
     });
 
     it('should read raw bytes', () => {
-      const reader = new BufferReader(Buffer.from([1, 2, 3, 4, 5]));
+      const reader = new ByteReader(Buffer.from([1, 2, 3, 4, 5]));
 
       const bytes = reader.readBytes(3);
       expect(Array.from(bytes)).toEqual([1, 2, 3]);
@@ -187,7 +187,7 @@ describe('BufferReader', () => {
       buf.writeUInt16LE(200, 2);
       buf.writeUInt16LE(300, 4);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readU16Array(3)).toEqual([100, 200, 300]);
     });
 
@@ -197,7 +197,7 @@ describe('BufferReader', () => {
       buf.writeUInt32LE(2000, 4);
       buf.writeUInt32LE(3000, 8);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readU32Array(3)).toEqual([1000, 2000, 3000]);
     });
 
@@ -206,7 +206,7 @@ describe('BufferReader', () => {
       u64le(100n).copy(buf, 0);
       u64le(200n).copy(buf, 8);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       const arr = reader.readU64Array(2);
 
       expect(Number(arr[0]!)).toBe(100);
@@ -218,7 +218,7 @@ describe('BufferReader', () => {
       u64le(100n).copy(buf, 0);
       u64le(-100n).copy(buf, 8);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       const arr = reader.readI64Array(2);
 
       expect(Number(arr[0]!)).toBe(100);
@@ -231,7 +231,7 @@ describe('BufferReader', () => {
       view.setFloat32(0, 1.5, true);
       view.setFloat32(4, 2.5, true);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       const arr = reader.readF32Array(2);
 
       expect(arr[0]).toBeCloseTo(1.5, 5);
@@ -243,7 +243,7 @@ describe('BufferReader', () => {
       const k2 = (await Keypair.generate()).publicKey;
       const buf = Buffer.concat([k1.toBytes(), k2.toBytes()]);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       const arr = reader.readPubkeyArray(2);
 
       expect(arr[0]!.equals(k1)).toBe(true);
@@ -253,7 +253,7 @@ describe('BufferReader', () => {
 
   describe('offset management', () => {
     it('should track offset correctly', () => {
-      const reader = new BufferReader(Buffer.alloc(100));
+      const reader = new ByteReader(Buffer.alloc(100));
 
       expect(reader.getOffset()).toBe(0);
 
@@ -278,7 +278,7 @@ describe('BufferReader', () => {
       buf.writeUInt8(1, 0);
       buf.writeUInt8(2, 5);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readU8()).toBe(1);
 
       reader.setOffset(5);
@@ -290,7 +290,7 @@ describe('BufferReader', () => {
       buf.writeUInt8(1, 0);
       buf.writeUInt8(2, 5);
 
-      const reader = new BufferReader(buf);
+      const reader = new ByteReader(buf);
       expect(reader.readU8()).toBe(1);
 
       reader.skip(4);
@@ -298,7 +298,7 @@ describe('BufferReader', () => {
     });
 
     it('should report remaining bytes', () => {
-      const reader = new BufferReader(Buffer.alloc(10));
+      const reader = new ByteReader(Buffer.alloc(10));
 
       expect(reader.remaining()).toBe(10);
 
@@ -314,13 +314,13 @@ describe('BufferReader', () => {
     it('should correctly identify null pubkey', () => {
       expect(isNullPubkey(NULL_PUBKEY)).toBe(true);
       expect(isNullPubkey(PublicKey.default)).toBe(true);
-      expect(BufferReader.isNullPubkey(NULL_PUBKEY)).toBe(true);
+      expect(ByteReader.isNullPubkey(NULL_PUBKEY)).toBe(true);
     });
 
     it('should correctly identify non-null pubkey', async () => {
       const keypair = await Keypair.generate();
       expect(isNullPubkey(keypair.publicKey)).toBe(false);
-      expect(BufferReader.isNullPubkey(keypair.publicKey)).toBe(false);
+      expect(ByteReader.isNullPubkey(keypair.publicKey)).toBe(false);
     });
   });
 });
@@ -328,9 +328,9 @@ describe('BufferReader', () => {
 describe('roundtrip serialization', () => {
   it('should roundtrip integers', () => {
     // Import writer dynamically to avoid circular dependency issues in test
-    const { BufferWriter } = require('../../src/utils/serialize');
+    const { ByteWriter } = require('../../src/utils/serialize');
 
-    const writer = new BufferWriter(50);
+    const writer = new ByteWriter(50);
     writer.writeU8(255);
     writer.writeI8(-100);
     writer.writeU16(65535);
@@ -340,7 +340,7 @@ describe('roundtrip serialization', () => {
     writer.writeU64(9007199254740992n);
     writer.writeI64(-1000000n);
 
-    const reader = new BufferReader(writer.toBuffer());
+    const reader = new ByteReader(writer.toBuffer());
 
     expect(reader.readU8()).toBe(255);
     expect(reader.readI8()).toBe(-100);
@@ -353,27 +353,27 @@ describe('roundtrip serialization', () => {
   });
 
   it('should roundtrip floats', () => {
-    const { BufferWriter } = require('../../src/utils/serialize');
+    const { ByteWriter } = require('../../src/utils/serialize');
 
-    const writer = new BufferWriter(12);
+    const writer = new ByteWriter(12);
     writer.writeF32(3.14159);
     writer.writeF64(2.718281828459045);
 
-    const reader = new BufferReader(writer.toBuffer());
+    const reader = new ByteReader(writer.toBuffer());
 
     expect(reader.readF32()).toBeCloseTo(3.14159, 4);
     expect(reader.readF64()).toBeCloseTo(2.718281828459045, 10);
   });
 
   it('should roundtrip pubkeys and strings', async () => {
-    const { BufferWriter } = require('../../src/utils/serialize');
+    const { ByteWriter } = require('../../src/utils/serialize');
 
     const keypair = await Keypair.generate();
-    const writer = new BufferWriter(64);
+    const writer = new ByteWriter(64);
     writer.writePubkey(keypair.publicKey);
     writer.writeString('TestPlayer', 32);
 
-    const reader = new BufferReader(writer.toBuffer());
+    const reader = new ByteReader(writer.toBuffer());
 
     expect(reader.readPubkey().equals(keypair.publicKey)).toBe(true);
     expect(reader.readString(32)).toBe('TestPlayer');

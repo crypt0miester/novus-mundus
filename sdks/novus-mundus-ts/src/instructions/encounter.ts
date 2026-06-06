@@ -10,7 +10,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveCityPda,
   deriveEncounterPda,
@@ -120,7 +120,7 @@ export async function createSpawnEncounterInstruction(
   ];
 
   // Instruction data: encounter_type (u8), grid_lat (i32 LE), grid_long (i32 LE)
-  const writer = new BufferWriter(9);
+  const writer = new ByteWriter(9);
   writer.writeU8(params.encounterType);
   writer.writeI32(accounts.gridLat);
   writer.writeI32(accounts.gridLong);

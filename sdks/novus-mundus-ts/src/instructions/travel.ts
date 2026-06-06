@@ -14,7 +14,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   derivePlayerPda,
@@ -101,7 +101,7 @@ export async function createIntercityStartInstruction(
   }
 
   // Instruction data: destination_city_id (u16) + dest_grid_lat (i32) + dest_grid_long (i32)
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU16(accounts.destinationCityId);
   writer.writeI32(accounts.destGridLat);
   writer.writeI32(accounts.destGridLong);
@@ -320,7 +320,7 @@ export async function createIntercityTeleportInstruction(
   }
 
   // Instruction data: destination_city_id (u16)
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU16(accounts.destinationCityId);
 
   const data = createInstructionData(DISCRIMINATORS.INTERCITY_TELEPORT, writer.toBuffer());
@@ -380,7 +380,7 @@ export async function createTravelSpeedupInstruction(
   ];
 
   // Instruction data: speedup_tier (u8)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.speedupTier);
 
   const data = createInstructionData(DISCRIMINATORS.TRAVEL_SPEEDUP, writer.toBuffer());
@@ -467,7 +467,7 @@ export async function createIntracityStartInstruction(
   }
 
   // Instruction data: destination_lat (f64) + destination_long (f64)
-  const writer = new BufferWriter(16);
+  const writer = new ByteWriter(16);
   writer.writeF64(params.destinationLat);
   writer.writeF64(params.destinationLong);
 

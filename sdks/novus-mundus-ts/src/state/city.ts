@@ -8,7 +8,7 @@
  */
 
 import type { AccountInfo, PublicKey } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 import { CityType } from '../types/enums';
 import type { BiomeKnobs } from '../calculators/biome';
 
@@ -79,7 +79,7 @@ export const CITY_LAYOUT_VERSION = 2;
  * Matches the on-chain repr(C) layout exactly, including padding.
  */
 export function deserializeCity(data: Uint8Array): CityAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   // repr(C) layout — see programs/novus_mundus/src/state/city.rs
   reader.readU8();                                     // offset 0   account_key

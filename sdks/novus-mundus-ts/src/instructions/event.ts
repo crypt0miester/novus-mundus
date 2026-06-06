@@ -14,7 +14,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -98,7 +98,7 @@ export async function createCreateEventInstruction(
   }
 
   // Instruction data
-  const writer = new BufferWriter(200);
+  const writer = new ByteWriter(200);
   writer.writeU64(accounts.eventId);
   writer.writeU8(nameBytes.length);
   writer.writeBytes(nameBytes);

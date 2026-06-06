@@ -14,7 +14,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -93,7 +93,7 @@ export async function createInitializeTemplateInstruction(
   // [18] prerequisite_research: u8
   // [19] prerequisite_level: u8
   // [20..22] gem_cost_per_minute: u16
-  const writer = new BufferWriter(22);
+  const writer = new ByteWriter(22);
   writer.writeU8(params.researchType);
   writer.writeU8(params.category);
   writer.writeU8(params.maxLevel);
@@ -168,7 +168,7 @@ export async function createUpdateTemplateInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const fieldIx = (writer: BufferWriter): TransactionInstruction =>
+  const fieldIx = (writer: ByteWriter): TransactionInstruction =>
     new TransactionInstruction({
       keys,
       programId: PROGRAM_ID,
@@ -178,49 +178,49 @@ export async function createUpdateTemplateInstruction(
   const ixns: TransactionInstruction[] = [];
 
   if (params.baseTimeSeconds !== undefined) {
-    const w = new BufferWriter(5);
+    const w = new ByteWriter(5);
     w.writeU8(0);
     w.writeU32(params.baseTimeSeconds);
     ixns.push(fieldIx(w));
   }
   if (params.baseCost !== undefined) {
-    const w = new BufferWriter(9);
+    const w = new ByteWriter(9);
     w.writeU8(1);
     w.writeU64(params.baseCost);
     ixns.push(fieldIx(w));
   }
   if (params.buffPerLevelBps !== undefined) {
-    const w = new BufferWriter(3);
+    const w = new ByteWriter(3);
     w.writeU8(2);
     w.writeU16(params.buffPerLevelBps);
     ixns.push(fieldIx(w));
   }
   if (params.gemCostPerMinute !== undefined) {
-    const w = new BufferWriter(3);
+    const w = new ByteWriter(3);
     w.writeU8(3);
     w.writeU16(params.gemCostPerMinute);
     ixns.push(fieldIx(w));
   }
   if (params.isActive !== undefined) {
-    const w = new BufferWriter(2);
+    const w = new ByteWriter(2);
     w.writeU8(4);
     w.writeU8(params.isActive ? 1 : 0);
     ixns.push(fieldIx(w));
   }
   if (params.maxLevel !== undefined) {
-    const w = new BufferWriter(2);
+    const w = new ByteWriter(2);
     w.writeU8(5);
     w.writeU8(params.maxLevel);
     ixns.push(fieldIx(w));
   }
   if (params.prerequisiteResearch !== undefined) {
-    const w = new BufferWriter(2);
+    const w = new ByteWriter(2);
     w.writeU8(6);
     w.writeU8(params.prerequisiteResearch === -1 ? 255 : params.prerequisiteResearch);
     ixns.push(fieldIx(w));
   }
   if (params.prerequisiteLevel !== undefined) {
-    const w = new BufferWriter(2);
+    const w = new ByteWriter(2);
     w.writeU8(7);
     w.writeU8(params.prerequisiteLevel);
     ixns.push(fieldIx(w));
@@ -308,7 +308,7 @@ export async function createStartResearchInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(accounts.researchType);
 
   const data = createInstructionData(DISCRIMINATORS.RESEARCH_START, writer.toBuffer());
@@ -408,7 +408,7 @@ export async function createSpeedUpResearchInstruction(
     { pubkey: template, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(8);
+  const writer = new ByteWriter(8);
   writer.writeU64(params.speedUpSeconds);
 
   const data = createInstructionData(DISCRIMINATORS.RESEARCH_SPEEDUP, writer.toBuffer());
@@ -516,7 +516,7 @@ export async function createAscendInstruction(
     { pubkey: estate, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.researchType);
 
   const data = createInstructionData(DISCRIMINATORS.RESEARCH_ASCEND, writer.toBuffer());

@@ -11,7 +11,7 @@
 
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import { derivePlayerPda } from '../pda';
 
 /** Matches the on-chain `equipped_<kind>` slot order. */
@@ -63,7 +63,7 @@ export async function createEquipCosmeticInstruction(
     { pubkey: player, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(3);
+  const writer = new ByteWriter(3);
   writer.writeU8(params.kind);
   writer.writeU16(params.id);
 

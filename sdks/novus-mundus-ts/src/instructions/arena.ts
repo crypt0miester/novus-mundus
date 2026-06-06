@@ -17,7 +17,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -82,7 +82,7 @@ export async function createCreateSeasonInstruction(
   // - daily_prize_pool (u64)
   // - daily_distribution_cap (u64)
   // - min_level_required (u8)
-  const writer = new BufferWriter(29);
+  const writer = new ByteWriter(29);
   writer.writeU32(accounts.seasonId);
   writer.writeU64(params.masterPrizePool);
   writer.writeU64(params.dailyPrizePool);
@@ -143,7 +143,7 @@ export async function createJoinSeasonInstruction(
   ];
 
   // Instruction data: season_id (u32) = 4 bytes
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU32(accounts.seasonId);
 
   const data = createInstructionData(DISCRIMINATORS.ARENA_JOIN_SEASON, writer.toBuffer());
@@ -206,7 +206,7 @@ export async function createUpdateLoadoutInstruction(
   // - ranged_weapons (u64)
   // - siege_weapons (u64)
   // - armor_pieces (u64)
-  const writer = new BufferWriter(88);
+  const writer = new ByteWriter(88);
   writer.writePubkey(params.arenaHero);
   writer.writeU64(params.defensiveUnits[0]);
   writer.writeU64(params.defensiveUnits[1]);
@@ -313,7 +313,7 @@ export async function createChallengePlayerInstruction(
   // - match_id (u64)
   // - match_timestamp (i64)
   // - season_id (u32)
-  const writer = new BufferWriter(20);
+  const writer = new ByteWriter(20);
   writer.writeU64(params.matchId);
   writer.writeI64(params.matchTimestamp);
   writer.writeU32(accounts.seasonId);
@@ -378,7 +378,7 @@ export async function createClaimArenaDailyRewardInstruction(
   ];
 
   // Instruction data: season_id (u32) = 4 bytes
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU32(accounts.seasonId);
 
   const data = createInstructionData(DISCRIMINATORS.ARENA_CLAIM_DAILY_REWARD, writer.toBuffer());
@@ -441,7 +441,7 @@ export async function createClaimMasterRewardInstruction(
   ];
 
   // Instruction data: season_id (u32) = 4 bytes
-  const writer = new BufferWriter(4);
+  const writer = new ByteWriter(4);
   writer.writeU32(accounts.seasonId);
 
   const data = createInstructionData(DISCRIMINATORS.ARENA_CLAIM_MASTER_REWARD, writer.toBuffer());
@@ -493,7 +493,7 @@ export async function createCloseSeasonInstruction(
   ];
 
   // Instruction data: season_id (u32), city_id (u16) = 6 bytes
-  const writer = new BufferWriter(6);
+  const writer = new ByteWriter(6);
   writer.writeU32(accounts.seasonId);
   writer.writeU16(accounts.cityId);
 

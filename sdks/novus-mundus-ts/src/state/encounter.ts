@@ -6,7 +6,7 @@
  */
 
 import { PublicKey, type AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 import { EncounterType } from '../types/enums';
 
 // Encounter Account Interface
@@ -41,7 +41,7 @@ export function calculateEncounterAccountSize(attackerCount: number): number {
 
 /** Deserialize EncounterAccount from raw bytes */
 export function deserializeEncounter(data: Uint8Array): EncounterAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   reader.skip(32); // game_engine (Pubkey, not in interface)

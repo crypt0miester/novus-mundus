@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Research Template Interface
 
@@ -71,7 +71,7 @@ export const RESEARCH_PROGRESS_SIZE = 144;
 
 /** Deserialize ResearchTemplate from raw bytes */
 export function deserializeResearchTemplate(data: Uint8Array): ResearchTemplateAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const researchType = reader.readU8();
@@ -105,7 +105,7 @@ export function deserializeResearchTemplate(data: Uint8Array): ResearchTemplateA
 
 /** Deserialize ResearchProgress from raw bytes */
 export function deserializeResearchProgress(data: Uint8Array): ResearchProgressAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const player = reader.readPubkey();

@@ -10,7 +10,7 @@ import {
   computeEventDiscriminator,
   discriminatorToHex,
   EVENT_DISCRIMINATORS,
-  EventBufferReader,
+  EventByteReader,
   parseNovusMundusEvent,
   parseEventFromBase64,
   parseEventsFromLogs,
@@ -123,17 +123,17 @@ describe('Event Discriminator', () => {
   });
 });
 
-describe('EventBufferReader', () => {
+describe('EventByteReader', () => {
   describe('integer reads', () => {
     it('should read u8', () => {
-      const reader = new EventBufferReader(Buffer.from([0, 127, 255]));
+      const reader = new EventByteReader(Buffer.from([0, 127, 255]));
       expect(reader.readU8()).toBe(0);
       expect(reader.readU8()).toBe(127);
       expect(reader.readU8()).toBe(255);
     });
 
     it('should read i8', () => {
-      const reader = new EventBufferReader(Buffer.from([0, 127, 128, 255]));
+      const reader = new EventByteReader(Buffer.from([0, 127, 128, 255]));
       expect(reader.readI8()).toBe(0);
       expect(reader.readI8()).toBe(127);
       expect(reader.readI8()).toBe(-128);
@@ -141,54 +141,54 @@ describe('EventBufferReader', () => {
     });
 
     it('should read u16 little-endian', () => {
-      const reader = new EventBufferReader(Buffer.from([0x34, 0x12]));
+      const reader = new EventByteReader(Buffer.from([0x34, 0x12]));
       expect(reader.readU16()).toBe(0x1234);
     });
 
     it('should read i16', () => {
       const buf = Buffer.alloc(2);
       buf.writeInt16LE(-1000, 0);
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(reader.readI16()).toBe(-1000);
     });
 
     it('should read u32 little-endian', () => {
-      const reader = new EventBufferReader(Buffer.from([0x78, 0x56, 0x34, 0x12]));
+      const reader = new EventByteReader(Buffer.from([0x78, 0x56, 0x34, 0x12]));
       expect(reader.readU32()).toBe(0x12345678);
     });
 
     it('should read i32', () => {
       const buf = Buffer.alloc(4);
       buf.writeInt32LE(-1000000, 0);
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(reader.readI32()).toBe(-1000000);
     });
 
     it('should read u64 as bigint', () => {
       const buf = Buffer.alloc(8);
       u64le(1000000n).copy(buf);
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(Number(reader.readU64())).toBe(1000000);
     });
 
     it('should read i64 as bigint', () => {
       const buf = Buffer.alloc(8);
       u64le(-1000000n).copy(buf);
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(Number(reader.readI64())).toBe(-1000000);
     });
   });
 
   describe('bool and pubkey reads', () => {
     it('should read bool', () => {
-      const reader = new EventBufferReader(Buffer.from([0, 1]));
+      const reader = new EventByteReader(Buffer.from([0, 1]));
       expect(reader.readBool()).toBe(false);
       expect(reader.readBool()).toBe(true);
     });
 
     it('should read PublicKey', async () => {
       const keypair = await Keypair.generate();
-      const reader = new EventBufferReader(keypair.publicKey.toBytes());
+      const reader = new EventByteReader(keypair.publicKey.toBytes());
       expect(reader.readPubkey().equals(keypair.publicKey)).toBe(true);
     });
   });
@@ -197,28 +197,28 @@ describe('EventBufferReader', () => {
     it('should read null-terminated string', () => {
       const buf = Buffer.alloc(32);
       buf.write('TestPlayer', 0, 'utf8');
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(reader.readString(32)).toBe('TestPlayer');
     });
 
     it('should read Name32', () => {
       const buf = Buffer.alloc(32);
       buf.write('MyTeam', 0, 'utf8');
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(reader.readName32()).toBe('MyTeam');
     });
 
     it('should read Name48', () => {
       const buf = Buffer.alloc(48);
       buf.write('LongerPlayerName', 0, 'utf8');
-      const reader = new EventBufferReader(buf);
+      const reader = new EventByteReader(buf);
       expect(reader.readName48()).toBe('LongerPlayerName');
     });
   });
 
   describe('offset tracking', () => {
     it('should track offset correctly', () => {
-      const reader = new EventBufferReader(Buffer.alloc(100));
+      const reader = new EventByteReader(Buffer.alloc(100));
       expect(reader.getOffset()).toBe(0);
 
       reader.readU8();
@@ -232,7 +232,7 @@ describe('EventBufferReader', () => {
     });
 
     it('should report remaining bytes', () => {
-      const reader = new EventBufferReader(Buffer.alloc(10));
+      const reader = new EventByteReader(Buffer.alloc(10));
       expect(reader.remaining()).toBe(10);
 
       reader.readU32();

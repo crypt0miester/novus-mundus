@@ -12,7 +12,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveEstatePda,
@@ -61,7 +61,7 @@ export async function createStartMeditationInstruction(
     { pubkey: estate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.heroSlot);
 
   const data = createInstructionData(DISCRIMINATORS.SANCTUARY_START_MEDITATION, writer.toBuffer());
@@ -170,7 +170,7 @@ export async function createSpeedupMeditationInstruction(
     { pubkey: player, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.speedupTier);
 
   const data = createInstructionData(DISCRIMINATORS.SANCTUARY_SPEEDUP_MEDITATION, writer.toBuffer());

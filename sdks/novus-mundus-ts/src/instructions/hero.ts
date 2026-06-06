@@ -16,7 +16,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, MPL_CORE_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveHeroTemplatePda,
@@ -121,7 +121,7 @@ export async function createCreateTemplateInstruction(
   ];
 
   // Instruction data: 85 bytes fixed
-  const writer = new BufferWriter(85);
+  const writer = new ByteWriter(85);
 
   // [0..2] template_id: u16
   writer.writeU16(params.templateId);
@@ -292,7 +292,7 @@ export async function createMintHeroInstruction(
     { pubkey: estateAccount, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU16(params.templateId);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_MINT, writer.toBuffer());
@@ -364,7 +364,7 @@ export async function createLockHeroInstruction(
   ];
 
   // Instruction data: slot_index (u8)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.slotIndex);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_LOCK, writer.toBuffer());
@@ -437,7 +437,7 @@ export async function createUnlockHeroInstruction(
   ];
 
   // Instruction data: slot_index (u8)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.slotIndex);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_UNLOCK, writer.toBuffer());
@@ -563,7 +563,7 @@ export async function createAssignDefensiveHeroInstruction(
   ];
 
   // Instruction data: slot_index (u8)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.slotIndex);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_ASSIGN_DEFENSIVE, writer.toBuffer());
@@ -634,7 +634,7 @@ export async function createBurnHeroInstruction(
     { pubkey: MPL_CORE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU16(params.templateId);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_BURN, writer.toBuffer());
@@ -689,7 +689,7 @@ export async function createUpdateSupplyCapInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(6);
+  const writer = new ByteWriter(6);
   writer.writeU16(params.templateId);
   writer.writeU32(params.newSupplyCap);
 
@@ -739,7 +739,7 @@ export async function createUseHeroAbilityInstruction(
     { pubkey: accounts.heroTemplate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.slotIndex);
 
   const data = createInstructionData(DISCRIMINATORS.HERO_USE_ABILITY, writer.toBuffer());

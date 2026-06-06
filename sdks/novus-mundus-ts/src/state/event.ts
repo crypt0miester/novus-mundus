@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // Event Enums
 
@@ -77,7 +77,7 @@ export const EVENT_PARTICIPATION_SIZE = 112;
 
 /** Deserialize EventAccount from raw bytes */
 export function deserializeEvent(data: Uint8Array): EventAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const gameEngine = reader.readPubkey();
@@ -151,7 +151,7 @@ export function deserializeEvent(data: Uint8Array): EventAccount {
 
 /** Deserialize EventParticipation from raw bytes */
 export function deserializeEventParticipation(data: Uint8Array): EventParticipation {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const gameEngine = reader.readPubkey();

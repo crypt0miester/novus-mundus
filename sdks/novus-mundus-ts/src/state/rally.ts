@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { RallyStatus, RallyTargetType } from '../types/enums';
 
 // Rally Account Interface
@@ -173,7 +173,7 @@ export const RALLY_PARTICIPANT_SIZE = 352;
 
 /** Deserialize RallyAccount from raw bytes */
 export function deserializeRally(data: Uint8Array): RallyAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
 
@@ -313,7 +313,7 @@ export function deserializeRally(data: Uint8Array): RallyAccount {
 
 /** Deserialize RallyParticipant from raw bytes */
 export function deserializeRallyParticipant(data: Uint8Array): RallyParticipant {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   reader.skip(7); // implicit padding for u64 alignment (offset 1 -> 8)

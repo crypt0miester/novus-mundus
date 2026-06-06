@@ -239,7 +239,7 @@ export const EVENT_DISCRIMINATORS: Map<string, string> = new Map([
 // Event Buffer Reader
 
 /** Reader for sequential byte reads from a buffer */
-export class EventBufferReader {
+export class EventByteReader {
   private buffer: Uint8Array;
   private view: DataView;
   private offset = 0;
@@ -355,7 +355,7 @@ export class EventBufferReader {
 
 // Event Parsers
 
-type EventParser = (reader: EventBufferReader) => Record<string, unknown>;
+type EventParser = (reader: EventByteReader) => Record<string, unknown>;
 
 const EVENT_PARSERS = new Map<string, EventParser>();
 
@@ -1831,7 +1831,7 @@ export function parseNovusMundusEvent(data: Uint8Array): NovusMundusEvent | null
     return null;
   }
 
-  const reader = new EventBufferReader(buffer.subarray(8));
+  const reader = new EventByteReader(buffer.subarray(8));
   const parsedData = parser(reader);
 
   return {

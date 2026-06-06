@@ -15,7 +15,7 @@
 
 import { PublicKey, TransactionInstruction } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, ALT_NAME_SERVICE_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveNameAccountPda,
@@ -85,7 +85,7 @@ export async function createSetPlayerNameInstruction(
 
   // Instruction data: reverse_acc_hashed_name (32 bytes), used to derive/verify
   // the reverse name account on-chain.
-  const writer = new BufferWriter(32);
+  const writer = new ByteWriter(32);
   writer.writeBytes(getHashedName(nameAccount.toBase58()));
 
   const data = createInstructionData(DISCRIMINATORS.NAME_SET_PLAYER, writer.toBuffer());
@@ -150,7 +150,7 @@ export async function createUpdatePlayerNameInstruction(
   ];
 
   // Instruction data: old_reverse_acc_hashed_name (32) + new_reverse_acc_hashed_name (32)
-  const writer = new BufferWriter(64);
+  const writer = new ByteWriter(64);
   writer.writeBytes(getHashedName(oldNameAccount.toBase58()));
   writer.writeBytes(getHashedName(newNameAccount.toBase58()));
 
@@ -210,7 +210,7 @@ export async function createRemovePlayerNameInstruction(
     { pubkey: ALT_NAME_SERVICE_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(32);
+  const writer = new ByteWriter(32);
   writer.writeBytes(getHashedName(nameAccount.toBase58()));
 
   const data = createInstructionData(DISCRIMINATORS.NAME_REMOVE_PLAYER, writer.toBuffer());

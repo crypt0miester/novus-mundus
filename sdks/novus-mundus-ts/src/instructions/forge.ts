@@ -15,7 +15,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -116,7 +116,7 @@ export async function createStartCraftInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(typeof params.equipmentType === 'number' ? params.equipmentType : params.equipmentType);
   writer.writeU8(typeof params.qualityTier === 'number' ? params.qualityTier : params.qualityTier);
 
@@ -248,7 +248,7 @@ export async function createEquipInstruction(
     { pubkey: craftedEquipment, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(typeof params.equipmentType === 'number' ? params.equipmentType : params.equipmentType);
   writer.writeU8(typeof params.qualityTier === 'number' ? params.qualityTier : params.qualityTier);
 

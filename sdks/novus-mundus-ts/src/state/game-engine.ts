@@ -6,8 +6,8 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
-import { BufferWriter } from '../utils/serialize';
+import { ByteReader } from '../utils/deserialize';
+import { ByteWriter } from '../utils/serialize';
 
 // Nested Types
 
@@ -380,7 +380,7 @@ export interface GameEngine {
 
 // Deserialization
 
-function deserializeRallyCaps(reader: BufferReader): RallyCaps {
+function deserializeRallyCaps(reader: ByteReader): RallyCaps {
   const maxActiveRalliesJoined = reader.readU8();
   const maxRalliesCreatedPerDay = reader.readU8();
   reader.skip(6); // padding
@@ -398,7 +398,7 @@ function deserializeRallyCaps(reader: BufferReader): RallyCaps {
   };
 }
 
-function deserializeSubscriptionTierConfig(reader: BufferReader): SubscriptionTierConfig {
+function deserializeSubscriptionTierConfig(reader: ByteReader): SubscriptionTierConfig {
   const nameBytes = reader.readBytes(16);
   const name = new TextDecoder().decode(nameBytes).replace(/\0/g, '');
   const tierIndex = reader.readU8();
@@ -472,7 +472,7 @@ function deserializeSubscriptionTierConfig(reader: BufferReader): SubscriptionTi
   };
 }
 
-function deserializeGameCaps(reader: BufferReader): GameCaps {
+function deserializeGameCaps(reader: ByteReader): GameCaps {
   return {
     maxReservedNoviPerPlayer: reader.readU64(),
     noviExpirationDuration: reader.readI64(),
@@ -485,7 +485,7 @@ function deserializeGameCaps(reader: BufferReader): GameCaps {
   };
 }
 
-function deserializeEconomicConfig(reader: BufferReader): EconomicConfig {
+function deserializeEconomicConfig(reader: ByteReader): EconomicConfig {
   const costMultiplier = reader.readU64();
   const lastCostUpdate = reader.readI64();
 
@@ -591,7 +591,7 @@ function deserializeEconomicConfig(reader: BufferReader): EconomicConfig {
   };
 }
 
-function deserializeGameplayConfig(reader: BufferReader): GameplayConfig {
+function deserializeGameplayConfig(reader: ByteReader): GameplayConfig {
   const driveByBonusBase = reader.readU32();
   reader.skip(4); // _reserved_drive_by
   const attackBaseEffectiveness = reader.readU32();
@@ -694,7 +694,7 @@ function deserializeGameplayConfig(reader: BufferReader): GameplayConfig {
   };
 }
 
-function deserializeMintingConfig(reader: BufferReader): MintingConfig {
+function deserializeMintingConfig(reader: ByteReader): MintingConfig {
   const maxSupplyCap = reader.readU64();
   const maxMintPerProposal = reader.readU64();
   const lastMintTimestamp = reader.readI64();
@@ -737,7 +737,7 @@ function deserializeMintingConfig(reader: BufferReader): MintingConfig {
   };
 }
 
-function deserializeThemeModifierConfig(reader: BufferReader): ThemeModifierConfig {
+function deserializeThemeModifierConfig(reader: ByteReader): ThemeModifierConfig {
   const currentTheme = reader.readU8();
   reader.skip(7); // padding
 
@@ -754,7 +754,7 @@ function deserializeThemeModifierConfig(reader: BufferReader): ThemeModifierConf
   };
 }
 
-function deserializeNoviPurchaseConfig(reader: BufferReader): NoviPurchaseConfig {
+function deserializeNoviPurchaseConfig(reader: ByteReader): NoviPurchaseConfig {
   const noviBasePriceLamports = reader.readU64();
   const noviMarketUndercutBps = reader.readU16();
   reader.skip(6); // implicit padding (align [u64;5] to 8-byte boundary)
@@ -799,7 +799,7 @@ function deserializeNoviPurchaseConfig(reader: BufferReader): NoviPurchaseConfig
   };
 }
 
-function deserializeArenaConfig(reader: BufferReader): ArenaConfig {
+function deserializeArenaConfig(reader: ByteReader): ArenaConfig {
   const seasonDuration = reader.readI64();
   const claimDeadline = reader.readI64();
   const matchExpirySeconds = reader.readI64();
@@ -831,7 +831,7 @@ function deserializeArenaConfig(reader: BufferReader): ArenaConfig {
   };
 }
 
-function deserializeExpeditionConfig(reader: BufferReader): ExpeditionConfig {
+function deserializeExpeditionConfig(reader: ByteReader): ExpeditionConfig {
   const miningNoviCost = reader.readU64Array(5);
   const miningFragmentBonus = reader.readU64Array(5);
   const fishingNoviCost = reader.readU64Array(5);
@@ -864,7 +864,7 @@ function deserializeExpeditionConfig(reader: BufferReader): ExpeditionConfig {
   };
 }
 
-function deserializeDungeonConfig(reader: BufferReader): DungeonConfig {
+function deserializeDungeonConfig(reader: ByteReader): DungeonConfig {
   const resumeGemCost = reader.readU64();
   const unitPower = reader.readU64Array(3);
   const unitHealth = reader.readU64Array(3);
@@ -901,7 +901,7 @@ function deserializeDungeonConfig(reader: BufferReader): DungeonConfig {
   };
 }
 
-function deserializeCastleConfig(reader: BufferReader): CastleConfig {
+function deserializeCastleConfig(reader: ByteReader): CastleConfig {
   const contestDuration = reader.readI64();
   const protectionDuration = reader.readI64();
   const attackRangeMeters = reader.readF64();
@@ -934,7 +934,7 @@ function deserializeCastleConfig(reader: BufferReader): CastleConfig {
   };
 }
 
-function deserializeCombatConfig(reader: BufferReader): CombatConfig {
+function deserializeCombatConfig(reader: ByteReader): CombatConfig {
   const damagePerSiegeWeapon = reader.readU64();
   const maxReinforcementReceive = reader.readU64();
   const defensiveUnit1Power = reader.readU64();
@@ -969,7 +969,7 @@ function deserializeCombatConfig(reader: BufferReader): CombatConfig {
 
 /** Serialize GameCaps to raw #[repr(C)] bytes (64 bytes) */
 export function serializeGameCaps(config: GameCaps): Uint8Array {
-  const w = new BufferWriter(64);
+  const w = new ByteWriter(64);
   w.writeU64(config.maxReservedNoviPerPlayer);
   w.writeI64(config.noviExpirationDuration);
   w.writeU64(config.maxEventMintedPrize);
@@ -983,7 +983,7 @@ export function serializeGameCaps(config: GameCaps): Uint8Array {
 
 /** Serialize GameplayConfig to raw #[repr(C)] bytes (248 bytes) */
 export function serializeGameplayConfig(config: GameplayConfig): Uint8Array {
-  const w = new BufferWriter(248);
+  const w = new ByteWriter(248);
   w.writeU32(config.driveByBonusBase);
   w.writeZeros(4); // _reserved_drive_by
   w.writeU32(config.attackBaseEffectiveness);
@@ -1034,7 +1034,7 @@ export function serializeGameplayConfig(config: GameplayConfig): Uint8Array {
 
 /** Serialize ArenaConfig to raw #[repr(C)] bytes (136 bytes) */
 export function serializeArenaConfig(config: ArenaConfig): Uint8Array {
-  const w = new BufferWriter(136);
+  const w = new ByteWriter(136);
   w.writeI64(config.seasonDuration);
   w.writeI64(config.claimDeadline);
   w.writeI64(config.matchExpirySeconds);
@@ -1060,7 +1060,7 @@ export function serializeArenaConfig(config: ArenaConfig): Uint8Array {
 
 /** Serialize ExpeditionConfig to raw #[repr(C)] bytes (240 bytes) */
 export function serializeExpeditionConfig(config: ExpeditionConfig): Uint8Array {
-  const w = new BufferWriter(240);
+  const w = new ByteWriter(240);
   w.writeU64Array(config.miningNoviCost);
   w.writeU64Array(config.miningFragmentBonus);
   w.writeU64Array(config.fishingNoviCost);
@@ -1084,7 +1084,7 @@ export function serializeExpeditionConfig(config: ExpeditionConfig): Uint8Array 
 
 /** Serialize DungeonConfig to raw #[repr(C)] bytes (224 bytes) */
 export function serializeDungeonConfig(config: DungeonConfig): Uint8Array {
-  const w = new BufferWriter(224);
+  const w = new ByteWriter(224);
   w.writeU64(config.resumeGemCost);
   w.writeU64Array(config.unitPower);
   w.writeU64Array(config.unitHealth);
@@ -1112,7 +1112,7 @@ export function serializeDungeonConfig(config: DungeonConfig): Uint8Array {
 
 /** Serialize CastleConfig to raw #[repr(C)] bytes (96 bytes) */
 export function serializeCastleConfig(config: CastleConfig): Uint8Array {
-  const w = new BufferWriter(96);
+  const w = new ByteWriter(96);
   w.writeI64(config.contestDuration);
   w.writeI64(config.protectionDuration);
   w.writeF64(config.attackRangeMeters);
@@ -1137,7 +1137,7 @@ export function serializeCastleConfig(config: CastleConfig): Uint8Array {
 
 /** Serialize CombatConfig to raw #[repr(C)] bytes (160 bytes) */
 export function serializeCombatConfig(config: CombatConfig): Uint8Array {
-  const w = new BufferWriter(160);
+  const w = new ByteWriter(160);
   w.writeU64(config.damagePerSiegeWeapon);
   w.writeU64(config.maxReinforcementReceive);
   w.writeU64(config.defensiveUnit1Power);
@@ -1161,7 +1161,7 @@ export function serializeCombatConfig(config: CombatConfig): Uint8Array {
 
 /** Deserialize GameEngine account from raw bytes */
 export function deserializeGameEngine(data: Uint8Array): GameEngine {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   // Kingdom fields (80 bytes)
   reader.readU8(); // account_key discriminator

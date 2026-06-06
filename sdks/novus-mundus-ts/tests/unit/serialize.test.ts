@@ -1,17 +1,17 @@
 /**
  * Serialization Unit Tests
  *
- * Tests for BufferWriter and instruction data serialization.
+ * Tests for ByteWriter and instruction data serialization.
  */
 
 import { describe, it, expect } from 'bun:test';
 import { PublicKey, Keypair } from '@solana/web3.js';
-import { BufferWriter, createInstructionData } from '../../src/utils/serialize';
+import { ByteWriter, createInstructionData } from '../../src/utils/serialize';
 
-describe('BufferWriter', () => {
+describe('ByteWriter', () => {
   describe('integer writes', () => {
     it('should write u8 correctly', () => {
-      const writer = new BufferWriter(3);
+      const writer = new ByteWriter(3);
       writer.writeU8(0);
       writer.writeU8(127);
       writer.writeU8(255);
@@ -24,7 +24,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write i8 correctly', () => {
-      const writer = new BufferWriter(3);
+      const writer = new ByteWriter(3);
       writer.writeI8(0);
       writer.writeI8(127);
       writer.writeI8(-128);
@@ -37,7 +37,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u16 little-endian', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeU16(0);
       writer.writeU16(0x1234);
 
@@ -50,7 +50,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write i16 correctly', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeI16(1000);
       writer.writeI16(-1000);
 
@@ -64,7 +64,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u32 little-endian', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeU32(0x12345678);
 
       const buf = writer.toBuffer();
@@ -75,7 +75,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write i32 correctly', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeI32(1000000);
       writer.writeI32(-1000000);
 
@@ -86,7 +86,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u64 zero and max', () => {
-      const writer = new BufferWriter(16);
+      const writer = new ByteWriter(16);
       writer.writeU64(0n);
       writer.writeU64(18446744073709551615n); // max u64
 
@@ -102,7 +102,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u64 from number', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeU64(1000000);
 
       const buf = Buffer.from(writer.toBuffer());
@@ -110,7 +110,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u64 from bigint', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeU64(9007199254740992n); // Beyond safe integer
 
       const buf = Buffer.from(writer.toBuffer());
@@ -118,7 +118,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write i64 with negative values', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeI64(-1n);
 
       const buf = writer.toBuffer();
@@ -131,7 +131,7 @@ describe('BufferWriter', () => {
 
   describe('float writes', () => {
     it('should write f32 correctly', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeF32(3.14159);
 
       const buf = writer.toBuffer();
@@ -140,7 +140,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write f64 correctly', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeF64(3.141592653589793);
 
       const buf = writer.toBuffer();
@@ -151,7 +151,7 @@ describe('BufferWriter', () => {
 
   describe('bool and pubkey writes', () => {
     it('should write bool correctly', () => {
-      const writer = new BufferWriter(2);
+      const writer = new ByteWriter(2);
       writer.writeBool(true);
       writer.writeBool(false);
 
@@ -162,7 +162,7 @@ describe('BufferWriter', () => {
 
     it('should write PublicKey correctly', async () => {
       const keypair = await Keypair.generate();
-      const writer = new BufferWriter(32);
+      const writer = new ByteWriter(32);
       writer.writePubkey(keypair.publicKey);
 
       const buf = writer.toBuffer();
@@ -172,7 +172,7 @@ describe('BufferWriter', () => {
 
   describe('string and bytes writes', () => {
     it('should write fixed-size string with padding', () => {
-      const writer = new BufferWriter(32);
+      const writer = new ByteWriter(32);
       writer.writeString('Hello', 32);
 
       const buf = Buffer.from(writer.toBuffer());
@@ -184,7 +184,7 @@ describe('BufferWriter', () => {
     });
 
     it('should truncate string if too long', () => {
-      const writer = new BufferWriter(5);
+      const writer = new ByteWriter(5);
       writer.writeString('HelloWorld', 5);
 
       const buf = Buffer.from(writer.toBuffer());
@@ -192,7 +192,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write raw bytes', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeBytes(Buffer.from([1, 2, 3, 4]));
 
       const buf = writer.toBuffer();
@@ -203,7 +203,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write zeros', () => {
-      const writer = new BufferWriter(8);
+      const writer = new ByteWriter(8);
       writer.writeU8(1);
       writer.writeZeros(6);
       writer.writeU8(2);
@@ -219,7 +219,7 @@ describe('BufferWriter', () => {
 
   describe('array writes', () => {
     it('should write u8 array', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeU8Array([1, 2, 3, 4]);
 
       const buf = writer.toBuffer();
@@ -227,7 +227,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u16 array', () => {
-      const writer = new BufferWriter(4);
+      const writer = new ByteWriter(4);
       writer.writeU16Array([0x0102, 0x0304]);
 
       const buf = writer.toBuffer();
@@ -238,7 +238,7 @@ describe('BufferWriter', () => {
     });
 
     it('should write u64 array', () => {
-      const writer = new BufferWriter(16);
+      const writer = new ByteWriter(16);
       writer.writeU64Array([100n, 200n]);
 
       const buf = Buffer.from(writer.toBuffer());
@@ -249,7 +249,7 @@ describe('BufferWriter', () => {
     it('should write pubkey array', async () => {
       const k1 = (await Keypair.generate()).publicKey;
       const k2 = (await Keypair.generate()).publicKey;
-      const writer = new BufferWriter(64);
+      const writer = new ByteWriter(64);
       writer.writePubkeyArray([k1, k2]);
 
       const buf = writer.toBuffer();
@@ -260,7 +260,7 @@ describe('BufferWriter', () => {
 
   describe('offset tracking', () => {
     it('should track offset correctly', () => {
-      const writer = new BufferWriter(100);
+      const writer = new ByteWriter(100);
       expect(writer.getOffset()).toBe(0);
 
       writer.writeU8(1);
@@ -280,7 +280,7 @@ describe('BufferWriter', () => {
     });
 
     it('should return only written portion with toBuffer', () => {
-      const writer = new BufferWriter(100);
+      const writer = new ByteWriter(100);
       writer.writeU8(1);
       writer.writeU8(2);
 
@@ -289,7 +289,7 @@ describe('BufferWriter', () => {
     });
 
     it('should return full buffer with toFullBuffer', () => {
-      const writer = new BufferWriter(100);
+      const writer = new ByteWriter(100);
       writer.writeU8(1);
 
       const full = writer.toFullBuffer();

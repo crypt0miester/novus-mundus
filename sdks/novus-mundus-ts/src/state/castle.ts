@@ -9,7 +9,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { CastleTier, CastleStatus, CourtPosition } from '../types/enums';
 
 // Castle Account Interface
@@ -155,7 +155,7 @@ export interface TeamCastleRewardAccount {
 // Deserialization
 
 export function deserializeCastle(data: Uint8Array): CastleAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(32); // game_engine
@@ -315,7 +315,7 @@ export function deserializeCastle(data: Uint8Array): CastleAccount {
 }
 
 export function deserializeKingRegistry(data: Uint8Array): KingRegistryAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
   reader.readU8(); // account_key
   const king = reader.readPubkey();
   const castle = reader.readPubkey();
@@ -325,7 +325,7 @@ export function deserializeKingRegistry(data: Uint8Array): KingRegistryAccount {
 }
 
 export function deserializeCourtPosition(data: Uint8Array): CourtPositionAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
   reader.readU8(); // account_key
   const castle = reader.readPubkey();
   const position = reader.readU8() as CourtPosition;
@@ -340,7 +340,7 @@ export function deserializeCourtPosition(data: Uint8Array): CourtPositionAccount
 }
 
 export function deserializeGarrisonContribution(data: Uint8Array): GarrisonContributionAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
   reader.readU8(); // account_key
   const castle = reader.readPubkey();
   const contributor = reader.readPubkey();
@@ -382,7 +382,7 @@ export function deserializeGarrisonContribution(data: Uint8Array): GarrisonContr
 }
 
 export function deserializeTeamCastleReward(data: Uint8Array): TeamCastleRewardAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
   reader.readU8(); // account_key
   const castle = reader.readPubkey();
   const member = reader.readPubkey();

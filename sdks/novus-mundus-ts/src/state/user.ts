@@ -6,7 +6,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 // User Account Interface
 
@@ -44,7 +44,7 @@ export const USER_ACCOUNT_SIZE = 152;
 
 /** Deserialize UserAccount from raw bytes */
 export function deserializeUser(data: Uint8Array): UserAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key discriminator
   const owner = reader.readPubkey();                 // offset 1   (32 bytes)

@@ -16,7 +16,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveReinforcementPda,
@@ -127,7 +127,7 @@ export async function createSendReinforcementInstruction(
   // - siege_weapons: u64
   // - hero_slot: u8
   // - team_id: u64
-  const writer = new BufferWriter(57);
+  const writer = new ByteWriter(57);
   writer.writeU64(params.defensiveUnit1);
   writer.writeU64(params.defensiveUnit2);
   writer.writeU64(params.defensiveUnit3);
@@ -402,7 +402,7 @@ export async function createReinforcementSpeedupInstruction(
   ];
 
   // Instruction data (1 byte): speedup_tier
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.speedupTier);
 
   const data = createInstructionData(DISCRIMINATORS.REINFORCEMENT_SPEEDUP, writer.toBuffer());

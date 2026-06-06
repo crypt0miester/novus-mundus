@@ -2,12 +2,12 @@
  * Instruction Parser
  *
  * Decodes Novus Mundus instruction data into structured objects.
- * Uses the discriminators from program.ts and the BufferReader from deserialize.ts.
+ * Uses the discriminators from program.ts and the ByteReader from deserialize.ts.
  */
 
 import { getBase64Encoder } from '@solana/codecs-strings';
 import { DISCRIMINATORS, INSTRUCTION_NAMES } from '../program';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 const base64Encoder = getBase64Encoder();
 
@@ -366,71 +366,71 @@ function getCategory(discriminator: number): string {
 
 // Individual Parsers
 
-function parseHireUnits(reader: BufferReader): HireUnitsData {
+function parseHireUnits(reader: ByteReader): HireUnitsData {
   return {
     unitType: reader.readU8(),
     noviAmount: reader.readU64(),
   };
 }
 
-function parsePurchaseEquipment(reader: BufferReader): PurchaseEquipmentData {
+function parsePurchaseEquipment(reader: ByteReader): PurchaseEquipmentData {
   return {
     equipmentType: reader.readU8(),
     amount: reader.readU64(),
   };
 }
 
-function parsePurchaseStamina(reader: BufferReader): PurchaseStaminaData {
+function parsePurchaseStamina(reader: ByteReader): PurchaseStaminaData {
   return {
     amount: reader.readU16(),
   };
 }
 
-function parseTransferCash(reader: BufferReader): TransferCashData {
+function parseTransferCash(reader: ByteReader): TransferCashData {
   return {
     amount: reader.readU64(),
   };
 }
 
-function parseVaultTransfer(reader: BufferReader): VaultTransferData {
+function parseVaultTransfer(reader: ByteReader): VaultTransferData {
   return {
     amount: reader.readU64(),
     isDeposit: reader.readBool(),
   };
 }
 
-function parseAttackPlayer(reader: BufferReader): AttackPlayerData {
+function parseAttackPlayer(reader: ByteReader): AttackPlayerData {
   return {
     driveBy: reader.readBool(),
   };
 }
 
-function parseIntercityStart(reader: BufferReader): IntercityStartData {
+function parseIntercityStart(reader: ByteReader): IntercityStartData {
   return {
     targetCityId: reader.readU16(),
   };
 }
 
-function parseIntercityTeleport(reader: BufferReader): IntercityTeleportData {
+function parseIntercityTeleport(reader: ByteReader): IntercityTeleportData {
   return {
     targetCityId: reader.readU16(),
   };
 }
 
-function parseIntracityStart(reader: BufferReader): IntracityStartData {
+function parseIntracityStart(reader: ByteReader): IntracityStartData {
   return {
     targetLat: reader.readI32(),
     targetLong: reader.readI32(),
   };
 }
 
-function parseTravelSpeedup(reader: BufferReader): TravelSpeedupData {
+function parseTravelSpeedup(reader: ByteReader): TravelSpeedupData {
   return {
     gemsToSpend: reader.readU16(),
   };
 }
 
-function parseTeamCreate(reader: BufferReader): TeamCreateData {
+function parseTeamCreate(reader: ByteReader): TeamCreateData {
   const nameLen = reader.readU8();
   const nameBytes = reader.readBytes(nameLen);
   return {
@@ -438,19 +438,19 @@ function parseTeamCreate(reader: BufferReader): TeamCreateData {
   };
 }
 
-function parseTeamDepositTreasury(reader: BufferReader): TeamDepositTreasuryData {
+function parseTeamDepositTreasury(reader: ByteReader): TeamDepositTreasuryData {
   return {
     amount: reader.readU64(),
   };
 }
 
-function parseTeamWithdrawTreasury(reader: BufferReader): TeamWithdrawTreasuryData {
+function parseTeamWithdrawTreasury(reader: ByteReader): TeamWithdrawTreasuryData {
   return {
     amount: reader.readU64(),
   };
 }
 
-function parseTeamSetMotd(reader: BufferReader): TeamSetMotdData {
+function parseTeamSetMotd(reader: ByteReader): TeamSetMotdData {
   const motdLen = reader.readU8();
   const motdBytes = reader.readBytes(motdLen);
   return {
@@ -458,13 +458,13 @@ function parseTeamSetMotd(reader: BufferReader): TeamSetMotdData {
   };
 }
 
-function parseTeamUpdateSettings(reader: BufferReader): TeamUpdateSettingsData {
+function parseTeamUpdateSettings(reader: ByteReader): TeamUpdateSettingsData {
   return {
     settings: reader.readU8(),
   };
 }
 
-function parseTreasuryRequestWithdraw(reader: BufferReader): TreasuryRequestWithdrawData {
+function parseTreasuryRequestWithdraw(reader: ByteReader): TreasuryRequestWithdrawData {
   const amount = reader.readU64();
   const reasonLen = reader.readU8();
   const reasonBytes = reader.readBytes(reasonLen);
@@ -474,14 +474,14 @@ function parseTreasuryRequestWithdraw(reader: BufferReader): TreasuryRequestWith
   };
 }
 
-function parseTreasuryUpdateSettings(reader: BufferReader): TreasuryUpdateSettingsData {
+function parseTreasuryUpdateSettings(reader: ByteReader): TreasuryUpdateSettingsData {
   return {
     requiredApprovals: reader.readU8(),
     maxWithdrawalWithoutApproval: reader.readU64(),
   };
 }
 
-function parseRallyCreate(reader: BufferReader): RallyCreateData {
+function parseRallyCreate(reader: ByteReader): RallyCreateData {
   return {
     targetType: reader.readU8(),
     targetId: reader.readU64(),
@@ -495,7 +495,7 @@ function parseRallyCreate(reader: BufferReader): RallyCreateData {
   };
 }
 
-function parseRallyJoin(reader: BufferReader): RallyJoinData {
+function parseRallyJoin(reader: ByteReader): RallyJoinData {
   return {
     du1: reader.readU64(),
     du2: reader.readU64(),
@@ -506,106 +506,106 @@ function parseRallyJoin(reader: BufferReader): RallyJoinData {
   };
 }
 
-function parseRallySpeedup(reader: BufferReader): RallySpeedupData {
+function parseRallySpeedup(reader: ByteReader): RallySpeedupData {
   return {
     gemsToSpend: reader.readU16(),
   };
 }
 
-function parseStartResearch(reader: BufferReader): StartResearchData {
+function parseStartResearch(reader: ByteReader): StartResearchData {
   return {
     templateId: reader.readU16(),
   };
 }
 
-function parseSpeedUpResearch(reader: BufferReader): SpeedUpResearchData {
+function parseSpeedUpResearch(reader: ByteReader): SpeedUpResearchData {
   return {
     gemsToSpend: reader.readU16(),
   };
 }
 
-function parseMintHero(reader: BufferReader): MintHeroData {
+function parseMintHero(reader: ByteReader): MintHeroData {
   return {
     templateId: reader.readU16(),
   };
 }
 
-function parseLevelUpHero(reader: BufferReader): LevelUpHeroData {
+function parseLevelUpHero(reader: ByteReader): LevelUpHeroData {
   return {
     xpToSpend: reader.readU64(),
   };
 }
 
-function parseAssignDefensiveHero(reader: BufferReader): AssignDefensiveHeroData {
+function parseAssignDefensiveHero(reader: ByteReader): AssignDefensiveHeroData {
   return {
     slot: reader.readU8(),
   };
 }
 
-function parseStartMeditation(reader: BufferReader): StartMeditationData {
+function parseStartMeditation(reader: ByteReader): StartMeditationData {
   return {
     noviAmount: reader.readU64(),
   };
 }
 
-function parsePurchaseShopItem(reader: BufferReader): PurchaseShopItemData {
+function parsePurchaseShopItem(reader: ByteReader): PurchaseShopItemData {
   return {
     itemId: reader.readU32(),
     quantity: reader.readU16(),
   };
 }
 
-function parsePurchaseBundle(reader: BufferReader): PurchaseBundleData {
+function parsePurchaseBundle(reader: ByteReader): PurchaseBundleData {
   return {
     bundleId: reader.readU32(),
   };
 }
 
-function parsePurchaseFlashSale(reader: BufferReader): PurchaseFlashSaleData {
+function parsePurchaseFlashSale(reader: ByteReader): PurchaseFlashSaleData {
   return {
     saleId: reader.readU64(),
   };
 }
 
-function parseEstateBuild(reader: BufferReader): EstateBuildData {
+function parseEstateBuild(reader: ByteReader): EstateBuildData {
   return {
     buildingType: reader.readU8(),
     plotIndex: reader.readU8(),
   };
 }
 
-function parseEstateUpgrade(reader: BufferReader): EstateUpgradeData {
+function parseEstateUpgrade(reader: ByteReader): EstateUpgradeData {
   return {
     plotIndex: reader.readU8(),
   };
 }
 
-function parseEstateBuyPlot(reader: BufferReader): EstateBuyPlotData {
+function parseEstateBuyPlot(reader: ByteReader): EstateBuyPlotData {
   return {
     plotIndex: reader.readU8(),
   };
 }
 
-function parseStartCraft(reader: BufferReader): StartCraftData {
+function parseStartCraft(reader: ByteReader): StartCraftData {
   return {
     equipmentSlot: reader.readU8(),
     targetQuality: reader.readU8(),
   };
 }
 
-function parseForgeStrike(reader: BufferReader): ForgeStrikeData {
+function parseForgeStrike(reader: ByteReader): ForgeStrikeData {
   return {
     intensity: reader.readU8(),
   };
 }
 
-function parseEquipCrafted(reader: BufferReader): EquipCraftedData {
+function parseEquipCrafted(reader: ByteReader): EquipCraftedData {
   return {
     slot: reader.readU8(),
   };
 }
 
-function parseSendReinforcement(reader: BufferReader): SendReinforcementData {
+function parseSendReinforcement(reader: ByteReader): SendReinforcementData {
   return {
     du1: reader.readU64(),
     du2: reader.readU64(),
@@ -613,13 +613,13 @@ function parseSendReinforcement(reader: BufferReader): SendReinforcementData {
   };
 }
 
-function parseSpeedupReinforcement(reader: BufferReader): SpeedupReinforcementData {
+function parseSpeedupReinforcement(reader: ByteReader): SpeedupReinforcementData {
   return {
     gemsToSpend: reader.readU16(),
   };
 }
 
-function parseStartExpedition(reader: BufferReader): StartExpeditionData {
+function parseStartExpedition(reader: ByteReader): StartExpeditionData {
   return {
     expeditionType: reader.readU8(),
     operatives: reader.readU64(),
@@ -627,19 +627,19 @@ function parseStartExpedition(reader: BufferReader): StartExpeditionData {
   };
 }
 
-function parseExpeditionStrike(reader: BufferReader): ExpeditionStrikeData {
+function parseExpeditionStrike(reader: ByteReader): ExpeditionStrikeData {
   return {
     intensity: reader.readU8(),
   };
 }
 
-function parseSpeedupExpedition(reader: BufferReader): SpeedupExpeditionData {
+function parseSpeedupExpedition(reader: ByteReader): SpeedupExpeditionData {
   return {
     gemsToSpend: reader.readU16(),
   };
 }
 
-function parseUpdateArenaLoadout(reader: BufferReader): UpdateArenaLoadoutData {
+function parseUpdateArenaLoadout(reader: ByteReader): UpdateArenaLoadoutData {
   return {
     du1: reader.readU64(),
     du2: reader.readU64(),
@@ -651,32 +651,32 @@ function parseUpdateArenaLoadout(reader: BufferReader): UpdateArenaLoadoutData {
   };
 }
 
-function parseEnterDungeon(reader: BufferReader): EnterDungeonData {
+function parseEnterDungeon(reader: ByteReader): EnterDungeonData {
   return {
     dungeonId: reader.readU16(),
   };
 }
 
-function parseDungeonAttack(reader: BufferReader): DungeonAttackData {
+function parseDungeonAttack(reader: ByteReader): DungeonAttackData {
   return {
     intensity: reader.readU8(),
   };
 }
 
-function parseDungeonAttackMulti(reader: BufferReader): DungeonAttackMultiData {
+function parseDungeonAttackMulti(reader: ByteReader): DungeonAttackMultiData {
   return {
     count: reader.readU8(),
     intensity: reader.readU8(),
   };
 }
 
-function parseChooseRelic(reader: BufferReader): ChooseRelicData {
+function parseChooseRelic(reader: ByteReader): ChooseRelicData {
   return {
     relicChoice: reader.readU8(),
   };
 }
 
-function parseCreateCastle(reader: BufferReader): CreateCastleData {
+function parseCreateCastle(reader: ByteReader): CreateCastleData {
   const castleId = reader.readU16();
   const nameLen = reader.readU8();
   const nameBytes = reader.readBytes(nameLen);
@@ -692,19 +692,19 @@ function parseCreateCastle(reader: BufferReader): CreateCastleData {
   };
 }
 
-function parseAppointCourt(reader: BufferReader): AppointCourtData {
+function parseAppointCourt(reader: ByteReader): AppointCourtData {
   return {
     position: reader.readU8(),
   };
 }
 
-function parseInitiateUpgrade(reader: BufferReader): InitiateUpgradeData {
+function parseInitiateUpgrade(reader: ByteReader): InitiateUpgradeData {
   return {
     upgradeType: reader.readU8(),
   };
 }
 
-function parseJoinGarrison(reader: BufferReader): JoinGarrisonData {
+function parseJoinGarrison(reader: ByteReader): JoinGarrisonData {
   return {
     du1: reader.readU64(),
     du2: reader.readU64(),
@@ -712,7 +712,7 @@ function parseJoinGarrison(reader: BufferReader): JoinGarrisonData {
   };
 }
 
-function parseUpdateCastleConfig(reader: BufferReader): UpdateCastleConfigData {
+function parseUpdateCastleConfig(reader: ByteReader): UpdateCastleConfigData {
   return {
     minLevel: reader.readU8(),
     minNetworthMillions: reader.readU8(),
@@ -744,7 +744,7 @@ export function parseInstructionData(data: Uint8Array): ParsedInstruction | null
   }
 
   const category = getCategory(discriminator);
-  const reader = new BufferReader(data.subarray(2));
+  const reader = new ByteReader(data.subarray(2));
 
   let parsedData: unknown = {};
 

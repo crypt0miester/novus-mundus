@@ -14,7 +14,7 @@ import {
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { ASSOCIATED_TOKEN_PROGRAM_ID } from '../utils/token';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveAllowedTokenPda,
   deriveNoviMintPda,
@@ -191,7 +191,7 @@ export async function createPurchaseSubscriptionInstruction(
   }
 
   // Instruction data: payment_type (u8) + new_tier_index (u8)
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(params.paymentType);
   writer.writeU8(params.tier);
 
@@ -263,7 +263,7 @@ const SUBSCRIPTION_TIER_SIZE = 256; // repr(C) size including alignment padding
  * Serialize a SubscriptionTierConfig to bytes.
  */
 function serializeSubscriptionTierConfig(config: SubscriptionTierConfigInput): Uint8Array {
-  const writer = new BufferWriter(SUBSCRIPTION_TIER_SIZE);
+  const writer = new ByteWriter(SUBSCRIPTION_TIER_SIZE);
 
   // name: [u8; 16]
   writer.writeString(config.name, 16);
@@ -353,7 +353,7 @@ export function createUpdateTierConfigInstruction(
 
   // Instruction data: tier_index (u8) + SubscriptionTier struct
   const tierData = serializeSubscriptionTierConfig(tierConfig);
-  const writer = new BufferWriter(1 + tierData.length);
+  const writer = new ByteWriter(1 + tierData.length);
   writer.writeU8(tierConfig.tierIndex);
   writer.writeBytes(tierData);
 

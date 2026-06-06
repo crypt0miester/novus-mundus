@@ -8,7 +8,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader, isNullPubkey } from '../utils/deserialize';
+import { ByteReader, isNullPubkey } from '../utils/deserialize';
 import { TeamMemberRank } from '../types/enums';
 
 // Team Settings & Permissions
@@ -106,7 +106,7 @@ export const TREASURY_REQUEST_SIZE = 112;
 
 /** Deserialize TeamAccount from raw bytes */
 export function deserializeTeam(data: Uint8Array): TeamAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(32); // game_engine
@@ -174,7 +174,7 @@ export function deserializeTeam(data: Uint8Array): TeamAccount {
 
 /** Deserialize TeamMemberSlot from raw bytes */
 export function deserializeTeamMemberSlot(data: Uint8Array): TeamMemberSlot {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -206,7 +206,7 @@ export function deserializeTeamMemberSlot(data: Uint8Array): TeamMemberSlot {
 
 /** Deserialize TeamInviteAccount from raw bytes */
 export function deserializeTeamInvite(data: Uint8Array): TeamInviteAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -233,7 +233,7 @@ export function deserializeTeamInvite(data: Uint8Array): TeamInviteAccount {
 
 /** Deserialize TreasuryRequest from raw bytes */
 export function deserializeTreasuryRequest(data: Uint8Array): TreasuryRequest {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 

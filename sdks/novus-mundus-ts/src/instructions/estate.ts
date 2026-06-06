@@ -16,7 +16,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveNoviMintPda,
   derivePlayerPda,
@@ -67,7 +67,7 @@ export async function createCreateEstateInstruction(
   ];
 
   // Instruction data: city_id (u16)
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU16(params.cityId);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_CREATE, writer.toBuffer());
@@ -121,7 +121,7 @@ export async function createBuildBuildingInstruction(
     { pubkey: buildingTemplate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.buildingType);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_BUILD, writer.toBuffer());
@@ -175,7 +175,7 @@ export async function createUpgradeBuildingInstruction(
     { pubkey: buildingTemplate, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.buildingType);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_UPGRADE, writer.toBuffer());
@@ -225,7 +225,7 @@ export async function createCompleteBuildingInstruction(
     { pubkey: estate, isSigner: false, isWritable: true },
   ];
 
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
 
   const data = createInstructionData(DISCRIMINATORS.ESTATE_COMPLETE, writer.toBuffer());
@@ -404,7 +404,7 @@ export async function createDailyActivityInstruction(
   }
 
   // Instruction data: building_type (u8), score (u8)
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
   writer.writeU8(Math.min(params.score, 100)); // Cap at 100
 
@@ -469,7 +469,7 @@ export async function createConvertMaterialsInstruction(
   ];
 
   // Instruction data: from_tier (u8), conversions (u8)
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(params.fromTier);
   writer.writeU8(params.conversions);
 
@@ -525,7 +525,7 @@ export async function createBuildingSpeedupInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(2);
+  const writer = new ByteWriter(2);
   writer.writeU8(typeof params.buildingType === 'number' ? params.buildingType : params.buildingType);
   writer.writeU8(params.speedupTier);
 
@@ -578,7 +578,7 @@ export async function createRecoverTroopsInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  const writer = new BufferWriter(10);
+  const writer = new ByteWriter(10);
   writer.writeU8(params.unitType);
   writer.writeU8(0); // padding
   writer.writeU64(BigInt(params.amount));
@@ -639,7 +639,7 @@ export async function createInitializeBuildingTemplateInstruction(
 
   // 19 bytes: building_type u8, tier u8, max_level u8, base_time_seconds u32,
   //           base_novi_cost u64, cost_growth_bps u16, time_growth_bps u16
-  const writer = new BufferWriter(19);
+  const writer = new ByteWriter(19);
   writer.writeU8(params.buildingType);
   writer.writeU8(params.tier);
   writer.writeU8(params.maxLevel);
@@ -691,40 +691,40 @@ export async function createUpdateBuildingTemplateInstruction(
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
   ];
 
-  let writer: BufferWriter;
+  let writer: ByteWriter;
   switch (params.field) {
     case 'baseTimeSeconds':
-      writer = new BufferWriter(5);
+      writer = new ByteWriter(5);
       writer.writeU8(0);
       writer.writeU32(params.value);
       break;
     case 'baseNoviCost':
-      writer = new BufferWriter(9);
+      writer = new ByteWriter(9);
       writer.writeU8(1);
       writer.writeU64(params.value);
       break;
     case 'costGrowthBps':
-      writer = new BufferWriter(3);
+      writer = new ByteWriter(3);
       writer.writeU8(2);
       writer.writeU16(params.value);
       break;
     case 'timeGrowthBps':
-      writer = new BufferWriter(3);
+      writer = new ByteWriter(3);
       writer.writeU8(3);
       writer.writeU16(params.value);
       break;
     case 'isActive':
-      writer = new BufferWriter(2);
+      writer = new ByteWriter(2);
       writer.writeU8(4);
       writer.writeU8(params.value ? 1 : 0);
       break;
     case 'maxLevel':
-      writer = new BufferWriter(2);
+      writer = new ByteWriter(2);
       writer.writeU8(5);
       writer.writeU8(params.value);
       break;
     case 'tier':
-      writer = new BufferWriter(2);
+      writer = new ByteWriter(2);
       writer.writeU8(6);
       writer.writeU8(params.value);
       break;

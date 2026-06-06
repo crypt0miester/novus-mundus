@@ -7,7 +7,7 @@
  */
 
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
-import { BufferReader } from '../utils/deserialize';
+import { ByteReader } from '../utils/deserialize';
 
 /** Seconds per leaderboard week — mirrors SECONDS_PER_WEEK in create_leaderboard.rs. */
 export const DUNGEON_SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
@@ -208,7 +208,7 @@ export interface DungeonLeaderboardAccount {
 // Deserialization
 
 export function deserializeDungeonTemplate(data: Uint8Array): DungeonTemplateAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(1); // implicit padding for u16 alignment
@@ -284,7 +284,7 @@ export function deserializeDungeonTemplate(data: Uint8Array): DungeonTemplateAcc
 }
 
 export function deserializeDungeonRun(data: Uint8Array): DungeonRunAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
 
@@ -429,7 +429,7 @@ export function deserializeDungeonRun(data: Uint8Array): DungeonRunAccount {
 }
 
 export function deserializeDungeonLeaderboard(data: Uint8Array): DungeonLeaderboardAccount {
-  const reader = new BufferReader(data);
+  const reader = new ByteReader(data);
 
   reader.readU8(); // account_key
   reader.skip(32); // game_engine

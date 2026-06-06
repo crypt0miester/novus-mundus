@@ -15,7 +15,7 @@ import {
   SystemProgram,
 } from '@solana/web3.js';
 import { PROGRAM_ID, DISCRIMINATORS } from '../program';
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveExpeditionPda,
@@ -99,7 +99,7 @@ export async function createExpeditionStartInstruction(
   // - operative_unit_1 (u64)
   // - operative_unit_2 (u64)
   // - operative_unit_3 (u64)
-  const writer = new BufferWriter(26);
+  const writer = new ByteWriter(26);
   writer.writeU8(params.expeditionType);
   writer.writeU8(params.tier);
   writer.writeU64(params.operativeUnit1);
@@ -157,7 +157,7 @@ export async function createExpeditionStrikeInstruction(
   ];
 
   // Instruction data: score (u8, 1 byte)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(Math.min(params.score, 100));
 
   const data = createInstructionData(DISCRIMINATORS.EXPEDITION_STRIKE, writer.toBuffer());
@@ -323,7 +323,7 @@ export async function createExpeditionSpeedupInstruction(
   ];
 
   // Instruction data: speedup_tier (u8, 1 byte)
-  const writer = new BufferWriter(1);
+  const writer = new ByteWriter(1);
   writer.writeU8(params.speedupTier);
 
   const data = createInstructionData(DISCRIMINATORS.EXPEDITION_SPEEDUP, writer.toBuffer());

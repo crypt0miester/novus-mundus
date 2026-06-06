@@ -33,7 +33,7 @@ export async function deriveProgramDataPda(): Promise<[PublicKey, number]> {
   });
   return [new PublicKey(addr), bump];
 }
-import { BufferWriter, createInstructionData } from '../utils/serialize';
+import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
   deriveNoviMintPda,
@@ -127,7 +127,7 @@ export async function createInitGameEngineInstruction(
   // - theme: u8 (1)
   // - kingdom_start_time: i64 (8)
   // - registration_closes_at: i64 (8)
-  const writer = new BufferWriter(51);
+  const writer = new ByteWriter(51);
 
   // kingdom_id
   writer.writeU16(accounts.kingdomId);
@@ -223,7 +223,7 @@ export async function createInitPlayerInstruction(
   ];
 
   // Instruction data: starting_city_id (u16) + spawn_lat (f64) + spawn_long (f64) = 18 bytes
-  const writer = new BufferWriter(18);
+  const writer = new ByteWriter(18);
   writer.writeU16(accounts.startingCityId);
   writer.writeF64(accounts.cityLatitude);
   writer.writeF64(accounts.cityLongitude);
@@ -377,7 +377,7 @@ export async function createInitCityInstruction(
   ];
 
   // Fixed 64-byte instruction data per Rust.
-  const writer = new BufferWriter(64);
+  const writer = new ByteWriter(64);
 
   // [0..2] city_id: u16
   writer.writeU16(params.cityId);
@@ -558,7 +558,7 @@ export function createBatchCitiesInstruction(
     bufSize += 1 + nameBytes.length + 30;
   }
 
-  const writer = new BufferWriter(bufSize);
+  const writer = new ByteWriter(bufSize);
   writer.writeU16(params.startCityId);
   writer.writeU8(count);
 

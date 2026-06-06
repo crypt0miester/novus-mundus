@@ -11,7 +11,7 @@
 import { PublicKey } from '@solana/web3.js';
 
 /** Offset tracker for sequential reads */
-export class BufferReader {
+export class ByteReader {
   private offset = 0;
   private readonly view: DataView;
 
@@ -219,7 +219,7 @@ export const NULL_PUBKEY = new PublicKey(new Uint8Array(32));
 
 /** Check if pubkey is null */
 export function isNullPubkey(pubkey: PublicKey): boolean {
-  return BufferReader.isNullPubkey(pubkey);
+  return ByteReader.isNullPubkey(pubkey);
 }
 
 /** True if `data` begins with the `expected` byte prefix (e.g. an account discriminator). */
