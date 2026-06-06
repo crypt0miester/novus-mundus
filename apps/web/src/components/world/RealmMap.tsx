@@ -17,6 +17,7 @@ import { prefersReducedMotion } from "@/lib/utils";
 import { BottomSheet } from "@/components/shared/BottomSheet";
 import Link from "next/link";
 import { GameIcon } from "@/components/shared/GameIcon";
+import { CityCrest, citySigilSrc } from "./CityCrest";
 import {
   useWorldCities,
   useWorldPlayers,
@@ -135,6 +136,11 @@ const TYPE_META = [
   { label: "Combat", glyph: "⚔", icon: "map-combat" },
   { label: "Trade", glyph: "◆", icon: "map-trade" },
 ] as const;
+
+// Per-city heraldic sigils replace the generic type glyph on the marker only
+// once zoomed in past this scale, where cities have spread far enough apart
+// that the detailed medallions stop colliding. Below it, the plain dot reads.
+const SIGIL_ZOOM = 2.4;
 
 const THEMES = ["Medieval", "Cyberpunk", "Sci-Fi", "Modern", "Post-Apocalyptic"];
 
@@ -1298,6 +1304,11 @@ export function RealmMap({
                   const isRec = recommendedId != null && n.city.cityId === recommendedId;
                   const isCapital = typeIdx(n.city.cityType) === 0;
                   const always = isCapital || isHome || isSel;
+                  // Selected city always wears its crest; others only once
+                  // zoomed in. sigR is in pre-zoom (≈ screen-px) units.
+                  const showSigil = isSel || zoom.scale >= SIGIL_ZOOM;
+                  const sigR = Math.max(n.size * 1.75, 11);
+                  const sigImg = sigR * 1.56; // crest box, ~78% of the disc
                   // Hit target is generous — inside the counter-scaled group
                   // these units render at constant screen size regardless of
                   // zoom (composite scale = zoom × 1/zoom = 1).
@@ -1376,6 +1387,26 @@ export function RealmMap({
                         cy={0}
                         r={n.size}
                       />
+
+                      {/* City crest — the per-city heraldic sigil on a dark
+                          medallion, shown when zoomed in (or for the selected
+                          city). Rides the counter-scale so it holds a constant
+                          screen size; the gold line-art reads against the ink
+                          disc where it would wash out on bare parchment. The
+                          type glyph below stays as a small corner pip. */}
+                      {showSigil && (
+                        <g style={{ pointerEvents: "none" }}>
+                          <circle className={styles.sigilDisc} cx={0} cy={0} r={sigR} />
+                          <image
+                            href={citySigilSrc(n.city.cityId)}
+                            x={-sigImg / 2}
+                            y={-sigImg / 2}
+                            width={sigImg}
+                            height={sigImg}
+                            preserveAspectRatio="xMidYMid meet"
+                          />
+                        </g>
+                      )}
 
                       {/* City-type sigil — the real engraved map-* GameIcon
                           (CSS mask over currentColor, tinted to --ink), the same
@@ -1619,7 +1650,7 @@ export function DefaultSelectedPanel({ node, isHome }: RealmMapSelectedContext) 
   const lore = getCityLore(c.cityId);
   return (
     <>
-      <div className={styles.detailName}>{c.name}</div>
+      <CityCrest cityId={c.cityId} name={c.name} />
       <span className={`${styles.detailType} ${isHome ? styles.home : ""}`}>
         <GameIcon id={meta.icon} title={meta.label} size={15} />
         {meta.label}

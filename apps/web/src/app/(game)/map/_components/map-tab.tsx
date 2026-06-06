@@ -80,6 +80,7 @@ import {
   type RealmCityNode,
   type RealmMapSelectedContext,
 } from "@/components/world/RealmMap";
+import { CityCrest } from "@/components/world/CityCrest";
 import { ReinforceComposerPanel } from "@/components/panels/ReinforceComposerPanel";
 import { RallyComposerPanel } from "@/components/panels/RallyComposerPanel";
 import { GarrisonComposerPanel } from "@/components/panels/GarrisonComposerPanel";
@@ -1679,7 +1680,7 @@ export function MapTab() {
 
     return (
       <>
-        <div className={styles.detailName}>{node.city.name}</div>
+        <CityCrest cityId={node.city.cityId} name={node.city.name} />
         <span className={`${styles.detailType} ${isHome ? styles.home : ""}`}>
           <span className={styles.glyph}>{meta.glyph}</span>
           {meta.label}

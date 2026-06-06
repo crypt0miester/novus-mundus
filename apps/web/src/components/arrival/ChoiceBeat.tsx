@@ -15,6 +15,7 @@ import {
   realmMapStyles as mapStyles,
   type RealmMapSelectedContext,
 } from "@/components/world/RealmMap";
+import { CityCrest } from "@/components/world/CityCrest";
 import { CityTerrainMap } from "@/components/world/CityTerrainMap";
 import { CellAffinityPanel } from "@/components/world/CellAffinityPanel";
 import { BeatButton, BeatEyebrow } from "./Beat";
@@ -155,7 +156,7 @@ export function ChoiceBeat({ onChoose }: ChoiceBeatProps) {
     const isRec = a.cityId === recommendedId;
     return (
       <>
-        <div className={mapStyles.detailName}>{a.name}</div>
+        <CityCrest cityId={a.cityId} name={a.name} />
         <span className={mapStyles.detailType}>
           <span className={mapStyles.glyph}>{TYPE_GLYPH[a.cityType] ?? "♛"}</span>
           {t.name}

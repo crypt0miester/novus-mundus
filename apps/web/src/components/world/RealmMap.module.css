@@ -572,6 +572,12 @@
   opacity: 0.35;
   pointer-events: none;
 }
+.sigilDisc {
+  fill: var(--ink);
+  stroke: var(--parchment-warm);
+  stroke-width: 0.5;
+  pointer-events: none;
+}
 .cityGlyph {
   fill: var(--ink);
   font-family: var(--font-cinzel), serif;
@@ -828,6 +834,31 @@
 .detailType.home {
   color: var(--seal);
   border-color: var(--seal);
+}
+.detailHead {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 0.5rem;
+}
+.detailHead .detailName {
+  margin-bottom: 0;
+}
+.detailSigil {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 1px solid var(--parchment-warm);
+}
+.detailSigil img {
+  width: 38px;
+  height: 38px;
+  object-fit: contain;
 }
 
 .lineMeta {
