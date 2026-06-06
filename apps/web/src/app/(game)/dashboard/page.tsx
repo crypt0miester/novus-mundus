@@ -36,9 +36,15 @@ export default function DashboardPage() {
   const { data: playerData, isSuccess: playerReady } = usePlayer();
   const { data: userData, isSuccess: userReady } = useUser();
   const { data: geData, isSuccess: geReady } = useGameEngine();
-  // Wallet-less realm summary for the spectator claim hub (the store-backed
-  // useGameEngine only seeds with a wallet; this fetches off the RPC).
-  const { data: worldGe } = useWorldGameEngine();
+  // Spectator floor: no wallet, or a resolved wallet with no claimed player.
+  // Distinct from a still-loading wallet (which must keep loading, not flash the
+  // claim hub), hence the playerReady gate rather than useIsSpectator. A no-wallet
+  // visitor never resolves playerReady, so the `!connected` disjunct is what keeps
+  // them off the perpetual loading screen.
+  const spectator = !connected || (!playerData?.exists && playerReady);
+  // Wallet-less realm summary for the claim hub; gated to spectators so a
+  // logged-in player (engine already in the store) skips the extra RPC.
+  const { data: worldGe } = useWorldGameEngine({ enabled: spectator });
   const { data: lootData, isSuccess: lootReady } = useLoot();
 
   const player = playerData?.account;
@@ -61,13 +67,9 @@ export default function DashboardPage() {
   if (userReady) completedKeys.add("user");
   if (lootReady) completedKeys.add("loot");
 
-  // Spectator: no wallet at all, or a connected wallet with no claimed player.
-  // The dashboard becomes a "claim your seat" hub: the wallet-less realm summary
-  // plus a prominent claim CTA. A no-wallet visitor never resolves playerReady
-  // (the account store only seeds with a wallet), so we key off `connected`
-  // too - otherwise they sit on the loading screen forever. Players (and a
-  // wallet still resolving its player) fall through to the full dashboard.
-  if (!connected || (!playerData?.exists && playerReady)) {
+  // A spectator gets a "claim your seat" hub - the wallet-less realm summary
+  // plus a claim CTA - instead of the full dashboard.
+  if (spectator) {
     const ge = worldGe?.account;
     const gp = ge?.gameplayConfig;
     const tm = ge?.themeConfig.themeMultipliers;
