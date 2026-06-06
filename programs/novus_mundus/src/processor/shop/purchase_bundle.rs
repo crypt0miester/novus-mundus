@@ -36,13 +36,20 @@ use pinocchio_system::instructions::Transfer;
 /// - [] estate_account: EstateAccount PDA (for Market discount)
 /// - [] shop_items[]: ShopItemAccount for each item in bundle (for fulfillment validation)
 ///
+/// # Accounts (Required for Token Payment, payment_type >= 2)
+///   Appended after the `shop_items[]` (token_offset = 9 + item_count):
+/// - [] allowed_token, token_mint, [writable] buyer_token_ata, treasury_token_ata, token_program
+///   Then, by oracle program (see helpers::process_token_payment_flow):
+///   - Pyth (+2): sol `PriceUpdateV2`, token `PriceUpdateV2`
+///   - Switchboard (+3): oracle-quote PDA, Switchboard queue, SlotHashes sysvar
+///
 /// # Building Bonuses
 /// Market building provides shop discounts:
 /// - 1% discount per Market level (max 20% at level 20)
 ///
 /// # Instruction Data
 /// - bundle_id: u32
-/// - payment_type: u8 (0 = SOL, 2+ = Token via AllowedToken - future)
+/// - payment_type: u8 (0 = SOL, 2+ = Token via AllowedToken)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -248,13 +255,19 @@ pub fn process(
         }
         .invoke()?;
     } else {
-        // Token payment (payment_type >= 2)
-        // Token accounts come after shop_item_accounts
-        let token_offset = 9 + shop_item_accounts.len();
+        // Token payment (payment_type >= 2). `shop_item_accounts` is the `rest`
+        // slice, which greedily holds BOTH the per-item ShopItem accounts and
+        // the trailing token-payment accounts. The layout is
+        // [shop_item × item_count, ...token_accounts], so the token accounts are
+        // the tail past the bundle's own items.
+        let item_count = bundle.item_count as usize;
+        let token_accounts = shop_item_accounts
+            .get(item_count..)
+            .ok_or(ProgramError::NotEnoughAccountKeys)?;
 
         // Use unified token payment helper
         process_token_payment_flow(
-            &accounts[token_offset..],
+            token_accounts,
             game_engine_account.address(),
             &game_engine.treasury_wallet,
             treasury,

@@ -368,6 +368,56 @@ export interface PurchaseItemParams {
   weeklySaleWeek?: number | bigint;
 }
 
+type AccountMetaLike = { pubkey: PublicKey; isSigner: boolean; isWritable: boolean };
+
+/**
+ * Append the SPL-token-payment accounts (`payment_type >= 2`) onto `keys`.
+ *
+ * Shared by `purchaseItem` / `purchaseFlashSale` / `purchaseBundle` — all three
+ * read these via `helpers::process_token_payment_flow`, which expects exactly
+ * this order after the processor's base + item-specific accounts:
+ *
+ *   [allowed_token, token_mint, buyer_ata, treasury_ata, token_program,
+ *    <oracle>, ata_program]
+ *
+ * where `<oracle>` is the Switchboard triple (quote PDA, queue, SlotHashes) or
+ * the Pyth pair (SOL feed, token feed), or absent for $1-pegged stablecoins.
+ */
+function appendTokenPaymentKeys(keys: AccountMetaLike[], tp: TokenPaymentAccounts): void {
+  keys.push({ pubkey: tp.allowedToken, isSigner: false, isWritable: false });
+  keys.push({ pubkey: tp.tokenMint, isSigner: false, isWritable: false });
+  keys.push({ pubkey: tp.buyerTokenAta, isSigner: false, isWritable: true });
+  keys.push({ pubkey: tp.treasuryTokenAta, isSigner: false, isWritable: true });
+  keys.push({ pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
+  if (tp.oracleQuote !== undefined) {
+    // Switchboard path: oracle-quote PDA + queue + SlotHashes sysvar.
+    if (tp.switchboardQueue === undefined) {
+      throw new Error('token payment: switchboardQueue is required alongside oracleQuote');
+    }
+    keys.push({ pubkey: tp.oracleQuote, isSigner: false, isWritable: false });
+    keys.push({ pubkey: tp.switchboardQueue, isSigner: false, isWritable: false });
+    keys.push({ pubkey: SLOT_HASHES_SYSVAR, isSigner: false, isWritable: false });
+  } else if (tp.solOracleFeed !== undefined || tp.tokenOracleFeed !== undefined) {
+    // Pyth path: SOL and TOKEN `PriceUpdateV2` feed accounts.
+    if (tp.solOracleFeed === undefined || tp.tokenOracleFeed === undefined) {
+      throw new Error('token payment: solOracleFeed + tokenOracleFeed required for the Pyth path');
+    }
+    keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
+    keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
+  } else if (!tp.peggedToUsd) {
+    // No oracle fields and no explicit pegged-USD opt-in — almost certainly a
+    // caller mistake. Without this guard the ix builds and submits, then the
+    // chain rejects with NotEnoughAccountKeys after burning compute.
+    throw new Error(
+      'token payment: needs either oracle accounts (Pyth/Switchboard) or explicit peggedToUsd: true',
+    );
+  }
+  // Append the ATA program so process_token_payment_flow's treasury-ATA
+  // creation backstop can CPI it. Appended last so positional `&accounts[..]`
+  // reads are not shifted.
+  keys.push({ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
+}
+
 /** ~20,000 CU */
 /**
  * Purchase an item from the shop.
@@ -415,46 +465,7 @@ export async function createPurchaseItemInstruction(
     if (!accounts.tokenPayment) {
       throw new Error('purchaseItem: tokenPayment accounts required when paymentType >= 2');
     }
-    const tp = accounts.tokenPayment;
-    keys.push({ pubkey: tp.allowedToken, isSigner: false, isWritable: false });
-    keys.push({ pubkey: tp.tokenMint, isSigner: false, isWritable: false });
-    keys.push({ pubkey: tp.buyerTokenAta, isSigner: false, isWritable: true });
-    keys.push({ pubkey: tp.treasuryTokenAta, isSigner: false, isWritable: true });
-    keys.push({ pubkey: SPL_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
-    if (tp.oracleQuote !== undefined) {
-      // Switchboard path: oracle-quote PDA + queue + SlotHashes sysvar.
-      if (tp.switchboardQueue === undefined) {
-        throw new Error('purchaseItem: switchboardQueue is required alongside oracleQuote');
-      }
-      keys.push({ pubkey: tp.oracleQuote, isSigner: false, isWritable: false });
-      keys.push({ pubkey: tp.switchboardQueue, isSigner: false, isWritable: false });
-      keys.push({ pubkey: SLOT_HASHES_SYSVAR, isSigner: false, isWritable: false });
-    } else if (tp.solOracleFeed !== undefined || tp.tokenOracleFeed !== undefined) {
-      // Pyth path: SOL and TOKEN `PriceUpdateV2` feed accounts.
-      if (tp.solOracleFeed === undefined || tp.tokenOracleFeed === undefined) {
-        throw new Error('purchaseItem: solOracleFeed + tokenOracleFeed required for the Pyth path');
-      }
-      keys.push({ pubkey: tp.solOracleFeed, isSigner: false, isWritable: false });
-      keys.push({ pubkey: tp.tokenOracleFeed, isSigner: false, isWritable: false });
-    } else if (!tp.peggedToUsd) {
-      /*
-       * No oracle fields AND no explicit pegged-USD opt-in — almost
-       * certainly a caller mistake. Without this guard the ix builds and
-       * submits, then the chain rejects with NotEnoughAccountKeys after
-       * burning compute. Pegged stablecoin? Set `peggedToUsd: true`.
-       */
-      throw new Error(
-        'purchaseItem: token payment needs either oracle accounts (Pyth/Switchboard) or explicit peggedToUsd: true',
-      );
-    }
-
-    /*
-     * Append the ATA program so `process_token_payment_flow`'s defensive
-     * `create_associated_token_account` backstop (fires when the treasury
-     * ATA doesn't exist) can CPI the ATA program. Appended at the end so
-     * positional `&accounts[..]` reads are not shifted.
-     */
-    keys.push({ pubkey: ASSOCIATED_TOKEN_PROGRAM_ID, isSigner: false, isWritable: false });
+    appendTokenPaymentKeys(keys, accounts.tokenPayment);
   }
 
   // Instruction data
@@ -681,6 +692,12 @@ export interface PurchaseBundleAccounts {
   treasury: PublicKey;
   /** Shop item accounts for each item in bundle */
   shopItemAccounts: PublicKey[];
+  /**
+   * Token-payment accounts — required iff params.paymentType >= 2. Bundles are
+   * SOL-priced, so only the oracle paths (Pyth/Switchboard) apply; pegged
+   * stablecoins are rejected on-chain.
+   */
+  tokenPayment?: TokenPaymentAccounts;
 }
 
 export interface PurchaseBundleParams {
@@ -719,6 +736,16 @@ export async function createPurchaseBundleInstruction(
   // Add shop item accounts
   for (const itemAccount of accounts.shopItemAccounts) {
     keys.push({ pubkey: itemAccount, isSigner: false, isWritable: false });
+  }
+
+  // Token-payment accounts (paymentType >= 2). The on-chain processor reads
+  // these from accounts[9 + shopItemAccounts.length..], so they come after the
+  // shop-item accounts above.
+  if ((params.paymentType ?? 0) >= 2) {
+    if (!accounts.tokenPayment) {
+      throw new Error('purchaseBundle: tokenPayment accounts required when paymentType >= 2');
+    }
+    appendTokenPaymentKeys(keys, accounts.tokenPayment);
   }
 
   const writer = new BufferWriter(5);
@@ -814,6 +841,12 @@ export interface PurchaseFlashSaleAccounts {
   itemOrBundle: PublicKey;
   /** Treasury wallet */
   treasury: PublicKey;
+  /**
+   * Token-payment accounts — required iff params.paymentType >= 2. Flash sales
+   * are SOL-priced, so only the oracle paths (Pyth/Switchboard) apply; pegged
+   * stablecoins are rejected on-chain.
+   */
+  tokenPayment?: TokenPaymentAccounts;
 }
 
 export interface PurchaseFlashSaleParams {
@@ -854,6 +887,16 @@ export async function createPurchaseFlashSaleInstruction(
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: estate, isSigner: false, isWritable: false },
   ];
+
+  // Token-payment accounts (paymentType >= 2). The on-chain processor reads
+  // these from accounts[10..] (token_offset = 10), so they come after the
+  // base 10 accounts above.
+  if ((params.paymentType ?? 0) >= 2) {
+    if (!accounts.tokenPayment) {
+      throw new Error('purchaseFlashSale: tokenPayment accounts required when paymentType >= 2');
+    }
+    appendTokenPaymentKeys(keys, accounts.tokenPayment);
+  }
 
   // Instruction data: sale_id (u64) + quantity (u16) + payment_type (u8)
   const writer = new BufferWriter(11);
@@ -1744,15 +1787,34 @@ export interface PurchaseNoviAccounts {
   noviMint: PublicKey;
 }
 
-/** Optional oracle accounts for price discovery */
-export interface PurchaseNoviOracleAccounts {
+/** Pyth oracle accounts for NOVI price discovery: two `PriceUpdateV2` feeds. */
+export interface PurchaseNoviPythOracle {
   /** ShopConfig account (for SOL oracle config) */
   shopConfig: PublicKey;
-  /** SOL/USD oracle feed (Pyth price account or Switchboard pull feed) */
+  /** SOL/USD Pyth `PriceUpdateV2` account */
   solOracleFeed: PublicKey;
-  /** NOVI/USD oracle feed (same oracle program as solOracleFeed) */
+  /** NOVI/USD Pyth `PriceUpdateV2` account */
   noviOracleFeed: PublicKey;
 }
+
+/**
+ * Switchboard oracle accounts for NOVI price discovery. A single program-owned
+ * `OracleQuote` PDA carries both the SOL/USD and NOVI/USD feeds; the SlotHashes
+ * sysvar is appended automatically.
+ */
+export interface PurchaseNoviSwitchboardOracle {
+  /** ShopConfig account (for SOL oracle config + switchboard_queue) */
+  shopConfig: PublicKey;
+  /** Program-owned oracle-quote PDA (`deriveOracleQuotePda`). */
+  oracleQuote: PublicKey;
+  /** The Switchboard On-Demand queue account. */
+  switchboardQueue: PublicKey;
+}
+
+/** Optional oracle accounts for price discovery (Pyth or Switchboard). */
+export type PurchaseNoviOracleAccounts =
+  | PurchaseNoviPythOracle
+  | PurchaseNoviSwitchboardOracle;
 
 export interface PurchaseNoviParams {
   /** Package index (0-4) */
@@ -1788,10 +1850,10 @@ export interface PurchaseNoviParams {
  * 7. [] token_program - SPL Token program
  * 8. [] system_program - System program
  *
- * # Accounts (Optional - Oracle Pricing, +3; Pyth or Switchboard)
- * 9. [] shop_config - ShopConfigAccount
- * 10. [] sol_oracle_feed - SOL/USD feed (Pyth or Switchboard pull feed)
- * 11. [] novi_oracle_feed - NOVI/USD feed (same oracle program as sol)
+ * # Accounts (Optional - Oracle Pricing)
+ *   Pyth (+3): 9 shop_config, 10 sol `PriceUpdateV2`, 11 novi `PriceUpdateV2`.
+ *   Switchboard (+4): 9 shop_config, 10 oracle-quote PDA, 11 queue,
+ *   12 SlotHashes sysvar (one quote carries both feeds).
  */
 export async function createPurchaseNoviInstruction(
   accounts: PurchaseNoviAccounts,
@@ -1817,11 +1879,22 @@ export async function createPurchaseNoviInstruction(
 
   if (params.oracleAccounts) {
     const oracle = params.oracleAccounts;
-    keys.push(
-      { pubkey: oracle.shopConfig, isSigner: false, isWritable: false },
-      { pubkey: oracle.solOracleFeed, isSigner: false, isWritable: false },
-      { pubkey: oracle.noviOracleFeed, isSigner: false, isWritable: false },
-    );
+    if ('oracleQuote' in oracle) {
+      // Switchboard: shop_config, oracle-quote PDA, queue, SlotHashes sysvar.
+      keys.push(
+        { pubkey: oracle.shopConfig, isSigner: false, isWritable: false },
+        { pubkey: oracle.oracleQuote, isSigner: false, isWritable: false },
+        { pubkey: oracle.switchboardQueue, isSigner: false, isWritable: false },
+        { pubkey: SLOT_HASHES_SYSVAR, isSigner: false, isWritable: false },
+      );
+    } else {
+      // Pyth: shop_config, SOL/USD feed, NOVI/USD feed.
+      keys.push(
+        { pubkey: oracle.shopConfig, isSigner: false, isWritable: false },
+        { pubkey: oracle.solOracleFeed, isSigner: false, isWritable: false },
+        { pubkey: oracle.noviOracleFeed, isSigner: false, isWritable: false },
+      );
+    }
   }
 
   // Instruction data: package_index (u8) + max_lamports (u64)

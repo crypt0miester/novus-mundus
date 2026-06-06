@@ -116,7 +116,6 @@ stays unobtainable. Prioritization order:
     
 14. small dummy event for quick testing
 15. make the cranks api more robust via vercel queeues
-16. apps/web/src/lib/server/oracle-crank.ts only handles purchaseItem instruction. what about the others? don't we need it?
-
-98. missing mpl token metadata for novi mint
+17. rewrite BufferWriter and BufferReader to Byte*
+98. last audit.
 99. fix values to make it devnet/mainnet ready. double check values (events, castles, arena, shop, etc.). check for localhost:3000 links and change with actual domain

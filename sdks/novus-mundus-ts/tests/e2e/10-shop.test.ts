@@ -107,6 +107,108 @@ async function createShopReadyPlayer(
   return player;
 }
 
+// Helper: stand up a Switchboard-priced payment token + a funded, shop-ready
+// buyer. Shared by the item / flash-sale / bundle token-payment tests, which
+// only differ in the sale object they create and the purchase ix they build.
+// Leaves the OracleQuote PDA UNSEEDED — callers seed it (via `seedSolTokenQuote`)
+// right before the purchase, after any clock advance, so recent_slot tracks the
+// clock.
+async function setupSwitchboardTokenBuyer(ctx: TestContext, factory: PlayerFactory) {
+  const tokenMint = (await Keypair.generate()).publicKey;
+  seedSplMint(ctx.svm, tokenMint, { decimals: 9, mintAuthority: ctx.daoAuthority.publicKey });
+
+  const switchboardQueue = (await Keypair.generate()).publicKey;
+  const oracleSigningKey = (await Keypair.generate()).publicKey.toBytes();
+  const solFeedId = (await Keypair.generate()).publicKey;
+  const tokenFeedId = (await Keypair.generate()).publicKey;
+  seedMockSwitchboardQueue(ctx.svm, switchboardQueue, oracleSigningKey);
+
+  await sendTransaction(
+    ctx.svm,
+    new Transaction().add(
+      await createUpdateConfigInstruction(
+        { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
+        {
+          solSwitchboardFeed: solFeedId,
+          solSwitchboardQueue: switchboardQueue,
+          solMaxStalenessSlots: 1_000_000,
+          solConfidenceThresholdBps: 1000,
+        },
+      ),
+    ),
+    [ctx.daoAuthority],
+  );
+
+  await sendTransaction(
+    ctx.svm,
+    new Transaction().add(
+      await createCreateAllowedTokenInstruction(
+        {
+          gameEngine: ctx.gameEngine,
+          payer: ctx.daoAuthority.publicKey,
+          daoAuthority: ctx.daoAuthority.publicKey,
+          tokenMint,
+          treasuryWallet: ctx.treasury.publicKey,
+        },
+        {
+          pythFeed: undefined,
+          switchboardFeed: tokenFeedId,
+          maxStalenessSlots: 1_000_000,
+          confidenceThresholdBps: 1000,
+          discountBps: 0,
+        },
+      ),
+    ),
+    [ctx.daoAuthority],
+  );
+
+  const buyer = await createShopReadyPlayer(ctx, factory);
+  const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
+  const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.publicKey);
+  const BUYER_START = 1_000_000_000_000n;
+  seedSplTokenAccount(ctx.svm, buyerAta, { mint: tokenMint, owner: buyer.publicKey, amount: BUYER_START });
+  seedSplTokenAccount(ctx.svm, treasuryAta, { mint: tokenMint, owner: ctx.treasury.publicKey, amount: 0n });
+
+  const [allowedTokenPda] = await deriveAllowedTokenPda(ctx.gameEngine, tokenMint);
+
+  return {
+    tokenMint,
+    switchboardQueue,
+    oracleSigningKey,
+    solFeedId,
+    tokenFeedId,
+    buyer,
+    buyerAta,
+    treasuryAta,
+    allowedTokenPda,
+    BUYER_START,
+  };
+}
+
+// Helper: seed the program-owned OracleQuote PDA (as the crank would leave it)
+// carrying SOL/USD = $150 and TOKEN/USD = $1 (Switchboard 10^18 scale). Returns
+// the quote PDA. Pair with `setupSwitchboardTokenBuyer`'s returned handles.
+async function seedSolTokenQuote(
+  ctx: TestContext,
+  s: {
+    switchboardQueue: PublicKey;
+    oracleSigningKey: Uint8Array;
+    solFeedId: PublicKey;
+    tokenFeedId: PublicKey;
+  },
+): Promise<PublicKey> {
+  const E18 = 10n ** 18n;
+  return seedMockOracleQuote(ctx.svm, {
+    programId: PROGRAM_ID,
+    queue: s.switchboardQueue,
+    oracleSigningKey: s.oracleSigningKey,
+    feeds: [
+      { feedId: s.solFeedId.toBytes(), value: 150n * E18 },
+      { feedId: s.tokenFeedId.toBytes(), value: 1n * E18 },
+    ],
+  });
+}
+
 /**
  * The Rust contract auto-assigns flash sale IDs from shop_config.next_flash_sale_id
  * and increments. The caller has to know the right ID to derive the matching
@@ -1159,92 +1261,8 @@ describe('Shop System', () => {
       // process_token_payment_flow verifies it via QuoteVerifier::verify_account
       // — oracle-key authorization against the queue + slot-hash freshness —
       // then reads both feeds. Switchboard feed values are scaled to 10^18.
-      const E18 = 10n ** 18n;
-
-      const tokenMint = (await Keypair.generate()).publicKey;
-      seedSplMint(ctx.svm, tokenMint, {
-        decimals: 9,
-        mintAuthority: ctx.daoAuthority.publicKey,
-      });
-
-      // The Switchboard queue, the oracle ed25519 signing key, and the two
-      // 32-byte feed ids (SOL/USD in shop config, TOKEN/USD on the token).
-      const switchboardQueue = (await Keypair.generate()).publicKey;
-      const oracleSigningKey = (await Keypair.generate()).publicKey.toBytes();
-      const solFeedId = (await Keypair.generate()).publicKey;
-      const tokenFeedId = (await Keypair.generate()).publicKey;
-
-      // Mock queue — registers the oracle key the quote is authorized against.
-      seedMockSwitchboardQueue(ctx.svm, switchboardQueue, oracleSigningKey);
-
-      // Register the SOL Switchboard feed id + the queue in shop config.
-      await sendTransaction(
-        ctx.svm,
-        new Transaction().add(
-          await createUpdateConfigInstruction(
-            { gameEngine: ctx.gameEngine, daoAuthority: ctx.daoAuthority.publicKey },
-            {
-              solSwitchboardFeed: solFeedId,
-              solSwitchboardQueue: switchboardQueue,
-              solMaxStalenessSlots: 1_000_000,
-              solConfidenceThresholdBps: 1000,
-            },
-          ),
-        ),
-        [ctx.daoAuthority],
-      );
-
-      // Register the payment token + its TOKEN/USD Switchboard feed id.
-      await sendTransaction(
-        ctx.svm,
-        new Transaction().add(
-          await createCreateAllowedTokenInstruction(
-            {
-              gameEngine: ctx.gameEngine,
-              payer: ctx.daoAuthority.publicKey,
-              daoAuthority: ctx.daoAuthority.publicKey,
-              tokenMint,
-              treasuryWallet: ctx.treasury.publicKey,
-            },
-            {
-              pythFeed: undefined,
-              switchboardFeed: tokenFeedId,
-              maxStalenessSlots: 1_000_000,
-              confidenceThresholdBps: 1000,
-              discountBps: 0,
-            },
-          ),
-        ),
-        [ctx.daoAuthority],
-      );
-
-      const buyer = await createShopReadyPlayer(ctx, factory);
-      const buyerAta = await getAssociatedTokenAddressAsync(tokenMint, buyer.publicKey);
-      const treasuryAta = await getAssociatedTokenAddressAsync(tokenMint, ctx.treasury.publicKey);
-      const BUYER_START = 1_000_000_000_000n;
-      seedSplTokenAccount(ctx.svm, buyerAta, {
-        mint: tokenMint,
-        owner: buyer.publicKey,
-        amount: BUYER_START,
-      });
-      seedSplTokenAccount(ctx.svm, treasuryAta, {
-        mint: tokenMint,
-        owner: ctx.treasury.publicKey,
-        amount: 0n,
-      });
-
-      // Seed the OracleQuote PDA (as a crank would leave it) carrying
-      // SOL/USD = $150 and TOKEN/USD = $1, plus the matching SlotHashes entry.
-      // Done right before the purchase so recent_slot tracks the clock.
-      const oracleQuote = await seedMockOracleQuote(ctx.svm, {
-        programId: PROGRAM_ID,
-        queue: switchboardQueue,
-        oracleSigningKey,
-        feeds: [
-          { feedId: solFeedId.toBytes(), value: 150n * E18 },
-          { feedId: tokenFeedId.toBytes(), value: 1n * E18 },
-        ],
-      });
+      const s = await setupSwitchboardTokenBuyer(ctx, factory);
+      const oracleQuote = await seedSolTokenQuote(ctx, s);
 
       await sendTransaction(
         ctx.svm,
@@ -1252,29 +1270,29 @@ describe('Shop System', () => {
           await createPurchaseItemInstruction(
             {
               gameEngine: ctx.gameEngine,
-              buyer: buyer.publicKey,
+              buyer: s.buyer.publicKey,
               itemId: 9999,
               treasury: ctx.treasury.publicKey,
               tokenPayment: {
-                allowedToken: (await deriveAllowedTokenPda(ctx.gameEngine, tokenMint))[0],
-                tokenMint,
-                buyerTokenAta: buyerAta,
-                treasuryTokenAta: treasuryAta,
+                allowedToken: s.allowedTokenPda,
+                tokenMint: s.tokenMint,
+                buyerTokenAta: s.buyerAta,
+                treasuryTokenAta: s.treasuryAta,
                 oracleQuote,
-                switchboardQueue,
+                switchboardQueue: s.switchboardQueue,
               },
             },
             { quantity: 1, paymentType: 2 },
           ),
         ),
-        [buyer.keypair],
+        [s.buyer.keypair],
       );
 
-      const buyerAfter = readSplTokenAmount(ctx.svm, buyerAta);
-      const treasuryAfter = readSplTokenAmount(ctx.svm, treasuryAta);
-      expect(buyerAfter < BUYER_START).toBe(true);
+      const buyerAfter = readSplTokenAmount(ctx.svm, s.buyerAta);
+      const treasuryAfter = readSplTokenAmount(ctx.svm, s.treasuryAta);
+      expect(buyerAfter < s.BUYER_START).toBe(true);
       expect(treasuryAfter > 0n).toBe(true);
-      expect(BUYER_START - buyerAfter).toBe(treasuryAfter);
+      expect(s.BUYER_START - buyerAfter).toBe(treasuryAfter);
     }, 60_000);
 
     it('should reject mixed Pyth + Switchboard feeds', async () => {
@@ -1376,6 +1394,146 @@ describe('Shop System', () => {
         ),
         [buyer.keypair],
       );
+    }, 60_000);
+
+    it('should accept flash-sale token payment via Switchboard feeds', async () => {
+      // Flash sales are SOL-priced, so a token payment must route through the
+      // oracle. Mirrors the item Switchboard path but via purchase_flash_sale
+      // (token_offset = 10): the same JIT-cranked OracleQuote PDA prices both
+      // SOL/USD and TOKEN/USD.
+      const s = await setupSwitchboardTokenBuyer(ctx, factory);
+
+      // Create + activate a flash sale on item 9999.
+      const onChainNow = await getCurrentTimestamp(ctx.svm);
+      const saleId = await getNextFlashSaleId(ctx);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createCreateFlashSaleInstruction(
+            {
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              saleId,
+            },
+            {
+              itemId: 9999,
+              isBundle: false,
+              discountBps: 2000,
+              startsAt: BigInt(onChainNow + 1),
+              durationSecs: 3600,
+              maxStock: 50,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+      await advanceTime(ctx.svm, 2);
+
+      // Quote seeded after the clock advance so recent_slot tracks the clock.
+      const oracleQuote = await seedSolTokenQuote(ctx, s);
+      const [itemPda] = await deriveShopItemPda(ctx.gameEngine, 9999);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createPurchaseFlashSaleInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: s.buyer.publicKey,
+              saleId,
+              itemOrBundle: itemPda,
+              treasury: ctx.treasury.publicKey,
+              tokenPayment: {
+                allowedToken: s.allowedTokenPda,
+                tokenMint: s.tokenMint,
+                buyerTokenAta: s.buyerAta,
+                treasuryTokenAta: s.treasuryAta,
+                oracleQuote,
+                switchboardQueue: s.switchboardQueue,
+              },
+            },
+            { quantity: 1, paymentType: 2 },
+          ),
+        ),
+        [s.buyer.keypair],
+      );
+
+      const buyerAfter = readSplTokenAmount(ctx.svm, s.buyerAta);
+      const treasuryAfter = readSplTokenAmount(ctx.svm, s.treasuryAta);
+      expect(buyerAfter < s.BUYER_START).toBe(true);
+      expect(treasuryAfter > 0n).toBe(true);
+      expect(s.BUYER_START - buyerAfter).toBe(treasuryAfter);
+    }, 60_000);
+
+    it('should accept bundle token payment via Switchboard feeds', async () => {
+      // Bundles are SOL-priced; token payment routes through the oracle via
+      // purchase_bundle (token_offset = 9 + shop_item_accounts.len()).
+      const BUNDLE_ID = 7777;
+      const s = await setupSwitchboardTokenBuyer(ctx, factory);
+
+      // Fresh SOL-priced bundle (items 9999 + 9998 already exist).
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createCreateBundleInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              payer: ctx.daoAuthority.publicKey,
+              daoAuthority: ctx.daoAuthority.publicKey,
+            },
+            {
+              bundleId: BUNDLE_ID,
+              tier: 1,
+              category: 0,
+              requiresSubscription: 0,
+              savingsBps: 1000,
+              items: [
+                { itemId: 9999, quantity: 1 },
+                { itemId: 9998, quantity: 1 },
+              ],
+              priceSolLamports: 100_000n,
+              availableFrom: 0n,
+              availableUntil: 0n,
+              isActive: true,
+            },
+          ),
+        ),
+        [ctx.daoAuthority],
+      );
+
+      const oracleQuote = await seedSolTokenQuote(ctx, s);
+      const [shopItem1] = await deriveShopItemPda(ctx.gameEngine, 9999);
+      const [shopItem2] = await deriveShopItemPda(ctx.gameEngine, 9998);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createPurchaseBundleInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              buyer: s.buyer.publicKey,
+              bundleId: BUNDLE_ID,
+              treasury: ctx.treasury.publicKey,
+              shopItemAccounts: [shopItem1, shopItem2],
+              tokenPayment: {
+                allowedToken: s.allowedTokenPda,
+                tokenMint: s.tokenMint,
+                buyerTokenAta: s.buyerAta,
+                treasuryTokenAta: s.treasuryAta,
+                oracleQuote,
+                switchboardQueue: s.switchboardQueue,
+              },
+            },
+            { paymentType: 2 },
+          ),
+        ),
+        [s.buyer.keypair],
+      );
+
+      const buyerAfter = readSplTokenAmount(ctx.svm, s.buyerAta);
+      const treasuryAfter = readSplTokenAmount(ctx.svm, s.treasuryAta);
+      expect(buyerAfter < s.BUYER_START).toBe(true);
+      expect(treasuryAfter > 0n).toBe(true);
+      expect(s.BUYER_START - buyerAfter).toBe(treasuryAfter);
     }, 60_000);
   });
 

@@ -1,7 +1,10 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import {
-  createPurchaseItemInstruction,
+  createPurchaseBundleInstruction,
+  deriveBundlePda,
+  deriveShopItemPda,
+  parseBundle,
   getAssociatedTokenAddressAsync,
 } from "novus-mundus-sdk";
 import { coSign } from "@/lib/server/cosign";
@@ -11,40 +14,44 @@ import { loadTokenPurchaseContext, feedHex } from "@/lib/server/shop-cosign";
 
 export const runtime = "nodejs";
 
-interface PurchaseBody {
-  itemId: number;
+interface BundleBody {
+  bundleId: number;
   tokenMint: string;
-  quantity?: number;
 }
 
 /**
- * POST /api/cosign/shop/purchase
+ * POST /api/cosign/shop/purchase-bundle
  *
- * Builds a Switchboard-payment item purchase, bundling a just-in-time oracle
- * quote refresh into the same transaction:
+ * Switchboard-payment bundle purchase. Bundles the JIT oracle refresh:
  *
- *   [ed25519-verify, crank_oracle_quote, purchase_item]
+ *   [ed25519-verify, crank_oracle_quote, purchase_bundle]
  *
- * The `crank` is co-signed by the `game_authority`; the buyer's wallet signs as
- * fee payer. Non-Switchboard tokens get `NOT_SWITCHBOARD` so the client falls
- * back to the direct path.
+ * Bundles are SOL-priced, so the token path always needs the oracle. The
+ * per-item ShopItem accounts are derived from the on-chain Bundle.
+ * Non-Switchboard tokens get `NOT_SWITCHBOARD` for the direct path.
  */
 export async function POST(req: Request) {
-  const parsed = await parseSessionBody<PurchaseBody>(req);
+  const parsed = await parseSessionBody<BundleBody>(req);
   if ("error" in parsed) return parsed.error;
   const { owner: buyer, body } = parsed;
 
-  if (!Number.isInteger(body.itemId) || body.itemId < 0) {
-    return fail("invalid 'itemId'");
-  }
-  const quantity = body.quantity ?? 1;
-  if (!Number.isInteger(quantity) || quantity < 1) {
-    return fail("invalid 'quantity'");
+  if (!Number.isInteger(body.bundleId) || body.bundleId < 0) {
+    return fail("invalid 'bundleId'");
   }
 
   const loaded = await loadTokenPurchaseContext(body.tokenMint);
   if (loaded instanceof NextResponse) return loaded;
   const { ctx, tok, tokenMint } = loaded;
+
+  // Derive a ShopItem account per bundle item, in order (matches the on-chain
+  // positional `shop_item_accounts[i]` read).
+  const [bundlePda] = await deriveBundlePda(ctx.gameEngine, body.bundleId);
+  const bundleInfo = await ctx.connection.getAccountInfo(bundlePda);
+  const bundle = bundleInfo ? parseBundle(bundleInfo) : null;
+  if (!bundle) return fail("bundle not found", 404);
+  const shopItemAccounts = await Promise.all(
+    bundle.items.map(async (it) => (await deriveShopItemPda(ctx.gameEngine, it.itemId))[0]),
+  );
 
   try {
     const crankIxs = await buildOracleCrankIxs({
@@ -54,12 +61,13 @@ export async function POST(req: Request) {
       ed25519IxIndex: ctx.ed25519IxIndex,
     });
 
-    const purchaseIx = await createPurchaseItemInstruction(
+    const purchaseIx = await createPurchaseBundleInstruction(
       {
         buyer,
         gameEngine: ctx.gameEngine,
-        itemId: body.itemId,
+        bundleId: body.bundleId,
         treasury: ctx.treasury,
+        shopItemAccounts,
         tokenPayment: {
           allowedToken: tok.allowedTokenPda,
           tokenMint,
@@ -69,13 +77,13 @@ export async function POST(req: Request) {
           switchboardQueue: ctx.switchboardQueue,
         },
       },
-      { quantity, paymentType: 2 },
+      { paymentType: 2 },
     );
 
     const transaction = await coSign([...crankIxs, purchaseIx], buyer, [ctx.alt]);
     return NextResponse.json({ transaction });
   } catch (e) {
-    console.error("shop purchase co-sign failed", e);
+    console.error("bundle co-sign failed", e);
     return fail(e instanceof Error ? e.message : "co-sign failed", 500);
   }
 }
