@@ -14,9 +14,6 @@
     "typecheck": "turbo typecheck",
     "novus": "cd sdks/novus-mundus-ts && bun run cli/cli.ts"
   },
-  "overrides": {
-    "@solana/web3.js": "3.0.0-rc.1"
-  },
   "devDependencies": {
     "chai": "4.3.4",
     "mocha": "9.0.3",

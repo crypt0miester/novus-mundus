@@ -8,7 +8,7 @@
  * stability even though they now return Promises (callers must `await`).
  */
 
-import { PublicKey } from '@solana/web3.js';
+import { PublicKey, TransactionInstruction, SystemProgram } from '@solana/web3.js';
 import { getProgramDerivedAddress, type Address } from '@solana/addresses';
 
 /** Associated Token Program ID */
@@ -68,4 +68,37 @@ export async function getAssociatedTokenAddressAsyncForPda(
     programId,
     associatedTokenProgramId
   );
+}
+
+/**
+ * Build an idempotent "create associated token account" instruction (ATA program
+ * `CreateIdempotent`, discriminator byte `1`) using web3.js v3.
+ *
+ * A v3-native drop-in for `@solana/spl-token`'s
+ * `createAssociatedTokenAccountIdempotentInstruction` (same parameter order),
+ * since that v1 library is incompatible with this SDK's web3.js-v3 seam.
+ *
+ * Accounts (ATA program order): payer (signer, writable), ata (writable),
+ * owner, mint, system program, token program.
+ */
+export function createAssociatedTokenAccountIdempotentInstruction(
+  payer: PublicKey,
+  ata: PublicKey,
+  owner: PublicKey,
+  mint: PublicKey,
+  programId = SPL_TOKEN_PROGRAM_ID,
+  associatedTokenProgramId = ASSOCIATED_TOKEN_PROGRAM_ID
+): TransactionInstruction {
+  return new TransactionInstruction({
+    keys: [
+      { pubkey: payer, isSigner: true, isWritable: true },
+      { pubkey: ata, isSigner: false, isWritable: true },
+      { pubkey: owner, isSigner: false, isWritable: false },
+      { pubkey: mint, isSigner: false, isWritable: false },
+      { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+      { pubkey: programId, isSigner: false, isWritable: false },
+    ],
+    programId: associatedTokenProgramId,
+    data: Buffer.from([1]), // 1 = CreateIdempotent
+  });
 }

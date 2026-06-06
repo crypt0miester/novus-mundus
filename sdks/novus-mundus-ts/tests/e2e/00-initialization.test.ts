@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
+import { Keypair, Transaction } from '@solana/web3.js';
 
 import {
   createUpdateGameConfigInstruction,
@@ -22,7 +22,7 @@ import {
 import { type TestContext, beforeAllTests, afterAllTests } from '../fixtures/setup';
 import { sendTransaction, expectTransactionToFail, buildTransaction } from '../utils/transactions';
 import { fetchGameEngine } from '../utils/accounts';
-import { svmKey } from '../fixtures/svm';
+import { svmKey, svmOwnerToV3 } from '../fixtures/svm';
 
 describe('Initialization', () => {
   let ctx: TestContext;
@@ -51,7 +51,7 @@ describe('Initialization', () => {
       const acct = ctx.svm.getAccount(svmKey(metadataPda));
       expect(acct).not.toBeNull();
       // Owned by the Metaplex Token Metadata program.
-      expect(new PublicKey(acct!.owner).toBase58()).toBe(TOKEN_METADATA_PROGRAM_ID.toBase58());
+      expect(svmOwnerToV3(acct!.owner).toBase58()).toBe(TOKEN_METADATA_PROGRAM_ID.toBase58());
       // The DataV2 strings are stored in the account; assert name/symbol/uri landed.
       const text = Buffer.from(acct!.data).toString('latin1');
       expect(text).toContain('Novus Mundus');

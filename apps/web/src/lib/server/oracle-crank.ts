@@ -1,9 +1,27 @@
 import "server-only";
-import * as sb from "@switchboard-xyz/on-demand";
-import { CrossbarClient } from "@switchboard-xyz/common";
-import type { PublicKey, TransactionInstruction } from "@solana/web3.js";
+import { PublicKey, TransactionInstruction } from "@solana/web3.js";
 import { createCrankOracleQuoteInstruction } from "novus-mundus-sdk";
 import { gameAuthorityKeypair, serverConnection } from "./game-authority";
+
+// The Switchboard On-Demand SDK runs on web3.js v1 (its own resolved dependency),
+// while the app is on v3. Its TransactionInstruction carries v1 `PublicKey`s,
+// which the v3 transaction builder rejects, so rebuild it as a v3 instruction via
+// raw bytes before composing it with the rest of the (v3) transaction.
+function toV3Instruction(ix: {
+  programId: { toBytes(): Uint8Array };
+  keys: { pubkey: { toBytes(): Uint8Array }; isSigner: boolean; isWritable: boolean }[];
+  data: Uint8Array;
+}): TransactionInstruction {
+  return new TransactionInstruction({
+    programId: new PublicKey(ix.programId.toBytes()),
+    keys: ix.keys.map((k) => ({
+      pubkey: new PublicKey(k.pubkey.toBytes()),
+      isSigner: k.isSigner,
+      isWritable: k.isWritable,
+    })),
+    data: Buffer.from(ix.data),
+  });
+}
 
 /**
  * Server-side Switchboard On-Demand crank for the bundled-purchase flow.
@@ -34,9 +52,26 @@ export async function buildOracleCrankIxs(params: {
     throw new Error("oracle crank: expected 1-8 feed hashes");
   }
 
+  // Import the Switchboard SDK lazily: it is heavy and only needed when a quote
+  // is actually fetched (not during Next's build-time page-data collection), and
+  // it is listed in next.config `serverExternalPackages` so Node requires it at
+  // runtime rather than the bundler trying to bundle its deep v1 ESM.
+  const sb = await import("@switchboard-xyz/on-demand");
+  const { CrossbarClient } = await import("@switchboard-xyz/common");
+
+  // v1/v3 boundary: serverConnection() is a v3 Connection (the 3.0.0-rc.1 compat
+  // shim, which exposes the v1 method surface) and switchboardQueue is a v3
+  // PublicKey; both are runtime-compatible with the SDK's v1 expectations, so we
+  // cast at the boundary.
+  type SbConn = Parameters<typeof sb.AnchorUtils.loadProgramFromConnection>[0];
+  type SbPk = ConstructorParameters<typeof sb.Queue>[1];
   const connection = serverConnection();
-  const program = await sb.AnchorUtils.loadProgramFromConnection(connection);
-  const queue = new sb.Queue(program, params.switchboardQueue);
+  const program = await sb.AnchorUtils.loadProgramFromConnection(connection as unknown as SbConn);
+  // Build the queue pubkey with the SDK's own (v1) PublicKey class, taken from
+  // the loaded program's `programId`, so v1-only methods (e.g. `.toBuffer()`)
+  // exist on it at runtime — a v3 PublicKey passed here would crash inside the SDK.
+  const V1PublicKey = program.programId.constructor as new (bytes: Uint8Array) => SbPk;
+  const queue = new sb.Queue(program, new V1PublicKey(params.switchboardQueue.toBytes()));
   const crossbar = CrossbarClient.default();
 
   // Gateway fetch: the ed25519 verify instruction carrying the oracle-signed
@@ -55,5 +90,7 @@ export async function buildOracleCrankIxs(params: {
     params.ed25519IxIndex,
   );
 
-  return [ed25519Ix, crankIx];
+  // `ed25519Ix` is a v1 TransactionInstruction; bridge it to v3 so it composes
+  // with `crankIx` (v3) in the transaction the cosign route assembles.
+  return [toV3Instruction(ed25519Ix), crankIx];
 }

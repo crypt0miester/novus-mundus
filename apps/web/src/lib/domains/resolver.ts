@@ -15,10 +15,14 @@ import type { MainDomain } from "@onsol/tldparser";
 let _parser: TldParser | null = null;
 let _connId: string | null = null;
 
+// @onsol/tldparser is typed against web3.js v1, whose `Connection` / `PublicKey`
+// are nominally distinct from the v3 `Connection` / `Address` the app uses but
+// runtime-compatible. Bridge the nominal gap with thin casts at every TldParser
+// call boundary (the same pattern svm.ts uses for LiteSVM).
 function getParser(connection: Connection): TldParser {
   const id = connection.rpcEndpoint;
   if (_parser && _connId === id) return _parser;
-  _parser = new TldParser(connection);
+  _parser = new TldParser(connection as unknown as ConstructorParameters<typeof TldParser>[0]);
   _connId = id;
   return _parser;
 }
@@ -30,7 +34,9 @@ export async function resolveDomainName(
 ): Promise<string | null> {
   try {
     const parser = getParser(connection);
-    const main = (await parser.getMainDomain(owner)) as MainDomain;
+    const main = (await parser.getMainDomain(
+      owner as unknown as Parameters<typeof parser.getMainDomain>[0],
+    )) as MainDomain;
     if (!main?.domain) return null;
     return `${main.domain}${main.tld}`;
   } catch {
@@ -76,5 +82,7 @@ export async function resolveDomainNamesBatched(
  */
 export async function getOwnedDomains(connection: Connection, owner: PublicKey | string) {
   const parser = getParser(connection);
-  return parser.getParsedAllUserDomains(owner);
+  return parser.getParsedAllUserDomains(
+    owner as unknown as Parameters<typeof parser.getParsedAllUserDomains>[0],
+  );
 }

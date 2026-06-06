@@ -29,9 +29,9 @@ import {
   deriveLocationPda,
   deriveNoviMintPda,
   getAssociatedTokenAddressAsync,
+  createAssociatedTokenAccountIdempotentInstruction,
   deserializePlayer,
 } from '../../../src/index';
-import { createAssociatedTokenAccountIdempotentInstruction } from '@solana/spl-token';
 
 const GRID_PRECISION = 10000;
 
@@ -138,11 +138,7 @@ async function handleFund(ctx: CLIContext, args: ParsedArgs): Promise<void> {
    *   - Prize + Event mint to the player's UserAccount reserved ATA
    *     (player must later call reserved_to_locked themselves to spend).
    *   - All other purposes mint directly to the player's wallet ATA
-   *     (player can deposit_novi back to reserved or trade on DEX).
-   *
-   * We don't have the player's keypair, so we can't drive deposit_novi
-   * here — the DAO can only deliver NOVI to one of those two
-   * destinations and the player follows up. */
+   *     (player can deposit_novi back to reserved or trade on DEX). */
   const MAX_PER_CALL = 100_000_000;
   const purposes: { purpose: MintPurpose; cap: number }[] = [
     { purpose: MintPurpose.Development, cap: 150_000_000 },

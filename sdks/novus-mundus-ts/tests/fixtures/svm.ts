@@ -29,6 +29,13 @@ const svmAccount = (acct: {
   rentEpoch: number;
 }): AccountInfoBytes => acct as unknown as AccountInfoBytes;
 
+// LiteSVM hands account owners back as web3.js *v1* `PublicKey` objects (its own
+// nested dependency), which the v3 `PublicKey` constructor rejects ("Invalid
+// public key input"). Bridge through raw bytes — the representation both versions
+// agree on. (A v1 PublicKey always exposes `.toBytes()`.)
+export const svmOwnerToV3 = (owner: { toBytes(): Uint8Array }): PublicKey =>
+  new PublicKey(owner.toBytes());
+
 // Send the bytes of a SIGNED transaction through LiteSVM. LiteSVM (web3.js v1)
 // serializes synchronously at its napi boundary, but v3's legacy
 // `Transaction.serialize()` is async — handing it the legacy tx yields a Promise,
@@ -115,7 +122,7 @@ function loadAccountFromJson(svm: LiteSVM, address: PublicKey, jsonPath: string)
 export function toAccountInfo(account: AccountInfoBytes): AccountInfo<Buffer> {
   return {
     executable: account.executable,
-    owner: new PublicKey(account.owner as unknown as Uint8Array),
+    owner: svmOwnerToV3(account.owner),
     lamports: BigInt(account.lamports as unknown as number),
     data: Buffer.from(account.data),
     rentEpoch: BigInt(account.rentEpoch as unknown as number),

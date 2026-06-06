@@ -691,7 +691,7 @@ describe('War Table', () => {
       executable: false,
       lamports: templateInfo.lamports,
       owner: templateInfo.owner, // the novus program (load_checked_by_key requires it)
-      rentEpoch: 0n,
+      rentEpoch: 0,
     });
 
     // The synthesized account is a valid Player in the second kingdom.
