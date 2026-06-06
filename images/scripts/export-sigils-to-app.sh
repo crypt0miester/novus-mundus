@@ -4,10 +4,13 @@
 #   1. alpha-strip the solid white background (-fuzz N% on #FFFFFF)
 #   2. trim transparent margin, then re-extent to a 1024² transparent canvas
 #   3. write to apps/web/public/img/heroes/city-sigils/<cityId>.png
+#   4. downscale that to a 96px sm/<cityId>.png for the world map, which only
+#      ever paints a ~34-38px medallion (citySigilSrc in CityCrest.tsx loads it)
 #
 # Output filename uses cityId (number), not the manifest id slug, so the
 # runtime compositor can look up city-sigils/<id>.png by the hero's
-# meditationCityId.
+# meditationCityId. The full-size PNG feeds the server-side hero compositor
+# (lib/hero-image/compose.ts); the sm/ variant feeds the client map.
 #
 # Usage:
 #   ./export-sigils-to-app.sh                            # every sigil with a raw png
@@ -24,14 +27,16 @@ MANIFEST="${REPO_ROOT}/images/sigils/sigils.json"
 RAW_DIR="${REPO_ROOT}/images/sigils/raw"
 APP_DIR="${APP_DIR:-${REPO_ROOT}/apps/web}"
 OUT_DIR="${APP_DIR}/public/img/heroes/city-sigils"
+SM_DIR="${OUT_DIR}/sm"
 PNG_FUZZ="${PNG_FUZZ:-14}"
 CANVAS_SIZE="${CANVAS_SIZE:-1024}"
+SM_SIZE="${SM_SIZE:-96}"
 
 [[ -f "${MANIFEST}" ]] || { echo "manifest not found: ${MANIFEST}" >&2; exit 2; }
 [[ -d "${APP_DIR}"  ]] || { echo "app dir not found: ${APP_DIR}" >&2; exit 2; }
 command -v jq      >/dev/null || { echo "jq not found" >&2; exit 2; }
 command -v magick  >/dev/null || { echo "ImageMagick (magick) not found" >&2; exit 2; }
-mkdir -p "${OUT_DIR}"
+mkdir -p "${OUT_DIR}" "${SM_DIR}"
 
 if [[ $# -gt 0 ]]; then
   REQUESTED=("$@")
@@ -83,8 +88,13 @@ for req in "${REQUESTED[@]}"; do
        -trim +repage \
        -background none -gravity center -extent "${CANVAS_SIZE}x${CANVAS_SIZE}" \
        "${out}"; then
+    # Downscale the full PNG to the map's sm/ variant (transparency preserved).
+    magick "${out}" -strip -resize "${SM_SIZE}x${SM_SIZE}" \
+      -define png:compression-level=9 "${SM_DIR}/${city_id}.png"
     sz=$(wc -c < "${out}")
-    printf "  %-30s -> city-sigils/%s.png  (%d bytes)\n" "${real_id}" "${city_id}" "${sz}"
+    sm_sz=$(wc -c < "${SM_DIR}/${city_id}.png")
+    printf "  %-30s -> city-sigils/%s.png (%d b)  + sm/%s.png (%d b)\n" \
+      "${real_id}" "${city_id}" "${sz}" "${city_id}" "${sm_sz}"
     exported=$((exported + 1))
   else
     echo "  ${real_id}: magick failed" >&2
