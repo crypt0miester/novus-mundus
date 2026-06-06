@@ -427,3 +427,151 @@ describe('Event Parsing', () => {
     });
   });
 });
+
+describe('Arena Events', () => {
+  // Build an event buffer the way the on-chain events/arena.rs serialize() does:
+  // 8-byte discriminator + little-endian fields in declared order.
+  const writeArenaEvent = (name: string, fields: Array<[string, any]>): Buffer => {
+    const chunks: Buffer[] = [Buffer.from(computeEventDiscriminator(name))];
+    for (const [kind, value] of fields) {
+      if (kind === 'u8') {
+        chunks.push(Buffer.from([Number(value) & 0xff]));
+      } else if (kind === 'u32') {
+        const b = Buffer.alloc(4);
+        b.writeUInt32LE(Number(value));
+        chunks.push(b);
+      } else if (kind === 'u64') {
+        chunks.push(u64le(BigInt(value)));
+      } else if (kind === 'i64') {
+        const b = Buffer.alloc(8);
+        b.writeBigInt64LE(BigInt(value));
+        chunks.push(b);
+      } else if (kind === 'bool') {
+        chunks.push(Buffer.from([value ? 1 : 0]));
+      } else {
+        chunks.push(Buffer.from((value as PublicKey).toBytes()));
+      }
+    }
+    return Buffer.concat(chunks);
+  };
+
+  it('registers all five arena event discriminators', () => {
+    for (const name of [
+      'ArenaBattleResolved',
+      'ArenaPlayerJoined',
+      'ArenaDailyRewardClaimed',
+      'ArenaMasterRewardClaimed',
+      'ArenaSeasonFinalized',
+    ]) {
+      const hex = discriminatorToHex(computeEventDiscriminator(name));
+      expect(EVENT_DISCRIMINATORS.get(hex)).toBe(name);
+    }
+  });
+
+  it('should parse ArenaBattleResolved', async () => {
+    const challenger = (await Keypair.generate()).publicKey;
+    const defender = (await Keypair.generate()).publicKey;
+    const data = writeArenaEvent('ArenaBattleResolved', [
+      ['u32', 1],
+      ['u64', 42n],
+      ['pk', challenger],
+      ['pk', defender],
+      ['u64', 5000n],
+      ['u64', 3000n],
+      ['bool', true],
+      ['u64', 150n],
+      ['u64', 0n],
+      ['u32', 1016],
+      ['u32', 984],
+      ['i64', 1700000000n],
+      ['u64', 12345n],
+    ]);
+
+    const event = parseNovusMundusEvent(data);
+    expect(event).not.toBeNull();
+    expect(event!.name).toBe('ArenaBattleResolved');
+    const d = event!.data as any;
+    expect(d.seasonId).toBe(1);
+    expect(Number(d.battleId)).toBe(42);
+    expect(d.challenger.equals(challenger)).toBe(true);
+    expect(d.defender.equals(defender)).toBe(true);
+    expect(Number(d.challengerPower)).toBe(5000);
+    expect(Number(d.defenderPower)).toBe(3000);
+    expect(d.challengerWon).toBe(true);
+    expect(Number(d.challengerPoints)).toBe(150);
+    expect(Number(d.defenderPoints)).toBe(0);
+    expect(d.newChallengerElo).toBe(1016);
+    expect(d.newDefenderElo).toBe(984);
+    expect(Number(d.slot)).toBe(12345);
+  });
+
+  it('should parse ArenaPlayerJoined', async () => {
+    const player = (await Keypair.generate()).publicKey;
+    const data = writeArenaEvent('ArenaPlayerJoined', [
+      ['u32', 2],
+      ['pk', player],
+      ['i64', 1700000001n],
+    ]);
+
+    const event = parseNovusMundusEvent(data);
+    expect(event!.name).toBe('ArenaPlayerJoined');
+    const d = event!.data as any;
+    expect(d.seasonId).toBe(2);
+    expect(d.player.equals(player)).toBe(true);
+  });
+
+  it('should parse ArenaDailyRewardClaimed', async () => {
+    const player = (await Keypair.generate()).publicKey;
+    const data = writeArenaEvent('ArenaDailyRewardClaimed', [
+      ['u32', 1],
+      ['pk', player],
+      ['u64', 1000n],
+      ['u8', 6],
+      ['u8', 3],
+      ['i64', 1700000002n],
+    ]);
+
+    const event = parseNovusMundusEvent(data);
+    expect(event!.name).toBe('ArenaDailyRewardClaimed');
+    const d = event!.data as any;
+    expect(d.seasonId).toBe(1);
+    expect(d.player.equals(player)).toBe(true);
+    expect(Number(d.amount)).toBe(1000);
+    expect(d.battlesFought).toBe(6);
+    expect(d.uniqueOpponents).toBe(3);
+  });
+
+  it('should parse ArenaMasterRewardClaimed', async () => {
+    const player = (await Keypair.generate()).publicKey;
+    const data = writeArenaEvent('ArenaMasterRewardClaimed', [
+      ['u32', 1],
+      ['pk', player],
+      ['u8', 1],
+      ['u64', 350000n],
+      ['i64', 1700000003n],
+    ]);
+
+    const event = parseNovusMundusEvent(data);
+    expect(event!.name).toBe('ArenaMasterRewardClaimed');
+    const d = event!.data as any;
+    expect(d.player.equals(player)).toBe(true);
+    expect(d.rank).toBe(1);
+    expect(Number(d.amount)).toBe(350000);
+  });
+
+  it('should parse ArenaSeasonFinalized', () => {
+    const data = writeArenaEvent('ArenaSeasonFinalized', [
+      ['u32', 1],
+      ['u64', 99n],
+      ['u8', 10],
+      ['i64', 1700000004n],
+    ]);
+
+    const event = parseNovusMundusEvent(data);
+    expect(event!.name).toBe('ArenaSeasonFinalized');
+    const d = event!.data as any;
+    expect(d.seasonId).toBe(1);
+    expect(Number(d.totalBattles)).toBe(99);
+    expect(d.leaderboardCount).toBe(10);
+  });
+});

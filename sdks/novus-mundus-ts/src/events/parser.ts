@@ -227,6 +227,13 @@ export const EVENT_DISCRIMINATORS: Map<string, string> = new Map([
   d('KingdomArenaSeasonStarted'),
   d('KingdomDungeonLeaderboardCreated'),
   d('KingdomCitiesInitialized'),
+
+  // Arena
+  d('ArenaBattleResolved'),
+  d('ArenaPlayerJoined'),
+  d('ArenaDailyRewardClaimed'),
+  d('ArenaMasterRewardClaimed'),
+  d('ArenaSeasonFinalized'),
 ]);
 
 // Event Buffer Reader
@@ -1747,6 +1754,54 @@ EVENT_PARSERS.set('KingdomCitiesInitialized', (r) => ({
   startCityId: r.readU16(),
   citiesCount: r.readU8(),
   initializedAt: r.readI64(),
+}));
+
+// ── Arena ──
+
+EVENT_PARSERS.set('ArenaBattleResolved', (r) => ({
+  seasonId: r.readU32(),
+  battleId: r.readU64(),
+  challenger: r.readPubkey(),
+  defender: r.readPubkey(),
+  challengerPower: r.readU64(),
+  defenderPower: r.readU64(),
+  challengerWon: r.readBool(),
+  challengerPoints: r.readU64(),
+  defenderPoints: r.readU64(),
+  newChallengerElo: r.readU32(),
+  newDefenderElo: r.readU32(),
+  timestamp: r.readI64(),
+  slot: r.readU64(),
+}));
+
+EVENT_PARSERS.set('ArenaPlayerJoined', (r) => ({
+  seasonId: r.readU32(),
+  player: r.readPubkey(),
+  timestamp: r.readI64(),
+}));
+
+EVENT_PARSERS.set('ArenaDailyRewardClaimed', (r) => ({
+  seasonId: r.readU32(),
+  player: r.readPubkey(),
+  amount: r.readU64(),
+  battlesFought: r.readU8(),
+  uniqueOpponents: r.readU8(),
+  timestamp: r.readI64(),
+}));
+
+EVENT_PARSERS.set('ArenaMasterRewardClaimed', (r) => ({
+  seasonId: r.readU32(),
+  player: r.readPubkey(),
+  rank: r.readU8(),
+  amount: r.readU64(),
+  timestamp: r.readI64(),
+}));
+
+EVENT_PARSERS.set('ArenaSeasonFinalized', (r) => ({
+  seasonId: r.readU32(),
+  totalBattles: r.readU64(),
+  leaderboardCount: r.readU8(),
+  timestamp: r.readI64(),
 }));
 
 // Main Parser Functions

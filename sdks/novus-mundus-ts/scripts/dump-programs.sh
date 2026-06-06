@@ -17,6 +17,7 @@ BIN_DIR="$SCRIPT_DIR/../programs/.bin"
 MPL_CORE_PROGRAM_ID="CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
 TLD_HOUSE_PROGRAM_ID="TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S"
 ALT_NAME_SERVICE_PROGRAM_ID="ALTNSZ46uaAUU7XUV6awvdorLGqAsPwa9shm7h4uP2FK"
+TOKEN_METADATA_PROGRAM_ID="metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 
 # Create bin directory if it doesn't exist
 mkdir -p "$BIN_DIR"
@@ -50,6 +51,15 @@ if [ ! -f "$BIN_DIR/alt_name_service.so" ]; then
     echo "  -> alt_name_service.so"
 else
     echo "ALT Name Service already exists, skipping (delete to re-download)"
+fi
+
+# Dump MPL Token Metadata (NOVI mint metadata)
+if [ ! -f "$BIN_DIR/mpl_token_metadata.so" ]; then
+    echo "Dumping MPL Token Metadata ($TOKEN_METADATA_PROGRAM_ID)..."
+    solana program dump -u mainnet-beta "$TOKEN_METADATA_PROGRAM_ID" "$BIN_DIR/mpl_token_metadata.so"
+    echo "  -> mpl_token_metadata.so"
+else
+    echo "MPL Token Metadata already exists, skipping (delete to re-download)"
 fi
 
 echo ""

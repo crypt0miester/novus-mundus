@@ -117,6 +117,12 @@ const NOVI_MINT_PDA: ([u8; 32], u8) =
     const_crypto::ed25519::derive_program_address(&[NOVI_MINT_SEED], &crate::ID.to_bytes());
 pub const NOVI_MINT_ADDRESS: [u8; 32] = NOVI_MINT_PDA.0;
 pub const NOVI_MINT_BUMP: u8 = NOVI_MINT_PDA.1;
+
+// NOVI SPL-token metadata (Metaplex), set once at first kingdom init.
+pub const NOVI_TOKEN_NAME: &[u8] = b"Novus Mundus";
+pub const NOVI_TOKEN_SYMBOL: &[u8] = b"NOVI";
+// Localnet: served by the Next dev server. Swap to the prod URL on mainnet.
+pub const NOVI_TOKEN_URI: &[u8] = b"http://localhost:3000/token/novi.json";
 pub const PLAYER_SEED: &[u8] = b"player";
 pub const USER_SEED: &[u8] = b"user";
 pub const DM_THREAD_SEED: &[u8] = b"wt_dm";

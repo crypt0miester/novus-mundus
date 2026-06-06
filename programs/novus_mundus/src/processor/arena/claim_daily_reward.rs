@@ -23,7 +23,9 @@ use crate::{
         ARENA_DAILY_BASE_REWARD, ARENA_MAX_DAILY_BATTLES, ARENA_MIN_BATTLES_FOR_DAILY_REWARD,
         GAME_ENGINE_SEED, SECONDS_PER_DAY,
     },
+    emit,
     error::GameError,
+    events::ArenaDailyRewardClaimed,
     helpers::{mint_tokens, validate_token_account_owner},
     state::{ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, GameEngine, PlayerAccount},
     utils::read_u32,
@@ -130,6 +132,10 @@ pub fn process(
         .min(remaining_today)
         .min(season.daily_prize_pool);
 
+    // Read-only metrics for the event only (no gating added).
+    let unique_opponents = participant.count_unique_opponents_in_window(now, SECONDS_PER_DAY);
+    let event_player = participant.player;
+
     // 8. Update participant
     participant.daily_reward_claimed_day = today;
 
@@ -161,6 +167,16 @@ pub fn process(
         program_id,
     )?;
     player.locked_novi = player.locked_novi.saturating_add(actual_reward);
+
+    // Emit daily-reward-claimed event (additive) after the reward is paid.
+    emit!(ArenaDailyRewardClaimed {
+        season_id,
+        player: event_player,
+        amount: actual_reward,
+        battles_fought: battles_today,
+        unique_opponents,
+        timestamp: now,
+    });
 
     Ok(())
 }

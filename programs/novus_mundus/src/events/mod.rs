@@ -22,6 +22,7 @@
 use pinocchio::Address;
 
 // Event modules
+pub mod arena;
 pub mod castle;
 pub mod combat;
 pub mod dungeon;
@@ -46,6 +47,7 @@ pub mod token;
 pub mod travel;
 
 // Re-export all events for convenience
+pub use arena::*;
 pub use castle::*;
 pub use combat::*;
 pub use dungeon::*;

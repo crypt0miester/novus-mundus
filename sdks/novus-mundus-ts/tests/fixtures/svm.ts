@@ -8,6 +8,7 @@
 import { LiteSVM, Clock, FailedTransactionMetadata, type TransactionMetadata, type AccountInfoBytes } from 'litesvm';
 import { PublicKey, SYSVAR_SLOT_HASHES_PUBKEY, VersionedTransaction, type AccountInfo } from '@solana/web3.js';
 import { deriveOracleQuotePda, deriveNameAccountPda, deriveReverseNameAccountPda } from '../../src/pda';
+import { TOKEN_METADATA_PROGRAM_ID } from '../../src/program';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -74,6 +75,7 @@ export function createTestSvm(): LiteSVM {
   svm.addProgramFromFile(svmKey(MPL_CORE_PROGRAM_ID), path.join(BIN_DIR, 'mpl_core.so'));
   svm.addProgramFromFile(svmKey(TLD_HOUSE_PROGRAM_ID), path.join(BIN_DIR, 'tld_house.so'));
   svm.addProgramFromFile(svmKey(ALT_NAME_SERVICE_PROGRAM_ID), path.join(BIN_DIR, 'alt_name_service.so'));
+  svm.addProgramFromFile(svmKey(TOKEN_METADATA_PROGRAM_ID), path.join(BIN_DIR, 'mpl_token_metadata.so'));
 
   // Seed TLD accounts from mainnet snapshots. tld_house feeds the on-chain TLD
   // read + reverse-record nclass check; the registry is the domain's parent.

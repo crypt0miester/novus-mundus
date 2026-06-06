@@ -101,6 +101,9 @@ export * from './calculators/index';
 // Spawn picker
 export * from './spawn/index';
 
+// Shared crank logic (CLI + web cron)
+export * from './cranks/castle';
+
 // External program helpers
 export * from './external/index';
 

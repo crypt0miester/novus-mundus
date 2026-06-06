@@ -25,6 +25,9 @@ import {
 import { useCoSign } from "@/lib/cosign";
 import { BuildingId } from "@/lib/buildings";
 import { BuildingShowcase } from "./building-showcase";
+import { ArenaLoadoutForm } from "./arena-loadout-form";
+import { ArenaLeaderboard } from "./arena-leaderboard";
+import { ArenaRecentBattles } from "./arena-recent-battles";
 
 export function ArenaTab() {
   const { data: playerData } = usePlayer();
@@ -241,6 +244,12 @@ export function ArenaTab() {
           </div>
         )
       )}
+
+      {participant && <ArenaLoadoutForm />}
+
+      {season && <ArenaLeaderboard season={season} />}
+
+      {participant && <ArenaRecentBattles participant={participant} />}
 
       {geData?.account &&
         (() => {

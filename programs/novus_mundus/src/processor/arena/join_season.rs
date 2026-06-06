@@ -18,7 +18,9 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::{ARENA_LOADOUT_SEED, ARENA_PARTICIPANT_SEED, ARENA_STARTING_ELO},
+    emit,
     error::GameError,
+    events::ArenaPlayerJoined,
     state::{
         ArenaLoadoutAccount, ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus,
         PlayerAccount, ARENA_LOADOUT_ACCOUNT_SIZE, ARENA_PARTICIPANT_ACCOUNT_SIZE,
@@ -162,6 +164,13 @@ pub fn process(
     };
 
     drop(participant_data_ref);
+
+    // Emit player-joined event (additive) once the participant is initialized.
+    emit!(ArenaPlayerJoined {
+        season_id,
+        player: player_key,
+        timestamp: now,
+    });
 
     // 10. Create Loadout Account if it doesn't exist (reusable across seasons)
     let (expected_loadout_pda, loadout_bump) =

@@ -1,0 +1,17 @@
+[package]
+name = "p-token-metadata"
+version = "0.1.0"
+edition = "2021"
+description = "Minimal pinocchio CPI binding for Metaplex Token Metadata"
+
+[dependencies]
+pinocchio = { version = "0.10.2", features = ["cpi"] }
+solana-address = { version = "2", features = ["decode"] }
+
+[features]
+default = []
+no-panic-handler = []
+
+[lib]
+crate-type = ["lib"]
+name = "p_token_metadata"

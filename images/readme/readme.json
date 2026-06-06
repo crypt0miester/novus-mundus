@@ -1,0 +1,38 @@
+{
+  "_comment": "README / docs key-art manifest. Wide cinematic matte-painting key-art used at the top of README.md and as chapter dividers in the root docs. Same Bonsai pipeline + entries-schema as banners.json/events.json: prompt = preamble + subject + style + tail, fixed per-entry seed so re-runs are deterministic. Raw PNGs land in images/readme/raw/<id>.png (gitignored); the curated webp lives in images/readme/<id>.webp (committed, GitHub-renderable). Most README section headers REUSE the already-committed building/castle/dungeon/event art under apps/web/public/img/**; this manifest only holds the genuinely-new wide key-art those don't cover. No alpha key, opaque as generated; the docs render the art as-is. Full color, warm golden hour, antique gold (#C9A961) glow to match the logo and banners.",
+
+  "defaults": {
+    "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
+    "variant":  "ternary",
+    "backend":  "mlx",
+    "width":    1408,
+    "height":   704,
+    "steps":    4,
+    "endpoint": "http://localhost:8000/generate"
+  },
+
+  "export": {
+    "subdir":   "readme",
+    "filename": "id",
+    "canvas":   [1408, 704],
+    "upscale":  1,
+    "alphaKey": false,
+    "format":   "webp",
+    "quality":  82
+  },
+
+  "preamble": "Single sweeping cinematic establishing key-art of a vast medieval-fantasy strategy-game world, viewed as one wide unbroken landscape vista, no people, no figures, no UI.",
+
+  "style": {
+    "keyart": "Style: richly detailed painterly fantasy game matte-painting in full color, lit by warm golden-hour light with a subtle antique gold (#C9A961) glow, crisp focal detail in the midground, soft atmospheric haze receding into depth, cohesive cinematic finish. No flat black silhouette, no cut-out look, full natural sky and ground."
+  },
+
+  "tail": "Composition: ultra-wide 2:1 landscape banner, the world fills the frame edge to edge at a generous scale with clear readable detail, evenly lit from foreground to sky. Scenery only, absolutely no text, no letters, no numbers, no UI, no people, no figures, no scene clutter, no black bars or dark empty bands.",
+
+  "entries": [
+    { "id": "hero-realm",   "seed": 7777, "subject": "A high aerial vista of a great fortified castle-city at golden hour crowning a coastal headland: crenellated towers and flying banners at the summit, terraced tile rooftops cascading down to a harbor where tall single-masted sailing ships lie moored, a winding river and patchwork farmland spreading inland toward distant snow-capped mountains under a warm dawn sky." },
+    { "id": "world-map",    "seed": 4242, "subject": "An antique cartographer's map of a fantasy realm rendered as terrain seen from high above: coastlines and islands, mountain ranges, forests and rivers, several walled cities marked along trade roads, the whole scene in warm parchment and antique-gold tones as if a living illustrated map." },
+    { "id": "economy-vault","seed": 5150, "subject": "A vaulted stone treasury hall lit by a single high shaft of golden light, stacked iron-bound chests overflowing with glinting gold coins along the walls, one tall ornate scale balance at the center, warm antique-gold glow throughout." },
+    { "id": "siege",        "seed": 6160, "subject": "A vast hilltop fortress with high curtain walls and corner towers at golden hour seen from the field below, siege earthworks and a single great trebuchet silhouetted on the approach, banners snapping above the gatehouse, no people." }
+  ]
+}

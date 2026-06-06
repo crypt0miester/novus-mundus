@@ -1,5 +1,5 @@
 {
-  "_comment": "Bonsai city-sigil bake manifest. One sigil per meditation city referenced by the current hero catalog (17 cities). Each sigil is a heraldic emblem appropriate to the city's lore region (city.ts Old Name). cityId 0 (the 'everywhere' sentinel for crypto-icon heroes) uses the existing sanctuary-meditation cairn icon and is NOT baked here.",
+  "_comment": "Bonsai city-sigil bake manifest. One heraldic sigil per city (all 24: cityIds 0-23), used both as the hero-portrait meditation-city medallion and as the world-map city-marker emblem. Each sigil is a heraldic device appropriate to the city's lore region (city.ts Old Name). cityId 0 Valdenmoor IS baked (for the world-map marker); the hero compositor still renders the sanctuary-meditation cairn for the cityId-0 'everywhere' sentinel (crypto-icon heroes) via an explicit guard in hero-image/compose.ts, so baking 0.png does not change those portraits. Seeds follow 5000 + cityId.",
 
   "defaults": {
     "model":    "prism-ml/bonsai-image-ternary-4B-mlx-2bit",
@@ -36,6 +36,14 @@
     { "id": "city-15-lyssandor",  "cityId": 15, "seed": 5015, "subject": "A heraldic merlion silhouette — the upper half a stylized lion with its face obscured by a deep mane shadow, the lower half a flowing fish tail, framed by a thin circular ring." },
     { "id": "city-16-maravhen",   "cityId": 16, "seed": 5016, "subject": "An Indian heraldic ashoka chakra — a thin circular wheel with twenty-four evenly spaced spokes radiating from the hub, with a small lotus blossom at the very center." },
     { "id": "city-19-tonalca",    "cityId": 19, "seed": 5019, "subject": "A Mesoamerican stylized stepped pyramid viewed from the front with a small sun disc above its apex, framed by two curving feathered-serpent silhouettes coiling up each side with their heads turned away so no facial features are visible." },
-    { "id": "city-22-grimhollow", "cityId": 22, "seed": 5022, "subject": "A Southern African heraldic device — two crossed assegai spears behind a tall oval Nguni-style shield with horizontal banded markings, framed by stylized acacia branches on each side." }
+    { "id": "city-22-grimhollow", "cityId": 22, "seed": 5022, "subject": "A Southern African heraldic device — two crossed assegai spears behind a tall oval Nguni-style shield with horizontal banded markings, framed by stylized acacia branches on each side." },
+
+    { "id": "city-00-valdenmoor", "cityId": 0,  "seed": 5000, "subject": "An English heraldic Tudor rose, a five-petalled double rose seen face-on, with a small royal crown resting directly above it, symmetrical about the vertical axis." },
+    { "id": "city-14-aelthis",    "cityId": 14, "seed": 5014, "subject": "A Korean taegeuk roundel, a circular two-comma yin-yang spiral, flanked at the four corners by short three-bar trigram marks, enclosed in a thin double ring." },
+    { "id": "city-17-ashenveil",  "cityId": 17, "seed": 5017, "subject": "An upright flaming torch held aloft, a radiant seven-point crown of straight rays spreading around the flame, flanked by one small five-pointed star on each side." },
+    { "id": "city-18-eldrath",    "cityId": 18, "seed": 5018, "subject": "A radiant setting sun disc with straight rays resting low on a horizon line, two stylized palm fronds curving upward and outward on each side, a single five-pointed star centered above the sun." },
+    { "id": "city-20-verador",    "cityId": 20, "seed": 5020, "subject": "A heraldic device of two crossed coffee branches bearing paired leaves and round berries, bound together at the base, a small five-pointed star centered above the crossing." },
+    { "id": "city-21-mirethane",  "cityId": 21, "seed": 5021, "subject": "A single tall harbour-bridge arch spanning three short horizontal wave lines, flanked by one triangular ship sail rising on each side, a small five-pointed star centered above the arch." },
+    { "id": "city-23-seralune",   "cityId": 23, "seed": 5023, "subject": "Two steep stylized mountain peaks rising side by side over three curved wave lines, a small radiant sun disc nestled in the notch between the two peaks." }
   ]
 }

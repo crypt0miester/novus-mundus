@@ -21,7 +21,9 @@ use pinocchio::{
 
 use crate::{
     constants::{ARENA_PRIZE_DISTRIBUTION, GAME_ENGINE_SEED},
+    emit,
     error::GameError,
+    events::{ArenaMasterRewardClaimed, ArenaSeasonFinalized},
     helpers::{mint_tokens, validate_token_account_owner},
     state::{ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, GameEngine, PlayerAccount},
     utils::read_u32,
@@ -84,6 +86,15 @@ pub fn process(
     // don't need a dedicated finalize ix to unlock master rewards.
     if season.status == ArenaStatus::Active as u8 && now > season.end_time {
         season.status = ArenaStatus::Finalized as u8;
+
+        // Emit season-finalized event (additive) at the exact Active -> Finalized
+        // transition.
+        emit!(ArenaSeasonFinalized {
+            season_id,
+            total_battles: season.total_battles,
+            leaderboard_count: season.leaderboard_count,
+            timestamp: now,
+        });
     }
 
     // Season must be finalized (or later)
@@ -167,6 +178,17 @@ pub fn process(
         program_id,
     )?;
     player.locked_novi = player.locked_novi.saturating_add(reward);
+
+    // Emit master-reward-claimed event (additive) after the reward is paid.
+    // rank is 1-based per the existing event/spec.
+    let rank_one_based = (rank_idx as u8).saturating_add(1);
+    emit!(ArenaMasterRewardClaimed {
+        season_id,
+        player: player_key,
+        rank: rank_one_based,
+        amount: reward,
+        timestamp: now,
+    });
 
     Ok(())
 }

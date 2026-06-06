@@ -2,6 +2,10 @@
 
 > **Instruction-level NOVI token flow using Pinocchio. Multi-kingdom-aware.**
 
+<p align="center">
+  <img src="images/readme/economy-vault.webp" width="820" alt="A treasury hall with a central scale balance and gold-filled vaults">
+</p>
+
 ---
 
 ## Overview
@@ -14,6 +18,26 @@ This document describes the complete NOVI token flow:
 4. **Consumption** burns NOVI from the SPL supply (deflationary).
 5. **DAO mints** are capped per purpose in `MintingConfig` and gated by the DAO authority on each kingdom's GameEngine.
 6. **Calculations are deterministic** — golden-ratio multipliers + basis-point math. The few skill/RNG-influenced flows (dungeon crits, expedition strikes, forge precision, estate daily activity) are designed to be co-signed by an off-chain `game_authority`.
+
+### Flow at a glance
+
+```mermaid
+flowchart TD
+    SUB["Subscription / play<br/>time generation<br/>(update_locked_novi)"] -->|mint| LOCKED
+    STARTER["Starter NOVI<br/>init_player · 1M"] -->|mint| LOCKED
+    SOL["SOL purchase<br/>shop::purchase_novi"] -->|mint| RESERVED
+    WINS["Events · encounter loot<br/>arena · dungeon · castle"] -->|mint| RESERVED
+    DAO["DAO mint_for_prize<br/>capped per purpose"] -->|mint| RESERVED
+
+    subgraph BUCKETS [Two-bucket economy: GameEngine PDA is the mint authority]
+      LOCKED["Locked NOVI<br/>PlayerAccount<br/>NOT withdrawable"]
+      RESERVED["Reserved NOVI<br/>UserAccount<br/>withdrawable"]
+    end
+
+    RESERVED -->|reserved_to_locked one-way| LOCKED
+    LOCKED -->|hire · attack · collect<br/>craft · speedup| BURN["SPL burn<br/>deflationary"]
+    RESERVED -->|7-day vesting<br/>withdraw_reserved| WALLET["Player wallet<br/>tradable on DEX"]
+```
 
 ---
 
@@ -289,29 +313,6 @@ pub fn get_time_multiplier(activity: ActivityType, time: TimeOfDay) -> f64 {
 }
 ```
 
----
-
-## Fibonacci Efficiency Detection
-
-`logic/fibonacci.rs`:
-
-```rust
-pub fn is_fibonacci(n: u64) -> bool {
-    if n == 0 { return false; }
-    let n2 = n.saturating_mul(n);
-    let five_n2 = n2.saturating_mul(5);
-    is_perfect_square(five_n2.saturating_add(4))
-        || is_perfect_square(five_n2.saturating_sub(4))
-}
-
-fn is_perfect_square(n: u64) -> bool {
-    if n == 0 { return true; }
-    let sqrt = libm::sqrt(n as f64) as u64;
-    sqrt.saturating_mul(sqrt) == n
-}
-```
-
-When `is_fibonacci(novi_amount)` is true, consumption applies `× √φ` (12_720 bps).
 
 ---
 
@@ -349,8 +350,6 @@ Event finalized; player ranked in top 10
 │  user.reserved_novi_earned_at = now                              │
 └─────────────────────────────────────────────────────────────────┘
 ```
-
-(Earlier docs cited a 40/20/13/9/6/4/3/2/2/1 prize split. The actual `PRIZE_DISTRIBUTION` constant in `src/constants.rs:160-171` is 35/25/15/7.5/7.5/2/2/2/2/2 = 100%.)
 
 ### Withdrawal (`token::withdraw_reserved`, instruction 16)
 
@@ -394,7 +393,6 @@ Player wants to move R reserved NOVI to locked
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-(There is no Reserved NOVI expiration today. The 90-day expiration mentioned in older docs is a design proposal, not a shipped instruction.)
 
 ---
 

@@ -33,6 +33,7 @@ NOVUS_MUNDUS_PROGRAM_ID="6kFKaG8DEMC5mVMi4VbD3AYxxmz2gQc3o2fuW4q4rYNk"
 MPL_CORE_PROGRAM_ID="CoREENxT6tW1HoK8ypY1SxRMZTcVPm7R94rH4PZNhX7d"
 TLD_HOUSE_PROGRAM_ID="TLDHkysf5pCnKsVA4gXpNvmy7psXLPEu4LAdDJthT9S"
 ALT_NAME_SERVICE_PROGRAM_ID="ALTNSZ46uaAUU7XUV6awvdorLGqAsPwa9shm7h4uP2FK"
+TOKEN_METADATA_PROGRAM_ID="metaqbxxUerdq28cj1RbAWkYQm3ybzjb6a8bt518x1s"
 
 # Accounts to clone from mainnet
 TLD_STATE="VmmhRjr64KbpTZpgmeiVSWmR8H8RyqgigF1XQf8AvET"
@@ -53,6 +54,7 @@ MISSING_PROGRAMS=""
 [ ! -f "$BIN_DIR/mpl_core.so" ] && MISSING_PROGRAMS="$MISSING_PROGRAMS mpl_core.so"
 [ ! -f "$BIN_DIR/tld_house.so" ] && MISSING_PROGRAMS="$MISSING_PROGRAMS tld_house.so"
 [ ! -f "$BIN_DIR/alt_name_service.so" ] && MISSING_PROGRAMS="$MISSING_PROGRAMS alt_name_service.so"
+[ ! -f "$BIN_DIR/mpl_token_metadata.so" ] && MISSING_PROGRAMS="$MISSING_PROGRAMS mpl_token_metadata.so"
 
 if [ -n "$MISSING_PROGRAMS" ]; then
     echo "Missing external programs:$MISSING_PROGRAMS"
@@ -142,6 +144,7 @@ CMD="$CMD --upgradeable-program $NOVUS_MUNDUS_PROGRAM_ID $NOVUS_MUNDUS_SO $DAO_A
 CMD="$CMD --bpf-program $MPL_CORE_PROGRAM_ID $BIN_DIR/mpl_core.so"
 CMD="$CMD --bpf-program $TLD_HOUSE_PROGRAM_ID $BIN_DIR/tld_house.so"
 CMD="$CMD --bpf-program $ALT_NAME_SERVICE_PROGRAM_ID $BIN_DIR/alt_name_service.so"
+CMD="$CMD --bpf-program $TOKEN_METADATA_PROGRAM_ID $BIN_DIR/mpl_token_metadata.so"
 
 # Clone accounts from mainnet
 CMD="$CMD --clone $TLD_STATE"

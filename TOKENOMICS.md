@@ -2,6 +2,10 @@
 
 > **Dual-account NOVI economy with deflationary gameplay consumption and DAO-controlled mint allocations, supporting multi-kingdom play with a shared mint authority.**
 
+<p align="center">
+  <img src="images/readme/economy-vault.webp" width="820" alt="A treasury hall with a central scale balance and gold-filled vaults">
+</p>
+
 ---
 
 ## Table of Contents
@@ -438,6 +442,18 @@ pub fn check_eligibility(
 
 The on-chain `MintingConfig` tracks both running totals and caps per purpose. Suggested defaults:
 
+```mermaid
+pie showData
+    title Suggested max-supply allocation (1,000,000,000 NOVI)
+    "Event Prizes" : 400
+    "Liquidity" : 200
+    "Development" : 150
+    "Marketing" : 100
+    "Partnerships" : 50
+    "Treasury" : 50
+    "Emergency" : 50
+```
+
 ```
 Max supply (DAO-configurable): 1,000,000,000 NOVI
 
@@ -454,6 +470,13 @@ Suggested allocation caps:
 Each allocation is tracked individually in `MintingConfig` and capped per purpose. `mint_for_prize` enforces `total_minted` ≤ `max_supply_cap` plus the per-purpose cap.
 
 ### Supply Equilibrium
+
+```mermaid
+flowchart LR
+    IN["Inflation (capped, DAO-approved)<br/>events · arena · dungeon · castle prizes<br/>NOVI purchase · time generation · starter"] -->|mint, capped| S(("NOVI<br/>supply"))
+    S -->|burn, uncapped| OUT["Deflation (market-driven)<br/>attacks · collection · hiring<br/>equipment · speedups · teleport · travel"]
+    OUT -.->|burn rate > mint rate as activity grows| NET["Net deflationary"]
+```
 
 **Inflationary Pressure** (capped, DAO-approved):
 

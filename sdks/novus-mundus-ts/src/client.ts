@@ -88,6 +88,8 @@ import { parseHeroTemplate, HERO_TEMPLATE_SIZE } from './state/hero';
 import type { HeroTemplateAccount } from './state/hero';
 import { parseCastle, parseGarrisonContribution, parseTeamCastleReward } from './state/castle';
 import type { CastleAccount, GarrisonContributionAccount, TeamCastleRewardAccount } from './state/castle';
+import { parseDungeonTemplate } from './state/dungeon';
+import type { DungeonTemplateAccount } from './state/dungeon';
 import { parseLocation, LOCATION_ACCOUNT_SIZE } from './state/location';
 import type { LocationAccount } from './state/location';
 import { parseEvent, parseEventParticipation, EVENT_ACCOUNT_SIZE } from './state/event';
@@ -1275,6 +1277,24 @@ export class NovusMundusClient {
         return parsed ? { pubkey, account: parsed } : null;
       })
       .filter((r): r is BulkFetchResult<TeamCastleRewardAccount> => r !== null);
+  }
+
+  /**
+   * Fetch every DungeonTemplate account (global, DAO-created). Filter on the
+   * account_key only — templates aren't kingdom-scoped (no game_engine field).
+   */
+  async fetchAllDungeonTemplates(): Promise<BulkFetchResult<DungeonTemplateAccount>[]> {
+    const keyByte = keyFilterBytes(AccountKey.DungeonTemplate);
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [{ memcmp: { offset: 0, bytes: keyByte } }],
+    });
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseDungeonTemplate(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<DungeonTemplateAccount> => r !== null);
   }
 
   /**

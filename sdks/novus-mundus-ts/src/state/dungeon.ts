@@ -9,6 +9,19 @@
 import type { PublicKey, AccountInfo } from '@solana/web3.js';
 import { BufferReader } from '../utils/deserialize';
 
+/** Seconds per leaderboard week — mirrors SECONDS_PER_WEEK in create_leaderboard.rs. */
+export const DUNGEON_SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
+
+/**
+ * Current dungeon-leaderboard week number = floor(unixSeconds / week).
+ * MUST match the on-chain `get_week_number` exactly — raw `timestamp / week`,
+ * with NO epoch offset (an offset makes week_number < current_week on chain,
+ * which create_leaderboard rejects).
+ */
+export function currentDungeonWeek(nowSeconds: number): number {
+  return Math.floor(nowSeconds / DUNGEON_SECONDS_PER_WEEK);
+}
+
 // Dungeon Enums (local definitions matching Rust state)
 // Note: These differ from types/enums.ts which has simplified versions
 

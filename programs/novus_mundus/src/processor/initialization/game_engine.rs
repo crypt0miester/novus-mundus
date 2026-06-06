@@ -55,7 +55,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
     let registration_closes_at = read_i64(data, 43, "game_engine.registration_closes_at")?;
 
     // 1. Parse accounts
-    crate::extract_accounts!(accounts, exact [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar, program_data]);
+    crate::extract_accounts!(accounts, exact [game_engine, authority, novi_mint, treasury_wallet, system_program, token_program, rent_sysvar, program_data, novi_metadata, token_metadata_program]);
 
     // 2. Validate accounts
     require_signer(authority)?;
@@ -63,6 +63,7 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
     require_writable(novi_mint)?;
     require_key_match(system_program, &pinocchio_system::ID)?;
     require_key_match(token_program, &pinocchio_token::ID)?;
+    require_key_match(token_metadata_program, &p_token_metadata::ID)?;
 
     assert_is_program_authority(program_id, authority, program_data)?;
 
@@ -130,6 +131,25 @@ pub fn process(program_id: &Address, accounts: &[AccountView], data: &[u8]) -> P
             freeze_authority: None,                // No freeze authority
         }
         .invoke()?;
+
+        // 8. Create the NOVI token metadata (name/symbol/uri) in the same tx so
+        // wallets/explorers render it. The mint authority is the GameEngine PDA,
+        // so it signs the CPI. CreateMetadataAccountV3 derives + validates the
+        // metadata PDA itself, so no pre-check is needed here. `signer` above was
+        // moved into the CreateAccount call; `seeds` is still in scope.
+        let ge_signer = pinocchio::cpi::Signer::from(&seeds);
+        p_token_metadata::instructions::CreateMetadataAccountV3 {
+            metadata: novi_metadata,
+            mint: novi_mint,
+            mint_authority: game_engine, // GameEngine PDA (mint authority) — signs
+            payer: authority,
+            update_authority: game_engine,
+            system_program,
+            name: crate::constants::NOVI_TOKEN_NAME,
+            symbol: crate::constants::NOVI_TOKEN_SYMBOL,
+            uri: crate::constants::NOVI_TOKEN_URI,
+        }
+        .invoke_signed(&[ge_signer])?;
     }
 
     // 8. Initialize GameEngine state with kingdom configuration

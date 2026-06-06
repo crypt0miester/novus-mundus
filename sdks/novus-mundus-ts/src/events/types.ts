@@ -1412,6 +1412,54 @@ export interface KingdomCitiesInitializedEvent {
   initializedAt: bigint;
 }
 
+// Arena Events
+
+export interface ArenaBattleResolvedEvent {
+  seasonId: number;
+  battleId: bigint;
+  challenger: PublicKey;
+  defender: PublicKey;
+  challengerPower: bigint;
+  defenderPower: bigint;
+  challengerWon: boolean;
+  challengerPoints: bigint;
+  defenderPoints: bigint;
+  newChallengerElo: number;
+  newDefenderElo: number;
+  timestamp: bigint;
+  slot: bigint;
+}
+
+export interface ArenaPlayerJoinedEvent {
+  seasonId: number;
+  player: PublicKey;
+  timestamp: bigint;
+}
+
+export interface ArenaDailyRewardClaimedEvent {
+  seasonId: number;
+  player: PublicKey;
+  amount: bigint;
+  battlesFought: number;
+  uniqueOpponents: number;
+  timestamp: bigint;
+}
+
+export interface ArenaMasterRewardClaimedEvent {
+  seasonId: number;
+  player: PublicKey;
+  rank: number;
+  amount: bigint;
+  timestamp: bigint;
+}
+
+export interface ArenaSeasonFinalizedEvent {
+  seasonId: number;
+  totalBattles: bigint;
+  leaderboardCount: number;
+  timestamp: bigint;
+}
+
 // Discriminated Union
 
 export type NovusMundusEvent =
@@ -1583,7 +1631,13 @@ export type NovusMundusEvent =
   | { name: 'KingdomEventCreated'; data: KingdomEventCreatedEvent }
   | { name: 'KingdomArenaSeasonStarted'; data: KingdomArenaSeasonStartedEvent }
   | { name: 'KingdomDungeonLeaderboardCreated'; data: KingdomDungeonLeaderboardCreatedEvent }
-  | { name: 'KingdomCitiesInitialized'; data: KingdomCitiesInitializedEvent };
+  | { name: 'KingdomCitiesInitialized'; data: KingdomCitiesInitializedEvent }
+  // Arena
+  | { name: 'ArenaBattleResolved'; data: ArenaBattleResolvedEvent }
+  | { name: 'ArenaPlayerJoined'; data: ArenaPlayerJoinedEvent }
+  | { name: 'ArenaDailyRewardClaimed'; data: ArenaDailyRewardClaimedEvent }
+  | { name: 'ArenaMasterRewardClaimed'; data: ArenaMasterRewardClaimedEvent }
+  | { name: 'ArenaSeasonFinalized'; data: ArenaSeasonFinalizedEvent };
 
 // Event Name Union
 

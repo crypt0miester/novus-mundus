@@ -1,71 +1,63 @@
 /**
- * Crank: Dungeons — create weekly leaderboards (Ix 260)
+ * Crank: Dungeons — create the current week's leaderboard per dungeon (Ix 260).
  *
- * For each dungeon template, calculates the current week number,
- * checks if the leaderboard PDA exists, and creates it if missing.
+ * Enumerates dungeon templates on chain, derives this week's leaderboard PDA,
+ * and creates it if missing. Permissionless.
+ *
+ * Prior version subtracted a `WEEK_ZERO_EPOCH` from the timestamp, but the chain
+ * uses raw `timestamp / SECONDS_PER_WEEK` — so its week number was ~2800 weeks
+ * too low and `create_leaderboard` rejected every call (`week_number <
+ * current_week`). Use the shared `currentDungeonWeek` helper, which mirrors the
+ * on-chain formula exactly.
  */
 
 import { type CLIContext } from '../context';
 import { log, newStats, sendWithRetry, accountExists, type PhaseStats } from '../helpers';
-import { DUNGEONS } from '../../data/dungeons';
-import { deriveDungeonLeaderboardPda } from '../../../src/pda';
+import {
+  NovusMundusClient,
+  currentDungeonWeek,
+  deriveDungeonLeaderboardPda,
+} from '../../../src/index';
 import { createCreateLeaderboardInstruction } from '../../../src/instructions/dungeon';
-
-/** Week 0 epoch — use a fixed reference point for week calculation */
-const WEEK_ZERO_EPOCH = 1704067200; // 2024-01-01T00:00:00Z (Monday)
-const SECONDS_PER_WEEK = 7 * 24 * 60 * 60;
-
-function getCurrentWeekNumber(): number {
-  const now = Math.floor(Date.now() / 1000);
-  return Math.floor((now - WEEK_ZERO_EPOCH) / SECONDS_PER_WEEK);
-}
 
 export async function crankDungeons(ctx: CLIContext): Promise<PhaseStats> {
   const stats = newStats();
-  const weekNumber = getCurrentWeekNumber();
+  const dao = ctx.daoAuthority.publicKey;
+  const weekNumber = currentDungeonWeek(Math.floor(Date.now() / 1000));
 
-  log.info(`  Current week number: ${weekNumber}`);
-  log.info(`  Checking ${DUNGEONS.length} dungeon templates...`);
+  const client = new NovusMundusClient({
+    connection: ctx.connection,
+    kingdomId: ctx.kingdomId,
+    gameEngine: ctx.gameEngine,
+  });
+  const templates = await client.fetchAllDungeonTemplates();
+  log.info(`  Week ${weekNumber} — checking ${templates.length} dungeon templates...`);
 
-  for (const dungeon of DUNGEONS) {
-    const [leaderboardPda] = await deriveDungeonLeaderboardPda(
-      ctx.gameEngine,
-      dungeon.templateId,
-      weekNumber
-    );
-
-    const exists = await accountExists(ctx.connection, leaderboardPda);
-    if (exists) {
-      log.skip(`Leaderboard: ${dungeon.name} week ${weekNumber} [exists]`);
+  for (const { account: t } of templates) {
+    const [leaderboardPda] = await deriveDungeonLeaderboardPda(ctx.gameEngine, t.dungeonId, weekNumber);
+    if (await accountExists(ctx.connection, leaderboardPda)) {
+      log.skip(`Leaderboard: ${t.name} week ${weekNumber} [exists]`);
       stats.skipped++;
       continue;
     }
 
     const ix = createCreateLeaderboardInstruction(
-      {
-        payer: ctx.daoAuthority.publicKey,
-        daoAuthority: ctx.daoAuthority.publicKey,
-        gameEngine: ctx.gameEngine,
-      },
-      {
-        templateId: dungeon.templateId,
-        weekNumber,
-        prizePool: 0,
-      }
+      { payer: dao, daoAuthority: dao, gameEngine: ctx.gameEngine },
+      { templateId: t.dungeonId, weekNumber, prizePool: 0 },
     );
 
     if (ctx.dryRun) {
-      log.dryRun(`Would create: Leaderboard ${dungeon.name} week ${weekNumber}`);
+      log.dryRun(`Would create: Leaderboard ${t.name} week ${weekNumber}`);
       stats.created++;
       continue;
     }
 
     try {
       await sendWithRetry(ctx, ix, [ctx.daoAuthority]);
-      log.create(`Leaderboard: ${dungeon.name} week ${weekNumber}`);
+      log.create(`Leaderboard: ${t.name} week ${weekNumber}`);
       stats.created++;
     } catch (err: any) {
-      log.error(`Failed to create leaderboard for ${dungeon.name}: ${err.message}`);
+      log.error(`Failed to create leaderboard for ${t.name}: ${err.message}`);
       stats.skipped++;
     }
   }

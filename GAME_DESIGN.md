@@ -2,6 +2,10 @@
 
 **Multi-kingdom strategy MMO with golden-ratio progression, dual-token economy, and deterministic core mechanics**
 
+<p align="center">
+  <img src="images/readme/hero-realm.webp" width="860" alt="The realm of Novus Mundus at golden hour">
+</p>
+
 ---
 
 ## Core Philosophy
@@ -28,6 +32,22 @@ A handful of moments have a skill/randomness component:
 - **Estate daily activity** — mini-game score (`game_authority` co-signed)
 
 Production design intent is that these moments are off-chain-verified and co-signed by the trusted `game_authority`, not on-chain RNG.
+
+### The Core Loop
+
+```mermaid
+flowchart LR
+    SUB["Subscribe / play<br/>time generation"] --> LOCKED["Locked NOVI"]
+    LOCKED --> HIRE["Hire units<br/>buy equipment"]
+    HIRE --> ACT["Collect resources<br/>attack players and encounters"]
+    ACT --> GROW["Cash · XP · loot · fragments"]
+    GROW --> INVEST["Research · Heroes<br/>Estate · Forge"]
+    INVEST --> COMPETE["Events · Arena<br/>Dungeons · Castles"]
+    COMPETE --> RESERVED["Reserved NOVI<br/>withdrawable, 7-day vest"]
+    RESERVED --> WITHDRAW["Withdraw to wallet"]
+    RESERVED -.reinvest.-> LOCKED
+    INVEST -.stronger.-> ACT
+```
 
 ---
 

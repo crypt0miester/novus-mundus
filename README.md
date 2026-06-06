@@ -1,18 +1,30 @@
-# Novus Mundus: A Multiplayer Strategy Game on Solana
+<p align="center">
+  <img src="images/logo/novus-mundus-logo-256-transparent.png" width="190" alt="Novus Mundus">
+</p>
 
-> **A persistent, event-driven world where empires rise, alliances form, and only the strategic survive.**
+<h1 align="center">Novus Mundus</h1>
+
+<p align="center">
+  <b>A persistent, event-driven strategy world on Solana, where empires rise, alliances form, and only the strategic survive.</b>
+</p>
+
+<p align="center">
+  <img src="images/readme/hero-realm.webp" width="900" alt="The realm of Novus Mundus at golden hour">
+</p>
 
 Novus Mundus is a continuous strategy game built on Solana where players command armies, capture castles, run dungeons, swing forge hammers, and compete in events to earn **NOVI** — the game's dual-purpose token that fuels both gameplay and real rewards.
 
 **Multi-Kingdom System**: Join a kingdom where everyone starts together. New kingdoms launch periodically so late joiners compete on equal footing. Each kingdom has its own teams, theme, leaderboards, events, castles, and dungeons.
 
-**Theme-Flexible Design**: Medieval, cyberpunk, sci-fi, modern, or post-apocalyptic — five themes are defined in code. Unit names and visuals change per kingdom theme; strategy stays the same.
-
-**Deterministic by Design**: Core math is deterministic — golden-ratio multipliers, basis-point arithmetic, no on-chain RNG. A handful of skill/randomness moments (dungeon crits, expedition strikes, forge precision) are intended to be co-signed by the off-chain `game_authority` so outcomes can be verified independently. 
+**Theme-Flexible Design**: Medieval, cyberpunk, sci-fi, modern, or post-apocalyptic, and more can be added. five themes are defined in code. Unit names and visuals change per kingdom theme; strategy stays the same.
 
 ---
 
 ## Game Overview
+
+<p align="center">
+  <img src="images/readme/world-map.webp" width="820" alt="An illustrated map of the realm with walled cities, rivers, and mountains">
+</p>
 
 ### Kingdoms: Fair Starts for Everyone
 
@@ -55,6 +67,10 @@ Command your forces across multiple cities within your kingdom:
 ---
 
 ## The NOVI Economy
+
+<p align="center">
+  <img src="apps/web/public/img/banners/treasury-banner.webp" width="760" alt="A vaulted treasury hall stacked with gold-filled chests">
+</p>
 
 ### Dual-Account System
 
@@ -201,6 +217,10 @@ Stamina constants are in `ENCOUNTER_STAMINA_COSTS` (`constants.rs:191-198`). Rew
 
 ### Dungeon System
 
+<p align="center">
+  <img src="apps/web/public/img/dungeons/dungeon-2-shadow-crypt.webp" width="720" alt="A torchlit shadow crypt">
+</p>
+
 Dungeons are roguelike PvE runs (the "Catacombs") with floors, rooms, combat, relics, and a weekly leaderboard.
 
 **Instructions**: `dungeon::enter` → `dungeon::attack` / `attack_multi` / `interact` / `choose_relic` → `flee` or `claim`; checkpointed runs can be `resume`'d for `DUNGEON_RESUME_GEM_COST = 500` gems.
@@ -214,6 +234,10 @@ Dungeons are roguelike PvE runs (the "Catacombs") with floors, rooms, combat, re
 **Reward scaling**: `DUNGEON_FLOOR_MULTIPLIERS = [1.0x, 1.2x, 1.44x, ..., 5.16x]` for floors 1-10. Weekly leaderboard (`claim_leaderboard_prize`) mints reserved NOVI for top finishers.
 
 ### Arena (Competitive PvP)
+
+<p align="center">
+  <img src="apps/web/public/img/banners/arena-banner.webp" width="720" alt="A Roman-style arena coliseum">
+</p>
 
 Seasonal PvP run on a per-kingdom basis. Constants in `constants.rs:290-358`:
 
@@ -229,6 +253,10 @@ Seasonal PvP run on a per-kingdom basis. Constants in `constants.rs:290-358`:
 Battles are challenge-based: `arena::challenge_player` requires the `game_authority` signer to validate the match.
 
 ### Castle System (Territory Control)
+
+<p align="center">
+  <img src="apps/web/public/img/banners/citadel-banner.webp" width="720" alt="A fortified citadel tower">
+</p>
 
 5 castle tiers: Outpost (0.25×), Keep (0.5×), Stronghold (1.0×), Fortress (1.5×), Citadel (2.0×) — see `CASTLE_TIER_MULTIPLIER_BPS`. Max castles per king: 5.
 
@@ -260,6 +288,10 @@ Each player has one `EstateAccount` (`estate::create`) with embedded buildings:
 `estate::build` starts construction; `estate::complete` finalizes after the timer; `estate::upgrade` levels existing buildings; `estate::daily_claim` and `estate::daily_activity` provide passive resource generation tied to a daily mini-game window. `recover_troops` heals abandoned units via Infirmary; `convert_materials` swaps resources.
 
 ### Forge System (Staged Tempering)
+
+<p align="center">
+  <img src="apps/web/public/img/banners/forge-banner.webp" width="720" alt="A blacksmith's forge with a glowing hearth">
+</p>
 
 Crafting flow: `forge::start_craft` (lock materials) → repeated `forge::strike` (skill-based timing window) → `forge::equip` (apply to player) or `forge::abandon_craft` (refund partial). Quality tiers 0-4 (Common → Mythic).
 
@@ -301,6 +333,10 @@ Heroes can be sent to meditate (`sanctuary::start_meditation`) for passive XP an
 
 ### Combat Mechanics
 
+<p align="center">
+  <img src="images/readme/siege.webp" width="720" alt="A hilltop fortress under siege with a trebuchet on the approach">
+</p>
+
 **Attack power (deterministic, see `logic/combat.rs`)**:
 
 ```
@@ -319,6 +355,10 @@ total_power = base_power × weapon_coverage × total_bonus_bps / 10000
 ---
 
 ## Events & Competition
+
+<p align="center">
+  <img src="apps/web/public/img/events/event-1.webp" width="720" alt="Crossed kingdom standards over a cairn of trophy arms">
+</p>
 
 All events and leaderboards are **kingdom-scoped** — you compete only with players in your kingdom.
 

@@ -5,11 +5,14 @@
  */
 
 import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
-import { Keypair, Transaction } from '@solana/web3.js';
+import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 
 import {
   createUpdateGameConfigInstruction,
   deriveGameEnginePda,
+  deriveNoviMintPda,
+  deriveTokenMetadataPda,
+  TOKEN_METADATA_PROGRAM_ID,
   type ArenaConfig,
   type CombatConfig,
   type CastleConfig,
@@ -40,6 +43,20 @@ describe('Initialization', () => {
       expect(engine).not.toBeNull();
       expect(Number(engine!.version)).toBeGreaterThanOrEqual(0);
       expect(engine!.paused).toBe(false);
+    });
+
+    it('should create NOVI token metadata at init', async () => {
+      const [noviMint] = await deriveNoviMintPda();
+      const [metadataPda] = await deriveTokenMetadataPda(noviMint);
+      const acct = ctx.svm.getAccount(svmKey(metadataPda));
+      expect(acct).not.toBeNull();
+      // Owned by the Metaplex Token Metadata program.
+      expect(new PublicKey(acct!.owner).toBase58()).toBe(TOKEN_METADATA_PROGRAM_ID.toBase58());
+      // The DataV2 strings are stored in the account; assert name/symbol/uri landed.
+      const text = Buffer.from(acct!.data).toString('latin1');
+      expect(text).toContain('Novus Mundus');
+      expect(text).toContain('NOVI');
+      expect(text).toContain('http://localhost:3000/token/novi.json');
     });
 
     it('should have default ArenaConfig values', async () => {

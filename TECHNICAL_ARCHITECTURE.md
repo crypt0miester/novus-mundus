@@ -26,6 +26,24 @@
 
 ### System Components
 
+```mermaid
+graph TD
+    DAO["DAO governance authority<br/>(authority pubkey on every GameEngine)"] --> GE
+    GA["game_authority<br/>skill / RNG co-signer"] -.-> GE
+    PAY["payment_authority<br/>off-chain payments"] -.-> GE
+    GE["GameEngine PDA - per kingdom_id (0..N)<br/>embeds GameCaps, EconomicConfig, GameplayConfig,<br/>SubscriptionTiers[4], MintingConfig,<br/>Arena / Dungeon / Castle / Combat configs"]
+    GE --> MINT["NOVI mint PDA<br/>shared · kingdom 0 is authority"]
+    GE --> PLAYER["Player PDAs"]
+    GE --> USER["User PDAs"]
+    GE --> CITY["City PDAs"]
+    GE --> ESTATE["Estate PDAs"]
+    GE --> SHOP["Shop PDAs"]
+    GE --> SUBS["Subsystems<br/>Team · Rally · Castle · Arena<br/>Dungeon · Event · Research · Expedition<br/>Hero (MPL Core) · Reinforcement"]
+```
+
+<details>
+<summary>ASCII version</summary>
+
 ```
 ┌──────────────────────────────────────────────────────────────────┐
 │                  DAO governance authority                        │
@@ -60,6 +78,8 @@
     ForgeConfig, ForgeSession, NameRecord, TeamCastleReward,
     AllowedToken, PlayerPurchase, etc.
 ```
+
+</details>
 
 ### Key Design Principles
 
@@ -219,6 +239,26 @@ programs/novus_mundus/src/
 ## Instruction Dispatch
 
 The dispatcher uses a **u16 little-endian** discriminator (first 2 bytes), not a single byte. See `src/lib.rs:42-298`.
+
+```mermaid
+flowchart LR
+    DATA["instruction data"] --> DISC{"u16 LE discriminant<br/>first 2 bytes"}
+    DISC --> R0["0-9 · Initialization"]
+    DISC --> R10["10-19 · Economy / Token"]
+    DISC --> R20["20-29 · Combat"]
+    DISC --> R30["30-49 · Travel"]
+    DISC --> R50["50-59, 210-229 · Team"]
+    DISC --> R60["60-69 · Rally"]
+    DISC --> R70["70-79 · Encounter / Loot"]
+    DISC --> R80["80-99 · Event / Progression"]
+    DISC --> R100["100-119 · Subscription / Name"]
+    DISC --> R120["120-136 · Research / Hero"]
+    DISC --> R140["140-159 · Shop"]
+    DISC --> R160["160-189 · Estate / Forge"]
+    DISC --> R190["190-209 · Reinforcement / Expedition"]
+    DISC --> R230["230-269 · Arena / Dungeon"]
+    DISC --> R270["270-319 · Castle / Purchase NOVI"]
+```
 
 ```rust
 pub fn process_instruction(

@@ -32,7 +32,9 @@ use crate::{
         ARENA_SIEGE_WEAPON_POWER, ARENA_UNDERDOG_BONUS_BPS, DEFENSIVE_UNIT_1_POWER,
         DEFENSIVE_UNIT_2_POWER, DEFENSIVE_UNIT_3_POWER, SECONDS_PER_DAY,
     },
+    emit,
     error::GameError,
+    events::ArenaBattleResolved,
     helpers::parse_hero_nft,
     state::{
         ArenaLoadoutAccount, ArenaParticipantAccount, ArenaSeasonAccount, ArenaStatus, BuffStat,
@@ -309,6 +311,25 @@ pub fn process(
     season.update_leaderboard(challenger_player_key, challenger_total_points);
     season.update_leaderboard(defender_player_key, defender_total_points);
 
+    // Emit battle resolution event (additive). battle_id is the post-increment
+    // season.total_battles. Slot is fetched once here for the event only.
+    let slot = Clock::get()?.slot;
+    emit!(ArenaBattleResolved {
+        season_id,
+        battle_id: season.total_battles,
+        challenger: challenger_player_key,
+        defender: defender_player_key,
+        challenger_power,
+        defender_power,
+        challenger_won,
+        challenger_points,
+        defender_points,
+        new_challenger_elo,
+        new_defender_elo,
+        timestamp: now,
+        slot,
+    });
+
     Ok(())
 }
 
@@ -320,27 +341,30 @@ fn calculate_arena_power(
     estate_account: &AccountView,
     program_id: &Address,
 ) -> u64 {
-    // Base power from defensive units
-    let unit_power = loadout.defensive_units[0]
-        .saturating_mul(DEFENSIVE_UNIT_1_POWER)
-        .saturating_add(loadout.defensive_units[1].saturating_mul(DEFENSIVE_UNIT_2_POWER))
-        .saturating_add(loadout.defensive_units[2].saturating_mul(DEFENSIVE_UNIT_3_POWER));
+    // Clamp every loadout field to the assets the player actually owns. An
+    // inflated loadout therefore cannot manufacture power it cannot back
+    // (phantom army), while a stale loadout never fails the battle - it just
+    // contributes the units still on hand.
+    let units_0 = loadout.defensive_units[0].min(player.defensive_unit_1);
+    let units_1 = loadout.defensive_units[1].min(player.defensive_unit_2);
+    let units_2 = loadout.defensive_units[2].min(player.defensive_unit_3);
 
-    // Equipment power
-    let equipment_power = loadout
-        .melee_weapons
+    // Base power from defensive units
+    let unit_power = units_0
+        .saturating_mul(DEFENSIVE_UNIT_1_POWER)
+        .saturating_add(units_1.saturating_mul(DEFENSIVE_UNIT_2_POWER))
+        .saturating_add(units_2.saturating_mul(DEFENSIVE_UNIT_3_POWER));
+
+    // Equipment power (also clamped to owned)
+    let melee = loadout.melee_weapons.min(player.melee_weapons);
+    let ranged = loadout.ranged_weapons.min(player.ranged_weapons);
+    let siege = loadout.siege_weapons.min(player.siege_weapons);
+    let armor = loadout.armor_pieces.min(player.armor_pieces);
+    let equipment_power = melee
         .saturating_mul(ARENA_MELEE_WEAPON_POWER)
-        .saturating_add(
-            loadout
-                .ranged_weapons
-                .saturating_mul(ARENA_RANGED_WEAPON_POWER),
-        )
-        .saturating_add(
-            loadout
-                .siege_weapons
-                .saturating_mul(ARENA_SIEGE_WEAPON_POWER),
-        )
-        .saturating_add(loadout.armor_pieces.saturating_mul(ARENA_ARMOR_POWER));
+        .saturating_add(ranged.saturating_mul(ARENA_RANGED_WEAPON_POWER))
+        .saturating_add(siege.saturating_mul(ARENA_SIEGE_WEAPON_POWER))
+        .saturating_add(armor.saturating_mul(ARENA_ARMOR_POWER));
 
     let base_power = unit_power.saturating_add(equipment_power);
 

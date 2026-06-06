@@ -19,6 +19,7 @@ import {
   SEEDS,
   ALT_NAME_SERVICE_PROGRAM_ID,
   TLD_HOUSE_PROGRAM_ID,
+  TOKEN_METADATA_PROGRAM_ID,
 } from './program';
 
 // Browser-safe LE byte helpers (no Buffer.write* dependency)
@@ -57,6 +58,15 @@ async function derive(
     seeds,
   });
   return [new PublicKey(addr), bump];
+}
+
+/** Derive the Metaplex metadata PDA for a mint: ["metadata", program, mint]. */
+export async function deriveTokenMetadataPda(mint: PublicKey): Promise<[PublicKey, number]> {
+  return derive(TOKEN_METADATA_PROGRAM_ID, [
+    new TextEncoder().encode('metadata'),
+    TOKEN_METADATA_PROGRAM_ID.toBytes(),
+    mint.toBytes(),
+  ]);
 }
 
 // Core Account PDAs

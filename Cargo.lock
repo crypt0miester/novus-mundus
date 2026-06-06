@@ -194,6 +194,7 @@ dependencies = [
  "p-core",
  "p-pyth",
  "p-switchboard",
+ "p-token-metadata",
  "pinocchio",
  "pinocchio-associated-token-account",
  "pinocchio-log",
@@ -225,6 +226,14 @@ version = "0.2.0"
 dependencies = [
  "five8_const 0.1.4",
  "pinocchio",
+]
+
+[[package]]
+name = "p-token-metadata"
+version = "0.1.0"
+dependencies = [
+ "pinocchio",
+ "solana-address",
 ]
 
 [[package]]

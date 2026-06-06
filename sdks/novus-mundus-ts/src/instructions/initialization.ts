@@ -15,7 +15,7 @@ import {
   SYSVAR_RENT_PUBKEY,
 } from '@solana/web3.js';
 import { getProgramDerivedAddress, type Address } from '@solana/addresses';
-import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID, TOKEN_METADATA_PROGRAM_ID } from '../program';
 
 /** BPFLoaderUpgradeab1e11111111111111111111111 — owner of program-data PDAs. */
 export const BPF_LOADER_UPGRADEABLE_PROGRAM_ID = new PublicKey(
@@ -41,6 +41,7 @@ import {
   deriveUserPda,
   deriveCityPda,
   deriveLocationPda,
+  deriveTokenMetadataPda,
 } from '../pda';
 import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
@@ -91,6 +92,7 @@ export async function createInitGameEngineInstruction(
   const [gameEngine] = await deriveGameEnginePda(accounts.kingdomId);
   const [noviMint] = await deriveNoviMintPda();
   const [programData] = await deriveProgramDataPda();
+  const [noviMetadata] = await deriveTokenMetadataPda(noviMint);
 
   // Rust account order (8):
   // 0. [writable] game_engine: GameEngine PDA
@@ -103,6 +105,9 @@ export async function createInitGameEngineInstruction(
   // 7. [] program_data: ProgramData PDA under BPFLoaderUpgradeable. Used by
   //    `assert_is_program_authority` to enforce that only the upgrade
   //    authority can initialize a kingdom.
+  // 8. [writable] novi_metadata: Metaplex metadata PDA for the NOVI mint (created
+  //    on the first kingdom's init, alongside the mint).
+  // 9. [] token_metadata_program: Metaplex Token Metadata program.
   const keys = [
     { pubkey: gameEngine, isSigner: false, isWritable: true },
     { pubkey: accounts.authority, isSigner: true, isWritable: true },
@@ -112,6 +117,8 @@ export async function createInitGameEngineInstruction(
     { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
     { pubkey: SYSVAR_RENT_PUBKEY, isSigner: false, isWritable: false },
     { pubkey: programData, isSigner: false, isWritable: false },
+    { pubkey: noviMetadata, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_METADATA_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Instruction data: 51 bytes
