@@ -144,7 +144,7 @@ pub struct ArenaLoadoutAccount {
 
 ```mermaid
 flowchart TD
-    A[Load Loadout] --> B["unit_power = units[0]×10 + units[1]×25 + units[2]×60"]
+    A["Load Loadout (clamp each field to owned)"] --> B["unit_power = units[0]×10 + units[1]×25 + units[2]×60"]
     B --> C["equip_power = melee×10 + ranged×16 + siege×26 + armor×5"]
     C --> D["base_power = unit_power + equip_power"]
     D --> E[Accumulate bonus_bps]
@@ -157,6 +157,10 @@ flowchart TD
 ```
 
 ```
+// Phantom-army guard: every field is first clamped to what the player owns,
+// for BOTH sides. units[t] = min(loadout.units[t], owned.units[t]); likewise
+// melee/ranged/siege/armor = min(loadout, owned). An inflated loadout therefore
+// contributes only the assets actually held.
 unit_power   = units[0]×10 + units[1]×25 + units[2]×60
 equip_power  = melee×10 + ranged×16 + siege×26 + armor×5
 base_power   = unit_power + equip_power
@@ -304,6 +308,10 @@ Permissionless. Two unlock conditions (either suffices):
 
 Rent returned to `season.authority`.
 
+### Season Rollover (off-chain)
+
+No on-chain auto-rollover. The arena crank (`cli/lib/cranks/arena.ts`) creates season N+1 (mirroring the prior season's prize pools / cap / min-level) once the current season passes `end_time`, and closes seasons past their deadline. Idempotent; runs via `novus crank arena` / `novus crank all`.
+
 ---
 
 ## Challenge Flow
@@ -329,7 +337,23 @@ sequenceDiagram
     Prog->>Prog: Determine winner, calculate ELO deltas
     Prog->>Prog: Update points, wins/losses, battle history
     Prog->>Season: update_leaderboard(challenger, defender)
+    Prog->>Prog: emit ArenaBattleResolved
 ```
+
+---
+
+## Events
+
+All discriminators are `sha256("event:<Name>")[..8]` (program `events/arena.rs` + SDK `src/events/parser.ts`, so names must match byte-for-byte). Pubkey fields are `Address` carrying the PlayerAccount PDA.
+
+| Event | Emitted in |
+|-------|-----------|
+| `KingdomArenaSeasonStarted` | `create_season` (230) |
+| `ArenaPlayerJoined` | `join_season` (231) |
+| `ArenaBattleResolved` | `challenge_player` (233) |
+| `ArenaDailyRewardClaimed` | `claim_daily_reward` (234) |
+| `ArenaMasterRewardClaimed` | `claim_master_reward` (235) |
+| `ArenaSeasonFinalized` | `claim_master_reward` (235, at lazy Active->Finalized) |
 
 ---
 

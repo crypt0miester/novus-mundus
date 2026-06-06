@@ -28,9 +28,11 @@ Combat is resolved entirely within a single transaction. No `ArenaBattleAccount`
 
 This saves ~5000 lamports per battle and reduces complexity.
 
-### Trusted Loadouts (Non-Lethal Design)
+### Loadout Clamping (Non-Lethal Design)
 
-Loadouts are **not** validated against current player assets, ever. There is no `validate_loadout` instruction and no `last_validated` staleness check. Because the arena is non-lethal (nothing is consumed or destroyed), a player who configures a loadout larger than their real army gains no economic advantage: they only risk over-stating their own power. Power is computed directly from the loadout at battle time. This keeps `challenge_player` cheap and removes a whole class of "stale loadout" failure modes.
+Loadouts are **not** gated at configure time. There is no `validate_loadout` instruction and no `last_validated` staleness check, so `update_loadout` stores values verbatim and never fails. Instead, the guard lives at **battle time**: in `calculate_arena_power`, every loadout field's power contribution is clamped to the assets the player actually owns, `min(loadout_field, owned_field)`, for both the challenger and the defender.
+
+This closes the phantom-army exploit (you cannot manufacture power you cannot back, so an inflated loadout wins nothing) while keeping the non-lethal, no-failure design (a stale loadout never fails the battle, it simply contributes the units still on hand). Nothing is consumed or destroyed; clamping only affects the power comparison. It stays cheap because the challenger/defender `PlayerAccount`s are already loaded for the power calculation.
 
 ### ELO-Based Skill Rating
 
@@ -193,7 +195,7 @@ pub struct ArenaParticipantAccount {
 
 Stores the player's arena-specific **choices** only. Power is computed at battle time. **Kingdom-scoped** and reusable across seasons (one loadout per player per kingdom). `player` stores the **PlayerAccount PDA**.
 
-There is **no `last_validated` field and no validation timestamp.** The arena is non-lethal, so loadout values are intentionally trusted (see Instructions / Anti-Exploit). If a loadout exceeds the player's real assets that is harmless and the player's own concern.
+There is **no `last_validated` field and no validation timestamp.** Configure-time values are stored verbatim; the asset check happens at battle time, where each field is clamped to `min(loadout, owned)` in `calculate_arena_power` (see Design Principles / Loadout Clamping). A loadout that exceeds the player's real assets therefore contributes only what they own.
 
 ```rust
 pub const ARENA_LOADOUT_ACCOUNT_SIZE: usize = 168;
@@ -348,7 +350,7 @@ fn join_season(season_id) -> Result<()> {
 
 ### 232: Update Loadout
 
-Player configures their arena loadout. **No asset validation** is performed here or anywhere else; the values are stored verbatim and trusted (arena is non-lethal). Hero ownership is also not checked here; the hero NFT is only verified at battle time in `challenge_player`.
+Player configures their arena loadout. **No asset validation** is performed here; the values are stored verbatim. The asset check is deferred to battle time, where `calculate_arena_power` clamps each field to `min(loadout, owned)` (see Design Principles / Loadout Clamping). Hero ownership is also not checked here; the hero NFT is only verified at battle time in `challenge_player`.
 
 **Instruction data (88 bytes):**
 ```rust
@@ -1056,6 +1058,10 @@ Prevents sybil attacks where many accounts claim minimum positions.
 ### 4. Match Replay + Freshness
 
 `challenge_player` requires `match_id > last_match_id` (`ArenaMatchAlreadyUsed`) and a `match_timestamp` that is not in the future (`ArenaMatchTimestampInvalid`) and at most 5 minutes old (`ArenaMatchExpired`). Combined with the required `game_authority` co-sign, this binds each battle to a single off-chain matchmaking assignment.
+
+### 5. Loadout Clamping (Phantom-Army Guard)
+
+`calculate_arena_power` clamps every loadout field to the assets the player actually owns, `min(loadout_field, owned_field)`, for both sides at battle time. A player cannot inflate their loadout beyond their real defensive units / weapons / armor to manufacture power, so an over-stated loadout wins nothing. It never fails the battle (non-lethal design) - it simply contributes the assets on hand.
 
 ---
 

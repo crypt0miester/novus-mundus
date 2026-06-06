@@ -42,7 +42,7 @@ GameEngine (kingdom root)
 Key design decisions:
 - **Stateless combat:** No battle account is created; ELO and points update in-place.
 - **Off-chain matchmaking:** `game_authority` co-signs every `challenge_player` to attest the match is legitimate.
-- **Loadout trust:** Loadouts are not validated against current assets at update time; power is computed from whatever values are stored. Players are responsible for keeping loadouts accurate.
+- **Loadout clamping:** Loadouts are not validated at update time, but at battle time each field's power contribution is clamped to the assets the player owns (`min(loadout, owned)`) in `calculate_arena_power`. An inflated loadout cannot manufacture power it cannot back, so it wins nothing; a stale loadout never fails, it just contributes the units on hand.
 - **Permissionless rewards:** Both `claim_daily_reward` and `claim_master_reward` are permissionless — anyone can invoke them for any player.
 
 ---
@@ -238,7 +238,7 @@ Guards: season `Active` and `now < end_time`; player level ≥ `min_level_requir
 [80..88] armor_pieces:         u64 LE
 ```
 
-No asset validation — values are trusted and used as-is in `challenge_player`.
+No asset validation here; values are stored verbatim. At battle time `challenge_player` clamps each field to `min(loadout, owned)` (see Combat & Power Formula), so an over-stated loadout contributes only what the player owns.
 
 ---
 
@@ -333,10 +333,17 @@ Unlock conditions (either suffices):
 
 ```
 DEFENSIVE_UNIT_POWER = [10, 25, 60]   // tier 1 / 2 / 3
-WEAPON_POWER         = melee×10 + ranged×16 + siege×26 + armor×5
 
-unit_power  = Σ (defensive_units[t] × DEFENSIVE_UNIT_POWER[t])
-base_power  = unit_power + WEAPON_POWER
+// Phantom-army guard: every loadout field is clamped to what the player
+// actually owns before it contributes power. Applied to BOTH sides.
+units[t]    = min(loadout.defensive_units[t], owned.defensive_unit[t])
+melee       = min(loadout.melee,  owned.melee_weapons)
+ranged      = min(loadout.ranged, owned.ranged_weapons)
+siege       = min(loadout.siege,  owned.siege_weapons)
+armor       = min(loadout.armor,  owned.armor_pieces)
+
+unit_power  = Σ (units[t] × DEFENSIVE_UNIT_POWER[t])
+base_power  = unit_power + (melee×10 + ranged×16 + siege×26 + armor×5)
 ```
 
 ### Bonus Accumulation
@@ -685,6 +692,25 @@ Any caller may invoke `close_season` when either condition is met:
 2. `city.arena_season_id − season.season_id ≥ 4` (season is 4+ behind current)
 
 Rent (lamports of the 608-byte account) is transferred to `season.authority`.
+
+### Season Rollover (off-chain)
+
+There is no on-chain auto-rollover. The off-chain arena crank (`sdks/novus-mundus-ts/cli/lib/cranks/arena.ts`) creates the next season (`season_id + 1`, mirroring the previous season's prize pools / cap / min-level) once the current season passes `end_time`, and closes seasons past their deadline. It is idempotent and runs via `novus crank arena` / `novus crank all`.
+
+---
+
+## Events
+
+All discriminators are `sha256("event:<Name>")[..8]` on both the program (`events/arena.rs`, `events/kingdom.rs`) and SDK (`src/events/parser.ts`), so the name strings must match byte-for-byte. Pubkey fields are `Address` (32 bytes) and carry the PlayerAccount PDA, not the wallet. Serialized order matches struct field order.
+
+| Event | Emitted in | Key fields |
+|-------|-----------|-----------|
+| `KingdomArenaSeasonStarted` | `create_season` (230) | kingdom_id, game_engine, season_id, start/end_time, prize_pool |
+| `ArenaPlayerJoined` | `join_season` (231) | season_id, player, timestamp |
+| `ArenaBattleResolved` | `challenge_player` (233) | season_id, battle_id, challenger, defender, challenger_power, defender_power, challenger_won, challenger_points, defender_points, new_challenger_elo, new_defender_elo, timestamp, slot |
+| `ArenaDailyRewardClaimed` | `claim_daily_reward` (234) | season_id, player, amount, battles_fought, unique_opponents, timestamp |
+| `ArenaMasterRewardClaimed` | `claim_master_reward` (235) | season_id, player, rank, amount, timestamp |
+| `ArenaSeasonFinalized` | `claim_master_reward` (235, at lazy Active→Finalized) | season_id, total_battles, leaderboard_count, timestamp |
 
 ---
 

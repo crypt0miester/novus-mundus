@@ -312,8 +312,8 @@ pub fn process(
     season.update_leaderboard(defender_player_key, defender_total_points);
 
     // Emit battle resolution event (additive). battle_id is the post-increment
-    // season.total_battles. Slot is fetched once here for the event only.
-    let slot = Clock::get()?.slot;
+    // season.total_battles. Slot reuses the clock loaded at the top of the fn.
+    let slot = clock.slot;
     emit!(ArenaBattleResolved {
         season_id,
         battle_id: season.total_battles,
@@ -517,7 +517,7 @@ fn update_elo(
     // Expected score = 1 / (1 + 10^((opponent_elo - player_elo) / 400))
     // We use a simplified integer approximation
 
-    let diff = defender_elo as i64 - challenger_elo as i64;
+    let diff = (defender_elo as i64).saturating_sub(challenger_elo as i64);
 
     // Approximate expected score (scaled to 0-100)
     // Using lookup-style approximation for common differences
@@ -553,7 +553,7 @@ fn update_elo(
         }
     };
 
-    let defender_expected = 100 - challenger_expected;
+    let defender_expected = 100i32.saturating_sub(challenger_expected);
 
     // Actual score (100 for win, 50 for draw, 0 for loss)
     let (challenger_actual, defender_actual) = if is_draw {
@@ -565,10 +565,12 @@ fn update_elo(
     };
 
     // New ELO = old + K * (actual - expected) / 100
-    let challenger_delta =
-        (ARENA_ELO_K_FACTOR as i64 * (challenger_actual - challenger_expected as i64)) / 100;
-    let defender_delta =
-        (ARENA_ELO_K_FACTOR as i64 * (defender_actual - defender_expected as i64)) / 100;
+    let challenger_delta = (ARENA_ELO_K_FACTOR as i64)
+        .saturating_mul(challenger_actual.saturating_sub(challenger_expected as i64))
+        / 100;
+    let defender_delta = (ARENA_ELO_K_FACTOR as i64)
+        .saturating_mul(defender_actual.saturating_sub(defender_expected as i64))
+        / 100;
 
     let new_challenger = (challenger_elo as i64)
         .saturating_add(challenger_delta)

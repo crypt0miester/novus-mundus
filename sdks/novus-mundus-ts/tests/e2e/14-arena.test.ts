@@ -1485,6 +1485,85 @@ describe('Arena System', () => {
       expect(afterSecond!.losses).toBe(1);
     });
 
+    it('should clamp an inflated loadout to owned assets (no phantom army)', async () => {
+      // Exploit guard: a challenger who configures a huge loadout but owns no
+      // units must NOT win. Power is clamped to min(loadout, owned) at battle
+      // time, so the phantom army contributes nothing.
+      const cheater = await factory.createPlayer({ initialize: true });
+      const honest = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks] });
+      // cheater hires NOTHING; honest fields a real, owned army. Both then claim
+      // an identical absurd loadout - only the clamp-to-owned decides the winner.
+      await factory.hireUnits(honest, 0, 10000);
+
+      for (const p of [cheater, honest]) {
+        await sendTransaction(
+          ctx.svm,
+          new Transaction().add(
+            await createJoinSeasonInstruction({
+              gameEngine: ctx.gameEngine,
+              owner: p.publicKey,
+              seasonAuthority: ctx.daoAuthority.publicKey,
+              seasonId: SEASON_ID,
+            }),
+          ),
+          [p.keypair],
+        );
+      }
+
+      // Cheater claims a massive loadout it cannot back; honest claims a modest,
+      // fully-owned one.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createUpdateLoadoutInstruction(
+            { owner: cheater.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(1_000_000), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
+          ),
+        ),
+        [cheater.keypair],
+      );
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createUpdateLoadoutInstruction(
+            { owner: honest.publicKey, gameEngine: ctx.gameEngine },
+            { arenaHero: PublicKey.default, defensiveUnits: [BigInt(1_000_000), BigInt(0), BigInt(0)], meleeWeapons: BigInt(0), rangedWeapons: BigInt(0), siegeWeapons: BigInt(0), armorPieces: BigInt(0) },
+          ),
+        ),
+        [honest.keypair],
+      );
+
+      const now = await getCurrentTimestamp(ctx.svm);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createChallengePlayerInstruction(
+            {
+              gameEngine: ctx.gameEngine,
+              challenger: cheater.publicKey,
+              gameAuthority: ctx.daoAuthority.publicKey,
+              seasonAuthority: ctx.daoAuthority.publicKey,
+              seasonId: SEASON_ID,
+              defenderAuthority: honest.publicKey,
+              challengerHero: PublicKey.default,
+              challengerEstate: PublicKey.default,
+              defenderHero: PublicKey.default,
+              defenderEstate: PublicKey.default,
+            },
+            { matchId: BigInt(8500), matchTimestamp: BigInt(now) },
+          ),
+        ),
+        [cheater.keypair, ctx.daoAuthority],
+      );
+
+      // The inflated loadout clamped to 0 owned units, so the cheater lost.
+      const cheaterPart = await fetchArenaParticipant(ctx.svm, ctx.gameEngine, SEASON_ID, cheater.playerPda);
+      const honestPart = await fetchArenaParticipant(ctx.svm, ctx.gameEngine, SEASON_ID, honest.playerPda);
+      expect(cheaterPart!.wins).toBe(0);
+      expect(cheaterPart!.losses).toBe(1);
+      expect(honestPart!.wins).toBe(1);
+    });
+
     it('should allow loadout updates', async () => {
       const player = await factory.createPlayer({ initialize: true, createEstate: true, buildings: [BuildingType.Barracks, BuildingType.Camp] });
       await factory.hireUnits(player, 0, 100);

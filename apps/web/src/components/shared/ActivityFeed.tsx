@@ -4,21 +4,13 @@ import { useState, useEffect } from "react";
 import { useEventStore, type EventEntry } from "@/lib/store/events";
 import { formatEventMessage } from "@/lib/events/format";
 import type { EventScope } from "@/lib/events/classify";
+import { relativeTime } from "@/lib/utils";
 
 const TABS: { scope: EventScope; label: string }[] = [
   { scope: "personal", label: "My Activity" },
   { scope: "team", label: "Team" },
   { scope: "city", label: "City" },
 ];
-
-function relativeTime(timestamp: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  const diff = now - timestamp;
-  if (diff < 60) return "just now";
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  return `${Math.floor(diff / 86400)}d ago`;
-}
 
 function EventRow({ entry }: { entry: EventEntry }) {
   const formatted = formatEventMessage({ name: entry.name, data: entry.event } as any);

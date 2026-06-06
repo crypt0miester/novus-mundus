@@ -82,6 +82,8 @@ Actions:
   - Emit KingdomArenaSeasonStarted
 ```
 
+> Triggered by the DAO (`game_authority`) directly, or for the recurring weekly cadence by the off-chain arena crank (`cli/lib/cranks/arena.ts`), which creates season N+1 once season N passes `end_time`.
+
 #### `Active → Finalized`
 ```
 Trigger: claim_master_reward (instruction 235), lazy transition
@@ -90,6 +92,7 @@ Guards:
   - now > season.end_time
 Actions:
   - season.status = Finalized (2)
+  - Emit ArenaSeasonFinalized
   - (master reward calculation proceeds in same instruction)
 ```
 
@@ -160,7 +163,7 @@ Actions:
   - Set elo_rating = 1000
   - Set total_points = 0, wins = 0, losses = 0
   - Create ArenaLoadoutAccount (168 bytes) if absent
-  - Emit (none; no event defined for join)
+  - Emit ArenaPlayerJoined
 ```
 
 #### `Joined: challenge_player`
@@ -178,6 +181,7 @@ Guards:
   - If loadout.arena_hero set: hero NFT key must match; NFT must be valid
 Actions:
   - calculate_arena_power(challenger), calculate_arena_power(defender)
+    (each loadout field clamped to min(loadout, owned); phantom-army guard)
   - Determine winner (higher power wins; equal = draw)
   - Update ELO (K=32, lookup-table expected score)
   - Award points (win=100+bonus, loss=20, draw=50)
@@ -185,6 +189,7 @@ Actions:
   - record_battle() on both participants (circular buffer)
   - season.total_battles += 1
   - season.update_leaderboard(challenger, defender)
+  - Emit ArenaBattleResolved
 ```
 
 #### `Joined: claim_daily_reward`
@@ -202,6 +207,7 @@ Actions:
   - season.distributed_today += reward
   - season.daily_prize_pool -= reward
   - Mint NOVI to player ATA; player.locked_novi += reward
+  - Emit ArenaDailyRewardClaimed (includes battles_fought + unique_opponents)
 ```
 
 #### `Joined: claim_master_reward`
@@ -219,6 +225,8 @@ Actions:
   - Compute reward = master_prize_pool × ARENA_PRIZE_DISTRIBUTION[rank] / 10000
   - season.prize_remaining -= reward
   - Mint NOVI to player ATA; player.locked_novi += reward
+  - Emit ArenaSeasonFinalized (if this call performed the lazy Active->Finalized)
+  - Emit ArenaMasterRewardClaimed
 ```
 
 ---
@@ -243,7 +251,7 @@ ASCII reference:
                                               └───────────────────────┘
 ```
 
-`ArenaLoadoutAccount` is season-agnostic — persists across seasons. No transition to "closed"; players may re-use loadouts indefinitely.
+`ArenaLoadoutAccount` is season-agnostic and persists across seasons. No transition to "closed"; players may re-use loadouts indefinitely. Configure-time values are not validated; at battle time each field is clamped to `min(loadout, owned)` in `calculate_arena_power`, so an over-stated loadout contributes only what the player owns.
 
 ---
 
