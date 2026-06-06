@@ -11,6 +11,9 @@ import { crankDungeons } from '../cranks/dungeons';
 import { crankCastles } from '../cranks/castles';
 import { crankRallies } from '../cranks/rallies';
 import { crankOracle } from '../cranks/oracle';
+import { crankReinforcements } from '../cranks/reinforcement';
+import { crankEncounters } from '../cranks/encounters';
+import { crankShop } from '../cranks/shop';
 
 interface CrankTarget {
   name: string;
@@ -25,6 +28,9 @@ const CRANK_TARGETS: CrankTarget[] = [
   { name: 'Dungeons',       key: 'dungeons',        fn: crankDungeons },
   { name: 'Castles',        key: 'castles',         fn: crankCastles },
   { name: 'Rallies',        key: 'rallies',         fn: crankRallies },
+  { name: 'Reinforcements', key: 'reinforcements',  fn: crankReinforcements },
+  { name: 'Encounters',     key: 'encounters',      fn: crankEncounters },
+  { name: 'Shop',           key: 'shop',            fn: crankShop },
   { name: 'Oracle',         key: 'oracle',          fn: crankOracle },
 ];
 
@@ -43,8 +49,7 @@ export async function handleCrank(ctx: CLIContext, args: ParsedArgs): Promise<vo
   let totalSkipped = 0;
 
   if (target === 'all') {
-    for (let i = 0; i < CRANK_TARGETS.length; i++) {
-      const crank = CRANK_TARGETS[i];
+    for (const [i, crank] of CRANK_TARGETS.entries()) {
       log.phase(i + 1, CRANK_TARGETS.length, `Crank: ${crank.name}`);
 
       try {

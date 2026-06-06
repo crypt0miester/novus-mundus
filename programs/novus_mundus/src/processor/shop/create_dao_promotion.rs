@@ -163,7 +163,10 @@ pub fn process(
     promo.total_revenue_lamports = 0;
     promo.unique_purchasers = 0;
 
-    promo._reserved = [0; 8];
+    // Persist the proposal_id (the PDA-derivation seed)
+    // so off-chain cranks can rebuild `activate_sale` 
+    // for this promo without having to reverse the PDA. 
+    promo.proposal_id = proposal_id.to_le_bytes();
     promo._padding2 = [0; 7];
     promo.bump = bump;
 

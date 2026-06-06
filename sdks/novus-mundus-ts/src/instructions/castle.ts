@@ -998,8 +998,11 @@ export interface FinalizeTransitionAccounts {
   cityId: number;
   /** Castle ID */
   castleId: number;
-  /** New king's wallet (for PDA derivation) */
-  newKing: PublicKey;
+  /** New king's wallet (for PDA derivation). Omit for a VACANT transition
+   *  (`transition_new_king == NULL`, e.g. after `force_remove_king`): the
+   *  processor returns before touching the new-king accounts, so the builder
+   *  passes an inert placeholder for those two slots. */
+  newKing?: PublicKey;
   /** Old king's wallet (optional, for registry update) */
   oldKing?: PublicKey;
 }
@@ -1014,8 +1017,19 @@ export async function createFinalizeTransitionInstruction(
   accounts: FinalizeTransitionAccounts
 ): Promise<TransactionInstruction> {
   const [castle] = await deriveCastlePda(accounts.gameEngine, accounts.cityId, accounts.castleId);
-  const [newKingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.newKing);
-  const [newKingRegistry] = await deriveKingRegistryPda(newKingPlayer);
+
+  // For a vacant transition (newKing omitted) the processor returns before it
+  // reads slots 2/3, so pass the GameEngine as an inert, program-owned
+  // placeholder. For a normal claim, derive the new king's player + registry.
+  let newKingPlayer: PublicKey;
+  let newKingRegistry: PublicKey;
+  if (accounts.newKing) {
+    [newKingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.newKing);
+    [newKingRegistry] = await deriveKingRegistryPda(newKingPlayer);
+  } else {
+    newKingPlayer = accounts.gameEngine;
+    newKingRegistry = accounts.gameEngine;
+  }
 
   // Rust account order:
   // 0. caller (SIGNER)

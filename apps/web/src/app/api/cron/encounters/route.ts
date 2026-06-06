@@ -10,14 +10,12 @@ import {
   sendAndConfirmTransaction,
 } from "@solana/web3.js";
 import {
-  createCleanupEncounterInstruction,
   createSpawnEncounterInstruction,
   deriveCityPda,
-  deriveEncounterPda,
-  deriveLocationPda,
   deserializeCity,
-  deserializeLocation,
   EncounterRarity,
+  buildEncounterCleanupIx,
+  isEncounterCleanable,
 } from "novus-mundus-sdk";
 
 import { biomeAt, biomeKnobsFromCity, isPassableBiome, type BiomeKnobs } from "@/lib/world/biome";
@@ -70,7 +68,6 @@ const RARITIES_TO_SPAWN: EncounterRarity[] = [
 ];
 
 const GRID_PRECISION = 10000;
-const CLEANUP_GRACE_SECONDS = 3600;
 /* Chain error codes we treat as "the cell is no good — try a different
  * one". Anything else (city encounter-limit hit, wrong time of day) is
  * terminal for this rarity's queue. InvalidPDA (6010) is handled
@@ -323,46 +320,14 @@ async function processCity(args: {
    * recipient correctly, then batch into multi-ix transactions. */
   const pending: TransactionInstruction[] = [];
   for (const { account: enc } of encounters) {
-    const despawnAt = Number(enc.despawnAt);
-    if (nowSec < despawnAt + CLEANUP_GRACE_SECONDS) {
-      if (nowSec >= despawnAt) summary.pending++;
+    if (!isEncounterCleanable(enc, nowSec)) {
+      if (nowSec >= Number(enc.despawnAt)) summary.pending++;
       continue;
     }
-    const encounterIndex = Number(enc.id);
-    const gridLat = Math.round(enc.locationLat * GRID_PRECISION);
-    const gridLong = Math.round(enc.locationLong * GRID_PRECISION);
-
-    /* Route rent: cell still held by THIS encounter → its original
-     * spawn payer (player wallet for player-spawned, game_authority
-     * for auto-spawned); cell closed or reused → game_authority.
-     * Mirrors cleanup.rs:159-187. The pubkey-equality check is load-
-     * bearing: `occupantType === 2` alone would also match a *newer*
-     * encounter that took the same cell, sending rent to the wrong
-     * wallet and the chain reverting the whole batched tx. */
-    let rentRecipient = authority.publicKey;
-    try {
-      const [locationPda] = await deriveLocationPda(gameEngine, cityId, gridLat, gridLong);
-      const [encounterPda] = await deriveEncounterPda(gameEngine, cityId, encounterIndex);
-      const locInfo = await connection.getAccountInfo(locationPda);
-      if (locInfo && locInfo.data.length > 0) {
-        const loc = deserializeLocation(locInfo.data);
-        if (loc.occupant.equals(encounterPda)) {
-          rentRecipient = loc.locationCreator;
-        }
-      }
-    } catch {
-      /* best-effort — fall through to game_authority */
-    }
-
+    // Rent routing + ix build are shared with the CLI crank (SDK
+    // buildEncounterCleanupIx) so the two implementations can't drift.
     pending.push(
-      await createCleanupEncounterInstruction({
-        gameEngine,
-        cityId,
-        encounterIndex,
-        gridLat,
-        gridLong,
-        rentRecipient,
-      }),
+      await buildEncounterCleanupIx(connection, gameEngine, cityId, enc, authority.publicKey),
     );
   }
 

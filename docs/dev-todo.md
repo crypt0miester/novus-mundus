@@ -111,7 +111,12 @@ stays unobtainable. Prioritization order:
 
 
 10. castles give same rewards for every tier. very bad design.
-13. arena full api and cli for other players to run.
+    NOTE: `calculate_reward` DOES apply `tier_multiplier_bps` (0.25x Outpost → 2.0x
+    Citadel). not sure if the UI shows this. we need to make it show. 
+    
 14. small dummy event for quick testing
-15. create a robust shop system in the cli, make it validate after and before that data is correct. full list of isntructions tested, and audited.
-16. analyze cranks and permissionless apis, create if missing. maybe using https://vercel.com/docs/queues/quickstart
+15. make the cranks api more robust via vercel queeues
+
+
+98. missing mpl token metadata for novi mint
+99. fix values to make it devnet/mainnet ready.

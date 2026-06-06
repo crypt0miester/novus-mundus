@@ -614,6 +614,10 @@ pub struct SeasonalSaleAccount {
     // Payer for rent return (32 bytes)
     pub payer: Address,
 
+    // Linked EventAccount — the PDA-derivation seed, persisted so cranks can
+    // rebuild activate_sale without reversing the PDA (32 bytes).
+    pub event: Address,
+
     // Sale Info (32 bytes)
     pub name: [u8; 32], // "Summer Combat Festival"
 
@@ -740,8 +744,7 @@ pub struct DAOPromotionAccount {
     pub total_revenue_lamports: u64,
     pub unique_purchasers: u64,
 
-    // Reserved (8 bytes)
-    pub _reserved: [u8; 8],
+    pub proposal_id: [u8; 8],
 
     // Alignment (7 bytes)
     pub _padding2: [u8; 7],

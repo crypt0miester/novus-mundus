@@ -234,6 +234,40 @@ export function newStats(): PhaseStats {
   return { created: 0, updated: 0, skipped: 0 };
 }
 
+/**
+ * Send one permissionless crank instruction and fold the result into PhaseStats.
+ * Shared by the crank modules so the dry-run / send / log / count shape lives in
+ * one place. `would`/`done` are the present/past verbs for the log line
+ * (e.g. "process"/"Processed"); `benignFail` treats a send error as an expected
+ * no-op (logged only under --verbose) rather than an error — used by cranks that
+ * just poke a state machine forward.
+ */
+export async function crankSend(
+  ctx: CLIContext,
+  stats: PhaseStats,
+  ix: IxInput,
+  label: string,
+  opts: { would: string; done: string; computeUnits?: number; benignFail?: boolean },
+): Promise<void> {
+  if (ctx.dryRun) {
+    log.dryRun(`Would ${opts.would}: ${label}`);
+    stats.updated++;
+    return;
+  }
+  try {
+    await sendWithRetry(ctx, ix, [ctx.daoAuthority], { computeUnits: opts.computeUnits ?? 15_000 });
+    log.update(`${opts.done}: ${label}`);
+    stats.updated++;
+  } catch (err: any) {
+    if (opts.benignFail) {
+      if (ctx.verbose) log.info(`  unchanged: ${label} (${err.message})`);
+    } else {
+      log.error(`Failed ${opts.would} (${label}): ${err.message}`);
+    }
+    stats.skipped++;
+  }
+}
+
 export async function createOrSkip(
   ctx: CLIContext,
   name: string,

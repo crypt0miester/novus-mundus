@@ -133,6 +133,7 @@ pub fn process(
 
     sale.account_key = crate::state::AccountKey::SeasonalSale as u8;
     sale.payer = *payer.address();
+    sale.event = *event_account.address();
     sale.name = name;
 
     // Parse featured items

@@ -1514,6 +1514,11 @@ describe('Shop System', () => {
       const [seasonalSalePda] = await deriveSeasonalSalePda(ctx.gameEngine, eventPda);
       const exists = await accountExists(ctx.svm, seasonalSalePda);
       expect(exists).toBe(true);
+
+      // The linked event (the PDA seed) is persisted on the account so cranks
+      // can rebuild activate_sale without reversing the PDA. Round-trip it.
+      const sale = deserializeSeasonalSale((await ctx.svm.getAccount(svmKey(seasonalSalePda)))!.data);
+      expect(sale.event.toBase58()).toBe(eventPda.toBase58());
     });
   });
 
@@ -1550,6 +1555,13 @@ describe('Shop System', () => {
       const [daoPromotionPda] = await deriveDaoPromotionPda(ctx.gameEngine, proposalId);
       const exists = await accountExists(ctx.svm, daoPromotionPda);
       expect(exists).toBe(true);
+
+      // proposal_id is persisted on the account (the PDA seed lives in the
+      // proposal_id field) so cranks can rebuild activate_sale without reversing
+      // the PDA. Round-trip it.
+      const promo = deserializeDaoPromotion((await ctx.svm.getAccount(svmKey(daoPromotionPda)))!.data);
+      expect(promo.proposalId).toBe(BigInt(proposalId));
+      expect(promo.title).toBe('Community Discount Week');
     });
   });
 

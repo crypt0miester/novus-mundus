@@ -129,6 +129,9 @@ export interface GarrisonContributionAccount {
   joinedAt: bigint;
   lastClaimedAt: bigint;
   bump: number;
+  /** Hero NFT mint contributed to the garrison, or the default pubkey if none.
+   *  garrison_cleanup needs this (+ the hero's template) to return the hero. */
+  heroMint: PublicKey;
   /** Weapons captured from attackers, claimable via claim_garrison_loot. */
   lootMelee: bigint;
   lootRanged: bigint;
@@ -350,7 +353,7 @@ export function deserializeGarrisonContribution(data: Uint8Array): GarrisonContr
   const du2 = reader.readU64(); // units_2
   const du3 = reader.readU64(); // units_3
   reader.skip(24); // melee_weapons, ranged_weapons, siege_weapons
-  reader.skip(32); // hero_mint
+  const heroMint = reader.readPubkey();
   reader.skip(8); // hero_defense_bps, hero_weapon_eff_bps, _padding2
   const lootMelee = reader.readU64();
   const lootRanged = reader.readU64();
@@ -369,6 +372,7 @@ export function deserializeGarrisonContribution(data: Uint8Array): GarrisonContr
     joinedAt,
     lastClaimedAt,
     bump,
+    heroMint,
     lootMelee,
     lootRanged,
     lootSiege,

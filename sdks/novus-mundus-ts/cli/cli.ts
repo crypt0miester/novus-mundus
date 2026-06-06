@@ -46,6 +46,8 @@ import { handleTeam } from './lib/commands/team';
 import { handleWartable } from './lib/commands/wartable';
 import { handleRally } from './lib/commands/rally';
 import { handleReinforcement } from './lib/commands/reinforcement';
+import { handleArena } from './lib/commands/arena';
+import { handleShop } from './lib/commands/shop';
 
 async function main(): Promise<void> {
   const args = parseArgs(process.argv.slice(2));
@@ -132,6 +134,12 @@ async function main(): Promise<void> {
     case 'reinf':
       await handleReinforcement(ctx, args);
       break;
+    case 'arena':
+      await handleArena(ctx, args);
+      break;
+    case 'shop':
+      await handleShop(ctx, args);
+      break;
     default:
       log.error(`Unknown command: ${args.command}`);
       printUsage();
@@ -157,8 +165,9 @@ Commands:
                             shop, heroes (--supply-caps),
                             castle-config
   crank all                 Run all permissionless cranks
-  crank <target>            Run specific: subscriptions, events,
-                            arena, dungeons, castles, rallies, oracle
+  crank <target>            Run specific: subscriptions, events, arena,
+                            dungeons, castles, rallies, reinforcements,
+                            encounters, shop, oracle
   flash-sale create         Create flash sale (--item, --discount, --duration, etc.)
   flash-sale close          Close flash sale (--sale-id)
   flash-sale activate       Activate flash sale (--sale-id)
@@ -251,6 +260,42 @@ Commands:
   reinforcement relieve <kp> Receiver sends troops back --sender <senderWallet>
   reinforcement return      Process return (crank) --sender <pk> --to <pk>
   reinforcement speedup <kp> Collapse travel with gems --to <pk> [--tier 1|2] [--repeat n]
+  arena show                Show a season + leaderboard [--season <id>]
+                            [--player <wallet>]  (adds that player's standing)
+  arena join <kp>           Join a season (creates participant + loadout)
+                            [--season <id>]
+  arena loadout <kp>        Configure combat loadout [--units a,b,c]
+                            [--weapons m,r,s] [--armor n] [--hero <mint>]
+  arena challenge <kp>      Battle another player (DAO co-signs)
+                            --defender <wallet> [--season <id>]
+  arena claim-daily <pk>    Claim daily reward (crank) [--season <id>]
+  arena claim-master <pk>   Claim end-of-season reward (crank) [--season <id>]
+  arena close               Close a finished season (crank)
+                            [--season <id>] [--city <id>]
+  shop show [what]          Read shop state with parsed accounts
+                            (config|items|bundles|deals|token|weekly|seasonal|dao)
+  shop daily-deal create    --slot 0..2 --item N --discount BPS
+                            [--next-item N] [--next-discount BPS]
+  shop daily-deal rotate    --slot 0..2 --item N --discount BPS
+  shop weekly-sale          --week N --theme N --bonus BPS --cats a,b,c,d
+                            --duration 1..7 [--starts TS]
+  shop seasonal-sale        --event PK --name "..." --discount BPS
+                            --starts TS --ends TS [--threshold L] [--cosmetic N]
+  shop dao-promotion        --proposal N --title "..." [--global BPS]
+                            [--max BPS] [--budget L] [--starts TS] [--ends TS]
+  shop config               --sol-pyth-feed HEX | --sol-switchboard-feed PK
+                            --sol-switchboard-queue PK [--staleness N] [--confidence BPS]
+  shop allowed-token add    --mint PK (--pyth-feed HEX|--switchboard-feed PK|--pegged)
+                            [--staleness N] [--confidence BPS] [--discount BPS]
+  shop allowed-token update --mint PK [...field flags]
+  shop allowed-token close  --mint PK
+  shop activate-sale        --proposal N | --event PK    (crank)
+  shop buy-item <kp>        --item N [--qty n]            (SOL)
+  shop buy-bundle <kp>      --bundle N                    (SOL)
+  shop buy-novi <kp>        --package 0..4 [--max-lamports L]
+  shop buy-flash <kp>       --sale N                      (SOL)
+  shop audit                Run the instruction list + read-back verify
+                            [--player <keypair>]
   wartable read <thread>     Decode + decrypt a war-table thread
                             --scope <team|rally|castle|encounter|dm>
                             --limit <n> --master-secret <hex>

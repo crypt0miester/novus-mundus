@@ -7,7 +7,7 @@
  * DailyDealAccount - Rotating daily deals (64 bytes with repr(C) padding)
  * FlashSaleAccount - Time-limited flash sales (120 bytes with repr(C) padding)
  * WeeklySaleAccount - Rotating weekly themed sales (104 bytes with repr(C) padding)
- * SeasonalSaleAccount - Seasonal event sales (208 bytes with repr(C) padding)
+ * SeasonalSaleAccount - Seasonal event sales (240 bytes with repr(C) padding)
  * DAOPromotionAccount - DAO-approved discount promotions (168 bytes with repr(C) padding)
  * PlayerPurchaseAccount - Per-player purchase tracking (48 bytes with repr(C) padding)
  * AllowedTokenAccount - Whitelisted SPL tokens for payment (122 bytes with repr(C) padding)
@@ -614,6 +614,9 @@ export const WEEKLY_SALE_ACCOUNT_SIZE = 104;
 
 export interface SeasonalSaleAccount {
   payer: PublicKey;
+  /** Linked EventAccount — the PDA-derivation seed, persisted so cranks can
+   *  rebuild `activate_sale` without reversing the PDA. */
+  event: PublicKey;
   name: string;
   featuredItemIds: number[];
   featuredDiscountsBps: number[];
@@ -631,7 +634,7 @@ export interface SeasonalSaleAccount {
 }
 
 /** SeasonalSaleAccount size in bytes */
-export const SEASONAL_SALE_ACCOUNT_SIZE = 208;
+export const SEASONAL_SALE_ACCOUNT_SIZE = 240;
 
 // DAO Promotion Account Interface
 
@@ -653,6 +656,8 @@ export interface DAOPromotionAccount {
   totalPurchases: bigint;
   totalRevenueLamports: bigint;
   uniquePurchasers: bigint;
+  /** Governance proposal id (the PDA-derivation seed) */
+  proposalId: bigint;
   bump: number;
 }
 
@@ -734,6 +739,7 @@ export function deserializeSeasonalSale(data: Uint8Array): SeasonalSaleAccount {
   reader.readU8(); // account_key
 
   const payer = reader.readPubkey();
+  const event = reader.readPubkey();
   const name = reader.readString(32);
   reader.skip(3); // implicit padding for u32 alignment
   const featuredItemIds = reader.readU32Array(10);
@@ -756,6 +762,7 @@ export function deserializeSeasonalSale(data: Uint8Array): SeasonalSaleAccount {
 
   return {
     payer,
+    event,
     name,
     featuredItemIds,
     featuredDiscountsBps,
@@ -800,7 +807,7 @@ export function deserializeDaoPromotion(data: Uint8Array): DAOPromotionAccount {
   const totalPurchases = reader.readU64();
   const totalRevenueLamports = reader.readU64();
   const uniquePurchasers = reader.readU64();
-  reader.skip(8); // _reserved
+  const proposalId = reader.readU64(); // proposal_id field ([u8; 8] = u64 LE)
   reader.skip(7); // _padding2
   const bump = reader.readU8();
 
@@ -822,6 +829,7 @@ export function deserializeDaoPromotion(data: Uint8Array): DAOPromotionAccount {
     totalPurchases,
     totalRevenueLamports,
     uniquePurchasers,
+    proposalId,
     bump,
   };
 }

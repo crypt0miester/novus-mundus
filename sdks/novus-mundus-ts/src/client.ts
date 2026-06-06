@@ -86,8 +86,8 @@ import { ARENA_PARTICIPANT_ACCOUNT_SIZE } from './state/arena';
 import { REINFORCEMENT_ACCOUNT_SIZE } from './state/reinforcement';
 import { parseHeroTemplate, HERO_TEMPLATE_SIZE } from './state/hero';
 import type { HeroTemplateAccount } from './state/hero';
-import { parseCastle } from './state/castle';
-import type { CastleAccount } from './state/castle';
+import { parseCastle, parseGarrisonContribution, parseTeamCastleReward } from './state/castle';
+import type { CastleAccount, GarrisonContributionAccount, TeamCastleRewardAccount } from './state/castle';
 import { parseLocation, LOCATION_ACCOUNT_SIZE } from './state/location';
 import type { LocationAccount } from './state/location';
 import { parseEvent, parseEventParticipation, EVENT_ACCOUNT_SIZE } from './state/event';
@@ -1228,6 +1228,53 @@ export class NovusMundusClient {
         return parsed ? { pubkey, account: parsed } : null;
       })
       .filter((r): r is BulkFetchResult<CastleAccount> => r !== null);
+  }
+
+  /**
+   * Fetch every GarrisonContribution account for a castle.
+   *
+   * Memcmp: account_key (byte 0) + castle pubkey (byte 1, per
+   * deserializeGarrisonContribution). Used by the castle transition crank to
+   * find garrisons to clean up.
+   */
+  async fetchGarrisonsForCastle(castle: PublicKey): Promise<BulkFetchResult<GarrisonContributionAccount>[]> {
+    const keyByte = keyFilterBytes(AccountKey.CastleGarrison);
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { memcmp: { offset: 1, bytes: castle.toBase58() } },
+      ],
+    });
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseGarrisonContribution(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<GarrisonContributionAccount> => r !== null);
+  }
+
+  /**
+   * Fetch every TeamCastleReward account for a castle.
+   *
+   * Memcmp: account_key (byte 0) + castle pubkey (byte 1, per
+   * deserializeTeamCastleReward). Used by the castle transition crank.
+   */
+  async fetchTeamRewardsForCastle(castle: PublicKey): Promise<BulkFetchResult<TeamCastleRewardAccount>[]> {
+    const keyByte = keyFilterBytes(AccountKey.TeamCastleReward);
+    const accounts = await this.connection.getProgramAccounts(PROGRAM_ID, {
+      commitment: this.commitment,
+      filters: [
+        { memcmp: { offset: 0, bytes: keyByte } },
+        { memcmp: { offset: 1, bytes: castle.toBase58() } },
+      ],
+    });
+    return accounts
+      .map(({ pubkey, account }) => {
+        const parsed = parseTeamCastleReward(account);
+        return parsed ? { pubkey, account: parsed } : null;
+      })
+      .filter((r): r is BulkFetchResult<TeamCastleRewardAccount> => r !== null);
   }
 
   /**
