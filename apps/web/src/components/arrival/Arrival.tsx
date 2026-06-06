@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
+import { useRouter } from "next/navigation";
 import { createTimeline, svg, type Timeline } from "animejs";
 import { WorldBeat } from "./WorldBeat";
 import { ChoiceBeat } from "./ChoiceBeat";
@@ -54,6 +55,7 @@ interface ArrivalProps {
  */
 export function Arrival({ hasPlayer, onComplete }: ArrivalProps) {
   const { disconnect } = useWallet();
+  const router = useRouter();
   const [beat, setBeat] = useState<Beat>(hasPlayer ? "claim" : "world");
   const [city, setCity] = useState<CityChoice | null>(null);
   // The beat the director is crossing toward. Non-null only mid-transition; the
@@ -176,7 +178,10 @@ export function Arrival({ hasPlayer, onComplete }: ArrivalProps) {
   // app to the connect screen, the true "first page".
   const goBack = () => {
     if (beat === "world") {
+      // Spectate is the read-only floor now, so dropping the wallet no longer
+      // bounces us anywhere on its own. Retreat must navigate to the landing.
       void disconnect();
+      router.push("/");
     } else if (beat === "choice") {
       setJumping(false);
       goToBeat("world");

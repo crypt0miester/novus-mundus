@@ -22,11 +22,6 @@ import { test, expect } from '@playwright/test';
 /** Routes to smoke. Dynamic segments use values seeded by `novus init all`. */
 const ROUTES = [
   '/',
-  '/world',
-  '/world/cities',
-  '/world/cities/0',
-  '/world/leaderboard',
-  '/world/teams',
   '/dashboard',
   '/combat',
   '/estate',
@@ -36,6 +31,11 @@ const ROUTES = [
   '/settings',
   '/shop',
   '/team',
+  // The /world tree was folded into (game) (SPECTATE_UNIFIED_UI.md); these are
+  // its new homes. /world/* now 307-redirect here via next.config.
+  '/players',
+  '/cities',
+  '/cities/0',
 ];
 
 /** Console/error text that indicates an invalid-nesting or hydration bug. */

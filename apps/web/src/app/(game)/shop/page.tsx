@@ -27,11 +27,10 @@ function ShopContent() {
           <TabNav tabs={TABS} activeTab={tab} onTabChange={setTab} />
         </div>
         <div className="min-h-0 flex-1 overflow-x-clip overflow-y-auto px-1 pb-4">
-          {tab === "shop" && (
-            <FeatureGate feature={FEATURES.SHOP_PURCHASE}>
-              <ShopTab />
-            </FeatureGate>
-          )}
+          {/* The catalog is public, read-only browsing: a spectator sees real
+              prices and deals (wallet-less data via useShop's Path-B fallback).
+              Purchases gate at TxButton (useCanAct), so no FeatureGate here. */}
+          {tab === "shop" && <ShopTab />}
           {tab === "subscribe" && (
             <FeatureGate feature={FEATURES.SUBSCRIPTION}>
               <SubscribeTab />

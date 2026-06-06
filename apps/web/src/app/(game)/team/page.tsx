@@ -9,6 +9,7 @@ import { TeamTab } from "./_components/team-tab";
 import { FeatureGate } from "@/components/shared/FeatureGate";
 import { FEATURES } from "@/lib/hooks/useFeatureGate";
 import { TeamBrowser } from "@/components/world/TeamBrowser";
+import { useIsSpectator } from "@/lib/hooks/useCanAct";
 
 // Rally + Reinforce moved to /map (Forces tab + EntityPanel composers).
 // /team is now identity/admin only.
@@ -18,7 +19,10 @@ const TABS = [
 ];
 
 function TeamContent() {
-  const [tab, setTab] = useTabParam("team");
+  // Spectators land on Browse (the public team list); players default to their
+  // own Team tab. Browse is ungated, so a spectator can always read the roster.
+  const isSpectator = useIsSpectator();
+  const [tab, setTab] = useTabParam(isSpectator ? "browse" : "team");
   const router = useRouter();
 
   // Redirect old deep-links (?tab=rally|reinforce) to /map (Forces tab).

@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
 import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useWorldGameEngine } from "@/lib/hooks/world/useWorldGameEngine";
 import { useLoot } from "@/lib/hooks/useLoot";
 import { useNoviBalance } from "@/lib/hooks/useNoviBalance";
 import { useStamina } from "@/lib/hooks/useStamina";
@@ -30,9 +32,13 @@ import { bpsToMultiplier, formatTime, formatNumber } from "@/lib/utils";
 import { xpRequiredForLevel, levelProgressPercent, deciToNovi } from "novus-mundus-sdk";
 
 export default function DashboardPage() {
+  const { connected } = useWallet();
   const { data: playerData, isSuccess: playerReady } = usePlayer();
   const { data: userData, isSuccess: userReady } = useUser();
   const { data: geData, isSuccess: geReady } = useGameEngine();
+  // Wallet-less realm summary for the spectator claim hub (the store-backed
+  // useGameEngine only seeds with a wallet; this fetches off the RPC).
+  const { data: worldGe } = useWorldGameEngine();
   const { data: lootData, isSuccess: lootReady } = useLoot();
 
   const player = playerData?.account;
@@ -55,11 +61,14 @@ export default function DashboardPage() {
   if (userReady) completedKeys.add("user");
   if (lootReady) completedKeys.add("loot");
 
-  // Spectator with no claimed player. The dashboard becomes a "claim your seat"
-  // hub: the ungated realm summary (from useGameEngine, which is spectator-OK)
-  // plus a prominent claim CTA. Players fall through to the full dashboard below.
-  if (!playerData?.exists && playerReady) {
-    const ge = geData?.account;
+  // Spectator: no wallet at all, or a connected wallet with no claimed player.
+  // The dashboard becomes a "claim your seat" hub: the wallet-less realm summary
+  // plus a prominent claim CTA. A no-wallet visitor never resolves playerReady
+  // (the account store only seeds with a wallet), so we key off `connected`
+  // too - otherwise they sit on the loading screen forever. Players (and a
+  // wallet still resolving its player) fall through to the full dashboard.
+  if (!connected || (!playerData?.exists && playerReady)) {
+    const ge = worldGe?.account;
     const gp = ge?.gameplayConfig;
     const tm = ge?.themeConfig.themeMultipliers;
     return (
