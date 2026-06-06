@@ -11,8 +11,20 @@ import { useEstate } from "@/lib/hooks/useEstate";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { useSheetStore } from "@/lib/store/sheet";
 import { cn } from "@/lib/utils";
-import { PRIMARY, SECONDARY, computePageLocks } from "./nav-config";
+import {
+  PRIMARY,
+  SECONDARY,
+  computePageLocks,
+  spectatorClass,
+  visibleForSpectator,
+  type NavItem,
+} from "./nav-config";
 import { useUnread } from "@/lib/hooks/useUnread";
+import { useIsSpectator } from "@/lib/hooks/useCanAct";
+
+// Where a spectator is sent when they tap a player-scoped nav item: the estate
+// onboarding home, which hosts the claim flow (init_user + init_player + estate).
+const CLAIM_HREF = "/estate";
 
 function NavLink({
   href,
@@ -112,7 +124,25 @@ export function TopBar() {
 
   const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
 
-  const disabled = isSuccess && !hasPlayer;
+  // Spectator = no claimed seat (anonymous, unclaimed, or viewAs). Browse items
+  // stay live for spectators; player-scoped items reroute to the claim CTA;
+  // personal items are dropped from the nav (filtered below). The old blanket
+  // `disabled = isSuccess && !hasPlayer` only applied to player-scoped items now.
+  const isSpectator = useIsSpectator();
+  const playerItemDisabled = isSuccess && !hasPlayer && !isSpectator;
+
+  // Resolve a nav item for the current capability: its effective href (a
+  // spectator's player-scoped tap lands on the claim CTA) and whether it should
+  // render at all. Browse items never reroute; personal items hide for spectators.
+  const resolveItem = (item: NavItem): { href: string; disabled: boolean } | null => {
+    const cls = spectatorClass(item);
+    if (isSpectator) {
+      if (!visibleForSpectator(item)) return null;
+      if (cls === "player") return { href: CLAIM_HREF, disabled: false };
+      return { href: item.href!, disabled: false };
+    }
+    return { href: item.href!, disabled: cls === "player" && playerItemDisabled };
+  };
 
   return (
     <header
@@ -148,17 +178,21 @@ export function TopBar() {
             expanded ? "opacity-0" : "opacity-100",
           )}
         >
-          {PRIMARY.map((item) => (
-            <NavLink
-              key={item.href}
-              href={item.href}
-              label={item.label}
-              size="primary"
-              active={isActive(item.href)}
-              locked={!!pageLocked[item.href]}
-              disabled={disabled}
-            />
-          ))}
+          {PRIMARY.map((item) => {
+            const resolved = resolveItem(item);
+            if (!resolved) return null;
+            return (
+              <NavLink
+                key={item.href}
+                href={resolved.href}
+                label={item.label}
+                size="primary"
+                active={isActive(item.href!)}
+                locked={!!pageLocked[item.href!]}
+                disabled={resolved.disabled}
+              />
+            );
+          })}
         </nav>
 
         <nav
@@ -170,35 +204,44 @@ export function TopBar() {
             expanded ? "opacity-100" : "opacity-0",
           )}
         >
-          {SECONDARY.map((item) =>
-            item.panel ? (
-              <button
-                key={item.panel}
-                type="button"
-                onClick={() => showPanel(item.label, item.panel!)}
-                disabled={disabled}
-                className={cn(
-                  "text-[11px] font-medium whitespace-nowrap transition-colors",
-                  disabled
-                    ? "pointer-events-none text-zinc-700"
-                    : "text-text-secondary hover:text-text-primary",
-                )}
-              >
-                {item.label}
-              </button>
-            ) : (
+          {SECONDARY.map((item) => {
+            // Panel items open a personal RightPanel (e.g. Inventory). For a
+            // spectator that panel is empty, so drop it; otherwise gate on the
+            // player-item disable.
+            if (item.panel) {
+              if (isSpectator) return null;
+              return (
+                <button
+                  key={item.panel}
+                  type="button"
+                  onClick={() => showPanel(item.label, item.panel!)}
+                  disabled={playerItemDisabled}
+                  className={cn(
+                    "text-[11px] font-medium whitespace-nowrap transition-colors",
+                    playerItemDisabled
+                      ? "pointer-events-none text-zinc-700"
+                      : "text-text-secondary hover:text-text-primary",
+                  )}
+                >
+                  {item.label}
+                </button>
+              );
+            }
+            const resolved = resolveItem(item);
+            if (!resolved) return null;
+            return (
               <NavLink
                 key={item.href}
-                href={item.href!}
+                href={resolved.href}
                 label={item.label}
                 size="secondary"
                 active={isActive(item.href!)}
                 locked={!!pageLocked[item.href!]}
-                disabled={disabled}
+                disabled={resolved.disabled}
                 badge={item.href === "/messages" && unread.total > 0}
               />
-            ),
-          )}
+            );
+          })}
         </nav>
       </div>
 

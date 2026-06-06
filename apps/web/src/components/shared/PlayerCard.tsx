@@ -63,7 +63,7 @@ export function PlayerCard({
           )}
           <div className="min-w-0">
             <Link
-              href={`/world/players/${address}`}
+              href={`/players/${address}`}
               className="block truncate text-sm font-semibold text-text-primary hover:text-text-gold transition-colors"
             >
               {name}

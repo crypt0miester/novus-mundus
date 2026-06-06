@@ -5,7 +5,7 @@ import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import { usePlayer } from "@/lib/hooks/usePlayer";
 import { useUser } from "@/lib/hooks/useUser";
-import { useGameEngine } from "@/lib/hooks/useGameEngine";
+import { useShopGameEngine } from "@/lib/hooks/useShop";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
@@ -37,7 +37,7 @@ import { useIsDesktop } from "./useIsDesktop";
 export function NoviView() {
   const { data: playerData } = usePlayer();
   const { data: userData } = useUser();
-  const { data: geData } = useGameEngine();
+  const { data: geData } = useShopGameEngine();
   const client = useNovusMundusClient();
   const { publicKey } = useWallet();
   const transact = useTransact();

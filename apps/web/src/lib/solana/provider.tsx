@@ -14,6 +14,7 @@ import { createContext, useContext, useEffect, useMemo, useRef, useState } from 
 import { NovusMundusClient } from "novus-mundus-sdk";
 import { startGameSubscriptions } from "@/lib/store/subscriptions";
 import { useAccountStore } from "@/lib/store/accounts";
+import { useViewAsStore } from "@/lib/store/view-as";
 import { useTierTheme } from "@/lib/hooks/useTierTheme";
 
 const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL || "http://127.0.0.1:8899";
@@ -79,6 +80,14 @@ function ViewAsBridge({ children }: { children: React.ReactNode }) {
       console.warn(`[viewAs] ignoring invalid pubkey: ${raw}`);
     }
   }, []);
+
+  // Mirror impersonation into the shared store so useCanAct can fold viewAs
+  // under the read-only umbrella (a faked wallet reports connected + a real
+  // player, so wallet/player reads alone cannot tell it apart from a real seat).
+  const setIsViewAs = useViewAsStore((s) => s.setIsViewAs);
+  useEffect(() => {
+    setIsViewAs(viewAs != null);
+  }, [viewAs, setIsViewAs]);
 
   const value = useMemo<WalletContextState>(() => {
     if (!viewAs) return real;

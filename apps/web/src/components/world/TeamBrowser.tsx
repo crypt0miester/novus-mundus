@@ -122,7 +122,7 @@ export function TeamBrowser() {
         return (
           <div className="flex items-center gap-2">
             <Link
-              href={`/world/teams/${Number(t.account.id)}`}
+              href={`/team/${Number(t.account.id)}`}
               className="font-medium text-text-primary transition-colors hover:text-text-gold"
             >
               {t.account.name || `Team #${Number(t.account.id)}`}

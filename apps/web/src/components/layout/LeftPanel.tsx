@@ -73,7 +73,7 @@ export function LeftPanel() {
       .then((r) => r.signature);
   };
 
-  if (!player) return null;
+  if (!player) return <SpectatorRail />;
 
   const activeBuildings =
     estate?.buildings?.filter((b: any) => b.status === 2 || b.status === 3).length ?? 0;
@@ -202,6 +202,31 @@ export function LeftPanel() {
   );
 }
 
+/**
+ * Spectator rail - shown in place of the resource stack when there is no
+ * claimed player. Keeps the left column from going blank and points the visitor
+ * at the claim flow (estate onboarding). The full resource rail returns the
+ * moment a player exists.
+ */
+function SpectatorRail() {
+  return (
+    <div className="flex flex-col gap-3 p-3">
+      <div className="rounded-lg border border-border-default bg-surface-raised p-4">
+        <div className="text-sm font-semibold text-text-primary">Spectating</div>
+        <p className="mt-1 text-xs text-text-muted">
+          You are watching the realm. Claim your seat to build an estate, raise an army, and act.
+        </p>
+        <Link
+          href="/estate"
+          className="tier-accent-border tier-accent-text mt-3 inline-flex w-full items-center justify-center rounded-md border bg-surface-overlay/40 px-3 py-2 text-xs font-semibold transition-colors hover:bg-surface-overlay/70"
+        >
+          Claim your seat
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 /** Mobile collapsible top bar — compact summary that expands to full data. */
 export function LeftPanelMobile() {
   const { publicKey } = useWallet();
@@ -265,7 +290,38 @@ export function LeftPanelMobile() {
       .then((r) => r.signature);
   };
 
-  if (!player) return null;
+  if (!player) {
+    return (
+      <div
+        className={cn(
+          "border-b border-border-default bg-[var(--nm-bg-bar)]",
+          mapFullscreen && "relative z-[55]",
+        )}
+      >
+        <div className="flex h-10 w-full items-center gap-2 px-2 text-xs">
+          <Link
+            href="/estate"
+            className="tier-accent-text flex min-w-0 flex-1 items-center gap-1.5 truncate text-left font-semibold"
+          >
+            Spectating
+            <span className="text-text-muted">- claim your seat</span>
+          </Link>
+          <WorldClock compact />
+          <WalletMultiButton
+            style={{
+              background: "var(--nm-bg-raised)",
+              border: "1px solid var(--nm-border)",
+              borderRadius: "0.375rem",
+              fontSize: "0.65rem",
+              height: "1.5rem",
+              padding: "0 0.5rem",
+              color: "var(--nm-text-secondary)",
+            }}
+          />
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div

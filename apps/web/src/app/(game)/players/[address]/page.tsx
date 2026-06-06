@@ -125,7 +125,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
     const url =
       typeof window !== "undefined"
         ? window.location.origin + window.location.pathname
-        : `/world/players/${address}`;
+        : `/players/${address}`;
     navigator.clipboard.writeText(url);
     setCopiedLink(true);
     setTimeout(() => setCopiedLink(false), 1500);
@@ -144,7 +144,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
               not a valid wallet address.
             </p>
             <Link
-              href="/world"
+              href="/map"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Back to Realm Overview
@@ -176,7 +176,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
               <span className="font-mono text-text-secondary">{shortenAddress(address, 8)}</span>.
             </p>
             <Link
-              href="/world"
+              href="/map"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Back to Realm Overview
@@ -308,7 +308,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
               <div className="mt-3 flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-text-muted sm:justify-start">
                 {cityName && (
                   <Link
-                    href={`/world/cities/${player.currentCity}`}
+                    href={`/cities/${player.currentCity}`}
                     className="transition-colors hover:text-text-gold"
                   >
                     <span className="text-text-muted">City </span>
@@ -317,7 +317,7 @@ export default function PlayerProfilePage({ params }: { params: Promise<{ addres
                 )}
                 {teamInfo && (
                   <Link
-                    href={`/world/teams/${teamInfo.id}`}
+                    href={`/team/${teamInfo.id}`}
                     className="transition-colors hover:text-text-gold"
                   >
                     <span className="text-text-muted">Team </span>

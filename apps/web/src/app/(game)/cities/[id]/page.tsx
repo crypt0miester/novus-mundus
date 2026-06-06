@@ -92,7 +92,7 @@ export default function CityRosterPage({ params }: { params: Promise<{ id: strin
           <div className="card">
             <p className="text-sm text-text-muted">City #{id} does not exist.</p>
             <Link
-              href="/world/cities"
+              href="/cities"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Browse Cities
@@ -173,7 +173,7 @@ export default function CityRosterPage({ params }: { params: Promise<{ id: strin
               {teamsPresent.map((t) => (
                 <Link
                   key={t.id}
-                  href={`/world/teams/${t.id}`}
+                  href={`/team/${t.id}`}
                   className="card inline-flex items-center gap-2 transition-all"
                 >
                   <span className="text-sm font-semibold text-text-primary">

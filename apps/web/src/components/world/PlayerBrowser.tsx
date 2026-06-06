@@ -106,7 +106,7 @@ export function PlayerBrowser() {
         const label = p.account.name || domainNames.get(addr) || shortenAddress(addr, 4);
         return (
           <Link
-            href={`/world/players/${addr}`}
+            href={`/players/${addr}`}
             className="font-medium text-text-primary transition-colors hover:text-text-gold"
           >
             {label}
@@ -136,7 +136,7 @@ export function PlayerBrowser() {
         const t = teamMap.get(p.account.team.toBase58());
         if (!t) return <span className="text-text-muted">—</span>;
         return (
-          <Link href={`/world/teams/${t.id}`} className="transition-colors hover:text-text-gold">
+          <Link href={`/team/${t.id}`} className="transition-colors hover:text-text-gold">
             {t.name || `#${t.id}`}
           </Link>
         );

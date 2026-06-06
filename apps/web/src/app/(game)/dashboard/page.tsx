@@ -55,12 +55,73 @@ export default function DashboardPage() {
   if (userReady) completedKeys.add("user");
   if (lootReady) completedKeys.add("loot");
 
-  // No player yet — the (game) layout redirects to /estate, where the Arrival lives.
+  // Spectator with no claimed player. The dashboard becomes a "claim your seat"
+  // hub: the ungated realm summary (from useGameEngine, which is spectator-OK)
+  // plus a prominent claim CTA. Players fall through to the full dashboard below.
   if (!playerData?.exists && playerReady) {
+    const ge = geData?.account;
+    const gp = ge?.gameplayConfig;
+    const tm = ge?.themeConfig.themeMultipliers;
     return (
-      <div className="flex min-h-[60vh] items-center justify-center text-sm text-text-muted">
-        Taking you to your holding…
-      </div>
+      <PageTransition>
+        <div className="flex flex-col gap-4">
+          <div className="card accent-border flex flex-col gap-3 text-center sm:gap-4">
+            <h1 className="tier-title font-display text-xl font-bold tracking-wide sm:text-2xl">
+              {ge ? ge.kingdomName : "The Realm"}
+            </h1>
+            <p className="mx-auto max-w-prose text-sm text-text-secondary">
+              You are watching the realm. Claim your seat to build an estate, raise an army, and
+              act.
+            </p>
+            <Link
+              href="/estate"
+              className="tier-accent-border tier-accent-text mx-auto inline-flex items-center justify-center gap-1 rounded-md border bg-surface-overlay/40 px-5 py-2.5 text-sm font-semibold transition-colors hover:bg-surface-overlay/70"
+            >
+              Claim your seat
+              <ChevronRight className="h-4 w-4" />
+            </Link>
+          </div>
+
+          {ge && gp && tm && (
+            <GameInfoPanel>
+              <InfoGrid
+                items={[
+                  { label: "Kingdom", value: ge.kingdomName, highlight: true },
+                  { label: "Theme", value: ge.kingdomTheme.toString() },
+                  {
+                    label: "Total Players",
+                    value: Number(ge.totalPlayers).toLocaleString(),
+                  },
+                  {
+                    label: "Protection",
+                    value: formatTime(Number(gp.newPlayerProtectionDuration), "compact"),
+                  },
+                  {
+                    label: "Daily Cash",
+                    value: Number(gp.dailyCashBase).toLocaleString(),
+                  },
+                  {
+                    label: "Daily XP",
+                    value: Number(gp.dailyXpBase).toLocaleString(),
+                  },
+                  {
+                    label: "Attack Mult",
+                    value: bpsToMultiplier(tm.attackMultiplier),
+                  },
+                  {
+                    label: "Defense Mult",
+                    value: bpsToMultiplier(tm.defenseMultiplier),
+                  },
+                  {
+                    label: "Collection Mult",
+                    value: bpsToMultiplier(tm.collectionMultiplier),
+                  },
+                ]}
+              />
+            </GameInfoPanel>
+          )}
+        </div>
+      </PageTransition>
     );
   }
 

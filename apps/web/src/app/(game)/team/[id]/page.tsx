@@ -114,7 +114,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
           <div className="card">
             <p className="text-sm text-text-muted">"{id}" is not a valid team id.</p>
             <Link
-              href="/world/teams"
+              href="/team"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Browse Teams
@@ -143,7 +143,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
           <div className="card">
             <p className="text-sm text-text-muted">Team #{id} does not exist.</p>
             <Link
-              href="/world/teams"
+              href="/team"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Browse Teams
@@ -191,7 +191,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
             <div>
               <span className="text-text-muted">Leader: </span>
               <Link
-                href={`/world/players/${team.leader.toBase58()}`}
+                href={`/players/${team.leader.toBase58()}`}
                 className="text-text-gold hover:underline"
               >
                 <DomainName pubkey={team.leader} chars={4} />
@@ -263,7 +263,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
                     </Badge>
                   </span>
                   <Link
-                    href={`/world/players/${pdata?.owner ?? m.account.player.toBase58()}`}
+                    href={`/players/${pdata?.owner ?? m.account.player.toBase58()}`}
                     className="flex-1 truncate text-sm text-text-secondary hover:text-text-gold transition-colors"
                   >
                     {pdata?.name ?? <DomainName pubkey={m.account.player} chars={4} />}

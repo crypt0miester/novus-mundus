@@ -1,8 +1,5 @@
 "use client";
 
-import { useWallet } from "@solana/wallet-adapter-react";
-import { useEffect } from "react";
-import { usePathname, useRouter } from "next/navigation";
 import { TopBar } from "@/components/layout/TopBar";
 import { MorphTabBar } from "@/components/layout/MorphTabBar";
 import { LeftPanel, LeftPanelMobile } from "@/components/layout/LeftPanel";
@@ -10,36 +7,23 @@ import { CairnFloating } from "@/components/cairn/CairnFloating";
 import { CairnPresence } from "@/components/cairn/CairnPresence";
 import { RightPanel } from "@/components/layout/RightPanel";
 import { CombatOutcomeModal } from "@/components/combat/CombatOutcomeModal";
-import { useTransitionStore, exitMessage } from "@/lib/store/transition";
-import { usePlayer } from "@/lib/hooks/usePlayer";
+import { usePathname } from "next/navigation";
 import { useActWatch } from "@/lib/hooks/useActWatch";
 import { UnreadSync } from "@/lib/hooks/useUnread";
 import { SessionProbe } from "@/lib/store/session";
 import { MotionEngineProvider } from "@/lib/motion/MotionEngineProvider";
 
 export default function GameLayout({ children }: { children: React.ReactNode }) {
-  const { connected } = useWallet();
-  const { data: playerData, isLoading: playerLoading } = usePlayer();
   const pathname = usePathname();
-  const router = useRouter();
-  const trigger = useTransitionStore((s) => s.trigger);
-  const phase = useTransitionStore((s) => s.phase);
 
   useActWatch();
 
-  // Transition to landing if disconnected
-  useEffect(() => {
-    if (!connected && phase === "idle") {
-      trigger(exitMessage(), "/");
-    }
-  }, [connected, phase, trigger]);
-
-  // A connected wallet with no player belongs in the Arrival — the estate is its home.
-  useEffect(() => {
-    if (connected && !playerLoading && !playerData?.exists && pathname !== "/estate") {
-      router.replace("/estate");
-    }
-  }, [connected, playerLoading, playerData, pathname, router]);
+  // Spectate is the read-only floor: a wallet-less visitor and a connected
+  // wallet with no player both stay in (game) and browse the real realm. The
+  // old redirect guards (no-wallet -> landing, no-player -> /estate) are gone;
+  // the "claim your seat" CTA now lives in TxButton (and the shell), so a write
+  // attempt is what prompts a claim, not entry. /estate remains the Arrival
+  // home, reached when a spectator chooses to claim.
 
   return (
     <MotionEngineProvider>

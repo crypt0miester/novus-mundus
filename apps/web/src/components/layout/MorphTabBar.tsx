@@ -19,8 +19,19 @@ import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { SETTLE } from "@/lib/motion/tokens";
 import { cn } from "@/lib/utils";
 import { TxButton } from "@/components/shared/TxButton";
-import { PRIMARY, SECONDARY, computePageLocks } from "./nav-config";
+import {
+  PRIMARY,
+  SECONDARY,
+  computePageLocks,
+  spectatorClass,
+  visibleForSpectator,
+  type NavItem,
+} from "./nav-config";
 import { useUnread } from "@/lib/hooks/useUnread";
+import { useIsSpectator } from "@/lib/hooks/useCanAct";
+
+// A spectator's player-scoped tap lands on the estate onboarding (claim) home.
+const CLAIM_HREF = "/estate";
 
 const ICON_BY_LABEL: Record<string, GameIconId> = {
   Home: "nav-home",
@@ -143,7 +154,23 @@ export function MorphTabBar() {
   const hasPlayer = !!player;
   const hasEstate = !!estateData?.account;
   const extensions = player?.extensions ?? 0;
-  const disabled = isSuccess && !hasPlayer;
+
+  // Spectator = no claimed seat. Browse items stay live; player-scoped items
+  // reroute to the claim CTA; personal items drop from the nav. The old blanket
+  // disable now only bites player-scoped items for a connected, no-player wallet.
+  const isSpectator = useIsSpectator();
+  const playerItemDisabled = isSuccess && !hasPlayer && !isSpectator;
+
+  // Effective href + render decision for a nav item under the current capability.
+  const resolveItem = (item: NavItem): { href: string; disabled: boolean } | null => {
+    const cls = spectatorClass(item);
+    if (isSpectator) {
+      if (!visibleForSpectator(item)) return null;
+      if (cls === "player") return { href: CLAIM_HREF, disabled: false };
+      return { href: item.href!, disabled: false };
+    }
+    return { href: item.href!, disabled: cls === "player" && playerItemDisabled };
+  };
 
   // Resolve lock state for the secondary deep-link items. Hooks are called
   // unconditionally in a fixed order — safe because the feature set is static.
@@ -587,11 +614,13 @@ export function MorphTabBar() {
               );
 
               if (item.panel) {
+                // The personal inventory panel is empty for a spectator: drop it.
+                if (isSpectator) return null;
                 return (
                   <button
                     key={item.panel}
                     type="button"
-                    disabled={disabled}
+                    disabled={playerItemDisabled}
                     onClick={() => {
                       setOverflowOpen(false);
                       showPanel(item.label, item.panel!);
@@ -606,10 +635,13 @@ export function MorphTabBar() {
                 );
               }
 
+              const resolved = resolveItem(item);
+              if (!resolved) return null;
+
               return (
                 <Link
                   key={item.href}
-                  href={item.href!}
+                  href={resolved.href}
                   onClick={() => setOverflowOpen(false)}
                   className={cn(tileClass, "relative")}
                 >
@@ -670,8 +702,8 @@ export function MorphTabBar() {
           >
             {PRIMARY.map((item) => {
               const iconId = ICON_BY_LABEL[item.label] ?? "nav-home";
-              const active = isActive(item.href);
-              const locked = !!pageLocked[item.href];
+              const active = isActive(item.href!);
+              const locked = !!pageLocked[item.href!];
               const cls = cn(
                 "flex h-11 w-11 items-center justify-center rounded-full transition-colors",
                 active
@@ -680,7 +712,12 @@ export function MorphTabBar() {
                     ? "text-zinc-600"
                     : "text-text-secondary active:bg-surface-overlay/40",
               );
-              if (disabled) {
+              // The bottom pill keeps a fixed 5-tab footprint (the morph geometry
+              // pins to it), so a spectator's player-scoped tabs are NOT dropped
+              // here, they reroute to the claim CTA in place. The disabled span
+              // is reserved for the connected-no-player (non-spectator) wallet.
+              const resolved = resolveItem(item);
+              if (resolved?.disabled) {
                 return (
                   <span
                     key={item.href}
@@ -695,7 +732,7 @@ export function MorphTabBar() {
               return (
                 <Link
                   key={item.href}
-                  href={item.href}
+                  href={resolved ? resolved.href : item.href!}
                   aria-label={item.label}
                   data-morph-item
                   className={cls}
@@ -757,14 +794,14 @@ export function MorphTabBar() {
             ref={toggleBtnRef}
             type="button"
             aria-label={overflowOpen ? "Close menu" : "More"}
-            disabled={disabled}
+            disabled={playerItemDisabled}
             onClick={() => setOverflowOpen((v) => !v)}
             className={cn(
               "pointer-events-auto relative flex h-14 w-14 shrink-0 items-center justify-center rounded-full border shadow-xl shadow-black/40 backdrop-blur transition-colors",
               overflowOpen
                 ? "tier-accent-border tier-accent-text bg-surface-overlay/80"
                 : "border-border-default bg-[var(--nm-bg-bar)]/95 text-text-secondary active:bg-surface-overlay/60",
-              disabled && "opacity-40",
+              playerItemDisabled && "opacity-40",
             )}
           >
             {/* Unread dot so mobile sees new messages before opening the overflow. */}

@@ -359,7 +359,7 @@ export function LeaderboardView() {
                   {rank}
                 </span>
                 <Link
-                  href={`/world/players/${p.account.owner.toBase58()}`}
+                  href={`/players/${p.account.owner.toBase58()}`}
                   className="flex-1 truncate text-sm text-text-secondary hover:text-text-gold transition-colors"
                 >
                   {p.account.name ||
@@ -378,7 +378,7 @@ export function LeaderboardView() {
                     if (!tInfo) return <span className="text-text-muted">-</span>;
                     return (
                       <Link
-                        href={`/world/teams/${tInfo.id}`}
+                        href={`/team/${tInfo.id}`}
                         className="text-text-secondary hover:text-text-gold transition-colors"
                       >
                         {tInfo.name || `#${tInfo.id}`}

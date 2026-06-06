@@ -35,7 +35,7 @@ export function TeamCard({ teamId, team, rank, actions, className, lordlyLabels 
           <div className="flex items-center gap-2">
             {rank != null && <span className="text-xs font-bold text-text-muted">#{rank}</span>}
             <Link
-              href={`/world/teams/${teamId}`}
+              href={`/team/${teamId}`}
               className="truncate text-sm font-semibold text-text-primary hover:text-text-gold transition-colors"
             >
               {team.name || `Team #${teamId}`}

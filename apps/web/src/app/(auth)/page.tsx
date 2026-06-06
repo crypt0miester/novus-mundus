@@ -5,18 +5,27 @@ import { useWallet } from "@solana/wallet-adapter-react";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
 import Noise from "@/components/shared/animations/Noise";
 import { useTransitionStore, spectateMessage } from "@/lib/store/transition";
+import { usePlayer } from "@/lib/hooks/usePlayer";
 
 export default function LandingPage() {
   const { connected } = useWallet();
+  const { data: playerData, isSuccess } = usePlayer();
   const trigger = useTransitionStore((s) => s.trigger);
   const phase = useTransitionStore((s) => s.phase);
 
-  // Cross into the realm when the wallet connects — the estate is home.
+  // Cross into the realm when the wallet connects. A claimed player lands on
+  // their dashboard; a connected wallet with no player looks first (the realm
+  // map, in spectator mode) rather than being trapped on onboarding (D5). Wait
+  // for the player read to resolve so we don't bounce a real player to /map.
+  const hasPlayer = playerData?.exists === true;
   useEffect(() => {
-    if (connected && phase === "idle") {
-      trigger("The road brought you here.", "/estate");
+    if (!connected || phase !== "idle" || !isSuccess) return;
+    if (hasPlayer) {
+      trigger("The road brought you here.", "/dashboard");
+    } else {
+      trigger(spectateMessage(), "/map");
     }
-  }, [connected, phase, trigger]);
+  }, [connected, phase, isSuccess, hasPlayer, trigger]);
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-8 px-4">
@@ -53,7 +62,7 @@ export default function LandingPage() {
       />
 
       <button
-        onClick={() => trigger(spectateMessage(), "/world")}
+        onClick={() => trigger(spectateMessage(), "/map")}
         className="text-sm text-text-secondary transition-colors hover:text-text-gold lowercase"
       >
         Spectate the Realms

@@ -1,11 +1,15 @@
 "use client";
 
 import { useRef, useState, useCallback, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { useWallet } from "@solana/wallet-adapter-react";
 import { animate, createAnimatable, engine, type AnimatableObject } from "animejs";
 import { Loader2 } from "lucide-react";
 import { cn, prefersReducedMotion } from "@/lib/utils";
 import { useHoldCharge } from "@/lib/hooks/useHoldCharge";
 import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
+import { useCanAct } from "@/lib/hooks/useCanAct";
+import { useWalletModal } from "@/components/shared/wallet-adapter";
 import { PRESS, SETTLE } from "@/lib/motion/tokens";
 
 export type TxPhase = "idle" | "preparing" | "signing" | "sending" | "confirmed" | "failed";
@@ -61,6 +65,24 @@ export function TxButton({
   const [phase, setPhase] = useState<TxPhase>("idle");
   const btnRef = useRef<HTMLButtonElement>(null);
   const progressRef = useRef<HTMLDivElement>(null);
+
+  // The global write floor. A spectator (no wallet / no player / viewAs) can't
+  // act: the button is forced disabled, and a press opens the claim CTA instead
+  // of running onClick - connect a wallet if anonymous, else head to the
+  // Arrival flow at /estate to claim a seat. This gates all 66 call sites at the
+  // seam, on top of each tab's own canX predicate.
+  const canAct = useCanAct();
+  const spectator = !canAct;
+  const { connected } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
+  const router = useRouter();
+  const claimSeat = useCallback(() => {
+    if (!connected) {
+      setWalletModalVisible(true);
+      return;
+    }
+    router.push("/estate");
+  }, [connected, setWalletModalVisible, router]);
   // One reused animatable that fuses two of the three motion layers: the
   // preparing press-scale on the button and the hold-charge fill width (driven
   // through a `--hold-fill` custom property the fill div reads). Each hold tick
@@ -149,7 +171,7 @@ export function TxButton({
   // Press-and-hold charging. The hook is always called (rules of hooks); its
   // pointer handlers are only wired onto the button when `holdMax` + `onHold`
   // make a hold meaningful - otherwise the plain `onClick` path is used.
-  const holdEnabled = holdMax != null && holdMax > 1 && onHold != null && !disabled;
+  const holdEnabled = holdMax != null && holdMax > 1 && onHold != null && !disabled && !spectator;
   const hold = useHoldCharge({
     max: holdMax ?? 1,
     onFire: (count) => {
@@ -190,13 +212,22 @@ export function TxButton({
   return (
     <button
       ref={btnRef}
-      onClick={holdEnabled || !onClick ? undefined : () => execTx(onClick)}
+      // A spectator press never runs the tx - it opens the claim CTA. We keep
+      // the element clickable (no native `disabled`) so the press fires, but
+      // wear the disabled look below. Players keep the normal onClick path.
+      onClick={
+        spectator
+          ? claimSeat
+          : holdEnabled || !onClick
+            ? undefined
+            : () => execTx(onClick)
+      }
       {...(holdEnabled ? hold.bind : {})}
-      disabled={disabled || phase !== "idle"}
+      disabled={!spectator && (disabled || phase !== "idle")}
       className={cn(
         "relative flex select-none items-center justify-center overflow-hidden rounded-lg px-4 py-2 text-sm font-semibold transition-colors w-full text-center",
         variantClasses[variant],
-        disabled && "cursor-not-allowed opacity-50",
+        (disabled || spectator) && "cursor-not-allowed opacity-50",
         // The press-scale now rides the fused animatable; under reduced motion
         // there is no scale at all.
         phase === "confirmed" && "bg-green-600 text-white",

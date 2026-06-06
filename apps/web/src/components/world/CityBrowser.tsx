@@ -32,7 +32,7 @@ export function CityBrowser() {
       header: "City",
       cell: (c) => (
         <Link
-          href={`/world/cities/${c.account.cityId}`}
+          href={`/cities/${c.account.cityId}`}
           className="font-medium text-text-primary transition-colors hover:text-text-gold"
         >
           {c.account.name}
@@ -95,7 +95,7 @@ export function CityBrowser() {
               return (
                 <Link
                   key={c.pubkey.toBase58()}
-                  href={`/world/cities/${city.cityId}`}
+                  href={`/cities/${city.cityId}`}
                   className={cn("card transition-all", isCurrentCity && "accent-border-bright")}
                 >
                   <div className="flex items-center justify-between">

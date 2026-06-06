@@ -19,12 +19,16 @@ nav. It is redundant — it does not let you *watch* the game.
   `lib/events/format.ts`, `components/shared/ActivityFeed.tsx`. The city
   account exposes `activeEncounters` / `totalEncountersSpawned` counters.
 
-**Plan.**
-- Build a real spectate view: a live realm activity feed — attacks, rallies,
-  dungeon clears, encounters, team forms — streamed across all cities, ideally
-  pinned to the `RealmMap` (pulse the city where something happened).
-- Route "Spectate" to this view (e.g. `/world/live`) instead of `/world`.
-- Larger item — needs a realm-wide event subscription strategy. Deferred.
+**Plan (redefined).** Full design: [`docs/design/SPECTATE_UNIFIED_UI.md`](design/SPECTATE_UNIFIED_UI.md).
+Instead of a second "watch" view, collapse the two UIs into one: delete the
+`/world` tree and let a spectator (no wallet, or a wallet with no player)
+navigate the real `(game)` routes read-only, seeing real on-chain values. The
+two blockers are the redirects in `(game)/layout.tsx:31-42` and the wallet-gated
+account store; the `useWorld*` RPC hooks already give a wallet-less data path.
+Write actions gate through one `useCanAct()` seam on `TxButton`. The world-only
+browse surfaces (players, cities, team detail) move under `(game)`.
+- The original live realm activity feed (attacks/rallies/dungeon clears pinned to
+  the `RealmMap`) is kept as a deferred Phase 3 of that design.
 
 ---
 
@@ -109,10 +113,6 @@ stays unobtainable. Prioritization order:
 
 ------------------
 
-
-10. castles give same rewards for every tier. very bad design.
-    NOTE: `calculate_reward` DOES apply `tier_multiplier_bps` (0.25x Outpost → 2.0x
-    Citadel). not sure if the UI shows this. we need to make it show. 
     
 14. small dummy event for quick testing
 15. make the cranks api more robust via vercel queeues

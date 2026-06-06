@@ -255,7 +255,7 @@ function resampleClosedPolygon(poly: Pt[], count: number): string {
 
 export interface RealmMapProps {
   /** Replace the selected-city scroll panel. Default: city detail + "Walk
-   *  its gates" link to /world/cities/[id]. */
+   *  its gates" link to /cities/[id]. */
   renderSelected?: (ctx: RealmMapSelectedContext) => ReactNode;
   /** Replace the no-selection scroll panel. Default: legend + realm meta. */
   renderDefault?: (ctx: RealmMapDefaultContext) => ReactNode;
@@ -1674,7 +1674,7 @@ export function DefaultSelectedPanel({ node, isHome }: RealmMapSelectedContext) 
         </dd>
       </dl>
 
-      <Link href={`/world/cities/${c.cityId}`} className={styles.seal}>
+      <Link href={`/cities/${c.cityId}`} className={styles.seal}>
         <span>Walk its gates</span>
         <span>
           <ChevronRight className="h-3.5 w-3.5" />

@@ -2,8 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
-import { useGameEngine } from "@/lib/hooks/useGameEngine";
-import { useShopItems, useFlashSales, useDailyDeals } from "@/lib/hooks/useShop";
+import { useShopItems, useFlashSales, useDailyDeals, useShopGameEngine } from "@/lib/hooks/useShop";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
@@ -64,7 +63,7 @@ const SHOP_VIEWS: Record<
 
 export function ShopTab() {
   const { data: playerData } = usePlayer();
-  const { data: geData } = useGameEngine();
+  const { data: geData } = useShopGameEngine();
   const { data: items } = useShopItems();
   const { data: flashSales } = useFlashSales();
   const { data: dailyDeals } = useDailyDeals();
