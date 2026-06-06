@@ -63,6 +63,7 @@ import {
   CastleStatus,
   WarTableScope,
   deciToNovi,
+  calculateCastleReward,
   MAX_FORTIFICATION_LEVEL,
   MAX_TREASURY_LEVEL,
   MAX_CHAMBERS_LEVEL,
@@ -547,6 +548,26 @@ export function CastleTab() {
   // passed. Otherwise show the countdown to the next claim window.
   const rewardClaimable = eligibleForRewards && (rewardLastClaim == null || rewardElapsedDays >= 1);
   const rewardNextClaimAt = rewardLastClaim != null ? rewardLastClaim + SECONDS_PER_DAY : 0;
+
+  /* EFFECTIVE daily reward by role = base × tier bonus × treasury bonus,
+   * mirroring on-chain calculate_reward. Base per-day rates are FLAT across
+   * tiers, so the seat's payout is set entirely by tierMultiplierBps (×0.25
+   * Outpost → ×2.0 Citadel) + treasury level (+10%/level). Memoized on the
+   * castle so the per-second chain-time tick doesn't recompute these stable
+   * values. */
+  const effectiveRewards = useMemo(() => {
+    if (!castle) return null;
+    const eff = (base: bigint) =>
+      calculateCastleReward(base, castle.tierMultiplierBps ?? 0, castle.treasuryLevel ?? 0, 1);
+    return {
+      kingNovi: deciToNovi(eff(castle.kingNoviPerDay)),
+      kingCash: eff(castle.kingCashPerDay),
+      courtNovi: deciToNovi(eff(castle.courtNoviPerDay)),
+      courtCash: eff(castle.courtCashPerDay),
+      memberNovi: deciToNovi(eff(castle.memberNoviPerDay)),
+      memberCash: eff(castle.memberCashPerDay),
+    };
+  }, [castle]);
 
   // Held-since + activation, for the Castle Record card.
   const heldSinceSec = castle ? Number(castle.claimedAt ?? 0n) : 0;
@@ -1035,28 +1056,49 @@ export function CastleTab() {
                 )}
               </div>
 
-              {/* Daily Rewards — the castle's daily NOVI + cash payout by role,
-                  plus the gated claim (king / court / garrison member only). */}
+              {/* Daily Rewards — the castle's EFFECTIVE daily NOVI + cash payout
+                  by role, plus the gated claim (king / court / garrison member
+                  only). Base per-day rates are FLAT across tiers on-chain; the
+                  seat's payout is set by its tier bonus (×0.25 Outpost → ×2.0
+                  Citadel) and treasury level (+10%/level), so we surface the
+                  scaled numbers here — `calculateCastleReward` mirrors the chain
+                  exactly — rather than the identical-looking base rates. */}
               <div className="card">
-                <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                  Daily Rewards
-                </h3>
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                    Daily Rewards
+                  </h3>
+                  <span className="flex items-center gap-1 text-[10px] font-medium text-text-gold/80">
+                    ×{((castle.tierMultiplierBps ?? 0) / 10000).toFixed(2)} tier
+                    {(castle.treasuryLevel ?? 0) > 0 && (
+                      <span className="text-text-muted">
+                        {" "}
+                        · +{(castle.treasuryLevel ?? 0) * 10}% treasury
+                      </span>
+                    )}
+                    <InfoButton>
+                      Effective daily payout. Every seat shares the same base rate; the tier
+                      bonus (×0.25 Outpost up to ×2.0 Citadel) and treasury level (+10% per
+                      level) scale it — so a Citadel pays 8× an Outpost.
+                    </InfoButton>
+                  </span>
+                </div>
                 <div className="space-y-1.5 text-xs">
                   {[
                     {
                       role: rulerTitle(castle.tier ?? 0),
-                      novi: deciToNovi(castle.kingNoviPerDay),
-                      cash: castle.kingCashPerDay,
+                      novi: effectiveRewards?.kingNovi,
+                      cash: effectiveRewards?.kingCash,
                     },
                     {
                       role: "Court",
-                      novi: deciToNovi(castle.courtNoviPerDay),
-                      cash: castle.courtCashPerDay,
+                      novi: effectiveRewards?.courtNovi,
+                      cash: effectiveRewards?.courtCash,
                     },
                     {
                       role: "Member",
-                      novi: deciToNovi(castle.memberNoviPerDay),
-                      cash: castle.memberCashPerDay,
+                      novi: effectiveRewards?.memberNovi,
+                      cash: effectiveRewards?.memberCash,
                     },
                   ].map((r) => (
                     <div

@@ -29,6 +29,7 @@ import {
   calculateXpReward,
   // Daily rewards
   calculateDailyRewards,
+  calculateCastleReward,
   // Types
   type EncounterLootPool,
 } from '../../src/calculators/rewards';
@@ -628,6 +629,51 @@ describe('Daily Rewards', () => {
       // 333 * 5000 / 10000 = 166.5 -> floor to 166
       const rewards = calculateDailyRewards(333, 0, 0, 5000);
       expect(rewards.cash).toBe(166);
+    });
+  });
+});
+
+// Castle Reward Tests — parity mirror of on-chain `calculate_reward`
+// (state/castle.rs): base × tierMult × (1 + treasuryLevel×10%) × days.
+
+describe('Castle Rewards', () => {
+  describe('calculateCastleReward', () => {
+    // Tier multipliers from CastleTier::multiplier_bps (state/castle.rs).
+    const OUTPOST = 2500; // 0.25x
+    const STRONGHOLD = 10000; // 1.0x
+    const CITADEL = 20000; // 2.0x
+
+    it('applies the tier multiplier (Outpost 0.25x, Citadel 2.0x)', () => {
+      expect(calculateCastleReward(1000n, OUTPOST, 0, 1)).toBe(250n);
+      expect(calculateCastleReward(1000n, STRONGHOLD, 0, 1)).toBe(1000n);
+      expect(calculateCastleReward(1000n, CITADEL, 0, 1)).toBe(2000n);
+    });
+
+    it('makes a Citadel pay 8x an Outpost for the same base rate', () => {
+      const outpost = calculateCastleReward(1000n, OUTPOST, 0, 1);
+      const citadel = calculateCastleReward(1000n, CITADEL, 0, 1);
+      expect(citadel).toBe(outpost * 8n);
+    });
+
+    it('stacks the +10%/level treasury bonus after the tier multiplier', () => {
+      // 1000 × 1.0x = 1000, then × (1 + 3×10%) = 1000 × 1.3 = 1300.
+      expect(calculateCastleReward(1000n, STRONGHOLD, 3, 1)).toBe(1300n);
+      // Citadel + treasury 5: 1000 × 2.0 = 2000, × 1.5 = 3000.
+      expect(calculateCastleReward(1000n, CITADEL, 5, 1)).toBe(3000n);
+    });
+
+    it('multiplies by days', () => {
+      expect(calculateCastleReward(1000n, CITADEL, 0, 7)).toBe(14000n);
+    });
+
+    it('returns 0 for non-positive days', () => {
+      expect(calculateCastleReward(1000n, CITADEL, 5, 0)).toBe(0n);
+      expect(calculateCastleReward(1000n, CITADEL, 5, -1)).toBe(0n);
+    });
+
+    it('truncates with integer division, matching the on-chain u64 path', () => {
+      // 333 × 2500 / 10000 = 83.25 -> 83 (tier step truncates first).
+      expect(calculateCastleReward(333n, OUTPOST, 0, 1)).toBe(83n);
     });
   });
 });

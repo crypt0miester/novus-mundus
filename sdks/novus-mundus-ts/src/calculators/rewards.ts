@@ -475,6 +475,30 @@ export function calculateDailyRewards(
   };
 }
 
+/**
+ * Effective castle reward for `days`, mirroring on-chain `calculate_reward`
+ * (state/castle.rs): `base × tierMult × (1 + treasuryLevel×10%) × days`.
+ *
+ * Castle per-day base rates are stored FLAT across tiers — the tier is expressed
+ * entirely through `tierMultiplierBps` (0.25x Outpost → 2.0x Citadel), with a
+ * further +10%/level treasury bonus. Kept in bigint to match the chain's u64
+ * truncation exactly (NOVI is stored in deci units and rewards can be large).
+ */
+export function calculateCastleReward(
+  baseRate: bigint,
+  tierMultiplierBps: number,
+  treasuryLevel: number,
+  days: number,
+): bigint {
+  if (days <= 0) return 0n;
+  // Tier multiplier first, then the +10%/level treasury bonus (truncating
+  // integer division at each step, exactly as the on-chain u64 path does).
+  const tierAdjusted = (baseRate * BigInt(tierMultiplierBps)) / 10000n;
+  const treasuryBonusBps = BigInt(treasuryLevel) * 1000n;
+  const withTreasury = (tierAdjusted * (10000n + treasuryBonusBps)) / 10000n;
+  return withTreasury * BigInt(days);
+}
+
 // Helper Functions
 
 /** Calculate local time from timestamp and longitude (0-999 scale) */
