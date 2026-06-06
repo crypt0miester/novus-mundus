@@ -6,7 +6,7 @@ problem, the current state with file references, and the plan. Status keys:
 
 Last touched: 2026-05-29.
 
-## #6 Make spectate actually spectate — `TODO`
+## #6 Make spectate actually spectate — `DONE (Phases 0-2, f17cbf8; live feed deferred)`
 
 **Problem.** The landing page's "Spectate the Realm" button just routes to
 `/world`, which is the same static city/team/player browsing available from the

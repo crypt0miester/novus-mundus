@@ -1,8 +1,9 @@
 # Spectate = the real game, read-only (unified UI)
 
-> **Status:** design / proposed. Supersedes the original dev-todo **#6 "Make spectate
-> actually spectate"** (which proposed a live activity feed). The live feed is kept as
-> an optional later layer (see [Out of scope](#out-of-scope--later)).
+> **Status:** implemented (Phases 0-2) in commit `f17cbf8`; typecheck-clean, not yet
+> browser-verified. Phase 3 (live activity feed) still deferred. Supersedes the original
+> dev-todo **#6 "Make spectate actually spectate"** (which proposed a live activity feed).
+> The live feed is kept as an optional later layer (see [Out of scope](#out-of-scope--later)).
 
 ## Intent
 
