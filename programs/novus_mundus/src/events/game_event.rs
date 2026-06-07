@@ -64,6 +64,31 @@ impl Event for GameEventJoined {
     }
 }
 
+/// Emitted when a player leaves a game event (after it finalizes or cancels)
+pub struct GameEventLeft {
+    /// Event account pubkey
+    pub event: Address,
+    /// Player account pubkey (not wallet)
+    pub player: Address,
+    /// Player's name (48 bytes UTF-8)
+    pub player_name: [u8; 48],
+    /// Unix timestamp
+    pub timestamp: i64,
+}
+
+impl Event for GameEventLeft {
+    const DISCRIMINATOR: [u8; 8] = discriminator("event:GameEventLeft");
+
+    fn serialize(&self, buf: &mut [u8]) -> usize {
+        let mut offset = 0;
+        offset += self.event.pack(&mut buf[offset..]);
+        offset += self.player.pack(&mut buf[offset..]);
+        offset += self.player_name.pack(&mut buf[offset..]);
+        offset += self.timestamp.pack(&mut buf[offset..]);
+        offset
+    }
+}
+
 /// Emitted when a game event is finalized
 pub struct GameEventFinalized {
     /// Event account pubkey

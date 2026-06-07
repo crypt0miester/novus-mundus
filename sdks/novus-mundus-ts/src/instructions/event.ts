@@ -184,6 +184,64 @@ export async function createJoinEventInstruction(
   });
 }
 
+// Leave Event
+
+export interface LeaveEventAccounts {
+  /** Payer for transaction fees (can be backend for gas-less leaves) */
+  payer: PublicKey;
+  /** GameEngine PDA */
+  gameEngine: PublicKey;
+  /** Player's wallet (also the rent-refund recipient) */
+  playerOwner: PublicKey;
+  /** Event ID */
+  eventId: number;
+}
+
+/** ~5,000 CU */
+/**
+ * Leave a finalized or cancelled event.
+ *
+ * Frees the player's one-event slot so non-winners (who never call claim_prize)
+ * aren't locked out of every future event. Closes the EventParticipation PDA and
+ * refunds its rent to playerOwner.
+ *
+ * Requirements:
+ * - Event must be finalized (2) or cancelled (3) (can't bail mid-competition)
+ * - Player must currently be in this event
+ * - Top-10 winners of a finalized event must claim their prize first
+ *
+ * Note: Payer can be different from playerOwner (allows backend to pay fees).
+ */
+export async function createLeaveEventInstruction(
+  accounts: LeaveEventAccounts
+): Promise<TransactionInstruction> {
+  const [player] = await derivePlayerPda(accounts.gameEngine, accounts.playerOwner);
+  const [event] = await deriveEventPda(accounts.gameEngine, accounts.eventId);
+  const [participation] = await deriveEventParticipationPda(accounts.gameEngine, accounts.eventId, accounts.playerOwner);
+
+  // Rust account order:
+  // 0. payer (SIGNER, WRITE) - pays tx fees
+  // 1. player_account (WRITE)
+  // 2. event_account (READ)
+  // 3. event_participation_account (WRITE) - will be closed
+  // 4. player_owner (WRITE) - rent refund recipient
+  const keys = [
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
+    { pubkey: player, isSigner: false, isWritable: true },
+    { pubkey: event, isSigner: false, isWritable: false },
+    { pubkey: participation, isSigner: false, isWritable: true },
+    { pubkey: accounts.playerOwner, isSigner: false, isWritable: true },
+  ];
+
+  const data = createInstructionData(DISCRIMINATORS.EVENT_LEAVE);
+
+  return new TransactionInstruction({
+    keys,
+    programId: PROGRAM_ID,
+    data,
+  });
+}
+
 // Finalize Event (Permissionless)
 
 export interface FinalizeEventAccounts {

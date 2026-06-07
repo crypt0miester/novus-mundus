@@ -67,7 +67,6 @@ export function EventsList({ filter }: { filter: EventStatusFilter }) {
         {events.map(({ pubkey, account }) => (
           <EventCard
             key={pubkey}
-            eventPubkey={pubkey}
             event={account}
             participation={participationByEventId.get(account.id.toString()) ?? null}
           />

@@ -311,6 +311,10 @@ pub fn process_instruction(
             msg!("claim event prize");
             processor::event::claim_prize::process(program_id, accounts, instruction_data)
         }
+        84 => {
+            msg!("leave event");
+            processor::event::leave::process(program_id, accounts, instruction_data)
+        }
 
         // Progression System (90-99)
         90 => {

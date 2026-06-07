@@ -178,6 +178,7 @@ pub enum GameError {
     TransferRatioTooHigh = 6611,
     NotInEvent = 6612,
     AlreadyInEvent = 6613, // Already entered an event (only one at a time)
+    EventPrizeUnclaimed = 6614, // Winner must claim their prize before leaving
 
     // Subscription Errors (700-799)
     InvalidSubscriptionTier = 6700,

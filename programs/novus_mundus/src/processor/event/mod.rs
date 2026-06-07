@@ -4,6 +4,7 @@ pub mod claim_prize;
 /// Skill-based competitions with in-game leaderboards:
 /// - create: Create event with scoring type, requirements, prize pool (DAO only)
 /// - join: Join event (creates EventParticipation PDA, sets player.current_event)
+/// - leave: Leave a finalized/cancelled event (clears slot, refunds participation rent)
 /// - finalize: Lock leaderboard after end_time (anyone can call)
 /// - claim_prize: Winners claim weighted prize share (top 10)
 ///
@@ -12,3 +13,4 @@ pub mod claim_prize;
 pub mod create;
 pub mod finalize;
 pub mod join;
+pub mod leave;

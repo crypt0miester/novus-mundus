@@ -15,9 +15,11 @@ import { Keypair, PublicKey, Transaction } from '@solana/web3.js';
 import {
   createCreateEventInstruction,
   createJoinEventInstruction,
+  createLeaveEventInstruction,
   createClaimPrizeInstruction,
   createFinalizeEventInstruction,
   createAttackPlayerInstruction,
+  createCollectResourcesInstruction,
   deriveEventPda,
   deriveEventParticipationPda,
   derivePlayerPda,
@@ -666,6 +668,164 @@ describe('Event System', () => {
     });
   });
 
+  // Leaving Events
+
+  describe('Leaving Events', () => {
+    const LEAVE_FINALIZE_EVENT_ID = 5;
+
+    it('should reject leaving an active (still-running) event', async () => {
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join the active event so the player is genuinely in it.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // Leaving a live event is not allowed (can't bail mid-competition).
+      const leaveIx = await createLeaveEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: ACTIVE_EVENT_ID,
+      });
+
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(leaveIx),
+        [player.keypair],
+        6607 // EventNotCompleted — event still running
+      );
+    });
+
+    it('should let a non-winner leave a finalized event, free the slot, and rejoin another', async () => {
+      // A short event the player can join (auto-activate) then we end + finalize.
+      const now = await getCurrentTimestamp(ctx.svm);
+      const createIx = await createCreateEventInstruction(
+        {
+          authority: ctx.daoAuthority.publicKey,
+          gameEngine: ctx.gameEngine,
+          eventId: LEAVE_FINALIZE_EVENT_ID,
+        },
+        {
+          name: 'LeaveFinalizeEvent',
+          startTime: now - 60,
+          endTime: now + 20,
+          eventType: 0,
+          minLevel: 1,
+          minReputation: 0,
+          requiredSubscriptionTier: 0,
+          prizeType: 0,
+          prizeAmount: 1000,
+          autoActivate: true,
+        }
+      );
+      await sendTransaction(ctx.svm, new Transaction().add(createIx), [ctx.daoAuthority]);
+
+      const player = await factory.createPlayer({ initialize: true });
+
+      // Join (auto-activates Pending -> Active). Player never scores, so they end
+      // up off the leaderboard: a non-winner.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: LEAVE_FINALIZE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      const joined = await fetchPlayer(ctx.svm, player.playerPda);
+      assertBnEquals(joined!.currentEvent, LEAVE_FINALIZE_EVENT_ID);
+
+      // End the event and finalize it.
+      await advanceTime(ctx.svm, 30);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createFinalizeEventInstruction({
+            gameEngine: ctx.gameEngine,
+            eventId: LEAVE_FINALIZE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+      const finalized = await fetchEvent(ctx.svm, ctx.gameEngine, LEAVE_FINALIZE_EVENT_ID);
+      expect(finalized!.status).toBe(EventStatus.Finalized);
+
+      // Leave succeeds: clears the slot and closes the participation account.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createLeaveEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: LEAVE_FINALIZE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      // currentEvent cleared.
+      const afterLeave = await fetchPlayer(ctx.svm, player.playerPda);
+      assertBnEquals(afterLeave!.currentEvent, 0);
+
+      // Participation PDA closed (rent refunded).
+      const [participationPda] = await deriveEventParticipationPda(
+        ctx.gameEngine, LEAVE_FINALIZE_EVENT_ID, player.publicKey
+      );
+      expect(await accountExists(ctx.svm, participationPda)).toBe(false);
+
+      // Slot is free: the player can now join a different event.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: ACTIVE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+      const rejoined = await fetchPlayer(ctx.svm, player.playerPda);
+      assertBnEquals(rejoined!.currentEvent, ACTIVE_EVENT_ID);
+    }, 30_000);
+
+    it('should reject leaving a finalized event without ever joining it', async () => {
+      // Event 2 is finalized but this player never participated.
+      const player = await factory.createPlayer({ initialize: true });
+
+      const leaveIx = await createLeaveEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: ENDED_EVENT_ID,
+      });
+
+      // No participation account exists, so the load fails.
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(leaveIx),
+        [player.keypair]
+      );
+    });
+  });
+
   // Event Account State Tests
 
   describe('Event Account State', () => {
@@ -965,5 +1125,115 @@ describe('Event System', () => {
       // Prize pool verified: 10000 Cash, rank 1 gets 35% = 3500 Cash
       // Full lifecycle complete: create → join → score → finalize → claim (blocked by anti-sybil only)
     }, 120_000);
+  });
+
+  // Leaving Events: Winner Guard
+  //
+  // Placed last because it advances the chain clock far enough to finalize a
+  // long-window event; running it after every sibling keeps that advance from
+  // ending the still-active events those tests rely on. Scores via resource
+  // collection (EventType 6) instead of PvP, so it needs no combat fixture.
+
+  describe('Leaving Events: Winner Guard', () => {
+    const WINNER_LEAVE_EVENT_ID = 6;
+
+    it('should reject a top-10 winner leaving before claiming their prize', async () => {
+      const player = await factory.createPlayer({ initialize: true, createEstate: true });
+      const now = await getCurrentTimestamp(ctx.svm);
+
+      // MostResourcesCollected event with a long window, so the player can score
+      // inside it before we jump the clock past end_time to finalize.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createCreateEventInstruction(
+            {
+              authority: ctx.daoAuthority.publicKey,
+              gameEngine: ctx.gameEngine,
+              eventId: WINNER_LEAVE_EVENT_ID,
+            },
+            {
+              name: 'WinnerLeaveEvent',
+              startTime: now - 3600,
+              endTime: now + 86400,
+              eventType: 6, // MostResourcesCollected (accumulative)
+              minLevel: 1,
+              minReputation: 0,
+              requiredSubscriptionTier: 0,
+              prizeType: 2, // Cash
+              prizeAmount: 10000,
+              autoActivate: true,
+            }
+          )
+        ),
+        [ctx.daoAuthority]
+      );
+
+      // Join (auto-activate), let resources accrue, then collect with the event
+      // attached so the player lands on the leaderboard.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createJoinEventInstruction({
+            gameEngine: ctx.gameEngine,
+            payer: player.publicKey,
+            playerOwner: player.publicKey,
+            eventId: WINNER_LEAVE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+
+      await advanceTime(ctx.svm, 3600);
+
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createCollectResourcesInstruction(
+            { owner: player.publicKey, gameEngine: ctx.gameEngine, eventId: WINNER_LEAVE_EVENT_ID },
+            { noviAmount: BigInt(100), collectionType: 0 }
+          )
+        ),
+        [player.keypair]
+      );
+
+      // Confirm the score registered the player as the sole leaderboard winner.
+      const scored = await fetchEvent(ctx.svm, ctx.gameEngine, WINNER_LEAVE_EVENT_ID);
+      expect(scored!.leaderboardCount).toBeGreaterThanOrEqual(1);
+      expect(scored!.leaderboard[0]!.player.equals(player.publicKey)).toBe(true);
+
+      // End + finalize the event.
+      const remaining = Number(scored!.endTime) - (await getCurrentTimestamp(ctx.svm));
+      if (remaining > 0) {
+        await advanceTime(ctx.svm, remaining + 2);
+      }
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createFinalizeEventInstruction({
+            gameEngine: ctx.gameEngine,
+            eventId: WINNER_LEAVE_EVENT_ID,
+          })
+        ),
+        [player.keypair]
+      );
+      const finalized = await fetchEvent(ctx.svm, ctx.gameEngine, WINNER_LEAVE_EVENT_ID);
+      expect(finalized!.status).toBe(EventStatus.Finalized);
+      expect(finalized!.leaderboard[0]!.player.equals(player.publicKey)).toBe(true);
+
+      // The winner can't leave (and silently forfeit) before claiming.
+      const leaveIx = await createLeaveEventInstruction({
+        gameEngine: ctx.gameEngine,
+        payer: player.publicKey,
+        playerOwner: player.publicKey,
+        eventId: WINNER_LEAVE_EVENT_ID,
+      });
+      await expectTransactionToFail(
+        ctx.svm,
+        new Transaction().add(leaveIx),
+        [player.keypair],
+        6614 // EventPrizeUnclaimed — winners must claim first
+      );
+    }, 30_000);
   });
 });

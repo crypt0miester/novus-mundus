@@ -19,6 +19,7 @@ import {
   getAssociatedTokenAddressAsyncForPda,
   isNullPubkey,
   createJoinEventInstruction,
+  createLeaveEventInstruction,
   createFinalizeEventInstruction,
   createClaimPrizeInstruction,
   type EventAccount,
@@ -46,11 +47,9 @@ const PRIZE_BPS = [3500, 2000, 1300, 900, 600, 400, 300, 200, 200, 100];
 const INVALIDATE = [["player"]];
 
 export function EventCard({
-  eventPubkey,
   event,
   participation,
 }: {
-  eventPubkey: string;
   event: EventAccount;
   participation: EventParticipation | null;
 }) {
@@ -101,6 +100,13 @@ export function EventCard({
   const canFinalize = (status === EventStatus.Pending || status === EventStatus.Active) && ended;
   // Claim: Finalized event where the player is on the top-10 leaderboard.
   const canClaim = status === EventStatus.Finalized && myRank !== null;
+  // Leave: free the one-event slot once the event is over. Winners must claim
+  // first (the chain rejects a winner's leave with EventPrizeUnclaimed), so this
+  // is only offered to non-winners on a finalized event, or anyone on a
+  // cancelled one. Claiming closes participation, so claimed winners drop out too.
+  const canLeave =
+    isJoined &&
+    (status === EventStatus.Cancelled || (status === EventStatus.Finalized && myRank === null));
 
   // The badge reflects the live time window, not the lazily-updated on-chain
   // status (which stays Pending until the first join/score flips it). So an event
@@ -189,6 +195,25 @@ export function EventCard({
         instructions: [ix],
         invalidateKeys: INVALIDATE,
         successMessage: "Prize claimed!",
+        onPhase: reportPhase,
+      })
+      .then((r) => r.signature);
+  };
+
+  const handleLeave = async (reportPhase: (p: TxPhase) => void) => {
+    if (!publicKey) throw new Error("Wallet not connected");
+    const ge = client.gameEngine;
+    const ix = await createLeaveEventInstruction({
+      payer: publicKey,
+      gameEngine: ge,
+      playerOwner: publicKey,
+      eventId,
+    });
+    return transact
+      .mutateAsync({
+        instructions: [ix],
+        invalidateKeys: INVALIDATE,
+        successMessage: `Left ${event.name}. You can join another event now.`,
         onPhase: reportPhase,
       })
       .then((r) => r.signature);
@@ -343,6 +368,11 @@ export function EventCard({
             {myEstimatedPrize > 0 && ` (~${myEstimatedPrize.toLocaleString()})`}
           </TxButton>
         )}
+        {canLeave && (
+          <TxButton onClick={handleLeave} variant="secondary">
+            Leave Event
+          </TxButton>
+        )}
       </div>
 
       {canFinalize && (
@@ -360,6 +390,11 @@ export function EventCard({
       {joinable && inAnotherEvent && (
         <p className="mt-2 text-xs text-text-muted">
           You're already entered in another event
+        </p>
+      )}
+      {canLeave && (
+        <p className="mt-2 text-xs text-text-muted">
+          This event is over. Leaving frees your slot so you can enter a new event.
         </p>
       )}
     </div>
