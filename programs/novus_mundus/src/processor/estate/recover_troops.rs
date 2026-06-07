@@ -5,15 +5,17 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::RECOVERY_COST_DISCOUNT_BPS,
+    constants::{PLAYER_SEED, RECOVERY_COST_DISCOUNT_BPS},
     emit,
     error::GameError,
     events::estate::TroopsRecovered,
+    helpers::burn_tokens,
     helpers::estate::{infirmary_recovery_bps, require_infirmary},
     logic::safe_math::apply_bp,
     state::{EstateAccount, GameEngine, PlayerAccount},
     types::UnitType,
     utils::read_u64,
+    validation::require_writable,
 };
 
 /// Recover wounded troops from the Infirmary
@@ -26,6 +28,9 @@ use crate::{
 /// 1. `[WRITE]` player_account - PlayerAccount PDA
 /// 2. `[WRITE]` estate_account - EstateAccount PDA
 /// 3. `[]` game_engine_account - GameEngine PDA
+/// 4. `[WRITE]` player_token_account - Player's locked NOVI ATA (burn source)
+/// 5. `[WRITE]` novi_mint - NOVI token mint
+/// 6. `[]` token_program - SPL Token program
 ///
 /// # Instruction Data (10 bytes)
 /// [0]    unit_type: u8 (0-5 = UnitType enum)
@@ -42,6 +47,9 @@ pub fn process(
         player_account,
         estate_account,
         game_engine_account,
+        player_token_account,
+        novi_mint,
+        _token_program,
     ]);
 
     // 2. Parse Instruction Data
@@ -60,6 +68,17 @@ pub fn process(
     if !owner.is_signer() {
         return Err(GameError::Unauthorized.into());
     }
+
+    // 3b. Validate burn accounts (the cost is paid in locked NOVI, which must be
+    // burnt 1:1 so the ATA balance stays in lockstep with player.locked_novi).
+    require_writable(player_token_account)?;
+    require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "recover_troops.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 4. Load Accounts
     let game_engine_data = GameEngine::load_checked_by_key(game_engine_account, program_id)?;
@@ -139,6 +158,8 @@ pub fn process(
         .locked_novi
         .checked_sub(total_cost)
         .ok_or(GameError::MathOverflow)?;
+    // Snapshot for the burn seeds below (the player borrow is still live here).
+    let player_bump = player_data.bump;
 
     // 9. Add units to player
     match unit_type {
@@ -219,6 +240,25 @@ pub fn process(
         novi_spent: total_cost,
         timestamp: now,
     });
+
+    // 12. Burn the recovery cost from the locked-NOVI ATA. The player borrow is
+    // dead after the emit above, so the CPI can take player_account as the burn
+    // authority (player PDA owns the ATA).
+    let bump_seed = [player_bump];
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine_account.address(),
+        owner.address(),
+        &bump_seed
+    );
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
+    burn_tokens(
+        player_token_account,
+        novi_mint,
+        player_account,
+        total_cost,
+        &[player_signer],
+    )?;
 
     Ok(())
 }

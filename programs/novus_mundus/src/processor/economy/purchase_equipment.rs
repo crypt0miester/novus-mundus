@@ -5,9 +5,11 @@ use pinocchio::{
 };
 
 use crate::{
+    constants::PLAYER_SEED,
     emit,
     error::GameError,
     events::EquipmentPurchased,
+    helpers::burn_tokens,
     helpers::{
         estate::{load_estate_for_player, market_discount_bps, require_market},
         event_scoring::update_event_score,
@@ -19,7 +21,7 @@ use crate::{
     state::{GameEngine, PlayerAccount},
     types::EventType,
     utils::{read_u64, read_u8},
-    validation::require_signer,
+    validation::{require_signer, require_writable},
 };
 
 /// Equipment type for purchases
@@ -64,6 +66,9 @@ impl TryFrom<u8> for EquipmentType {
 /// - [signer] owner: Wallet that owns the account
 /// - [] game_engine: GameEngine PDA (for cost config)
 /// - [] estate_account: EstateAccount PDA (for Market discount)
+/// - [writable] player_token_account: Player's locked NOVI ATA (burn source, locked-novi payments)
+/// - [writable] novi_mint: NOVI token mint
+/// - [] token_program: SPL Token program
 /// - [writable] event_participation: (Optional) EventParticipation PDA for event scoring
 /// - [writable] event: (Optional) EventAccount PDA for event scoring
 ///
@@ -81,10 +86,18 @@ pub fn process(
     data: &[u8],
 ) -> Result<(), ProgramError> {
     // 1. Parse accounts
-    // estate_account is required, event accounts are optional
-    crate::extract_accounts!(accounts, [player, owner, game_engine, estate_account,]);
-    let (event_participation, event) = if accounts.len() >= 6 {
-        (Some(&accounts[4]), Some(&accounts[5]))
+    // The NOVI burn accounts are required; event accounts remain optional.
+    crate::extract_accounts!(accounts, [
+        player,
+        owner,
+        game_engine,
+        estate_account,
+        player_token_account,
+        novi_mint,
+        _token_program,
+    ]);
+    let (event_participation, event) = if accounts.len() >= 9 {
+        (Some(&accounts[7]), Some(&accounts[8]))
     } else {
         (None, None)
     };
@@ -115,6 +128,8 @@ pub fn process(
         program_id,
     )?;
     let economic_config = &game_engine_data.economic_config;
+    // Snapshot for the burn seeds below (the player borrow is still live here).
+    let player_bump = player_data.bump;
 
     // 5. Calculate total cost with DAO multiplier
     // Get base cost from GameEngine config (differentiated by type using φ ratios)
@@ -280,8 +295,22 @@ pub fn process(
         }
     }
 
-    // Emit EquipmentPurchased event (only for non-cash purchases since that burns NOVI)
+    // Locked-NOVI payments emit the purchase event and burn the cost 1:1 so the
+    // ATA stays in lockstep with player.locked_novi. Cash payments draw on
+    // cash_on_hand (off-ATA), so they skip the event, the burn, and the burn
+    // accounts' validation entirely. The player borrow is dead after the cost
+    // math above, so the CPI can take player as the burn authority (player PDA
+    // owns the ATA).
     if !pay_with_cash {
+        require_writable(player_token_account)?;
+        require_writable(novi_mint)?;
+        crate::require_keys_eq!(
+            novi_mint.address().as_array(),
+            &crate::constants::NOVI_MINT_ADDRESS,
+            "purchase_equipment.novi_mint",
+            GameError::InvalidMint,
+        );
+
         emit!(EquipmentPurchased {
             player: *player.address(),
             player_name: player_data.name,
@@ -290,6 +319,22 @@ pub fn process(
             novi_burned: total_cost,
             timestamp: now,
         });
+
+        let bump_seed = [player_bump];
+        let player_seeds = crate::seeds!(
+            PLAYER_SEED,
+            game_engine.address(),
+            owner.address(),
+            &bump_seed
+        );
+        let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
+        burn_tokens(
+            player_token_account,
+            novi_mint,
+            player,
+            total_cost,
+            &[player_signer],
+        )?;
     }
 
     Ok(())

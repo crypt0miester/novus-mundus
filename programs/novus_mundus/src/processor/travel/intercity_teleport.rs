@@ -6,12 +6,12 @@ use pinocchio::{
 use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::LOCATION_SEED,
+    constants::{LOCATION_SEED, PLAYER_SEED},
     emit,
     error::GameError,
     events::PlayerTeleported,
     helpers::{
-        add_hero_buffs_to_player_with_location, clear_hero_buffs, close_account,
+        add_hero_buffs_to_player_with_location, burn_tokens, clear_hero_buffs, close_account,
         estate::{load_estate_for_player, require_stables},
         parse_hero_nft,
     },
@@ -21,7 +21,7 @@ use crate::{
         is_hero_at_home, location_bonus_for_tier, require_extension, tier_from_mint_cost,
         CityAccount, HeroTemplate, LocationAccount, PlayerAccount, EXT_INVENTORY, NULL_PUBKEY,
     },
-    validation::require_owner,
+    validation::{require_owner, require_writable},
 };
 
 /// Teleport instantly to another city (costs Locked Novi)
@@ -41,13 +41,16 @@ use crate::{
 /// 6. `[WRITE]` destination_location - LocationAccount for destination cell (to occupy)
 /// 7. `[]` system_program - For creating location account
 /// 8. `[]` estate_account - EstateAccount PDA (for Stables requirement)
+/// 9. `[WRITE]` player_token_account - Player's locked NOVI ATA (burn source)
+/// 10. `[WRITE]` novi_mint - NOVI token mint
+/// 11. `[]` token_program - SPL Token program
 ///
 /// # Optional Hero Accounts (for location synergy recalculation)
 /// For each locked hero slot (0-2), if slot is occupied, include:
-/// 9+2n. `[]` hero_nft_n - Hero NFT mint account for slot n
-/// 10+2n. `[]` hero_template_n - HeroTemplate PDA for slot n (for tier calculation)
+/// 12+2n. `[]` hero_nft_n - Hero NFT mint account for slot n
+/// 13+2n. `[]` hero_template_n - HeroTemplate PDA for slot n (for tier calculation)
 ///
-/// Total: 9 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
+/// Total: 12 base accounts + up to 6 hero accounts (2 per locked slot: NFT + Template)
 pub fn process(
     program_id: &Address,
     accounts: &[AccountView],
@@ -67,6 +70,9 @@ pub fn process(
             destination_location_account,
             _system_program,
             estate_account,
+            player_token_account,
+            novi_mint,
+            _token_program,
         ]
     );
 
@@ -79,6 +85,17 @@ pub fn process(
     if !owner.is_signer() {
         return Err(GameError::Unauthorized.into());
     }
+
+    // 3b. Validate burn accounts. The teleport fee is paid in locked NOVI and
+    // burnt 1:1 so the ATA balance stays in lockstep with player.locked_novi.
+    require_writable(player_token_account)?;
+    require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "intercity_teleport.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 4. Load Accounts (kingdom-scoped)
 
@@ -168,6 +185,8 @@ pub fn process(
         .locked_novi
         .checked_sub(adjusted_cost)
         .ok_or(GameError::MathOverflow)?;
+    // Snapshot for the burn seeds below (the player borrow is still live here).
+    let player_bump = player_data.bump;
 
     // 12. Get Current Timestamp
     let now = Clock::get()?.unix_timestamp;
@@ -325,13 +344,13 @@ pub fn process(
         .iter()
         .any(|h| *h != NULL_PUBKEY);
 
-    if has_locked_heroes && accounts.len() > 9 {
+    if has_locked_heroes && accounts.len() > 12 {
         // Clear all existing hero buffs before recalculating
         clear_hero_buffs(&mut *player_data);
 
         // Parse hero accounts from remaining accounts (2 per locked hero: NFT + Template)
         // NFT-Only System: All hero state is stored in NFT attributes
-        let hero_accounts = &accounts[9..];
+        let hero_accounts = &accounts[12..];
         let mut hero_idx = 0;
 
         for slot in 0..3 {
@@ -403,6 +422,25 @@ pub fn process(
         gems_spent: adjusted_cost,
         timestamp: now,
     });
+
+    // 21. Burn the teleport fee from the locked-NOVI ATA. The player borrow is
+    // dead after the emit above, so the CPI can take player_account as the burn
+    // authority (player PDA owns the ATA), keeping the ATA in lockstep with state.
+    let bump_seed = [player_bump];
+    let player_seeds = crate::seeds!(
+        PLAYER_SEED,
+        game_engine_account.address(),
+        owner.address(),
+        &bump_seed
+    );
+    let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
+    burn_tokens(
+        player_token_account,
+        novi_mint,
+        player_account,
+        adjusted_cost,
+        &[player_signer],
+    )?;
 
     Ok(())
 }

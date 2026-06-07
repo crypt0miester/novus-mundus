@@ -233,12 +233,18 @@ export async function createPurchaseEquipmentInstruction(
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  // Token account is owned by the PlayerAccount PDA (locked NOVI burn source).
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
     { pubkey: estate, isSigner: false, isWritable: false },
+    { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Optional event accounts

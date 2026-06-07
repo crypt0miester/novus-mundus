@@ -30,7 +30,10 @@ import {
   deriveHeroTemplatePda,
   deriveEstatePda,
   deriveHeroCollectionPda,
+  deriveNoviMintPda,
+  getAssociatedTokenAddressAsyncForPda,
 } from '../../src/index';
+import { readSplTokenAmount } from '../fixtures/svm';
 
 import {
   type TestContext,
@@ -172,8 +175,16 @@ describe('Expedition System', () => {
   // Start Expedition Tests
 
   describe('Starting Expeditions', () => {
-    it('should start mining expedition', async () => {
+    it('should start mining expedition and burn the cost (ATA stays in lockstep with locked_novi)', async () => {
       const player = await createMiningReadyPlayer();
+
+      // The locked-NOVI cost must be burnt 1:1 so the player's NOVI ATA balance
+      // stays equal to player.locked_novi (the invariant the treasury sweep
+      // relies on; a missing burn leaves orphaned tokens in the ATA).
+      const [noviMint] = await deriveNoviMintPda();
+      const ata = await getAssociatedTokenAddressAsyncForPda(noviMint, player.playerPda);
+      const before = await fetchPlayer(ctx.svm, player.playerPda);
+      const ataBefore = readSplTokenAmount(ctx.svm, ata);
 
       const ix = await createExpeditionStartInstruction(
         { gameEngine: ctx.gameEngine, owner: player.publicKey },
@@ -191,6 +202,14 @@ describe('Expedition System', () => {
       // Verify expedition started (expedition PDA is seeded by the player PDA)
       const expedition = await fetchExpedition(ctx.svm, player.playerPda);
       expect(expedition).not.toBeNull();
+
+      const after = await fetchPlayer(ctx.svm, player.playerPda);
+      const ataAfter = readSplTokenAmount(ctx.svm, ata);
+      const lockedSpent = before!.lockedNovi - after!.lockedNovi;
+      expect(lockedSpent > 0n).toBe(true);
+      // The ATA dropped by exactly the locked_novi spent, and the two match.
+      expect(ataBefore - ataAfter).toBe(lockedSpent);
+      expect(ataAfter).toBe(after!.lockedNovi);
     });
 
     it('should start fishing expedition', async () => {

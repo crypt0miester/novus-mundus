@@ -13,7 +13,7 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   deriveGameEnginePda,
@@ -21,7 +21,9 @@ import {
   deriveCityPda,
   deriveLocationPda,
   deriveEstatePda,
+  deriveNoviMintPda,
 } from '../pda';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 
 // Intercity Start
 
@@ -297,9 +299,13 @@ export async function createIntercityTeleportInstruction(
   const [originCity] = await deriveCityPda(accounts.gameEngine, accounts.originCityId);
   const [destinationCity] = await deriveCityPda(accounts.gameEngine, accounts.destinationCityId);
   const [estateAccount] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  // Token account is owned by the PlayerAccount PDA (locked NOVI burn source).
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order: player, owner, origin_city, destination_city, game_engine,
-  //                     origin_location, destination_location, system_program, estate_account, [hero_accounts]
+  //                     origin_location, destination_location, system_program, estate_account,
+  //                     player_token_account, novi_mint, token_program, [hero_accounts]
   const keys = [
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -310,6 +316,9 @@ export async function createIntercityTeleportInstruction(
     { pubkey: accounts.destinationLocation, isSigner: false, isWritable: true },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
     { pubkey: estateAccount, isSigner: false, isWritable: false },
+    { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Add optional hero accounts

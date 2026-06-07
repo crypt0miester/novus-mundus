@@ -565,17 +565,26 @@ export async function createRecoverTroopsInstruction(
 ): Promise<TransactionInstruction> {
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  // Token account is owned by the PlayerAccount PDA (locked NOVI burn source).
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   // Rust account order:
   // 0. owner (SIGNER)
   // 1. player_account (WRITE)
   // 2. estate_account (WRITE)
   // 3. game_engine
+  // 4. player_token_account (WRITE) - locked NOVI ATA (burn source)
+  // 5. novi_mint (WRITE)
+  // 6. token_program
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: false },
     { pubkey: player, isSigner: false, isWritable: true },
     { pubkey: estate, isSigner: false, isWritable: true },
     { pubkey: accounts.gameEngine, isSigner: false, isWritable: false },
+    { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   const writer = new ByteWriter(10);

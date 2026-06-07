@@ -35,6 +35,7 @@ use crate::{
     emit,
     error::GameError,
     events::ExpeditionStarted,
+    helpers::burn_tokens,
     helpers::estate::{load_estate_for_player, require_dock, require_mine},
     state::{ExpeditionAccount, PlayerAccount, NULL_PUBKEY},
     utils::{read_u64, read_u8},
@@ -59,11 +60,14 @@ use crate::{
 /// 2. `[writable]` expedition_account - ExpeditionAccount PDA (to be created)
 /// 3. `[]` estate_account - EstateAccount PDA (for building level check)
 /// 4. `[]` system_program - System program (for account creation)
+/// 5. `[writable]` player_token_account - Player's locked NOVI ATA (burn source)
+/// 6. `[writable]` novi_mint - NOVI token mint
+/// 7. `[]` token_program - SPL Token program
 ///
 /// ## Optional Hero Accounts (if sending hero with expedition):
-/// 5. `[writable]` hero_mint - Hero NFT (MPL Core asset)
-/// 6. `[]` hero_collection - Hero collection (MPL Core)
-/// 7. `[]` p_core_program - MPL Core program
+/// 8. `[writable]` hero_mint - Hero NFT (MPL Core asset)
+/// 9. `[]` hero_collection - Hero collection (MPL Core)
+/// 10. `[]` p_core_program - MPL Core program
 ///
 /// # Instruction Data
 /// - expedition_type: u8 (1 byte) - 1=Mining, 2=Fishing
@@ -76,7 +80,7 @@ pub fn process(
     accounts: &[AccountView],
     instruction_data: &[u8],
 ) -> ProgramResult {
-    // 1. Parse Accounts (minimum 5, up to 8 with hero)
+    // 1. Parse Accounts (minimum 8, up to 11 with hero)
     crate::extract_accounts!(
         accounts,
         [
@@ -85,18 +89,32 @@ pub fn process(
             expedition_account,
             estate_account,
             system_program,
+            player_token_account,
+            novi_mint,
+            _token_program,
         ],
         rest = hero_accounts
     );
 
-    // Optional hero accounts (if len >= 8)
-    let has_hero_accounts = accounts.len() >= 8;
+    // Optional hero accounts come after the 8 fixed accounts (len >= 11).
+    let has_hero_accounts = accounts.len() >= 11;
 
     // 2. Validate Accounts
     require_signer(owner)?;
     require_writable(player_account)?;
     require_writable(expedition_account)?;
     require_owner(player_account, program_id)?;
+
+    // The expedition cost is paid in locked NOVI and burnt 1:1 so the ATA
+    // balance stays in lockstep with player.locked_novi.
+    require_writable(player_token_account)?;
+    require_writable(novi_mint)?;
+    crate::require_keys_eq!(
+        novi_mint.address().as_array(),
+        &crate::constants::NOVI_MINT_ADDRESS,
+        "expedition_start.novi_mint",
+        GameError::InvalidMint,
+    );
 
     // 3. Parse Instruction Data (26 bytes: type + tier + 3x u64 operatives)
     let expedition_type = read_u8(instruction_data, 0, "expedition_type")?;
@@ -249,6 +267,28 @@ pub fn process(
     let player_current_city = player_data.current_city;
     let player_name = player_data.name;
     drop(player_data_ref);
+
+    // 17b. Burn the expedition cost from the locked-NOVI ATA. The player borrow
+    // is released above, so the CPI can take player_account as the burn authority
+    // (player PDA owns the ATA). abort.rs documents this cost as "burnt" — this is
+    // where the burn actually happens, keeping the ATA in lockstep with state.
+    {
+        let player_bump_seed = [player_bump];
+        let player_seeds = crate::seeds!(
+            PLAYER_SEED,
+            player_game_engine.as_ref(),
+            owner.address(),
+            &player_bump_seed
+        );
+        let player_signer = pinocchio::cpi::Signer::from(&player_seeds);
+        burn_tokens(
+            player_token_account,
+            novi_mint,
+            player_account,
+            novi_cost,
+            &[player_signer],
+        )?;
+    }
 
     // 18. Create ExpeditionAccount PDA
     let lamports = crate::utils::rent_exempt_const(ExpeditionAccount::LEN);

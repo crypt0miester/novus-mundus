@@ -14,13 +14,15 @@ import {
   TransactionInstruction,
   SystemProgram,
 } from '@solana/web3.js';
-import { PROGRAM_ID, DISCRIMINATORS } from '../program';
+import { PROGRAM_ID, DISCRIMINATORS, TOKEN_PROGRAM_ID } from '../program';
 import { ByteWriter, createInstructionData } from '../utils/serialize';
 import {
   derivePlayerPda,
   deriveExpeditionPda,
   deriveEstatePda,
+  deriveNoviMintPda,
 } from '../pda';
+import { getAssociatedTokenAddressAsyncForPda } from '../utils/token';
 import { ExpeditionType } from '../types/enums';
 
 /** MPL Core program ID */
@@ -77,6 +79,9 @@ export async function createExpeditionStartInstruction(
   const [player] = await derivePlayerPda(accounts.gameEngine, accounts.owner);
   const [expedition] = await deriveExpeditionPda(player);
   const [estate] = await deriveEstatePda(player);
+  const [noviMint] = await deriveNoviMintPda();
+  // Token account is owned by the PlayerAccount PDA (locked NOVI burn source).
+  const playerTokenAccount = await getAssociatedTokenAddressAsyncForPda(noviMint, player);
 
   const keys = [
     { pubkey: accounts.owner, isSigner: true, isWritable: true },
@@ -84,6 +89,9 @@ export async function createExpeditionStartInstruction(
     { pubkey: expedition, isSigner: false, isWritable: true },
     { pubkey: estate, isSigner: false, isWritable: false },
     { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+    { pubkey: playerTokenAccount, isSigner: false, isWritable: true },
+    { pubkey: noviMint, isSigner: false, isWritable: true },
+    { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
   ];
 
   // Optional hero accounts (all three required if hero provided)
