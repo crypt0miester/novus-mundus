@@ -111,6 +111,22 @@ html {
   --nm-text-secondary: #4a4a4a;
   --nm-text-muted: #666658;
   --nm-border: #d4cfc6;
+
+  /* Icon-rail two-tone (left-sidebar-nav doc 5/12): a dark ink rail with a
+     light foreground in BOTH themes, for the clip's strong contrast and the
+     black-and-gold brand. The active icon flips to the tier accent (handled in
+     SideRailIcon via tier-accent-text), so the rail only owns the surface + the
+     resting foreground here. Default = paper / tier 0 (pre-hydration frame). */
+  --nm-rail: #1a1613;
+  --nm-rail-fg: #efe9df;
+
+  /* Resizable column widths. The committed value is mirrored onto <html> from
+     the sidebar store (see GameLayout), and a live drag overrides it on <html>
+     too (useResizable); these :root defaults cover SSR / first paint and match
+     DRAWER_WIDTH_DEFAULT / RIGHT_PANEL_WIDTH_DEFAULT. Kept on one element so a
+     live drag is never shadowed by a nearer inline var. */
+  --drawer-w: 240px;
+  --right-panel-w: 288px;
 }
 
 /* NM theme overrides.
@@ -124,6 +140,9 @@ body[data-theme="paper"] {
   --nm-text-secondary: #4a4a4a;
   --nm-text-muted: #666658;
   --nm-border: #d4cfc6;
+  /* Dark ink rail with a light foreground, the clip's two-tone look on paper. */
+  --nm-rail: #1a1613;
+  --nm-rail-fg: #efe9df;
   --color-surface: #F5F0E8;
   --color-surface-raised: #EDE8DF;
   --color-surface-overlay: #E5E0D7;
@@ -146,6 +165,10 @@ body[data-theme="dark"] {
   --nm-text-secondary: #a1a1aa;
   --nm-text-muted: #8a8a93;
   --nm-border: var(--tier-border);
+  /* Dark: the deepest panel with a muted-light foreground (still dark ink, so
+     the two-tone holds in dark mode without going pure black). */
+  --nm-rail: #0c0b0a;
+  --nm-rail-fg: #d7d4cd;
   --color-surface: #171412;
   --color-surface-raised: #18181b;
   --color-surface-overlay: #27272a;
@@ -531,4 +554,47 @@ body[data-theme="dark"] .cairn-orb {
 }
 .cosmetic-color-anim-cinder {
   animation: cosmetic-anim-cinder 2.8s ease-in-out infinite;
+}
+
+/* While a resize handle is dragging, useResizable sets data-resizing on <html>.
+   Suppress the resizable columns' width transition so they track the pointer
+   1:1 (the collapse animation, a separate gesture, keeps its transition). The
+   col-resize cursor stays through the drag even when the pointer leaves the thin
+   handle, since pointer capture routes moves back to it. */
+html[data-resizing] {
+  cursor: col-resize;
+}
+html[data-resizing] #side-drawer {
+  transition: none;
+}
+
+/* The external drawer handle's `left` slides with the collapse animation, but a
+   drag must track the pointer 1:1, so suppress that transition while resizing
+   (same flag the column width uses). */
+html[data-resizing] #drawer-resize-handle {
+  transition: none;
+}
+
+/* A column's content fades to fully transparent whenever it is below the min
+   width: dragging an open column past the min (release-to-close tell), and while
+   reopening from collapsed until the width crosses the min. useResizable toggles
+   data-closing on the content element; the transition sits on the base so the
+   fade eases both ways. The handle keeps full opacity (it lives outside). */
+#drawer-content,
+#right-panel-content {
+  transition: opacity 160ms ease;
+}
+#drawer-content[data-closing],
+#right-panel-content[data-closing] {
+  opacity: 0;
+}
+
+/* Reduced motion: the drawer collapse/expand is a CSS width+opacity transition
+   (it cannot route through the anime.js engine speed the way our JS tweens do),
+   so snap it to the final state here. The JS-driven rail glider, drawer content
+   cross-fade, and collapsed flyout each carry their own reduced-motion guard. */
+@media (prefers-reduced-motion: reduce) {
+  #side-drawer {
+    transition: none;
+  }
 }

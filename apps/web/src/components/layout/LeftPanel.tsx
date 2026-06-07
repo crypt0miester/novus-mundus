@@ -3,17 +3,14 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { MessageSquare } from "lucide-react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { usePlayer } from "@/lib/hooks/usePlayer";
-import { useEstate } from "@/lib/hooks/useEstate";
 import { useStamina } from "@/lib/hooks/useStamina";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { GoldNumber } from "@/components/shared/GoldNumber";
 import { GameIcon } from "@/components/shared/GameIcon";
 import { WorldClock } from "@/components/shared/WorldClock";
-import { StatBar } from "@/components/shared/StatBar";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { getTierInfo, getCachedTier } from "@/lib/hooks/useTierTheme";
@@ -22,212 +19,13 @@ import { useNoviGenerator } from "@/lib/hooks/useNoviGenerator";
 import { cn, formatNumber } from "@/lib/utils";
 import { useSheetStore } from "@/lib/store/sheet";
 import { WalletMultiButton } from "@/components/shared/wallet-adapter";
-import { CairnReport } from "@/components/cairn/CairnReport";
 import { createUpdateLockedNoviInstruction, deciToNovi } from "novus-mundus-sdk";
-import { useUnread } from "@/lib/hooks/useUnread";
 
-/** Desktop left sidebar — vertical card stack with player data + resources. */
-export function LeftPanel() {
-  const { publicKey } = useWallet();
-  const unread = useUnread();
-  const { data: playerData } = usePlayer();
-  const { data: estateData } = useEstate();
-  const client = useNovusMundusClient();
-  const transact = useTransact();
-  const player = playerData?.account;
-  const estate = estateData?.account;
+// The desktop resource HUD that used to live here was retired into
+// ResourceFooter (it now pins to the foot of the contextual SideDrawer at md+).
+// Only the mobile (<md) collapsible top bar remains.
 
-  const stamina = useStamina(player);
-
-  const domain = useDomainName(publicKey);
-
-  const { tier, active } = player
-    ? (() => {
-        const now = Math.floor(Date.now() / 1000);
-        const end = Number(player.subscriptionEnd);
-        return {
-          tier: Math.min(player.subscriptionTier, 3),
-          active: end > now,
-        };
-      })()
-    : { tier: getCachedTier(), active: false };
-  const tierInfo = getTierInfo(tier, active);
-
-  // NOVI accrual ticker — shared with the status bar and mobile sidebar.
-  const { pendingNovi } = useNoviGenerator();
-
-  const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
-    if (!publicKey) throw new Error("Wallet not connected");
-    const geKey = client.gameEngine;
-    const ix = await createUpdateLockedNoviInstruction({
-      owner: publicKey,
-      gameEngine: geKey,
-    });
-    return transact
-      .mutateAsync({
-        instructions: [ix],
-        invalidateKeys: [["player"]],
-        successMessage: `Claimed ${formatNumber(pendingNovi, "compact")} NOVI!`,
-        onPhase: reportPhase,
-      })
-      .then((r) => r.signature);
-  };
-
-  if (!player) return <SpectatorRail />;
-
-  const activeBuildings =
-    estate?.buildings?.filter((b: any) => b.status === 2 || b.status === 3).length ?? 0;
-  const constructingBuildings =
-    estate?.buildings?.filter((b: any) => b.status === 1 || b.status === 4).length ?? 0;
-  const plotsOwned = estate?.plotsOwned ?? 0;
-  const maxSlots = plotsOwned * 4;
-
-  return (
-    // Bottom padding keeps the last card clear of the fixed Cairn (CairnPresence).
-    <div className="flex flex-col gap-3 p-3 pb-44">
-      {/* Player identity */}
-      <div className="rounded-lg border border-border-default bg-surface-raised p-3">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-semibold text-text-primary truncate">
-            {domain || player.name || "Player"}
-          </span>
-          {tierInfo.hasBadge && <span className="tier-badge text-[10px]">[{tierInfo.badge}]</span>}
-        </div>
-        <div className="mt-1 text-xs text-text-muted">Level {player.level}</div>
-      </div>
-
-      {/* Messages — unread DMs + team war-room (count from useUnread). */}
-      <Link
-        href="/messages"
-        className="flex items-center justify-between rounded-lg border border-border-default bg-surface-raised p-3 transition-colors hover:border-[var(--seal)]"
-      >
-        <span className="flex items-center gap-1.5 text-xs text-text-muted">
-          <MessageSquare className="h-3.5 w-3.5" />
-          Messages
-        </span>
-        {unread.total > 0 && (
-          <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-accent px-1.5 text-[10px] font-bold text-surface">
-            {unread.total}
-          </span>
-        )}
-      </Link>
-
-      {/* Stamina */}
-      <div className="rounded-lg border border-border-default bg-surface-raised p-3">
-        <div className="mb-1 flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 text-text-muted">
-            <GameIcon id="resource-stamina" size={14} />
-            Stamina
-          </span>
-          <span className="font-mono tabular-nums text-text-secondary">
-            {stamina.current}/{stamina.max}
-          </span>
-        </div>
-        <StatBar
-          current={stamina.current}
-          max={stamina.max}
-          size="sm"
-          showValues={false}
-          color="tier"
-        />
-      </div>
-
-      {/* NOVI + Claim */}
-      <div className="rounded-lg border border-border-default bg-surface-raised p-3">
-        <div className="flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 text-text-muted">
-            <GameIcon id="resource-novi" size={14} />
-            NOVI
-          </span>
-          <GoldNumber value={deciToNovi(player.lockedNovi)} size="sm" format="compact" />
-        </div>
-        {pendingNovi > 0 && (
-          <div className="mt-2 flex items-center justify-between">
-            <span className="font-mono text-xs text-emerald-400">
-              +{formatNumber(pendingNovi, "compact")}
-            </span>
-            <TxButton
-              onClick={handleClaim}
-              className="h-6 px-2 text-[10px] font-semibold leading-none w-20"
-            >
-              Claim
-            </TxButton>
-          </div>
-        )}
-      </div>
-
-      {/* Cash + Gems */}
-      <div className="rounded-lg border border-border-default bg-surface-raised p-3 space-y-1.5">
-        <div className="flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 text-text-muted">
-            <GameIcon id="resource-cash" size={14} />
-            Cash
-          </span>
-          <GoldNumber value={Number(player.cashOnHand)} size="sm" format="compact" />
-        </div>
-        <div className="flex items-center justify-between text-xs">
-          <span className="flex items-center gap-1.5 text-text-muted">
-            <GameIcon id="resource-gem" size={14} />
-            Gems
-          </span>
-          <GoldNumber value={Number(player.gems)} size="sm" format="compact" />
-        </div>
-      </div>
-
-      {/* Estate summary */}
-      {estate && (
-        <div className="rounded-lg border border-border-default bg-surface-raised p-3 space-y-1.5">
-          <div className="text-xs font-semibold text-text-muted uppercase tracking-wider">
-            Estate
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">Level</span>
-            <span className="font-semibold text-text-primary">{estate.estateLevel ?? 0}</span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">Plots</span>
-            <span className="text-text-primary">{plotsOwned}/5</span>
-          </div>
-          <div className="flex items-center justify-between text-xs">
-            <span className="text-text-muted">Buildings</span>
-            <span className="text-text-primary">
-              {activeBuildings + constructingBuildings}/{maxSlots}
-            </span>
-          </div>
-        </div>
-      )}
-
-      <CairnReport />
-    </div>
-  );
-}
-
-/**
- * Spectator rail - shown in place of the resource stack when there is no
- * claimed player. Keeps the left column from going blank and points the visitor
- * at the claim flow (estate onboarding). The full resource rail returns the
- * moment a player exists.
- */
-function SpectatorRail() {
-  return (
-    <div className="flex flex-col gap-3 p-3">
-      <div className="rounded-lg border border-border-default bg-surface-raised p-4">
-        <div className="text-sm font-semibold text-text-primary">Spectating</div>
-        <p className="mt-1 text-xs text-text-muted">
-          You are watching the realm. Claim your seat to build an estate, raise an army, and act.
-        </p>
-        <Link
-          href="/estate"
-          className="tier-accent-border tier-accent-text mt-3 inline-flex w-full items-center justify-center rounded-md border bg-surface-overlay/40 px-3 py-2 text-xs font-semibold transition-colors hover:bg-surface-overlay/70"
-        >
-          Claim your seat
-        </Link>
-      </div>
-    </div>
-  );
-}
-
-/** Mobile collapsible top bar — compact summary that expands to full data. */
+/** Mobile collapsible top bar: compact summary that expands to full data. */
 export function LeftPanelMobile() {
   const { publicKey } = useWallet();
   const { data: playerData } = usePlayer();
@@ -253,24 +51,23 @@ export function LeftPanelMobile() {
 
   const [expanded, setExpanded] = useState(false);
 
-  // /map turns the page into a fullscreen disc (z-30) with its own
-  // floating chrome — lift the data bar above the parchment so the
-  // player's identity strip stays readable. Other routes keep the
-  // default stacking so the bar doesn't poke through the wallet
-  // modal scrim (z-50).
+  // /map turns the page into a fullscreen disc (z-30) with its own floating
+  // chrome, so lift the data bar above the parchment so the player's identity
+  // strip stays readable. Other routes keep the default stacking so the bar
+  // doesn't poke through the wallet modal scrim (z-50).
   const pathname = usePathname();
   const mapFullscreen = pathname === "/map" || pathname?.startsWith("/map/");
 
   // Open intent drops the instant a sheet is dismissed (before its close
-  // animation): drop the full data panel down while a detail sheet is open —
-  // the player is mid-decision and wants resources in view — and collapse it
-  // the moment the sheet closes, with no lingering delay.
+  // animation): drop the full data panel down while a detail sheet is open (the
+  // player is mid-decision and wants resources in view) and collapse it the
+  // moment the sheet closes, with no lingering delay.
   const sheetOpen = useSheetStore((s) => s.openSheets.length > 0);
   useEffect(() => {
     setExpanded(sheetOpen);
   }, [sheetOpen]);
 
-  // NOVI accrual ticker — shared via useNoviGenerator (see LeftPanel above).
+  // NOVI accrual ticker, shared via useNoviGenerator (see ResourceFooter).
   const { pendingNovi } = useNoviGenerator();
 
   const handleClaim = async (reportPhase: (p: TxPhase) => void) => {
@@ -361,7 +158,7 @@ export function LeftPanelMobile() {
           aria-label={expanded ? "Collapse details" : "Expand details"}
           className="flex-shrink-0 text-text-muted"
         >
-          {expanded ? "\u25B2" : "\u25BC"}
+          {expanded ? "▲" : "▼"}
         </button>
       </div>
 
@@ -419,7 +216,7 @@ export function LeftPanelMobile() {
         </div>
       )}
 
-      {/* Floating claim pill — mobile only, above bottom nav */}
+      {/* Floating claim pill: mobile only, above bottom nav */}
       {pendingNovi > 0 && !expanded && (
         <div className="fixed bottom-20 right-3 z-50">
           <TxButton

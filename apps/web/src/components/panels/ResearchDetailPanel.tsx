@@ -7,6 +7,7 @@ import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useConnection } from "@solana/wallet-adapter-react";
+import { useChainNow } from "@/lib/hooks/useChainTime";
 import { useQuery } from "@tanstack/react-query";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
@@ -60,6 +61,11 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
   const { connection } = useConnection();
   const transact = useTransact();
   const close = useRightPanelStore((s) => s.close);
+  // Gate completion on the cluster clock, not Date.now(): complete_research
+  // checks `now >= completes_at` against Clock::unix_timestamp on-chain, so a
+  // local clock ahead of the cluster (common on a dev validator) would show
+  // "Claim" early and the tx would fail with InvalidParameter (0x1777).
+  const nowSec = useChainNow(15_000);
 
   // Fetch template
   const { data: template } = useQuery({
@@ -254,7 +260,6 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
       isResearching(progress) &&
       progress.currentResearch === template.researchType
     );
-    const nowSec = Math.floor(Date.now() / 1000);
     const isComplete = !!(progress && isActiveForThis && isResearchComplete(progress, nowSec));
     const isAnyActive = progress ? isResearching(progress) : false;
     const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
@@ -355,6 +360,7 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
   }, [
     template,
     progress,
+    nowSec,
     estateData,
     noviBalance,
     playerData,
@@ -375,7 +381,6 @@ export function ResearchPanel({ researchType }: { researchType: number }) {
   const isActiveForThis = progress
     ? isResearching(progress) && progress.currentResearch === template.researchType
     : false;
-  const nowSec = Math.floor(Date.now() / 1000);
   const isComplete = progress ? isActiveForThis && isResearchComplete(progress, nowSec) : false;
   const canMeetPrereqs = progress ? checkResearchPrerequisites(progress, template) : true;
   const isAnyActive = progress ? isResearching(progress) : false;

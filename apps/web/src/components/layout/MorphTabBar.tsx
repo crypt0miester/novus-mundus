@@ -5,10 +5,9 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { animate } from "animejs";
 import { Plus, X, ChevronLeft } from "lucide-react";
-import { GameIcon, type GameIconId } from "@/components/shared/GameIcon";
+import { GameIcon } from "@/components/shared/GameIcon";
 
 import { usePlayer } from "@/lib/hooks/usePlayer";
-import { useEstate } from "@/lib/hooks/useEstate";
 import { useFeatureGate, FEATURES } from "@/lib/hooks/useFeatureGate";
 import { useRightPanelStore, type PanelAction } from "@/lib/store/right-panel";
 import { useSheetStore } from "@/lib/store/sheet";
@@ -19,38 +18,11 @@ import { useReducedMotion } from "@/lib/hooks/useReducedMotion";
 import { SETTLE } from "@/lib/motion/tokens";
 import { cn } from "@/lib/utils";
 import { TxButton } from "@/components/shared/TxButton";
-import {
-  PRIMARY,
-  SECONDARY,
-  computePageLocks,
-  spectatorClass,
-  visibleForSpectator,
-  type NavItem,
-} from "./nav-config";
+import { ICON_BY_LABEL } from "./nav-config";
+import { isActiveRoute } from "@/lib/nav/sections";
 import { useUnread } from "@/lib/hooks/useUnread";
 import { useIsSpectator } from "@/lib/hooks/useCanAct";
-
-// A spectator's player-scoped tap lands on the estate onboarding (claim) home.
-const CLAIM_HREF = "/estate";
-
-const ICON_BY_LABEL: Record<string, GameIconId> = {
-  Home: "nav-home",
-  Estate: "nav-estate",
-  Combat: "nav-combat",
-  Team: "nav-team",
-  Shop: "nav-shop",
-  Inventory: "nav-inventory",
-  Map: "nav-map",
-  Events: "nav-events",
-  Leaderboard: "nav-leaderboard",
-  Settings: "nav-settings",
-  // Sub-page deep links
-  Heroes: "nav-heroes",
-  Dungeon: "nav-dungeon",
-  Arena: "nav-arena",
-  Rally: "nav-rally",
-  Subscription: "nav-subscription",
-};
+import { useNavItems } from "@/lib/hooks/useNavItems";
 
 // Morph timing. The shape morph runs on a requestAnimationFrame loop with an
 // easeOutCubic curve; these are the exit/enter tween lengths. (The SETTLE spring
@@ -101,7 +73,7 @@ export function MorphTabBar() {
   const router = useRouter();
   const unread = useUnread();
   const { data: playerData, isSuccess } = usePlayer();
-  const { data: estateData } = useEstate();
+  const { primary, secondary } = useNavItems();
   const showPanel = useRightPanelStore((s) => s.show);
   const open = useRightPanelStore((s) => s.open);
   const morphActions = useRightPanelStore((s) => s.morphActions);
@@ -150,27 +122,14 @@ export function MorphTabBar() {
         ]
       : panelActions;
 
-  const player = playerData?.account;
-  const hasPlayer = !!player;
-  const hasEstate = !!estateData?.account;
-  const extensions = player?.extensions ?? 0;
+  const hasPlayer = !!playerData?.account;
 
-  // Spectator = no claimed seat. Browse items stay live; player-scoped items
-  // reroute to the claim CTA; personal items drop from the nav. The old blanket
-  // disable now only bites player-scoped items for a connected, no-player wallet.
+  // Spectator = no claimed seat. The nav-item spectator/lock/claim routing lives
+  // in `useNavItems` now; this local flag survives only for the standalone `+`
+  // toggle circle (not a nav item), which disables for a connected, no-player
+  // wallet. The old blanket disable bit only player-scoped items.
   const isSpectator = useIsSpectator();
   const playerItemDisabled = isSuccess && !hasPlayer && !isSpectator;
-
-  // Effective href + render decision for a nav item under the current capability.
-  const resolveItem = (item: NavItem): { href: string; disabled: boolean } | null => {
-    const cls = spectatorClass(item);
-    if (isSpectator) {
-      if (!visibleForSpectator(item)) return null;
-      if (cls === "player") return { href: CLAIM_HREF, disabled: false };
-      return { href: item.href!, disabled: false };
-    }
-    return { href: item.href!, disabled: cls === "player" && playerItemDisabled };
-  };
 
   // Resolve lock state for the secondary deep-link items. Hooks are called
   // unconditionally in a fixed order — safe because the feature set is static.
@@ -189,8 +148,6 @@ export function MorphTabBar() {
     [FEATURES.RALLY_JOIN]: !rallyGate.allowed,
     [FEATURES.SUBSCRIPTION]: !subscriptionGate.allowed,
   };
-
-  const pageLocked = computePageLocks(hasPlayer, hasEstate, extensions);
 
   // The mode is derived from store state — a panel with actions is the only
   // thing that flips us out of nav mode. Actions alone trigger the morph;
@@ -562,8 +519,6 @@ export function MorphTabBar() {
     };
   }, [shape, wideBarWidth, composeWidth, reduce]);
 
-  const isActive = (href: string) => pathname === href || pathname?.startsWith(`${href}/`);
-
   // Render — one structure for every shape. Both layers are always in the DOM;
   // the inactive one is an `absolute` overlay so it costs no layout space.
   return (
@@ -602,7 +557,11 @@ export function MorphTabBar() {
           }}
         >
           <div className="grid grid-cols-4 gap-1.5">
-            {SECONDARY.map((item) => {
+            {secondary.map((resolved) => {
+              // The resolver drops items hidden for the current capability (a
+              // spectator's personal items + the personal inventory panel).
+              if (!resolved) return null;
+              const { item } = resolved;
               const iconId = ICON_BY_LABEL[item.label] ?? "nav-settings";
               const locked = item.feature ? !!featureLocks[item.feature] : false;
 
@@ -614,13 +573,11 @@ export function MorphTabBar() {
               );
 
               if (item.panel) {
-                // The personal inventory panel is empty for a spectator: drop it.
-                if (isSpectator) return null;
                 return (
                   <button
                     key={item.panel}
                     type="button"
-                    disabled={playerItemDisabled}
+                    disabled={resolved.disabled}
                     onClick={() => {
                       setOverflowOpen(false);
                       showPanel(item.label, item.panel!);
@@ -635,17 +592,14 @@ export function MorphTabBar() {
                 );
               }
 
-              const resolved = resolveItem(item);
-              if (!resolved) return null;
-
               return (
                 <Link
                   key={item.href}
-                  href={resolved.href}
+                  href={resolved.href!}
                   onClick={() => setOverflowOpen(false)}
                   className={cn(tileClass, "relative")}
                 >
-                  {item.href === "/messages" && unread.total > 0 && (
+                  {resolved.badge && (
                     <span
                       className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-accent"
                       aria-hidden
@@ -700,10 +654,14 @@ export function MorphTabBar() {
               willChange: "opacity, transform",
             }}
           >
-            {PRIMARY.map((item) => {
+            {primary.map((resolved) => {
+              // No PRIMARY item is personal, so the resolver never drops one; the
+              // bottom pill keeps a fixed 5-tab footprint regardless.
+              if (!resolved) return null;
+              const { item } = resolved;
               const iconId = ICON_BY_LABEL[item.label] ?? "nav-home";
-              const active = isActive(item.href!);
-              const locked = !!pageLocked[item.href!];
+              const active = isActiveRoute(pathname, item.href!);
+              const locked = resolved.locked;
               const cls = cn(
                 "flex h-11 w-11 items-center justify-center rounded-full transition-colors",
                 active
@@ -712,12 +670,10 @@ export function MorphTabBar() {
                     ? "text-zinc-600"
                     : "text-text-secondary active:bg-surface-overlay/40",
               );
-              // The bottom pill keeps a fixed 5-tab footprint (the morph geometry
-              // pins to it), so a spectator's player-scoped tabs are NOT dropped
-              // here, they reroute to the claim CTA in place. The disabled span
-              // is reserved for the connected-no-player (non-spectator) wallet.
-              const resolved = resolveItem(item);
-              if (resolved?.disabled) {
+              // A spectator's player-scoped tabs are NOT dropped here, they
+              // reroute to the claim CTA in place. The disabled span is reserved
+              // for the connected-no-player (non-spectator) wallet.
+              if (resolved.disabled) {
                 return (
                   <span
                     key={item.href}
@@ -732,7 +688,7 @@ export function MorphTabBar() {
               return (
                 <Link
                   key={item.href}
-                  href={resolved ? resolved.href : item.href!}
+                  href={resolved.href!}
                   aria-label={item.label}
                   data-morph-item
                   className={cls}

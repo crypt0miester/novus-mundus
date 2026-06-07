@@ -1,3 +1,5 @@
+import type { GameIconId } from "@/components/shared/GameIcon";
+
 export interface NavItem {
   label: string;
   /** Route to navigate to. */
@@ -56,10 +58,9 @@ export const SECONDARY: NavItem[] = [
   },
   {
     section: "Team",
-    href: "/team?tab=rally",
-    label: "Rally",
-    feature: "rally_join",
-    spectator: "player",
+    href: "/team?tab=browse",
+    label: "Browse",
+    spectator: "browse",
   },
   {
     section: "Shop",
@@ -78,6 +79,26 @@ export const SECONDARY: NavItem[] = [
   { href: "/events", label: "Events", spectator: "browse" },
   { panel: "inventory", label: "Inventory", spectator: "player" },
 ];
+
+// Label to flat `nav-*` glyph. Shared by the mobile MorphTabBar and the desktop
+// rail/drawer, so the two navs map labels identically.
+export const ICON_BY_LABEL: Record<string, GameIconId> = {
+  Home: "nav-home",
+  Estate: "nav-estate",
+  Team: "nav-team",
+  Shop: "nav-shop",
+  Inventory: "nav-inventory",
+  Map: "nav-map",
+  Events: "nav-events",
+  Leaderboard: "nav-leaderboard",
+  Settings: "nav-settings",
+  // Sub-page deep links
+  Heroes: "nav-heroes",
+  Dungeon: "nav-dungeon",
+  Arena: "nav-arena",
+  Rally: "nav-rally",
+  Subscription: "nav-subscription",
+};
 
 /**
  * Primary-nav routes a player can't enter yet, keyed by `href`. `/map` is

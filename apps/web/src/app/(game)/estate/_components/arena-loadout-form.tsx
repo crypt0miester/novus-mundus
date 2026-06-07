@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Swords, Shield, Crosshair, Hammer, User } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Crosshair, Hammer, User, Pencil } from "lucide-react";
 import { PublicKey } from "@solana/web3.js";
 import {
   createUpdateLoadoutInstruction,
@@ -14,16 +14,17 @@ import { useArenaLoadout } from "@/lib/hooks/useArena";
 import { useLockedHeroes } from "@/lib/hooks/useLockedHeroes";
 import { useTransact } from "@/lib/hooks/useTransact";
 import { useNovusMundusClient } from "@/lib/solana/provider";
-import { NumberField } from "@/components/shared/NumberField";
 import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
 import { InfoButton } from "@/components/shared/InfoButton";
 import { bnToSafeNumber, cn, shortenAddress } from "@/lib/utils";
 
-// One configurable count in the loadout, paired with the player's owned total.
-// At battle time the chain clamps each count to what you own, so owned is the
-// effective ceiling: anything above it is ignored, not a hard input gate.
-interface SlotState {
+// The loadout's unit/weapon/armor counts are not escrowed, and arena power is
+// min(loadout, owned) (challenge_player.calculate_arena_power clamps each count
+// to current assets). So committing your full owned army is always optimal and
+// committing less only caps you lower. We always save the player's current owned
+// totals; the only real choice is the arena hero.
+interface ArmyCounts {
   defense1: number;
   defense2: number;
   defense3: number;
@@ -33,7 +34,7 @@ interface SlotState {
   armor: number;
 }
 
-const ZERO_SLOTS: SlotState = {
+const ZERO_ARMY: ArmyCounts = {
   defense1: 0,
   defense2: 0,
   defense3: 0,
@@ -42,6 +43,19 @@ const ZERO_SLOTS: SlotState = {
   siege: 0,
   armor: 0,
 };
+
+// Ordered field metadata, shared by the editor list and the committed summary.
+const ARMY_FIELDS: { key: keyof ArmyCounts; label: string; short: string }[] = [
+  { key: "defense1", label: "Defensive Unit I", short: "Def I" },
+  { key: "defense2", label: "Defensive Unit II", short: "Def II" },
+  { key: "defense3", label: "Defensive Unit III", short: "Def III" },
+  { key: "melee", label: "Melee Weapons", short: "Melee" },
+  { key: "ranged", label: "Ranged Weapons", short: "Ranged" },
+  { key: "siege", label: "Siege Weapons", short: "Siege" },
+  { key: "armor", label: "Armor Pieces", short: "Armor" },
+];
+
+const armySum = (a: ArmyCounts) => ARMY_FIELDS.reduce((sum, f) => sum + a[f.key], 0);
 
 export function ArenaLoadoutForm() {
   const { publicKey } = useWallet();
@@ -53,10 +67,11 @@ export function ArenaLoadoutForm() {
 
   const player = playerData?.account;
   const loadout = loadoutData?.account;
+  const hasCommitted = !!loadout;
 
-  // Owned counts — advisory ceilings shown next to each control.
-  const owned = useMemo(() => {
-    if (!player) return ZERO_SLOTS;
+  // The committed army is always the player's full owned totals.
+  const owned = useMemo<ArmyCounts>(() => {
+    if (!player) return ZERO_ARMY;
     return {
       defense1: bnToSafeNumber(player.defensiveUnit1),
       defense2: bnToSafeNumber(player.defensiveUnit2),
@@ -68,14 +83,10 @@ export function ArenaLoadoutForm() {
     };
   }, [player]);
 
-  const [slots, setSlots] = useState<SlotState>(ZERO_SLOTS);
-  const [heroMint, setHeroMint] = useState<string>("");
-
-  // Preload from the on-chain loadout once it resolves. Re-running on the
-  // loadout identity keeps the form in sync after a successful save.
-  useEffect(() => {
-    if (!loadout) return;
-    setSlots({
+  // What is currently committed on-chain (drives the compact summary).
+  const committed = useMemo<ArmyCounts>(() => {
+    if (!loadout) return ZERO_ARMY;
+    return {
       defense1: bnToSafeNumber(loadout.defensiveUnits[0] ?? 0n),
       defense2: bnToSafeNumber(loadout.defensiveUnits[1] ?? 0n),
       defense3: bnToSafeNumber(loadout.defensiveUnits[2] ?? 0n),
@@ -83,29 +94,41 @@ export function ArenaLoadoutForm() {
       ranged: bnToSafeNumber(loadout.rangedWeapons),
       siege: bnToSafeNumber(loadout.siegeWeapons),
       armor: bnToSafeNumber(loadout.armorPieces),
-    });
+    };
+  }, [loadout]);
+
+  const ownedPower = useMemo(() => armySum(owned), [owned]);
+  const committedPower = useMemo(() => armySum(committed), [committed]);
+
+  const committedHeroName = useMemo(() => {
+    if (!loadout || isNullPubkey(loadout.arenaHero)) return null;
+    const mint = loadout.arenaHero.toBase58();
+    const hero = lockedHeroes.find((h) => h?.mint.toBase58() === mint);
+    return hero?.name ?? shortenAddress(mint, 4);
+  }, [loadout, lockedHeroes]);
+
+  const [heroMint, setHeroMint] = useState<string>("");
+  // The compact committed card is the default once a loadout exists; "Edit"
+  // opens the full editor.
+  const [editing, setEditing] = useState(false);
+
+  // Preload the hero choice from the on-chain loadout once it resolves (the
+  // counts are always max, so only the hero needs syncing).
+  useEffect(() => {
+    if (!loadout) return;
     setHeroMint(isNullPubkey(loadout.arenaHero) ? "" : loadout.arenaHero.toBase58());
   }, [loadout]);
 
-  const setSlot = (key: keyof SlotState) => (next: number) =>
-    setSlots((s) => ({ ...s, [key]: next }));
-
-  const totalPower = useMemo(
-    () =>
-      slots.defense1 +
-      slots.defense2 +
-      slots.defense3 +
-      slots.melee +
-      slots.ranged +
-      slots.siege +
-      slots.armor,
-    [slots],
-  );
-
-  // A slider's ceiling is the larger of the owned count and the currently
-  // committed value, so a loadout that exceeds current stock (units spent
-  // elsewhere) still renders without snapping down.
-  const ceiling = (key: keyof SlotState) => Math.max(owned[key], slots[key], 1);
+  const heroValid = useMemo(() => {
+    const trimmed = heroMint.trim();
+    if (trimmed.length === 0) return true;
+    try {
+      new PublicKey(trimmed);
+      return true;
+    } catch {
+      return false;
+    }
+  }, [heroMint]);
 
   const handleSave = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -119,19 +142,16 @@ export function ArenaLoadoutForm() {
         throw new Error("Hero is not a valid address");
       }
     }
+    // Always commit the full owned army (counts are not escrowed).
     const ix = await createUpdateLoadoutInstruction(
       { owner: publicKey, gameEngine: ge },
       {
         arenaHero,
-        defensiveUnits: [
-          BigInt(slots.defense1),
-          BigInt(slots.defense2),
-          BigInt(slots.defense3),
-        ],
-        meleeWeapons: BigInt(slots.melee),
-        rangedWeapons: BigInt(slots.ranged),
-        siegeWeapons: BigInt(slots.siege),
-        armorPieces: BigInt(slots.armor),
+        defensiveUnits: [BigInt(owned.defense1), BigInt(owned.defense2), BigInt(owned.defense3)],
+        meleeWeapons: BigInt(owned.melee),
+        rangedWeapons: BigInt(owned.ranged),
+        siegeWeapons: BigInt(owned.siege),
+        armorPieces: BigInt(owned.armor),
       },
     );
     return transact
@@ -141,52 +161,90 @@ export function ArenaLoadoutForm() {
         successMessage: "Loadout saved!",
         onPhase: reportPhase,
       })
-      .then((r) => r.signature);
+      .then((r) => {
+        setEditing(false); // collapse back to the compact summary
+        return r.signature;
+      });
   };
 
-  const heroValid = useMemo(() => {
-    const trimmed = heroMint.trim();
-    if (trimmed.length === 0) return true;
-    try {
-      new PublicKey(trimmed);
-      return true;
-    } catch {
-      return false;
-    }
-  }, [heroMint]);
+  // Committed and not editing: the compact summary card.
+  if (hasCommitted && !editing) {
+    const grew = ownedPower - committedPower;
+    return (
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            Arena Loadout
+            <InfoButton>
+              Your loadout is your full army at the time you saved it. Nothing is escrowed. Recruit
+              more, then update to bring them in.
+            </InfoButton>
+          </h3>
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="flex items-center gap-1 rounded-md border border-border-default px-2 py-1 text-[11px] text-text-secondary transition-colors hover:border-border-gold hover:text-text-primary"
+          >
+            <Pencil className="h-3 w-3" />
+            Edit
+          </button>
+        </div>
 
+        <div className="flex items-end justify-between gap-3">
+          <div>
+            <div className="text-[11px] text-text-muted">Loadout Strength</div>
+            <div className="font-mono text-lg font-semibold tabular-nums text-text-gold">
+              {committedPower.toLocaleString()}
+            </div>
+          </div>
+          <div className="text-right">
+            <div className="text-[11px] text-text-muted">Hero</div>
+            <div className="flex items-center justify-end gap-1 text-sm text-text-primary">
+              <User className="h-3.5 w-3.5 text-text-muted" />
+              {committedHeroName ?? "None"}
+            </div>
+          </div>
+        </div>
+
+        {committedPower > 0 ? (
+          <div className="flex flex-wrap gap-1.5">
+            {ARMY_FIELDS.filter((f) => committed[f.key] > 0).map((f) => (
+              <span
+                key={f.key}
+                className="rounded-md bg-surface-overlay px-2 py-1 text-[11px] text-text-secondary"
+              >
+                {f.short}{" "}
+                <span className="font-mono tabular-nums text-text-primary">
+                  {committed[f.key].toLocaleString()}
+                </span>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[11px] text-text-muted">No army committed yet.</p>
+        )}
+
+        {grew > 0 && (
+          <button
+            type="button"
+            onClick={() => setEditing(true)}
+            className="w-full rounded-lg border border-[var(--tier-accent)] bg-accent/10 px-3 py-2 text-left text-[11px] tier-accent-text transition-colors hover:bg-accent/20"
+          >
+            Your army grew by {grew.toLocaleString()}. Update your loadout to commit it.
+          </button>
+        )}
+      </div>
+    );
+  }
+
+  // First-time setup, or editing an existing loadout: the full editor.
   const disabledReason = !publicKey
     ? "Connect your wallet to set a loadout."
     : !heroValid
       ? "Enter a valid hero address or leave it blank."
-      : totalPower === 0
-        ? "An all-zero loadout battles at 0 power and only draws. Add units, weapons, or armor."
+      : ownedPower === 0
+        ? "You have no army yet. Recruit units, forge weapons, or craft armor first."
         : null;
-
-  // Field groups rendered as a data-driven list instead of seven near-identical
-  // NumberField blocks. Each key is a SlotState field; owned/ceiling drive the
-  // advisory max.
-  const slotGroups: { title: string; icon: ReactNode; fields: { key: keyof SlotState; label: string }[] }[] = [
-    {
-      title: "Defensive Units",
-      icon: <Shield className="h-3.5 w-3.5" />,
-      fields: [
-        { key: "defense1", label: "Unit I" },
-        { key: "defense2", label: "Unit II" },
-        { key: "defense3", label: "Unit III" },
-      ],
-    },
-    {
-      title: "Weapons & Armor",
-      icon: <Swords className="h-3.5 w-3.5" />,
-      fields: [
-        { key: "melee", label: "Melee Weapons" },
-        { key: "ranged", label: "Ranged Weapons" },
-        { key: "siege", label: "Siege Weapons" },
-        { key: "armor", label: "Armor Pieces" },
-      ],
-    },
-  ];
 
   return (
     <div className="card space-y-4">
@@ -194,9 +252,8 @@ export function ArenaLoadoutForm() {
         <h3 className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
           Arena Loadout
           <InfoButton>
-            Your loadout is what fights in arena battles. Battle power is clamped to what you own, so
-            counts above your owned totals are ignored. A loadout left at zero battles at 0 power and
-            can only draw.
+            Your loadout is your full army: every unit, weapon, and piece of armor you own fights in
+            arena battles. Nothing is escrowed, so saving just commits your current totals.
           </InfoButton>
         </h3>
         <div className="text-right">
@@ -204,10 +261,10 @@ export function ArenaLoadoutForm() {
           <div
             className={cn(
               "font-mono text-sm font-semibold tabular-nums",
-              totalPower > 0 ? "text-text-gold" : "text-red-400",
+              ownedPower > 0 ? "text-text-gold" : "text-red-400",
             )}
           >
-            {totalPower.toLocaleString()}
+            {ownedPower.toLocaleString()}
           </div>
         </div>
       </div>
@@ -262,30 +319,34 @@ export function ArenaLoadoutForm() {
         )}
       </div>
 
-      {slotGroups.map((group) => (
-        <div key={group.title} className="space-y-3">
-          <div className="flex items-center gap-1 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            {group.icon}
-            {group.title}
-          </div>
-          {group.fields.map(({ key, label }) => (
-            <NumberField
-              key={key}
-              label={label}
-              value={slots[key]}
-              onChange={setSlot(key)}
-              max={ceiling(key)}
-              size="sm"
-              info={`Owned: ${owned[key].toLocaleString()}`}
-            />
-          ))}
+      {/* The army being committed is always your full owned totals (read-only). */}
+      <div className="space-y-1.5">
+        <div className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+          Full Army
         </div>
-      ))}
+        {ARMY_FIELDS.map((f) => (
+          <div key={f.key} className="flex items-center justify-between text-xs">
+            <span className="text-text-secondary">{f.label}</span>
+            <span className="font-mono tabular-nums text-text-primary">
+              {owned[f.key].toLocaleString()}
+            </span>
+          </div>
+        ))}
+      </div>
 
       <div className="flex flex-col items-center gap-2">
         <TxButton onClick={handleSave} disabled={disabledReason != null}>
-          Save Loadout
+          {hasCommitted ? "Update Loadout" : "Save Loadout"}
         </TxButton>
+        {hasCommitted && (
+          <button
+            type="button"
+            onClick={() => setEditing(false)}
+            className="text-[11px] text-text-muted transition-colors hover:text-text-secondary"
+          >
+            Cancel
+          </button>
+        )}
         {disabledReason && (
           <p className="flex items-center gap-1 text-center text-[11px] text-text-muted">
             <Crosshair className="h-3 w-3 shrink-0" />
@@ -296,7 +357,8 @@ export function ArenaLoadoutForm() {
 
       <p className="flex items-center gap-1 text-[11px] text-text-muted">
         <Hammer className="h-3 w-3 shrink-0" />
-        Recruit units, forge weapons, and craft armor across your estate to raise these totals.
+        Recruit units, forge weapons, and craft armor across your estate to raise these totals, then
+        save to commit them.
       </p>
     </div>
   );

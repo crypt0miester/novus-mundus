@@ -20,11 +20,21 @@ import { useChainNow } from "@/lib/hooks/useChainTime";
 import { effectiveTeamCapacity } from "@/lib/teamCapacity";
 import { systemFraming } from "@/lib/narrative";
 import { useTransitionStore } from "@/lib/store/transition";
+import { cn } from "@/lib/utils";
 import { createTeamJoinInstruction, parsePlayer } from "novus-mundus-sdk";
 
 const HOUSE_FRAMING = systemFraming("house");
 
 type SortOption = "members" | "treasury" | "name" | "newest";
+
+// Sort tabs (replaces the old <select>); concise labels so the segmented control
+// stays compact.
+const SORTS: { value: SortOption; label: string }[] = [
+  { value: "members", label: "Sworn Blades" },
+  { value: "treasury", label: "War-chest" },
+  { value: "name", label: "Name" },
+  { value: "newest", label: "Newest" },
+];
 
 export function TeamBrowser() {
   const { data: teams, isLoading } = useWorldTeams();
@@ -203,33 +213,55 @@ export function TeamBrowser() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
+      <div className="flex flex-wrap items-center gap-3 lg:ml-1">
         <input
           type="text"
           placeholder="Search Houses..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-border-gold focus:outline-none"
+          className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none"
         />
-        <label className="flex items-center gap-2 text-sm text-text-secondary">
-          <input
-            type="checkbox"
-            checked={publicOnly}
-            onChange={(e) => setPublicOnly(e.target.checked)}
-            className="rounded border-zinc-700"
-          />
-          Public only
-        </label>
-        <select
-          value={sort}
-          onChange={(e) => setSort(e.target.value as SortOption)}
-          className="rounded-lg border border-border-default bg-surface-raised px-3 py-2 text-sm text-text-primary focus:border-border-gold focus:outline-none"
+        {/* Public-only: a clickable toggle chip, accent-bordered + filled when on. */}
+        <button
+          type="button"
+          onClick={() => setPublicOnly((v) => !v)}
+          aria-pressed={publicOnly}
+          className={cn(
+            "rounded-lg border px-3 py-2 text-sm transition-colors",
+            publicOnly
+              ? "tier-accent-border tier-accent-text bg-surface-overlay font-medium"
+              : "border-border-default bg-surface-raised text-text-secondary hover:border-border-gold hover:text-text-primary",
+          )}
         >
-          <option value="members">Most Sworn Blades</option>
-          <option value="treasury">Largest War-chest</option>
-          <option value="name">Name (A-Z)</option>
-          <option value="newest">Newest Banner</option>
-        </select>
+          Public only
+        </button>
+        {/* Sort: a segmented tab control (replaces the select). */}
+        <div
+          role="tablist"
+          aria-label="Sort Houses"
+          className="inline-flex flex-wrap gap-0.5 rounded-lg border border-border-default bg-surface-raised p-0.5"
+        >
+          {SORTS.map((s) => {
+            const selected = sort === s.value;
+            return (
+              <button
+                key={s.value}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setSort(s.value)}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  selected
+                    ? "bg-surface-overlay tier-accent-text font-medium"
+                    : "text-text-secondary hover:text-text-primary",
+                )}
+              >
+                {s.label}
+              </button>
+            );
+          })}
+        </div>
         <ViewToggle mode={view} onChange={setView} className="ml-auto" />
       </div>
 

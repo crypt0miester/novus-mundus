@@ -147,34 +147,34 @@ export function ArenaTab() {
     }
   };
 
+  // The season strip lives on the banner art (it had a lot of empty space)
+  // instead of in a separate card below it.
+  const seasonFooter = season ? (
+    <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1">
+      <div>
+        <div className="text-[10px] uppercase tracking-wider text-zinc-400">
+          Season {currentSeasonId}
+        </div>
+        <div className="text-sm font-semibold leading-tight text-zinc-50">
+          {isSeasonActive(season) ? "Active" : "Ended"}
+        </div>
+      </div>
+      {season.endTime ? (
+        <div className="text-right">
+          <div className="text-[10px] uppercase tracking-wider text-zinc-400">Ends in</div>
+          <GoldCountdown endsAt={Number(season.endTime ?? 0n)} format="compact" />
+        </div>
+      ) : null}
+      <div className="text-right">
+        <div className="text-[10px] uppercase tracking-wider text-zinc-400">Participants</div>
+        <GoldNumber value={season.leaderboardCount ?? 0} />
+      </div>
+    </div>
+  ) : undefined;
+
   return (
     <div className="space-y-6">
-      <BuildingShowcase buildingId={BuildingId.Arena} icon="nav-arena" />
-      {season && (
-        <div className="card accent-border">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-xs text-text-muted">Season {currentSeasonId}</div>
-              <div className="text-lg font-semibold text-text-primary">
-                {isSeasonActive(season) ? "Active" : "Ended"}
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-xs text-text-muted">Participants</div>
-              <GoldNumber value={season.leaderboardCount ?? 0} />
-            </div>
-          </div>
-          {season.endTime && (
-            <div className="mt-2">
-              <GoldCountdown
-                endsAt={Number(season.endTime ?? 0n)}
-                format="full"
-                label="Season Ends"
-              />
-            </div>
-          )}
-        </div>
-      )}
+      <BuildingShowcase buildingId={BuildingId.Arena} icon="nav-arena" footer={seasonFooter} />
 
       {participant ? (
         <div className="card">

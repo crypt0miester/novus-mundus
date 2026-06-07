@@ -68,28 +68,31 @@ function PanelContent() {
   );
 }
 
-/** RightPanel — desktop: fixed sidebar. Mobile: bottom sheet modal. */
+/** RightPanel: desktop fixed sidebar; mobile bottom sheet modal. */
 export function RightPanel() {
   const open = useRightPanelStore((s) => s.open);
   const title = useRightPanelStore((s) => s.title);
   const close = useRightPanelStore((s) => s.close);
 
   // Escape-to-close and mobile body-scroll-lock are owned by BottomSheet,
-  // which is always mounted below — no need to duplicate them here.
+  // which is always mounted below, so no need to duplicate them here.
 
   return (
     <>
-      {/* ── Desktop: fixed right sidebar — only mounted when something is
-          selected, so an unused panel reclaims its width for the main view ── */}
+      {/* Desktop: fixed right sidebar, only mounted when something is selected so
+          an unused panel reclaims its width. Its width is the resizable
+          --right-panel-w; the DrawerResizeHandle (variant "right-panel", in the
+          layout) sets it and closes the panel when dragged past the min. */}
       {open && (
-        <aside className="hidden lg:flex lg:w-72 flex-shrink-0 flex-col border-l border-border-default bg-[var(--nm-bg-bar)]">
-          <div className="flex flex-1 flex-col overflow-y-auto">
+        <aside className="hidden lg:flex w-[var(--right-panel-w)] flex-shrink-0 flex-col border-l border-border-default bg-[var(--nm-bg-bar)]">
+          <div id="right-panel-content" className="flex flex-1 flex-col overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-border-default px-4 py-2">
               <h3 className="text-xs font-semibold uppercase tracking-wider text-text-muted">
                 {title}
               </h3>
               <button
+                type="button"
                 onClick={close}
                 className="rounded border border-border-default px-2 py-0.5 text-xs text-text-muted hover:text-text-secondary"
               >

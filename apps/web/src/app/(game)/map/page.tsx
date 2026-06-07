@@ -49,19 +49,19 @@ function MapContent() {
           {activeTab === "castle" && <CastleTab />}
         </div>
 
-        {/* Sub-tab switcher — vertical column of round icon buttons on
-         *  the right rail. Shown at every breakpoint now that the map
-         *  is fullscreen on desktop too. On md+ the TopBar holds the
-         *  wallet button at the same right edge, so we drop the nav
-         *  below it (top: 11px = the bar's bottom edge + a small gap)
-         *  via the `md:top-[3rem]` arbitrary value. The MorphTabBar on
-         *  mobile occupies the bottom and the realm map's status pill
-         *  sits ~bottom-7rem; top-36 keeps the nav clear of both. */}
+        {/* Sub-tab switcher: vertical column of round icon buttons on the
+         *  right edge. Shown at every breakpoint now that the map is fullscreen
+         *  on desktop too. The desktop TopBar is gone (the nav lives in the
+         *  left rail, which never overlaps this right edge), so the nav no
+         *  longer reserves the old bar height; a small top inset clears the
+         *  fullscreen disc's own top chrome. The MorphTabBar on mobile occupies
+         *  the bottom and the realm map's status pill sits ~bottom-7rem; the
+         *  bottom of the column stays clear of both. */}
         <nav
           role="tablist"
           aria-label="Map sub-tab"
           aria-orientation="vertical"
-          className="fixed right-2 top-14 z-40 flex flex-col gap-2"
+          className="fixed right-2 top-2 z-40 flex flex-col gap-2"
         >
           {TABS.map(({ key, label, icon: Icon }) => {
             const active = activeTab === key;

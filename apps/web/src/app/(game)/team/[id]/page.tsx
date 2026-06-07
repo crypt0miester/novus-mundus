@@ -2,6 +2,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 import {
   useWorldTeam,
   useWorldTeamMembers,
@@ -114,7 +115,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
           <div className="card">
             <p className="text-sm text-text-muted">"{id}" is not a valid team id.</p>
             <Link
-              href="/team"
+              href="/team?tab=browse"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Browse Teams
@@ -143,7 +144,7 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
           <div className="card">
             <p className="text-sm text-text-muted">Team #{id} does not exist.</p>
             <Link
-              href="/team"
+              href="/team?tab=browse"
               className="mt-3 inline-block text-sm text-text-gold hover:underline"
             >
               Browse Teams
@@ -161,6 +162,15 @@ export default function TeamDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <PageTransition>
       <div className="mx-auto max-w-4xl space-y-6">
+        {/* Back to the team browse list */}
+        <Link
+          href="/team?tab=browse"
+          className="inline-flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-text-gold"
+        >
+          <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+          Browse Teams
+        </Link>
+
         {/* Team Info */}
         <div className="card accent-border">
           <div className="flex flex-wrap items-start justify-between gap-4">

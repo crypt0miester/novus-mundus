@@ -185,10 +185,10 @@ export function DungeonSplash({ dungeonId, boss = false, title, subtitle }: Dung
             y="1"
             width="98"
             height="54.25"
-            rx="2"
+            rx="1"
             fill="none"
             stroke={accent}
-            strokeWidth="0.6"
+            strokeWidth="0.3"
             opacity="0"
           />
         </svg>

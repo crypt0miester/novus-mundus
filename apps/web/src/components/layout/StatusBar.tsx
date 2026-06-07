@@ -127,7 +127,7 @@ export function StatusBar() {
           </div>
         )}
 
-        {/* Wallet button — visible on mobile only (TopBar hidden) */}
+        {/* Wallet button: visible on mobile only (the rail holds it at md+) */}
         <div className="md:hidden">
           <WalletMultiButton
             style={{

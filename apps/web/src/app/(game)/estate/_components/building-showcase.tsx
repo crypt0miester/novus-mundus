@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import type { GameIconId } from "@/components/shared/GameIcon";
 import { BuildingId, BuildingName } from "@/lib/buildings";
 import { buildingFraming } from "@/lib/narrative";
@@ -22,6 +23,9 @@ interface BuildingShowcaseProps {
   buildingId: number;
   /** Function-evoking icon for the building (its produce, action, or nav glyph). */
   icon: GameIconId;
+  /** Optional status content pinned to the bottom of the banner art (e.g. the
+   *  arena season strip) so it lives on the image instead of a separate card. */
+  footer?: ReactNode;
 }
 
 // Building-as-subject banner for an estate view tab: the building's full-color
@@ -29,7 +33,7 @@ interface BuildingShowcaseProps {
 // Distinct from the inline ShowcaseBanner the action tabs (forge, market, ...)
 // use to showcase a *selected entity*. Returns null when the building has no
 // view banner so callers can drop it cleanly.
-export function BuildingShowcase({ buildingId, icon }: BuildingShowcaseProps) {
+export function BuildingShowcase({ buildingId, icon, footer }: BuildingShowcaseProps) {
   const slug = VIEW_BANNER_SLUG[buildingId];
   if (!slug) return null;
   const framing = buildingFraming(buildingId);
@@ -39,6 +43,7 @@ export function BuildingShowcase({ buildingId, icon }: BuildingShowcaseProps) {
       icon={icon}
       title={BuildingName[buildingId]}
       tag={framing.role}
+      footer={footer}
     >
       <p className="text-xs italic text-zinc-300">{framing.line}</p>
     </ShowcaseBanner>

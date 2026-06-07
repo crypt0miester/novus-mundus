@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { Map as MapIcon } from "lucide-react";
 import {
   useWorldPlayers,
   useWorldCities,
@@ -125,16 +126,16 @@ export function PlayerBrowser() {
       key: "city",
       header: "City",
       className: "hidden w-32 sm:table-cell",
-      cell: (p) => cityMap.get(p.account.currentCity) ?? "—",
+      cell: (p) => cityMap.get(p.account.currentCity) ?? "-",
     },
     {
       key: "team",
       header: "Team",
       className: "hidden w-36 md:table-cell",
       cell: (p) => {
-        if (isNullPubkey(p.account.team)) return <span className="text-text-muted">—</span>;
+        if (isNullPubkey(p.account.team)) return <span className="text-text-muted">-</span>;
         const t = teamMap.get(p.account.team.toBase58());
-        if (!t) return <span className="text-text-muted">—</span>;
+        if (!t) return <span className="text-text-muted">-</span>;
         return (
           <Link href={`/team/${t.id}`} className="transition-colors hover:text-text-gold">
             {t.name || `#${t.id}`}
@@ -148,6 +149,25 @@ export function PlayerBrowser() {
       align: "right",
       className: "w-28",
       cell: (p) => <GoldNumber value={Number(p.account.networth)} size="sm" />,
+    },
+    {
+      key: "map",
+      header: "",
+      align: "right",
+      className: "w-12",
+      cell: (p) => {
+        const addr = p.account.owner.toBase58();
+        return (
+          <Link
+            href={`/map?city=${p.account.currentCity}&player=${addr}`}
+            aria-label="View on map"
+            title="View on map"
+            className="inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-surface-raised hover:text-text-gold"
+          >
+            <MapIcon className="h-4 w-4" aria-hidden />
+          </Link>
+        );
+      },
     },
   ];
 
@@ -187,6 +207,13 @@ export function PlayerBrowser() {
             </option>
           ))}
         </select>
+        <Link
+          href="/map"
+          className="inline-flex items-center gap-1 rounded-lg border border-border-default px-2.5 py-2 text-sm text-text-secondary transition-colors hover:border-border-gold hover:text-text-primary"
+        >
+          <MapIcon className="h-4 w-4" aria-hidden />
+          Map
+        </Link>
         <ViewToggle mode={view} onChange={setView} />
       </div>
 
@@ -228,6 +255,7 @@ export function PlayerBrowser() {
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-2">
           <button
+            type="button"
             onClick={() => setPage(Math.max(0, safePage - 1))}
             disabled={safePage === 0}
             className="rounded px-3 py-1 text-xs text-text-secondary hover:text-text-gold disabled:opacity-30"
@@ -238,6 +266,7 @@ export function PlayerBrowser() {
             {safePage + 1} / {totalPages}
           </span>
           <button
+            type="button"
             onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))}
             disabled={safePage >= totalPages - 1}
             className="rounded px-3 py-1 text-xs text-text-secondary hover:text-text-gold disabled:opacity-30"

@@ -12,9 +12,9 @@ interface DungeonArt {
 
 const DUNGEON_ART: Record<number, DungeonArt> = {
   1: { slug: "goblin-caves", accent: "#D97A3A" },
-  2: { slug: "shadow-crypt", accent: "#8E6FCB" },
+  2: { slug: "shadow-crypt", accent: "#A89F92" },
   3: { slug: "dragons-lair", accent: "#C7423A" },
-  4: { slug: "abyssal-depths", accent: "#3C8A9E" },
+  4: { slug: "abyssal-depths", accent: "#B8862B" },
 };
 
 // Splash path for a dungeon, or null when the id has no art (the four

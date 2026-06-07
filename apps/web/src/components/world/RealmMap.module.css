@@ -1161,11 +1161,15 @@
    element itself) and let descendant rules use that as a prefix.
    ═══════════════════════════════════════════════════════════════ */
 
-/* .root: pin to the viewport. On phones the TopBar is `hidden md:grid`
- * so we only need to leave room for the LeftPanelMobile strip and the
- * MorphTabBar at the bottom. On tablet (768–1023) the TopBar + the
- * same LeftPanelMobile strip both render. On desktop (≥1024) just the
- * TopBar at the top and the LeftPanel sidebar at the left. */
+/* .root: pin to the viewport, leaving room for the surrounding chrome.
+ * Below md the desktop rail/drawer are hidden, so we only clear the
+ * LeftPanelMobile strip at the top and the MorphTabBar at the bottom.
+ * From md+ the chrome is the left two-tier rail: a fixed w-16 (4rem) icon
+ * rail plus the contextual drawer, whose width is the live --drawer-w when
+ * open and 0 when collapsed. data-drawer-mode (set on the layout shell)
+ * mirrors the drawer's open / collapsed / responsive state so the disc inset
+ * tracks it flash-free, including a live resize of --drawer-w. There is no
+ * top chrome at md+ (the old TopBar is gone). */
 .root[data-fullscreen="true"] {
   max-width: none;
   margin: 0;
@@ -1179,16 +1183,22 @@
     bottom: calc(5rem + env(safe-area-inset-bottom)); /* MorphTabBar */
   }
 }
-@media (min-width: 768px) and (max-width: 1023px) {
+@media (min-width: 768px) {
+  /* The w-16 icon rail is the only always-present left chrome; the drawer
+   * adds its width when shown. No top chrome remains at md+. */
   .root[data-fullscreen="true"] {
-    /* TopBar (h-10 + 1px) + LeftPanelMobile (h-10 + 1px). */
-    top: calc(5rem + 2px);
+    top: 0;
+    left: 4rem; /* icon rail (w-16); a collapsed drawer adds nothing */
+  }
+  /* Drawer pinned open at any breakpoint adds its resizable width. */
+  :global([data-drawer-mode="open"]) .root[data-fullscreen="true"] {
+    left: calc(4rem + var(--drawer-w));
   }
 }
 @media (min-width: 1024px) {
-  .root[data-fullscreen="true"] {
-    top: calc(2.5rem + 1px); /* TopBar */
-    left: 18rem; /* LeftPanel sidebar (lg:w-72) */
+  /* No explicit preference: the drawer opens at lg+ (responsive default). */
+  :global([data-drawer-mode="responsive"]) .root[data-fullscreen="true"] {
+    left: calc(4rem + var(--drawer-w));
   }
 }
 

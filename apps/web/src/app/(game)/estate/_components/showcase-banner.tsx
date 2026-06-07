@@ -12,6 +12,9 @@ interface ShowcaseBannerProps {
   tag?: string;
   /** Body — lore line and/or a stat line. Use text-zinc-300 / text-zinc-400. */
   children: ReactNode;
+  /** Optional content pinned to the bottom of the art, over a bottom gradient,
+   *  for status that belongs on the image rather than in a separate card. */
+  footer?: ReactNode;
 }
 
 /**
@@ -21,10 +24,10 @@ interface ShowcaseBannerProps {
  * holds the art's native 16:9 ratio so the full illustration shows with no
  * crop and no letterbox bars; it scales with the column width.
  */
-export function ShowcaseBanner({ image, icon, title, tag, children }: ShowcaseBannerProps) {
+export function ShowcaseBanner({ image, icon, title, tag, children, footer }: ShowcaseBannerProps) {
   return (
     <div
-      className="relative flex aspect-[16/9] items-center overflow-hidden rounded-lg border border-border-default"
+      className="relative flex aspect-[16/9] flex-col justify-center overflow-hidden rounded-lg border border-border-default"
       style={{
         backgroundImage: `url(${image})`,
         backgroundSize: "cover",
@@ -36,7 +39,10 @@ export function ShowcaseBanner({ image, icon, title, tag, children }: ShowcaseBa
         <GameIcon
           id={icon}
           size={72}
-          className="shrink-0 drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]"
+          // The banner gradient is dark in both themes, so pin the glyph to a
+          // warm bone tone instead of inheriting the page text color (which is
+          // dark in light mode and vanishes against the gradient).
+          className="shrink-0 text-[#e6dcc6] drop-shadow-[0_2px_6px_rgba(0,0,0,0.7)]"
         />
         <div className="min-w-0 space-y-1.5">
           <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
@@ -48,6 +54,11 @@ export function ShowcaseBanner({ image, icon, title, tag, children }: ShowcaseBa
           {children}
         </div>
       </div>
+      {footer && (
+        <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 via-black/60 to-transparent p-4 pt-10 sm:px-5">
+          {footer}
+        </div>
+      )}
     </div>
   );
 }

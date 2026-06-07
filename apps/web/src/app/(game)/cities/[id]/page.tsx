@@ -14,10 +14,8 @@ import { PlayerCard } from "@/components/shared/PlayerCard";
 import { PageTransition } from "@/components/shared/PageTransition";
 import { cn } from "@/lib/utils";
 import { getCityLore } from "@/lib/cityLore";
-import { CITY_TYPE_NAMES } from "novus-mundus-sdk";
-
-// Variant order matches the on-chain CityType enum (Capital, Resource, Combat, Trade).
-const CITY_TYPE_VARIANTS = ["legendary", "success", "danger", "gold"] as const;
+import { CityTypeTag } from "@/components/world/CityTypeTag";
+import { ArrowLeft, Map as MapIcon } from "lucide-react";
 
 export default function CityRosterPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = use(params);
@@ -105,23 +103,38 @@ export default function CityRosterPage({ params }: { params: Promise<{ id: strin
 
   const c = city.account;
   const lore = getCityLore(cityId);
-  const typeIndex = Math.min(c.cityType, 3);
   const isCurrentCity =
     citizen.isCitizen && citizen.player && citizen.player.currentCity === cityId;
 
   return (
     <PageTransition>
       <div className="mx-auto max-w-4xl space-y-6">
+        {/* Back to the city list + jump to the map */}
+        <div className="flex items-center justify-between">
+          <Link
+            href="/cities"
+            className="inline-flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-text-gold"
+          >
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
+            Cities
+          </Link>
+          <Link
+            href={`/map?city=${cityId}`}
+            className="inline-flex items-center gap-1 rounded-lg border border-border-default px-2.5 py-1.5 text-xs text-text-secondary transition-colors hover:border-border-gold hover:text-text-primary"
+          >
+            <MapIcon className="h-3.5 w-3.5" aria-hidden />
+            View on map
+          </Link>
+        </div>
+
         {/* City Info */}
         <div className={cn("card accent-border", isCurrentCity && "accent-border-bright")}>
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-bold text-text-gold">{c.name}</h1>
               <div className="mt-1 flex flex-wrap items-center gap-2">
-                <Badge variant={CITY_TYPE_VARIANTS[typeIndex] as any}>
-                  {CITY_TYPE_NAMES[typeIndex]}
-                </Badge>
-                {isCurrentCity && <Badge variant="success">You are here</Badge>}
+                <CityTypeTag type={c.cityType} />
+                {isCurrentCity && <Badge variant="gold">You are here</Badge>}
               </div>
               {lore && (
                 <div className="mt-1 text-xs uppercase tracking-wider text-text-muted">
