@@ -92,8 +92,7 @@ stays unobtainable. Prioritization order:
     
 14. small dummy event for quick testing
 15. make the cranks api more robust via vercel queeues
-16. someone can claim the castle without being close to it. not sure if this is a good idea. its not a problem.
-since we cannot garrison the outpost (smallest type of casttle), how do we defend the castle? what is it based on?
+16. the encounters are too high in level. smaller level encounter should be more when spawned. 
 
 98. last audit.
 99. fix values to make it devnet/mainnet ready. double check values (events, castles, arena, shop, etc.). check for localhost:3000 links and change with actual domain

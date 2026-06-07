@@ -61,6 +61,7 @@ import {
   deriveCourtPda,
   isNullPubkey,
   CastleStatus,
+  castleEffectiveProtectionSecs,
   WarTableScope,
   deciToNovi,
   calculateCastleReward,
@@ -334,15 +335,13 @@ export function CastleTab() {
   const canClaim = claimReqs.length > 0 && claimReqs.every((r) => r.ok) && !claimBlockedByResidue;
 
   // Contest-window end + protection-shield end, derived once from the seat and
-  // shared by attackInfo + statusTimer. protectionEnd = contestEnd + the base
-  // protection duration scaled by the watchtower (each level adds 10% via bps).
+  // shared by attackInfo + statusTimer. The protection shield is derived from
+  // the castle tier (Outpost ~none .. Citadel 10d) scaled by the watchtower, NOT
+  // the stored protectionDuration field, mirroring the chain.
   const { contestEnd, protectionEnd } = useMemo(() => {
     if (!castle) return { contestEnd: 0, protectionEnd: 0 };
     const contestEnd = Number(castle.contestEndAt ?? 0n);
-    const watchtowerBps = (castle.watchtowerLevel ?? 0) * 1000;
-    const protSecs = Math.floor(
-      (Number(castle.protectionDuration ?? 0n) * (10_000 + watchtowerBps)) / 10_000,
-    );
+    const protSecs = castleEffectiveProtectionSecs(castle.tier, castle.watchtowerLevel ?? 0);
     return { contestEnd, protectionEnd: contestEnd + protSecs };
   }, [castle]);
 
@@ -755,14 +754,17 @@ export function CastleTab() {
 
   const handleFinalizeTransition = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey || !castle) throw new Error("Wallet not connected");
-    // Permissionless. The new king is this wallet; the old king's registry
-    // decrement (optional account) is left to a separate sweep.
+    // Permissionless. The new king is this wallet. Pass the outgoing king's
+    // PlayerAccount PDA (castle.king) so the processor drops the castle from
+    // their registry instead of leaving a stale entry behind.
+    const oldKingPlayer = isNullPubkey(castle.king) ? undefined : castle.king;
     const ix = await createFinalizeTransitionInstruction({
       payer: publicKey,
       gameEngine: client.gameEngine,
       cityId,
       castleId,
       newKing: publicKey,
+      oldKingPlayer,
     });
     return transact
       .mutateAsync({

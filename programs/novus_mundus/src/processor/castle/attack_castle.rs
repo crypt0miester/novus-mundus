@@ -16,7 +16,7 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::{CASTLE_ATTACK_RANGE_METERS, CASTLE_CONTEST_DURATION, CASTLE_STATUS_TRANSITIONING},
+    constants::{CASTLE_ATTACK_RANGE_METERS, CASTLE_STATUS_TRANSITIONING},
     emit,
     error::GameError,
     events::{CastleAttacked, CastleConquered, CastleDefended},
@@ -489,8 +489,8 @@ pub fn process(
 
             // Update transition fields - new attacker claims the pending throne
             castle.transition_new_king = *attacker_player.address();
-            // Reset 2-hour contest window for others to challenge
-            castle.contest_end_at = now.saturating_add(CASTLE_CONTEST_DURATION);
+            // Reset the tier's contest window for others to challenge
+            castle.contest_end_at = now.saturating_add(castle.contest_duration());
 
             // Emit conquest event
             emit!(CastleConquered {

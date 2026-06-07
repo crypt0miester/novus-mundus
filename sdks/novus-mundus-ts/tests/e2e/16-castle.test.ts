@@ -46,6 +46,8 @@ import {
   deriveTeamPda,
   deriveCourtPda,
   deriveTeamCastleRewardPda,
+  deriveKingRegistryPda,
+  isNullPubkey,
   deserializeCastle,
   BuildingType,
 } from '../../src/index';
@@ -836,6 +838,85 @@ describe('Castle System', () => {
       expect(afterAttack.failedDefenses).toBe(1);
     }, 60_000);
 
+    it('should let a first-time king (won by conquest) finalize the transition', async () => {
+      // A conqueror becomes transition_new_king by defeating the garrison but has
+      // never claimed a castle, so they have no KingRegistryAccount. finalize must
+      // create it; otherwise the castle wedges in TRANSITIONING forever.
+      // Uses its own city so the attacker-anchored castle can't overlap the
+      // city-1 conquer castle's footprint (both attackers spawn at city center).
+      const FCITY = 2;
+      const CASTLE_FINALIZE = 144;
+      const attacker = await factory.createPlayer({
+        cityId: FCITY,
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Barracks],
+      });
+      await createTeamForPlayer(ctx, attacker);
+      await factory.hireUnits(attacker, 0, 10_000);
+
+      await createCastleAtPlayer(ctx, attacker, FCITY, CASTLE_FINALIZE, 2);
+
+      const king = await createCastleReadyPlayer(factory, ctx);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createClaimVacantCastleInstruction({
+            gameEngine: ctx.gameEngine,
+            claimer: king.publicKey,
+            cityId: FCITY,
+            castleId: CASTLE_FINALIZE,
+          })
+        ),
+        [king.keypair]
+      );
+
+      // Conquer the empty garrison → TRANSITIONING, attacker is pending king.
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createAttackCastleInstruction(
+            { gameEngine: ctx.gameEngine, attacker: attacker.publicKey, cityId: FCITY, castleId: CASTLE_FINALIZE },
+            { driveBy: false }
+          )
+        ),
+        [attacker.keypair]
+      );
+
+      const mid = deserializeCastle((await fetchCastleRaw(ctx.svm, ctx.gameEngine, FCITY, CASTLE_FINALIZE))!.data);
+      expect(mid.status).toBe(4); // TRANSITIONING
+      expect(mid.transitionNewKing.toBase58()).toBe(attacker.playerPda.toBase58());
+
+      // The conqueror has no registry yet — this is the bug that wedged the castle.
+      const [attackerRegistry] = await deriveKingRegistryPda(attacker.playerPda);
+      expect(await ctx.svm.getAccount(svmKey(attackerRegistry))).toBeNull();
+
+      // Wait out the 2h contest window, then finalize (pass the outgoing king so
+      // their registry is decremented).
+      await advanceTime(ctx.svm, 7201);
+      await sendTransaction(
+        ctx.svm,
+        new Transaction().add(
+          await createFinalizeTransitionInstruction({
+            payer: attacker.publicKey,
+            gameEngine: ctx.gameEngine,
+            cityId: FCITY,
+            castleId: CASTLE_FINALIZE,
+            newKing: attacker.publicKey,
+            oldKingPlayer: king.playerPda,
+          })
+        ),
+        [attacker.keypair]
+      );
+
+      // Crown transferred to the conqueror, protection granted, registry created.
+      const after = deserializeCastle((await fetchCastleRaw(ctx.svm, ctx.gameEngine, FCITY, CASTLE_FINALIZE))!.data);
+      expect(after.status).toBe(2); // PROTECTED
+      expect(after.king.toBase58()).toBe(attacker.playerPda.toBase58());
+      expect(isNullPubkey(after.transitionNewKing)).toBe(true); // cleared
+      expect(await ctx.svm.getAccount(svmKey(attackerRegistry))).not.toBeNull();
+    }, 60_000);
+
     it('should reject out-of-range attack (OutOfRange)', async () => {
       // Castle at default coords (400000,-740000 → 40.0,-74.0 post-fix).
       // Attacker spawns at city center which won't match → distance > 50m.
@@ -1433,7 +1514,7 @@ describe('Castle System', () => {
   // Castle Tier Tests
 
   describe('Castle Tiers', () => {
-    it('should create outpost (tier 0) with no garrison', async () => {
+    it('should create outpost (tier 0)', async () => {
       await createCastle(ctx, 1, 170, 0); // Outpost
       const castleInfo = await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 170);
       expect(castleInfo).not.toBeNull();
@@ -1463,9 +1544,17 @@ describe('Castle System', () => {
       expect(castleInfo).not.toBeNull();
     });
 
-    it('should reject garrison join on outpost', async () => {
-      // Claim outpost first
-      const king = await createCastleReadyPlayer(factory, ctx);
+    it('should allow garrison join on an outpost (uniform garrison)', async () => {
+      // Outposts are garrisoned like every other tier now — claiming one gives a
+      // real garrison cap, and a team member can station units in it.
+      const king = await factory.createPlayer({
+        initialize: true,
+        createEstate: true,
+        buildings: [BuildingType.Barracks],
+      });
+      await createTeamForPlayer(ctx, king);
+      await factory.hireUnits(king, 0, 50);
+
       await sendTransaction(
         ctx.svm,
         new Transaction().add(
@@ -1479,18 +1568,25 @@ describe('Castle System', () => {
         [king.keypair]
       );
 
-      // Try to join garrison on outpost (tier 0 = no garrison)
-      const ix = await createJoinGarrisonInstruction(
-        { gameEngine: ctx.gameEngine, owner: king.publicKey, cityId: 1, castleId: 170 },
-        { units: [BigInt(10), BigInt(0), BigInt(0)], weapons: [BigInt(0), BigInt(0), BigInt(0)], heroSlot: 255 }
-      );
+      // Claiming sets a real garrison cap on the outpost (was hardcoded 0 before).
+      const claimed = deserializeCastle((await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 170))!.data);
+      expect(claimed.maxGarrison).toBeGreaterThan(0);
 
-      await expectTransactionToFail(
+      // And the join actually goes through.
+      await sendTransaction(
         ctx.svm,
-        new Transaction().add(ix),
+        new Transaction().add(
+          await createJoinGarrisonInstruction(
+            { gameEngine: ctx.gameEngine, owner: king.publicKey, cityId: 1, castleId: 170 },
+            { units: [BigInt(10), BigInt(0), BigInt(0)], weapons: [BigInt(0), BigInt(0), BigInt(0)], heroSlot: 255 },
+          )
+        ),
         [king.keypair]
       );
-    });
+
+      const after = deserializeCastle((await fetchCastleRaw(ctx.svm, ctx.gameEngine, 1, 170))!.data);
+      expect(after.garrisonCount).toBe(1);
+    }, 30_000);
 
     it('should reject court appointment on Outpost (max_court=0)', async () => {
       // Tier 0 sets max_court=0 in create_castle; appoint_court rejects with CastleTierNoCourt

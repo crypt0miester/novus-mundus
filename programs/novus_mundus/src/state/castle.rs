@@ -74,12 +74,6 @@ impl CastleTier {
         matches!(self, Self::Citadel)
     }
 
-    /// Check if this tier has garrison
-    /// Citadel, Fortress, and Stronghold have garrison for defense
-    pub const fn has_garrison(self) -> bool {
-        matches!(self, Self::Citadel | Self::Fortress | Self::Stronghold)
-    }
-
     /// Check if this tier is team-controlled (no individual king)
     /// Outpost, Keep, Stronghold, Fortress are team objectives
     pub const fn is_team_controlled(self) -> bool {
@@ -435,13 +429,33 @@ impl CastleAccount {
             .saturating_add(self.armory_bonus_bps())
     }
 
+    /// Base protection shield for this castle's tier, before the watchtower
+    /// bonus. Derived from the tier (not the stored `protection_duration` field)
+    /// so rebalancing the table retunes every castle at once — Outposts get ~no
+    /// shield and flip constantly, Citadels get the long shield.
+    pub fn base_protection_duration(&self) -> i64 {
+        crate::constants::CASTLE_PROTECTION_DURATION_BY_TIER
+            .get(self.tier as usize)
+            .copied()
+            .unwrap_or(crate::constants::CASTLE_PROTECTION_DURATION)
+    }
+
+    /// Contest/transition window for this castle's tier (seconds). Outposts get
+    /// a shorter window so low-stakes seats settle and flip quickly.
+    pub fn contest_duration(&self) -> i64 {
+        crate::constants::CASTLE_CONTEST_DURATION_BY_TIER
+            .get(self.tier as usize)
+            .copied()
+            .unwrap_or(crate::constants::CASTLE_CONTEST_DURATION)
+    }
+
     /// Calculate effective protection duration with watchtower bonus
     /// Watchtower extends protection: +10% per level (max +150% at level 15)
     /// This is the "time shield" - higher watchtower = longer safety periods
     pub fn effective_protection_duration(&self) -> i64 {
         let watchtower_bonus = self.watchtower_bonus_bps() as i64;
-        // protection_duration * (10000 + watchtower_bonus) / 10000
-        self.protection_duration
+        // base (tier) protection * (10000 + watchtower_bonus) / 10000
+        self.base_protection_duration()
             .saturating_mul((10000 as i64).saturating_add(watchtower_bonus))
             / 10000
     }

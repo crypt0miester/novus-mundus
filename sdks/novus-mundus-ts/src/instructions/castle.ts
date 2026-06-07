@@ -1003,8 +1003,15 @@ export interface FinalizeTransitionAccounts {
    *  processor returns before touching the new-king accounts, so the builder
    *  passes an inert placeholder for those two slots. */
   newKing?: PublicKey;
-  /** Old king's wallet (optional, for registry update) */
+  /** Old king's wallet (optional, for registry update). The processor removes
+   *  the castle from the previous king's registry so they aren't left holding a
+   *  stale entry. Prefer `oldKingPlayer` when you already have the PlayerAccount
+   *  PDA (e.g. `castle.king`) and not the wallet. */
   oldKing?: PublicKey;
+  /** Old king's PlayerAccount PDA (optional). Use this when you have the king's
+   *  PlayerAccount address directly (the registry seed is derived from it).
+   *  Takes precedence over `oldKing`. */
+  oldKingPlayer?: PublicKey;
 }
 
 /** ~10,000 CU */
@@ -1032,20 +1039,30 @@ export async function createFinalizeTransitionInstruction(
   }
 
   // Rust account order:
-  // 0. caller (SIGNER)
+  // 0. caller (SIGNER, WRITE) - pays registry rent on a first-time king's reign
   // 1. castle_account (WRITE)
   // 2. new_king_player (WRITE)
-  // 3. new_king_registry (WRITE)
-  // 4. old_king_registry (optional, WRITE)
+  // 3. new_king_registry (WRITE) - created here if it doesn't exist yet
+  // 4. system_program (READ) - for registry creation
+  // 5. old_king_registry (optional, WRITE)
   const keys = [
-    { pubkey: accounts.payer, isSigner: true, isWritable: false },
+    { pubkey: accounts.payer, isSigner: true, isWritable: true },
     { pubkey: castle, isSigner: false, isWritable: true },
     { pubkey: newKingPlayer, isSigner: false, isWritable: true },
     { pubkey: newKingRegistry, isSigner: false, isWritable: true },
+    { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
   ];
 
-  if (accounts.oldKing) {
-    const [oldKingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.oldKing);
+  // Old king registry (optional): prefer the PlayerAccount PDA when given,
+  // otherwise derive it from the wallet. Lets the processor drop the castle from
+  // the previous king's registry.
+  let oldKingPlayer: PublicKey | undefined;
+  if (accounts.oldKingPlayer) {
+    oldKingPlayer = accounts.oldKingPlayer;
+  } else if (accounts.oldKing) {
+    [oldKingPlayer] = await derivePlayerPda(accounts.gameEngine, accounts.oldKing);
+  }
+  if (oldKingPlayer) {
     const [oldKingRegistry] = await deriveKingRegistryPda(oldKingPlayer);
     keys.push({ pubkey: oldKingRegistry, isSigner: false, isWritable: true });
   }

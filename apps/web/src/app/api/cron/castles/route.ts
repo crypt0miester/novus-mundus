@@ -1,6 +1,7 @@
 import "server-only";
 import {
   CastleStatus,
+  castleStatusUpdateDue,
   collectCastleCleanups,
   buildCastleFinalize,
   createUpdateCastleStatusInstruction,
@@ -55,29 +56,42 @@ async function handle(req: Request): Promise<Response> {
     }
   };
 
-  for (const { pubkey: castlePda, account: castle } of castles) {
-    // Nudge time-based status transitions (CONTEST->PROTECTED->VULNERABLE).
-    // Best-effort: a no-op fails simulation and is simply not sent.
-    await simulateAndSend(
-      client,
-      authority,
-      await createUpdateCastleStatusInstruction({
-        caller: crank,
-        gameEngine,
-        cityId: castle.cityId,
-        castleId: castle.castleId,
-      }),
-    );
+  // Nudge time-based status transitions (CONTEST->PROTECTED->VULNERABLE), but
+  // only for castles whose transition is actually due — update_castle_status
+  // errors on a no-op, so blindly poking every castle is one wasted RPC each.
+  // The due ones are independent, so fire them concurrently.
+  const now = (await client.getBlockTime()) ?? 0;
+  const dueStatus = castles.filter(({ account }) => castleStatusUpdateDue(account, now));
+  await Promise.all(
+    dueStatus.map(async ({ account: castle }) =>
+      record(
+        await simulateAndSend(
+          client,
+          authority,
+          await createUpdateCastleStatusInstruction({
+            caller: crank,
+            gameEngine,
+            cityId: castle.cityId,
+            castleId: castle.castleId,
+          }),
+        ),
+        `status ${castle.cityId}/${castle.castleId}`,
+      ),
+    ),
+  );
 
+  // Ownership-transition pipeline: per TRANSITIONING castle, the cleanups must
+  // confirm before finalize (it gates on garrison/court counts == 0), so this
+  // stays sequential per castle.
+  for (const { pubkey: castlePda, account: castle } of castles) {
     if (castle.status !== CastleStatus.Transitioning) continue;
 
-    // Cleanups must confirm before finalize (it gates on counts == 0).
     const cleanups = await collectCastleCleanups(client, crank, castle, castlePda);
     for (const c of cleanups) {
       record(await simulateAndSend(client, authority, c.ix), c.label);
     }
 
-    const fin = await buildCastleFinalize(client, crank, castlePda);
+    const fin = await buildCastleFinalize(client, crank, castlePda, now);
     if (fin) record(await simulateAndSend(client, authority, fin.ix), fin.label);
   }
 

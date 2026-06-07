@@ -99,6 +99,33 @@ export interface CastleAccount {
   hasKing: boolean;
 }
 
+/**
+ * Per-tier protection shield in seconds after a castle finalizes. Mirrors the
+ * on-chain `CASTLE_PROTECTION_DURATION_BY_TIER` — index is the castle tier
+ * (0=Outpost..4=Citadel). Outposts get no shield and flip constantly; the
+ * Citadel keeps the long 10-day shield.
+ */
+export const CASTLE_PROTECTION_DURATION_BY_TIER = [
+  0, // Outpost
+  3_600, // Keep — 1h
+  86_400, // Stronghold — 1d
+  259_200, // Fortress — 3d
+  864_000, // Citadel — 10d
+] as const;
+
+/**
+ * Effective protection shield (seconds) for a castle: the tier base scaled by
+ * the watchtower bonus (+10% per level, capped). Mirrors
+ * `CastleAccount::effective_protection_duration` on-chain. Protection derives
+ * from tier (not the stored `protectionDuration` field), so this is the source
+ * of truth for the UI countdown and the crank's due-check.
+ */
+export function castleEffectiveProtectionSecs(tier: number, watchtowerLevel: number): number {
+  const base = CASTLE_PROTECTION_DURATION_BY_TIER[tier] ?? 864_000;
+  const watchtowerBps = Math.min(watchtowerLevel * 1000, 65535);
+  return Math.floor((base * (10000 + watchtowerBps)) / 10000);
+}
+
 // King Registry Account
 
 export interface KingRegistryAccount {

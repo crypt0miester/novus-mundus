@@ -7,6 +7,7 @@ import { useFocusTrap } from "@/lib/hooks/useFocusTrap";
 import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import { BLOOM, DUR, STAGGER } from "@/lib/motion/tokens";
 import { TxButton } from "@/components/shared/TxButton";
+import { GameIcon } from "@/components/shared/GameIcon";
 import { formatNoviAmount } from "novus-mundus-sdk";
 
 function num(v: unknown): number {
@@ -410,7 +411,14 @@ export function CombatOutcomeModal() {
         style={{ opacity: 0 }}
         className={`relative w-full max-w-sm rounded-2xl border ${t.ring} bg-surface-raised p-6 shadow-2xl ${t.glow}`}
       >
-        <div className="text-center">
+        {/* Outcome emblem — a background-stripped bronze relief mark floating
+            over the top edge. Rides the card's spring-in as a child. Decorative
+            (empty title): the heading already names the outcome. */}
+        <div className="absolute left-1/2 top-0 -translate-x-1/2 -translate-y-1/2">
+          <GameIcon id={`combat-${view.tone}`} size={80} title="" className="object-contain" />
+        </div>
+
+        <div className="mt-7 text-center">
           <div className={`font-display text-2xl font-bold uppercase tracking-[0.18em] ${t.text}`}>
             {view.heading}
           </div>

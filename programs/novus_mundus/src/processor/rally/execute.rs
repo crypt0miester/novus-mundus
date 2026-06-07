@@ -5,7 +5,7 @@ use pinocchio::{
 };
 
 use crate::{
-    constants::{CASTLE_CONTEST_DURATION, CASTLE_STATUS_TRANSITIONING, MIN_RALLY_PARTICIPANTS},
+    constants::{CASTLE_STATUS_TRANSITIONING, MIN_RALLY_PARTICIPANTS},
     emit,
     error::GameError,
     events::{CastleConquered, CastleDefended, RallyExecuted},
@@ -698,8 +698,8 @@ pub fn process(
 
                     // Set/reset transition fields - rally creator claims the pending throne
                     castle.transition_new_king = rally_creator;
-                    // Start/reset 2-hour contest window for others to challenge
-                    castle.contest_end_at = now.saturating_add(CASTLE_CONTEST_DURATION);
+                    // Start/reset the tier's contest window for others to challenge
+                    castle.contest_end_at = now.saturating_add(castle.contest_duration());
                     castle.failed_defenses = castle.failed_defenses.saturating_add(1);
 
                     // Leader name not available in execute - will be filled during transition finalize

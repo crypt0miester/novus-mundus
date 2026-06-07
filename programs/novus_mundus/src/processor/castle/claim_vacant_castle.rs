@@ -10,13 +10,9 @@ use pinocchio::{
     sysvars::{clock::Clock, Sysvar},
     AccountView, Address, ProgramResult,
 };
-use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
-    constants::{
-        CASTLE_CONTEST_DURATION, CASTLE_STATUS_CONTEST, GARRISON_CAP_BY_TIER, KING_REGISTRY_SEED,
-        MAX_CASTLES_PER_KING,
-    },
+    constants::CASTLE_STATUS_CONTEST,
     emit,
     error::GameError,
     events::CastleClaimed,
@@ -142,36 +138,13 @@ pub fn process(
         return Err(GameError::InvalidPDA.into());
     }
 
-    let registry_exists = king_registry_account.data_len() > 0;
-
-    if !registry_exists {
-        // Create king registry account
-        let lamports = crate::utils::rent_exempt_const(KingRegistryAccount::LEN);
-
-        let bump_seed = [registry_bump];
-        let seeds = crate::seeds!(KING_REGISTRY_SEED, player_account.address(), &bump_seed);
-        let signer = pinocchio::cpi::Signer::from(&seeds);
-
-        CreateAccount {
-            from: player_wallet,
-            to: king_registry_account,
-            lamports,
-            space: KingRegistryAccount::LEN as u64,
-            owner: program_id,
-        }
-        .invoke_signed(&[signer])?;
-
-        // Initialize registry
-        let mut registry_data = king_registry_account.try_borrow_mut()?;
-        let registry = unsafe { KingRegistryAccount::load_mut(&mut registry_data) };
-
-        registry.account_key = crate::state::AccountKey::KingRegistry as u8;
-        registry.king = *player_account.address();
-        registry.bump = registry_bump;
-        registry.castle_count = 0;
-        registry.max_castles = MAX_CASTLES_PER_KING;
-        registry.castles = Default::default();
-    }
+    crate::processor::castle::ensure_king_registry(
+        player_wallet,
+        king_registry_account,
+        player_account,
+        registry_bump,
+        program_id,
+    )?;
 
     // Load registry (after potential creation)
     let mut registry_data = king_registry_account.try_borrow_mut()?;
@@ -192,16 +165,14 @@ pub fn process(
     castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on ownership change
     castle.team = player.team_address();
     castle.claimed_at = now;
-    castle.contest_end_at = now.saturating_add(CASTLE_CONTEST_DURATION);
+    castle.contest_end_at = now.saturating_add(castle.contest_duration());
     castle.status = CASTLE_STATUS_CONTEST;
 
-    // Set garrison cap based on king's subscription tier
-    let tier_index = (player.subscription_tier as usize).min(3);
-    castle.max_garrison = if castle.tier == 0 {
-        0 // Outposts have no garrison
-    } else {
-        GARRISON_CAP_BY_TIER[tier_index]
-    };
+    // Garrison cap follows the king's subscription tier, uniform across all
+    // castle tiers — every castle (Outpost included) can be garrisoned, so
+    // contesting one is a real fight rather than an auto-win on an empty seat.
+    castle.max_garrison =
+        crate::processor::castle::garrison_cap_for_subscription_tier(player.subscription_tier);
 
     // Increment claim counter
     castle.times_claimed = castle.times_claimed.saturating_add(1);

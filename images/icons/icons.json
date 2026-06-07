@@ -38,6 +38,10 @@
     { "id": "buff-mining-affinity",         "set": "relief", "seed": 1717, "subject": "A miner's pickaxe crossed over a raw ore nugget." },
     { "id": "buff-fishing-affinity",        "set": "relief", "seed": 1718, "subject": "A fish hooked on a curved fishing hook." },
 
+    { "id": "combat-victory",               "set": "relief", "generator": "bonsai", "seed": 1940, "subject": "Two crossed swords behind a victor's laurel wreath." },
+    { "id": "combat-defeat",                "set": "relief", "generator": "bonsai", "seed": 1941, "subject": "A heater shield cracked and broken, split by a deep jagged fracture down the middle." },
+    { "id": "combat-survive",               "set": "relief", "generator": "bonsai", "seed": 1942, "subject": "Two sword blades crossed and clashing edge to edge, a burst of sparks where they meet." },
+
     { "id": "resource-novi",                "set": "relief", "seed": 1760, "source": "asset", "sourceImage": "images/logo/novus-mundus-logo-1024-on-black.png", "subject": "The Novus Mundus logo mark — the NOVI token icon, placed from the canonical bronze logo asset (no coin)." },
     { "id": "resource-gem",                 "set": "relief", "seed": 1851, "subject": "a single faceted brilliant-cut gemstone" },
     { "id": "resource-cash",                "set": "relief", "seed": 1862, "subject": "a small heap of three or four overlapping round coins, a clear realistic pile of gold money (not abstract, not a glyph)" },

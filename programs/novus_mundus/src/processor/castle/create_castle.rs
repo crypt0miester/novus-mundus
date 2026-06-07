@@ -29,7 +29,8 @@ use pinocchio_system::instructions::CreateAccount;
 
 use crate::{
     constants::{
-        CASTLE_PROTECTION_DURATION, CASTLE_SEED, CASTLE_STATUS_VACANT, CASTLE_TIER_MULTIPLIER_BPS,
+        CASTLE_PROTECTION_DURATION_BY_TIER, CASTLE_SEED, CASTLE_STATUS_VACANT,
+        CASTLE_TIER_MULTIPLIER_BPS,
         COURT_CASH_PER_DAY, COURT_NOVI_PER_DAY, KING_CASH_PER_DAY, KING_LOOT_CUT_BPS,
         KING_NOVI_PER_DAY, LOCATION_SEED, MEMBER_CASH_PER_DAY, MEMBER_NOVI_PER_DAY,
     },
@@ -247,7 +248,10 @@ pub fn process(
         castle.contest_end_at = 0;
 
         castle.garrison_count = 0;
-        castle.max_garrison = if tier == 0 { 0 } else { 25 };
+        // Placeholder until claimed; claim_vacant_castle / finalize_transition set
+        // the real cap from the king's subscription tier. Uniform across tiers —
+        // outposts can be garrisoned too.
+        castle.max_garrison = 25;
 
         castle.court_count = 0;
         castle.max_court = match tier {
@@ -270,7 +274,9 @@ pub fn process(
         castle.min_level = min_level;
         castle.min_networth_millions = min_networth_millions;
         castle.min_troops_thousands = min_troops_thousands;
-        castle.protection_duration = CASTLE_PROTECTION_DURATION;
+        // Stored for record/display; the shield logic derives from tier via
+        // effective_protection_duration(), so this just mirrors the tier value.
+        castle.protection_duration = CASTLE_PROTECTION_DURATION_BY_TIER[tier as usize];
 
         castle.tier_multiplier_bps = CASTLE_TIER_MULTIPLIER_BPS[tier as usize];
         castle.king_loot_cut_bps = KING_LOOT_CUT_BPS;

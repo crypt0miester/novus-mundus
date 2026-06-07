@@ -6,13 +6,16 @@
 //! 1. The 2-hour contest window has passed (now >= contest_end_at)
 //! 2. All garrison and court cleanup is complete
 //!
-//! Sets the new king and grants protection period.
+//! Sets the new king and grants protection period. If the new king has never
+//! ruled before, their KingRegistryAccount is created here (a castle won by
+//! conquest via attack_castle never creates one — only claim_vacant_castle did —
+//! so without this a first-time king could never finalize and the castle would
+//! wedge in TRANSITIONING forever).
 
 use pinocchio::{
     sysvars::{clock::Clock, Sysvar},
     AccountView, Address, ProgramResult,
 };
-
 use crate::{
     constants::{CASTLE_STATUS_PROTECTED, CASTLE_STATUS_TRANSITIONING, CASTLE_STATUS_VACANT},
     emit,
@@ -20,7 +23,7 @@ use crate::{
     events::CastleClaimed,
     state::{player::NULL_PUBKEY, CastleAccount, KingRegistryAccount, PlayerAccount},
     utils::read_u16,
-    validation::require_owner,
+    validation::{require_key_match, require_owner, require_signer, require_writable},
 };
 
 /// Finalize Transition instruction data
@@ -28,11 +31,12 @@ use crate::{
 /// - castle_id: u16 (bytes 4-5)
 
 /// Accounts:
-/// 0. [signer] Caller (anyone can call - permissionless)
+/// 0. [signer, writable] Caller (anyone can call - permissionless; pays registry rent)
 /// 1. [writable] Castle account
 /// 2. [writable] New king player account
-/// 3. [writable] New king registry account
-/// 4. [writable] Old king registry account (optional, to update)
+/// 3. [writable] New king registry account (created here if it doesn't exist)
+/// 4. [] System program (for registry creation)
+/// 5. [writable] Old king registry account (optional, to update)
 
 pub fn process(
     program_id: &Address,
@@ -42,12 +46,24 @@ pub fn process(
     // Parse accounts
     crate::extract_accounts!(
         accounts,
-        [_caller, castle_account, new_king_account, new_king_registry,]
+        [
+            caller,
+            castle_account,
+            new_king_account,
+            new_king_registry,
+            system_program,
+        ],
+        rest = extra_accounts
     );
 
     // Parse instruction data
     let city_id = read_u16(instruction_data, 0, "city_id")?;
     let castle_id = read_u16(instruction_data, 2, "castle_id")?;
+
+    // Caller funds any new account, so it must be a writable signer.
+    require_signer(caller)?;
+    require_writable(caller)?;
+    require_key_match(system_program, &pinocchio_system::ID)?;
 
     // Get current timestamp
     let clock = Clock::get()?;
@@ -99,18 +115,7 @@ pub fn process(
         castle.transition_rewards_cleaned = 0;
 
         // Best-effort: clear castle from old king's registry if provided
-        if accounts.len() > 4 && old_king != NULL_PUBKEY {
-            let old_king_registry = &accounts[4];
-            let (expected_old_pda, _) = KingRegistryAccount::derive_pda(&old_king);
-            if old_king_registry.address() == &expected_old_pda
-                && unsafe { old_king_registry.owner() } == program_id
-                && old_king_registry.data_len() > 0
-            {
-                let mut old_registry_data = old_king_registry.try_borrow_mut()?;
-                let old_registry = unsafe { KingRegistryAccount::load_mut(&mut old_registry_data) };
-                old_registry.remove_castle(city_id, castle_id);
-            }
-        }
+        clear_old_king_registry(extra_accounts, old_king, city_id, castle_id, program_id)?;
 
         // No CastleClaimed event for vacant transition (claim_vacant_castle
         // will emit when someone takes the throne).
@@ -121,9 +126,27 @@ pub fn process(
     if *new_king_account.address() != castle.transition_new_king {
         return Err(GameError::Unauthorized.into());
     }
+    require_owner(new_king_account, program_id)?;
+
+    // Verify the new king's registry PDA before any creation/use.
+    let (expected_registry_pda, registry_bump) =
+        KingRegistryAccount::derive_pda(new_king_account.address());
+    if new_king_registry.address() != &expected_registry_pda {
+        return Err(GameError::InvalidPDA.into());
+    }
+
+    // Create the registry on first reign (a castle won by conquest never created
+    // one). Done before borrowing the player so no data borrow is held across the
+    // CPI. Shared with claim_vacant_castle.
+    crate::processor::castle::ensure_king_registry(
+        caller,
+        new_king_registry,
+        new_king_account,
+        registry_bump,
+        program_id,
+    )?;
 
     // Load new king player
-    require_owner(new_king_account, program_id)?;
     let mut new_king_data = new_king_account.try_borrow_mut()?;
     let new_king = unsafe { PlayerAccount::load_mut(&mut new_king_data) };
 
@@ -146,25 +169,15 @@ pub fn process(
     new_registry.add_castle(city_id, castle_id, castle.tier, now);
 
     // Update old king registry if provided - remove castle from their list
-    if accounts.len() > 4 && old_king != NULL_PUBKEY {
-        let old_king_registry = &accounts[4];
-
-        // Verify old king registry PDA matches the previous king
-        let (expected_old_pda, _) = KingRegistryAccount::derive_pda(&old_king);
-        if old_king_registry.address() == &expected_old_pda {
-            if unsafe { old_king_registry.owner() } == program_id
-                && old_king_registry.data_len() > 0
-            {
-                let mut old_registry_data = old_king_registry.try_borrow_mut()?;
-                let old_registry = unsafe { KingRegistryAccount::load_mut(&mut old_registry_data) };
-                old_registry.remove_castle(city_id, castle_id);
-            }
-        }
-    }
+    clear_old_king_registry(extra_accounts, old_king, city_id, castle_id, program_id)?;
 
     // Update castle state - directly to PROTECTED with protection period starting now
     castle.king = castle.transition_new_king;
     castle.team = new_king.team_address();
+    // Garrison cap follows the new king's subscription tier (uniform across all
+    // castle tiers), so a conquered seat reflects its new holder's capacity.
+    castle.max_garrison =
+        crate::processor::castle::garrison_cap_for_subscription_tier(new_king.subscription_tier);
     castle.transition_new_king = NULL_PUBKEY;
     castle.status = CASTLE_STATUS_PROTECTED;
     castle.membership_epoch = castle.membership_epoch.saturating_add(1); // rotate war-table key on ownership change
@@ -196,5 +209,37 @@ pub fn process(
         timestamp: now,
     });
 
+    Ok(())
+}
+
+/// Best-effort removal of the castle from the previous king's registry.
+///
+/// The old king registry is an optional trailing account. We re-derive its
+/// canonical PDA from `old_king` (the castle's stored king, a PlayerAccount PDA)
+/// and only touch it when the passed account matches, is program-owned, and is
+/// initialized — so a missing or stale account is silently skipped.
+fn clear_old_king_registry(
+    extra_accounts: &[AccountView],
+    old_king: Address,
+    city_id: u16,
+    castle_id: u16,
+    program_id: &Address,
+) -> ProgramResult {
+    if old_king == NULL_PUBKEY {
+        return Ok(());
+    }
+    let Some(old_king_registry) = extra_accounts.first() else {
+        return Ok(());
+    };
+
+    let (expected_old_pda, _) = KingRegistryAccount::derive_pda(&old_king);
+    if old_king_registry.address() == &expected_old_pda
+        && unsafe { old_king_registry.owner() } == program_id
+        && old_king_registry.data_len() > 0
+    {
+        let mut old_registry_data = old_king_registry.try_borrow_mut()?;
+        let old_registry = unsafe { KingRegistryAccount::load_mut(&mut old_registry_data) };
+        old_registry.remove_castle(city_id, castle_id);
+    }
     Ok(())
 }

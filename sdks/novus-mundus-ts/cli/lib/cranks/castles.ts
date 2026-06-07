@@ -2,20 +2,25 @@
  * Crank: Castles - status transitions + ownership-transition cleanup pipeline
  *
  * For each castle (enumerated + parsed via the SDK):
- *   1. update_castle_status (Ix 289) - permissionless, no-op if not time
+ *   1. update_castle_status (Ix 289) - permissionless, but ONLY sent when a
+ *      time-based transition is actually due. The processor errors on a no-op,
+ *      so `castleStatusUpdateDue` filters client-side first — the difference
+ *      between a couple of txs and one-per-castle at 100+ castles. Due updates
+ *      are sent in parallel.
  *   2. if TRANSITIONING, run the cleanup pipeline so the new king can take over:
  *      garrison_cleanup (282) + court_cleanup (283) + rewards_cleanup (284),
  *      then finalize_transition (285) once garrison/court counts hit zero.
  *
  * The pipeline logic (member PDA->wallet resolution, hero-template lookup, the
- * vacant-transition path) lives in the SDK (`collectCastleCleanups` /
- * `buildCastleFinalize`) so the web cron shares it verbatim — no drift.
+ * vacant-transition path, the due-check) lives in the SDK so the web cron shares
+ * it verbatim — no drift.
  */
 
 import { type CLIContext } from '../context';
-import { log, newStats, sendWithRetry, crankSend, type PhaseStats } from '../helpers';
+import { log, newStats, batchSend, crankSend, type PhaseStats } from '../helpers';
 import {
   NovusMundusClient,
+  castleStatusUpdateDue,
   collectCastleCleanups,
   buildCastleFinalize,
 } from '../../../src/index';
@@ -36,43 +41,52 @@ export async function crankCastles(ctx: CLIContext): Promise<PhaseStats> {
   });
 
   const castles = await client.fetchAllCastles();
+  const now = (await client.getBlockTime()) ?? 0;
   log.info(`  Found ${castles.length} castles`);
 
-  for (const { pubkey: castlePda, account: castle } of castles) {
-    const label = `${castle.name || `castle ${castle.castleId}`} (city ${castle.cityId})`;
+  // Partition: which castles actually need work this run. Everything else is a
+  // skip with zero RPC — that's the whole point at scale.
+  const dueStatus = castles.filter((c) => castleStatusUpdateDue(c.account, now));
+  const transitioning = castles.filter((c) => c.account.status === CastleStatus.Transitioning);
+  stats.skipped += castles.length - dueStatus.length - transitioning.length;
 
-    // Step 1: nudge time-based status transitions (no-op if not due).
-    const statusIx = createUpdateCastleStatusInstruction({
-      caller: dao,
-      gameEngine: ctx.gameEngine,
-      cityId: castle.cityId,
-      castleId: castle.castleId,
-    });
+  // Step 1: time-based status nudges, only for castles that will actually flip.
+  if (dueStatus.length > 0) {
+    log.info(`  ${dueStatus.length} castle(s) need a status update`);
     if (ctx.dryRun) {
-      log.dryRun(`Would update status: ${label}`);
-    } else {
-      try {
-        await sendWithRetry(ctx, statusIx, [ctx.daoAuthority], { computeUnits: 5_000 });
-        if (ctx.verbose) log.update(`Status update: ${label}`);
-      } catch {
-        if (ctx.verbose) log.info(`  Status unchanged: ${label}`);
+      for (const { account: c } of dueStatus) {
+        log.dryRun(`Would update status: ${c.name || `castle ${c.castleId}`} (city ${c.cityId})`);
       }
+      stats.updated += dueStatus.length;
+    } else {
+      // Pre-build the (async) instructions, then fire them concurrently.
+      const ixs = await Promise.all(
+        dueStatus.map(({ account: c }) =>
+          createUpdateCastleStatusInstruction({
+            caller: dao,
+            gameEngine: ctx.gameEngine,
+            cityId: c.cityId,
+            castleId: c.castleId,
+          }),
+        ),
+      );
+      const sent = await batchSend(ctx, ixs, (ix) => ({ ix, signers: [ctx.daoAuthority] }), 8);
+      stats.updated += sent;
     }
+  }
 
-    if (castle.status !== CastleStatus.Transitioning) {
-      stats.skipped++;
-      continue;
-    }
-
+  // Step 2: ownership-transition pipeline (few castles; inherently sequential
+  // per castle — cleanups must confirm before finalize gates on counts == 0).
+  for (const { pubkey: castlePda, account: castle } of transitioning) {
+    const label = `${castle.name || `castle ${castle.castleId}`} (city ${castle.cityId})`;
     log.info(`  ${label} is TRANSITIONING - running cleanup pipeline`);
 
-    // Step 2: cleanup (shared SDK logic), then finalize once counts hit zero.
     const cleanups = await collectCastleCleanups(client, dao, castle, castlePda);
     for (const c of cleanups) {
       await crankSend(ctx, stats, c.ix, c.label, CLEANUP);
     }
 
-    const fin = await buildCastleFinalize(client, dao, castlePda);
+    const fin = await buildCastleFinalize(client, dao, castlePda, now);
     if (fin) {
       await crankSend(ctx, stats, fin.ix, fin.label, FINALIZE);
     } else {

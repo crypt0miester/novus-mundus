@@ -9,8 +9,8 @@ The King's Castle system is the **largest territorial mechanic** in Novus Mundus
 ```mermaid
 graph TB
     subgraph "Ownership Lifecycle"
-        VACANT[Vacant] -->|claim_vacant_castle| CONTEST[Contest<br/>2-hour window]
-        CONTEST -->|update_castle_status| PROTECTED[Protected<br/>10 days]
+        VACANT[Vacant] -->|claim_vacant_castle| CONTEST[Contest<br/>tier window: Outpost 1h, else 2h]
+        CONTEST -->|update_castle_status| PROTECTED[Protected<br/>tier shield: Outpost 0 .. Citadel 10d]
         PROTECTED -->|update_castle_status| VULNERABLE[Vulnerable]
         VULNERABLE -->|attack_castle garrison defeated| TRANSITIONING[Transitioning<br/>cleanup phase]
         CONTEST -->|attack_castle garrison defeated| TRANSITIONING
@@ -45,7 +45,7 @@ graph TB
 | ID | Instruction | Description |
 |----|-------------|-------------|
 | 270 | `create_castle` | DAO creates a new castle with tier, anchor location, N×N footprint, and eligibility requirements; also creates `footprint_size²` `LocationAccount`s with `OCCUPANT_CASTLE` |
-| 271 | `claim_vacant_castle` | Player claims an unoccupied castle, entering a 2-hour contest window |
+| 271 | `claim_vacant_castle` | Player claims an unoccupied castle, entering the tier's contest window (Outpost 1h, others 2h) |
 | 272 | `appoint_court` | King appoints a teammate to a court position (Citadel only) |
 | 273 | `dismiss_court` | King dismisses a court member, closing the position account |
 | 274 | `resign_court` | Court member voluntarily resigns their position |
@@ -72,29 +72,29 @@ graph TB
 
 ## Castle Tiers
 
-| Tier | Name | Reward Multiplier | has_king() | has_court() | has_garrison() | Max Garrison Slots |
-|------|------|-------------------|-----------|-------------|----------------|--------------------|
-| 0 | Outpost | 0.25× (2500 bps) | false | false | false | 0 |
-| 1 | Keep | 0.5× (5000 bps) | false | false | false | king's sub tier |
-| 2 | Stronghold | 1.0× (10000 bps) | false | false | true | king's sub tier |
-| 3 | Fortress | 1.5× (15000 bps) | false | false | true | king's sub tier |
-| 4 | Citadel | 2.0× (20000 bps) | true | true | true | king's sub tier |
+| Tier | Name | Reward Multiplier | has_king() | has_court() | Garrison | Contest window | Protection shield |
+|------|------|-------------------|-----------|-------------|----------|----------------|-------------------|
+| 0 | Outpost | 0.25× (2500 bps) | false | false | king's sub tier | 1h | 0 (none) |
+| 1 | Keep | 0.5× (5000 bps) | false | false | king's sub tier | 2h | 1h |
+| 2 | Stronghold | 1.0× (10000 bps) | false | false | king's sub tier | 2h | 1d |
+| 3 | Fortress | 1.5× (15000 bps) | false | false | king's sub tier | 2h | 3d |
+| 4 | Citadel | 2.0× (20000 bps) | true | true | king's sub tier | 2h | 10d |
 
-> **Note:** `create_castle` sets `max_court = 1` for Keep and `max_court = 3` for Stronghold/Fortress/Citadel (Outpost gets 0). `has_king()` and `has_court()` both return `true` **only for Citadel** in the type system — the court system is intended for Citadel-tier castles. Non-Citadel castles are team-controlled objectives rather than individual kingdoms.
+> **Note:** Garrison is **uniform across all tiers** — every castle (Outpost included) can be garrisoned, with the cap set from the king's subscription tier (see table below). `create_castle` sets `max_court = 1` for Keep and `max_court = 3` for Stronghold/Fortress/Citadel (Outpost gets 0). `has_king()` and `has_court()` both return `true` **only for Citadel** — the court and individual-king systems are Citadel-only; non-Citadel castles are team-controlled objectives. The **contest window** and **protection shield** are tier-scaled (`CASTLE_CONTEST_DURATION_BY_TIER` / `CASTLE_PROTECTION_DURATION_BY_TIER`): low tiers flip fast and aren't shielded, the Citadel is the defensible prize. Protection is derived from tier (not the stored `protection_duration` field) so a rebalance applies to every existing castle at once.
 
 ```mermaid
 graph LR
     subgraph "Castle Tiers — Features Unlocked"
-        O["Outpost (0)<br/>0.25×<br/>no garrison<br/>no court"]
-        K["Keep (1)<br/>0.5×<br/>no garrison<br/>no court"]
-        S["Stronghold (2)<br/>1.0× baseline<br/>garrison ✓"]
-        F["Fortress (3)<br/>1.5×<br/>garrison ✓<br/>reserved NOVI ✓"]
-        C["Citadel (4)<br/>2.0×<br/>garrison ✓<br/>court ✓<br/>king system ✓<br/>reserved NOVI ✓"]
+        O["Outpost (0)<br/>0.25×<br/>garrison ✓<br/>no shield<br/>1h contest"]
+        K["Keep (1)<br/>0.5×<br/>garrison ✓<br/>1h shield"]
+        S["Stronghold (2)<br/>1.0× baseline<br/>garrison ✓<br/>1d shield"]
+        F["Fortress (3)<br/>1.5×<br/>garrison ✓<br/>3d shield<br/>reserved NOVI ✓"]
+        C["Citadel (4)<br/>2.0×<br/>garrison ✓<br/>court ✓<br/>king system ✓<br/>10d shield<br/>reserved NOVI ✓"]
         O --> K --> S --> F --> C
     end
 ```
 
-Garrison capacity is determined by the **king's subscription tier** at claim time:
+Garrison capacity is determined by the **king's subscription tier** at claim time (and re-set from the new king's tier on `finalize_transition`), uniformly for every castle tier:
 
 | King's Subscription Tier | Max Garrison Members |
 |--------------------------|---------------------|
@@ -147,7 +147,7 @@ CastleAccount (~600 bytes):
 │
 ├── // Garrison Tracking (4 bytes)
 ├── garrison_count: u8            // Active garrison members
-├── max_garrison: u8              // Set from king's subscription tier at claim time
+├── max_garrison: u8              // King's sub-tier cap, set on claim & finalize (uniform across all tiers)
 ├── _padding3: [u8; 2]
 │
 ├── // Court Tracking (4 bytes)
@@ -174,7 +174,7 @@ CastleAccount (~600 bytes):
 ├── min_networth_millions: u8
 ├── min_troops_thousands: u8
 ├── _padding6: [u8; 5]
-├── protection_duration: i64      // Base protection window in seconds
+├── protection_duration: i64      // Display only; shield is derived from tier (see CASTLE_PROTECTION_DURATION_BY_TIER)
 │
 ├── // Reward Rates (48 bytes) — DAO configurable per castle
 ├── tier_multiplier_bps: u16      // e.g., 10000 for Stronghold (1.0×)
@@ -209,8 +209,11 @@ CastleAccount (~600 bytes):
 
 **Derived protection formula:**
 ```
-effective_protection_duration = protection_duration × (10000 + watchtower_bonus_bps) / 10000
+base = CASTLE_PROTECTION_DURATION_BY_TIER[tier]   // Outpost 0 .. Citadel 864000 (10d)
+effective_protection_duration = base × (10000 + watchtower_bonus_bps) / 10000
 // watchtower_bonus_bps = watchtower_level × 1000 (max level 15 → +150%)
+// NOTE: derived from tier, not the stored protection_duration field (which is
+// kept only for display); rebalancing the table retunes every existing castle.
 ```
 
 **Attackability logic:**
@@ -218,7 +221,7 @@ effective_protection_duration = protection_duration × (10000 + watchtower_bonus
 Contest    → attackable if now < contest_end_at
 Vulnerable → always attackable
 Protected  → attackable if now >= contest_end_at + effective_protection_duration
-Transitioning → attackable if now < contest_end_at  (2-hour contest for new challenger)
+Transitioning → attackable if now < contest_end_at  (tier contest window for new challenger)
 ```
 
 [Source: state/castle.rs](../../../programs/novus_mundus/src/state/castle.rs)
@@ -381,14 +384,14 @@ ASCII reference diagram:
 ```
 ┌──────────┐  claim_vacant_castle  ┌──────────┐
 │          │ ─────────────────────>│          │
-│  Vacant  │                       │ Contest  │ (2 hours: CASTLE_CONTEST_DURATION = 7200 s)
+│  Vacant  │                       │ Contest  │ (tier window: CASTLE_CONTEST_DURATION_BY_TIER — Outpost 3600 s, else 7200 s)
 │    (0)   │<─────────────────┐    │   (1)    │
 └──────────┘  finalize_        │    └────┬─────┘
               transition       │         │ update_castle_status
               (no new king)    │         │ (now >= contest_end_at)
                                │         ▼
                                │    ┌──────────┐
-                               │    │Protected │ (duration: protection_duration × watchtower_mult)
+                               │    │Protected │ (duration: tier shield × watchtower_mult; Outpost = 0)
                                │    │   (2)    │
                                │    └────┬─────┘
                                │         │ update_castle_status
@@ -412,7 +415,7 @@ ASCII reference diagram:
 
 **Transition rules:**
 - `update_castle_status` handles only Contest→Protected and Protected→Vulnerable. All other status changes require specific instructions.
-- `attack_castle` sets status to Transitioning when garrison casualties exceed 90% of garrison total, or garrison is empty. A new 2-hour `contest_end_at` window is set so other attackers can challenge the incoming king.
+- `attack_castle` sets status to Transitioning when garrison casualties exceed 90% of garrison total, or garrison is empty. A fresh `contest_end_at` window (the castle tier's contest duration) is set so other attackers can challenge the incoming king.
 - `finalize_transition` requires: `status == Transitioning`, `now >= contest_end_at`, `garrison_count == 0`, `court_count == 0`.
 - `force_remove_king` (DAO) sets status to Transitioning with `transition_new_king = NULL_PUBKEY`, directing `finalize_transition` to the Vacant branch.
 
@@ -496,6 +499,8 @@ Examples:
 
 All rates are stored on `CastleAccount` and can be adjusted per-castle via `update_castle_config`.
 
+> **Who claims what:** the King and Court rates apply **only on a Citadel** (the sole tier with `has_king()`/`has_court()`). On every other tier (Outpost/Keep/Stronghold/Fortress), there is no individual-owner bonus — the holder and every teammate alike claim the **Team member** rate, gated solely by `player.team == castle.team`. Garrisoning is not required to claim the daily reward (it's separate — garrison is for defense and `claim_garrison_loot`). Each claimer has their own `TeamCastleRewardAccount` and rewards are minted fresh per claimer, so a larger controlling team extracts proportionally more from the same castle.
+
 ### Reward Formula
 
 ```
@@ -546,7 +551,7 @@ flowchart TD
 Solo attack on a castle's garrison from within 50 meters of ANY footprint cell.
 
 **Prerequisites:**
-- `castle.can_be_attacked(now)` — status is Contest (within window), Vulnerable, or Protected (protection expired), or Transitioning (within 2-hour window)
+- `castle.can_be_attacked(now)` — status is Contest (within window), Vulnerable, or Protected (protection expired), or Transitioning (within the tier contest window)
 - Attacker is not traveling, not in an active rally
 - Attacker has defensive units (castle attacks use defensive forces, not operatives)
 - Attacker is within `CASTLE_ATTACK_RANGE_METERS = 50.0` meters of any cell in the castle's `footprint_size × footprint_size` footprint (min distance across the N² cells, anchored at `castle.latitude`/`castle.longitude`)
@@ -576,7 +581,7 @@ flowchart TD
     A["attack_castle called<br/>(within 50 m, Vulnerable/Contest/expired Protected)"]
     A --> CALC["Calculate damage:<br/>attacker_damage (units + weapons)<br/>garrison_damage × armory_bonus<br/>effective_attacker_damage / fortification_penalty"]
     CALC --> CHECK{"remaining garrison<br/>< 10% OR garrison empty?"}
-    CHECK -->|"Yes — garrison defeated"| TRANS["status → Transitioning<br/>transition_new_king = attacker<br/>contest_end_at = now + 7200<br/>failed_defenses += 1<br/>Emit CastleConquered"]
+    CHECK -->|"Yes — garrison defeated"| TRANS["status → Transitioning<br/>transition_new_king = attacker<br/>contest_end_at = now + tier contest window<br/>failed_defenses += 1<br/>Emit CastleConquered"]
     CHECK -->|"No — garrison holds"| DEF["Attacker loses units<br/>Garrison accumulates loot<br/>successful_defenses += 1<br/>Emit CastleDefended"]
     TRANS --> CRANK["Cleanup cranks run:<br/>garrison_cleanup × N<br/>court_cleanup × M<br/>rewards_cleanup × P<br/>finalize_transition"]
 ```
@@ -586,7 +591,7 @@ flowchart TD
 When garrison is defeated:
 - `castle.status` → Transitioning
 - `castle.transition_new_king` = attacker's PlayerAccount PDA
-- `castle.contest_end_at` = now + 7200 (fresh 2-hour challenge window)
+- `castle.contest_end_at` = now + the tier's contest window (Outpost 1h, others 2h) — fresh challenge window
 - Emits `CastleConquered`
 
 When garrison wins (attacker repelled):
@@ -603,8 +608,8 @@ When garrison wins (attacker repelled):
 ```mermaid
 flowchart TD
     START["Garrison defeated<br/>(attack_castle)"]
-    START --> TRANS["status = Transitioning<br/>transition_new_king = attacker<br/>contest_end_at = now + 7200"]
-    TRANS --> WINDOW["2-hour challenge window<br/>(other attackers can replace transition_new_king)"]
+    START --> TRANS["status = Transitioning<br/>transition_new_king = attacker<br/>contest_end_at = now + tier contest window"]
+    TRANS --> WINDOW["challenge window (tier: Outpost 1h, else 2h)<br/>(other attackers can replace transition_new_king)"]
     WINDOW --> CLEANUP["Permissionless cleanup cranks<br/>(any order, fully concurrent)"]
 
     subgraph CLEANUP["Cleanup Phase (all permissionless)"]
@@ -628,7 +633,7 @@ sequenceDiagram
 
     Attacker->>Program: attack_castle (defeats garrison)
     Program->>Castle: status=Transitioning, transition_new_king=attacker
-    Note over Castle: 2-hour contest window opens
+    Note over Castle: tier contest window opens (Outpost 1h, else 2h)
     Note over Castle: Other players may attack and replace transition_new_king
 
     Crank->>Program: garrison_cleanup (×N, one per garrison member)
@@ -767,7 +772,7 @@ const claimIx = createClaimVacantCastleInstruction(
   { cityId, castleId }
 );
 
-// Step 2: Transition Contest → Protected (permissionless, after 2 hours)
+// Step 2: Transition Contest → Protected (permissionless, after the tier contest window)
 const updateStatusIx = createUpdateCastleStatusInstruction(
   { caller: wallet.publicKey, castleAccount: castlePda }
 );
@@ -792,16 +797,19 @@ const rewardIx = createClaimCastleRewardsInstruction(
 const castle = await fetchCastleAccount(connection, castlePda);
 const now = Math.floor(Date.now() / 1000);
 
-// Attackable if: Contest (within window), Vulnerable, or Protected (expired)
+// Attackable if: Contest (within window), Vulnerable, or Protected (expired).
+// The protection shield is derived from tier (Outpost 0 .. Citadel 10d) scaled
+// by the watchtower — use the SDK helper, NOT the stored protectionDuration field.
+import { castleEffectiveProtectionSecs } from "novus-mundus-sdk";
+
 function isAttackable(castle, now) {
   switch (castle.status) {
     case 1 /* Contest */: return now < castle.contestEndAt;
     case 3 /* Vulnerable */: return true;
-    case 2 /* Protected */:
-      const watchtowerBonus = castle.watchtowerLevel * 1000;
-      const effectiveDuration = castle.protectionDuration
-        * (10000 + watchtowerBonus) / 10000;
+    case 2 /* Protected */: {
+      const effectiveDuration = castleEffectiveProtectionSecs(castle.tier, castle.watchtowerLevel);
       return now >= castle.contestEndAt + effectiveDuration;
+    }
     case 4 /* Transitioning */: return now < castle.contestEndAt;
     default: return false;
   }

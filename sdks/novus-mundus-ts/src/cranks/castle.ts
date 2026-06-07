@@ -18,7 +18,7 @@
 import type { Connection, PublicKey, TransactionInstruction } from '@solana/web3.js';
 import type { NovusMundusClient } from '../client';
 import { deriveCourtPda } from '../pda';
-import { parseCastle, parseCourtPosition } from '../state/castle';
+import { parseCastle, parseCourtPosition, castleEffectiveProtectionSecs } from '../state/castle';
 import type { CastleAccount } from '../state/castle';
 import { deserializePlayer } from '../state/player';
 import { parseAssetV1 } from '../external/asset';
@@ -36,6 +36,31 @@ const MAX_COURT_POSITIONS = 5;
 export interface CastleCrankIx {
   ix: TransactionInstruction;
   label: string;
+}
+
+/**
+ * Whether `update_castle_status` would actually transition this castle right now.
+ *
+ * The on-chain processor (instruction 289) errors on a no-op, so blindly sending
+ * it for every castle is pure waste — the difference between a couple of txs and
+ * one-per-castle. Mirrors the chain's time conditions exactly:
+ *   - CONTEST   -> PROTECTED   when now >= contest_end_at
+ *   - PROTECTED -> VULNERABLE  when now >= contest_end_at + effective_protection
+ * (effective protection adds the watchtower bonus: +10% per level). Every other
+ * status (Vacant, Vulnerable, Transitioning) has no time-based status update.
+ */
+export function castleStatusUpdateDue(castle: CastleAccount, nowSec: number): boolean {
+  const contestEnd = Number(castle.contestEndAt);
+  switch (castle.status) {
+    case CastleStatus.Contest:
+      return nowSec >= contestEnd;
+    case CastleStatus.Protected:
+      // Protection derives from tier (not the stored field), so a rebalance
+      // applies to every castle at once.
+      return nowSec >= contestEnd + castleEffectiveProtectionSecs(castle.tier, castle.watchtowerLevel);
+    default:
+      return false;
+  }
 }
 
 /** Resolve a member's wallet from their PlayerAccount PDA (reads player.owner). */
@@ -146,12 +171,20 @@ export async function buildCastleFinalize(
   client: NovusMundusClient,
   crank: PublicKey,
   castlePda: PublicKey,
+  now?: number,
 ): Promise<CastleCrankIx | null> {
   const { connection, gameEngine } = client;
   const info = await connection.getAccountInfo(castlePda);
   const castle = info ? parseCastle(info) : null;
   if (!castle || castle.status !== CastleStatus.Transitioning) return null;
   if (castle.garrisonCount !== 0 || castle.courtCount !== 0) return null;
+
+  // Not finalizable until the tier contest window closes — the chain rejects with
+  // ContestNotEnded. Return null so callers report "not ready" instead of firing
+  // (CLI) or simulating (cron) a doomed tx. Callers thread in the chain-now they
+  // already fetched for the status pass; fall back to a fetch if omitted.
+  const chainNow = now ?? (await client.getBlockTime()) ?? 0;
+  if (chainNow < Number(castle.contestEndAt)) return null;
 
   const { cityId, castleId } = castle;
   const oldKing =

@@ -587,9 +587,32 @@ pub const CASTLE_STATUS_PROTECTED: u8 = 2;
 pub const CASTLE_STATUS_VULNERABLE: u8 = 3;
 pub const CASTLE_STATUS_TRANSITIONING: u8 = 4;
 
-/// Castle time constants
+/// Castle time constants. The flat values are the defaults/fallbacks; the
+/// per-tier tables below are what the processors actually use so low tiers flip
+/// fast and high tiers are defensible.
 pub const CASTLE_CONTEST_DURATION: i64 = 7_200; // 2 hours
 pub const CASTLE_PROTECTION_DURATION: i64 = 864_000; // 10 days
+
+/// Per-tier contest/transition window (seconds). Index = castle tier
+/// (0=Outpost..4=Citadel). Outposts settle in 1h; the rest keep the 2h window.
+pub const CASTLE_CONTEST_DURATION_BY_TIER: [i64; 5] = [
+    3_600, // Outpost    — 1 hour
+    7_200, // Keep       — 2 hours
+    7_200, // Stronghold — 2 hours
+    7_200, // Fortress   — 2 hours
+    7_200, // Citadel    — 2 hours
+];
+
+/// Per-tier protection shield (seconds) after a castle finalizes. Index = tier.
+/// Low tiers flip often; the Citadel is the prize worth defending. Computed from
+/// tier (not stored per-castle) so a rebalance applies to every castle at once.
+pub const CASTLE_PROTECTION_DURATION_BY_TIER: [i64; 5] = [
+    0,       // Outpost    — no shield, re-contestable immediately
+    3_600,   // Keep       — 1 hour
+    86_400,  // Stronghold — 1 day
+    259_200, // Fortress   — 3 days
+    864_000, // Citadel    — 10 days
+];
 
 /// Castle limits
 pub const MAX_CASTLES_PER_KING: u8 = 5;

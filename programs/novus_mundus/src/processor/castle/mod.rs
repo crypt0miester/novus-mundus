@@ -23,6 +23,62 @@
 //! - 289: update_castle_status - Permissionless time-based status transitions
 //! - 290: complete_upgrade - Complete upgrade when timer expires (permissionless)
 
+use pinocchio::{AccountView, Address, ProgramResult};
+use pinocchio_system::instructions::CreateAccount;
+
+use crate::{
+    constants::{GARRISON_CAP_BY_TIER, KING_REGISTRY_SEED, MAX_CASTLES_PER_KING},
+    state::KingRegistryAccount,
+};
+
+/// Garrison capacity for a king's subscription tier (uniform across castle tiers).
+/// Clamps to the Legendary cap so an out-of-range tier can't index past the table.
+pub fn garrison_cap_for_subscription_tier(subscription_tier: u8) -> u8 {
+    GARRISON_CAP_BY_TIER[(subscription_tier as usize).min(GARRISON_CAP_BY_TIER.len() - 1)]
+}
+
+/// Create + initialize a king's `KingRegistryAccount` if it doesn't exist yet.
+///
+/// Shared by `claim_vacant_castle` (first claim) and `finalize_transition` (a
+/// castle won by conquest whose new king has never ruled before). No-op when the
+/// account already exists. The registry PDA is `[KING_REGISTRY_SEED, owner_player]`,
+/// so the seeds derive from `owner_player_account` and the caller passes the bump.
+pub fn ensure_king_registry(
+    payer: &AccountView,
+    registry_account: &AccountView,
+    owner_player_account: &AccountView,
+    registry_bump: u8,
+    program_id: &Address,
+) -> ProgramResult {
+    if registry_account.data_len() > 0 {
+        return Ok(());
+    }
+
+    let lamports = crate::utils::rent_exempt_const(KingRegistryAccount::LEN);
+    let bump_seed = [registry_bump];
+    let seeds = crate::seeds!(KING_REGISTRY_SEED, owner_player_account.address(), &bump_seed);
+    let signer = pinocchio::cpi::Signer::from(&seeds);
+
+    CreateAccount {
+        from: payer,
+        to: registry_account,
+        lamports,
+        space: KingRegistryAccount::LEN as u64,
+        owner: program_id,
+    }
+    .invoke_signed(&[signer])?;
+
+    let mut registry_data = registry_account.try_borrow_mut()?;
+    let registry = unsafe { KingRegistryAccount::load_mut(&mut registry_data) };
+    registry.account_key = crate::state::AccountKey::KingRegistry as u8;
+    registry.king = *owner_player_account.address();
+    registry.bump = registry_bump;
+    registry.castle_count = 0;
+    registry.max_castles = MAX_CASTLES_PER_KING;
+    registry.castles = Default::default();
+    Ok(())
+}
+
 pub mod appoint_court;
 pub mod attack_castle;
 pub mod cancel_upgrade;
