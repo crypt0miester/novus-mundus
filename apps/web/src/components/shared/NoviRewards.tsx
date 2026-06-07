@@ -325,7 +325,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
               <div className="rounded-lg border border-border-gold/30 bg-accent/10 px-4 py-3">
                 <div className="flex items-start gap-2">
                   <GameIcon id="resource-novi" title="NOVI" size={14} className="mt-0.5" />
-                  <div className="text-xs text-zinc-400">
+                  <div className="text-xs text-black">
                     Convert reserved NOVI into{" "}
                     <span className="font-semibold text-text-gold">locked NOVI</span> for gameplay.
                     This is <span className="text-text-gold">permanent</span> and cannot be
@@ -360,7 +360,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
               <div className="rounded-lg border border-border-gold/30 bg-accent/10 px-4 py-3">
                 <div className="flex items-start gap-2">
                   <GameIcon id="resource-novi" title="NOVI" size={14} className="mt-0.5" />
-                  <div className="text-xs text-zinc-400">
+                  <div className="text-xs text-black">
                     Deposit NOVI from your wallet back into{" "}
                     <span className="font-semibold text-text-gold">reserved</span>. A{" "}
                     <span className="text-text-gold">{DEPOSIT_FEE_BPS / 100}% fee</span> is burned
@@ -378,7 +378,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
 
               {!hasWalletNovi ? (
                 <div className="rounded-lg border border-zinc-800 bg-surface/60 px-4 py-4 text-center text-xs text-zinc-500">
-                  No NOVI in your wallet to deposit. Withdraw or buy NOVI first.
+                  No NOVI in your wallet to deposit
                 </div>
               ) : (
                 <>
@@ -423,7 +423,7 @@ export function NoviRewards({ className }: NoviRewardsProps) {
               <div className="rounded-lg border border-border-gold/30 bg-accent/10 px-4 py-3">
                 <div className="flex items-start gap-2">
                   <span className="mt-0.5 text-text-gold">↗</span>
-                  <div className="text-xs text-zinc-400">
+                  <div className="text-xs text-black">
                     Withdraw reserved NOVI to your{" "}
                     <span className="font-semibold text-text-gold">wallet</span>. Requires a{" "}
                     <span className="text-text-gold">7-day vesting</span> period after earning.

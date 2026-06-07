@@ -20,6 +20,11 @@ export const CATEGORY_ORDER: BuildingCategory[] = [
   "Exploration",
 ];
 
+/** Text color class for a building's tier badge (T1 muted, T2 gold, T3 bright). */
+export function tierColor(tier: number): string {
+  return tier === 3 ? "text-gold-500" : tier === 2 ? "text-text-gold" : "text-text-muted";
+}
+
 // ── Per-building feature mapping ──
 export interface BuildingFeatureConfig {
   id: number;

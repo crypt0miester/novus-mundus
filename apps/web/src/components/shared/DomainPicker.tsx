@@ -60,7 +60,7 @@ export function DomainPicker({
   const { data: ownedDomains, isLoading: domainsLoading } = useOwnedDomains(publicKey);
 
   const [input, setInput] = useState("");
-  const [tld] = useState("abc");
+  const [tld] = useState("solana");
   const [debounced, setDebounced] = useState("");
 
   // Debounce input for API check

@@ -3,6 +3,7 @@
 import { Suspense, type ComponentType } from "react";
 import { useRightPanelStore } from "@/lib/store/right-panel";
 import { BuildingUpgradePanel } from "@/components/panels/BuildingUpgradePanel";
+import { BuildingPickerPanel } from "@/components/panels/BuildingPickerPanel";
 import { ResearchPanel } from "@/components/panels/ResearchDetailPanel";
 import { RallyDetailPanel } from "@/components/panels/RallyDetailPanel";
 import { DailyActivityListPanel } from "@/app/(game)/estate/_components/daily-activity/DailyActivityListPanel";
@@ -21,6 +22,7 @@ import { BottomSheet } from "@/components/shared/BottomSheet";
 // Components resolved by contentKey from the store.
 const PANELS: Record<string, ComponentType<any>> = {
   "building-detail": BuildingUpgradePanel,
+  "building-picker": BuildingPickerPanel,
   research: ResearchPanel,
   "rally-detail": RallyDetailPanel,
   "daily-activities": DailyActivityListPanel,

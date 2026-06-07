@@ -164,7 +164,7 @@ export interface SystemFraming {
 export const SYSTEM_FRAMING: Readonly<Record<string, SystemFraming>> = {
   house: {
     title: "The Houses",
-    line: "A lord with no House is a large hall and one man rattling in it. A House is a claim to legitimacy — and a debt, chosen well.",
+    line: "A lord with no House is a large hall and one man rattling in it. A House is a claim to legitimacy, and a debt, chosen well.",
   },
   castle: {
     title: "The Seat",

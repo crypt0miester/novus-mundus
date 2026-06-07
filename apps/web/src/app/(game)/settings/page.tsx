@@ -409,9 +409,6 @@ export default function SettingsPage() {
                 <div className="flex flex-col gap-2 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <span className="text-text-primary">Priority Fee</span>
-                    <p className="text-xs text-text-muted">
-                      Higher fees help transactions land faster
-                    </p>
                   </div>
                   <div className="flex rounded-lg border border-zinc-800">
                     {PRIORITY_PRESETS.map((preset) => (

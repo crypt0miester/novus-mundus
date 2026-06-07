@@ -4,26 +4,15 @@ import { useMemo, useEffect, useState, useCallback, useLayoutEffect, useRef } fr
 import { useRouter } from "next/navigation";
 import { animate, stagger, utils } from "animejs";
 import { useEstate } from "@/lib/hooks/useEstate";
-import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
-import { BUILDING_FEATURES } from "@/lib/config/building-features";
-import { findBuilding } from "novus-mundus-sdk";
-import { buildingPhase } from "@/lib/narrative";
+import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import { formatTime, prefersReducedMotion } from "@/lib/utils";
-import { REORDER } from "@/lib/motion/tokens";
-import {
-  BuildingCard,
-  type BuildingCardData,
-  type BuildingStatus as CardStatus,
-} from "./building-card";
+import { REORDER, SETTLE, STAGGER, DUR } from "@/lib/motion/tokens";
+import type { BuildingCardData } from "./building-card";
+import { PlotParcel } from "./plot-parcel";
+import { LockedParcel } from "./locked-parcel";
+import { deriveBuildingInfo, splitPlots, MAX_PLOTS } from "./estate-layout";
 import { hasCenterView } from "./feature-view";
-import { TxButton } from "@/components/shared/TxButton";
 import type { TxPhase } from "@/components/shared/TxButton";
-import { InfoButton } from "@/components/shared/InfoButton";
-
-/** Building slots a single plot holds. */
-const SLOTS_PER_PLOT = 4;
-/** The most plots a holding can claim. */
-const MAX_PLOTS = 5;
 
 interface BuildingGridProps {
   /** Currently selected building ID in the right panel */
@@ -31,9 +20,11 @@ interface BuildingGridProps {
   onSelectBuilding: (id: number) => void;
   /** Navigation function for center-view features */
   onOpenFeature?: (buildingId: number) => void;
-  /** Buy the next plot — wired to the next claimable "Land Beyond" card. */
+  /** Open the global building picker — wired to every break-ground site. */
+  onBreakGround: () => void;
+  /** Buy the next plot — wired to the claimable locked parcel. */
   onBuyPlot: (reportPhase: (p: TxPhase) => void) => Promise<string>;
-  /** NOVI cost of the next plot, for the claim card label. */
+  /** NOVI cost of the next plot, for the claim parcel label. */
   nextPlotCost: number;
 }
 
@@ -41,6 +32,7 @@ export function BuildingGrid({
   selectedBuildingId,
   onSelectBuilding,
   onOpenFeature,
+  onBreakGround,
   onBuyPlot,
   nextPlotCost,
 }: BuildingGridProps) {
@@ -50,36 +42,9 @@ export function BuildingGrid({
 
   const [tick, setTick] = useState(() => Math.floor(Date.now() / 1000));
 
-  // Build info for all buildings — buildingPhase() is the single source of truth.
-  const buildingInfo = useMemo(() => {
-    return BUILDING_FEATURES.map((config) => {
-      const slot = estate ? findBuilding(estate, config.id) : null;
-      const phase = buildingPhase(slot, tick);
-      const constructing =
-        phase === "rising" || phase === "raised" || phase === "improving" || phase === "improved";
-      const endsAt = Number(slot?.constructionEnds ?? 0n);
-      const remainingSec = constructing ? Math.max(0, endsAt - tick) : 0;
-      const ready = phase === "raised" || phase === "improved";
-      const status: CardStatus =
-        phase === "unbuilt"
-          ? "unbuilt"
-          : phase === "standing"
-            ? "active"
-            : phase === "rising" || phase === "raised"
-              ? "building"
-              : "upgrading";
-      return {
-        config,
-        phase,
-        status,
-        level: slot?.level ?? 0,
-        constructing,
-        remainingSec,
-        ready,
-        slot,
-      };
-    });
-  }, [estate, tick]);
+  // Build info for all buildings — buildingPhase() is the single source of
+  // truth, shared with the right-panel picker via deriveBuildingInfo.
+  const buildingInfo = useMemo(() => deriveBuildingInfo(estate, tick), [estate, tick]);
 
   // Tick timer for construction progress
   const hasConstructing = buildingInfo.some((b) => b.constructing);
@@ -93,41 +58,23 @@ export function BuildingGrid({
 
   const plotsOwned = Math.max(1, Math.min(MAX_PLOTS, estate?.plotsOwned ?? 1));
 
-  // Reframe the holding as land: every building that has broken ground (built,
-  // standing, or under construction) is settled onto a claimed plot, four to a
-  // parcel; buildings not yet raised wait in a separate "ground to break" set.
-  // The on-chain model doesn't pin a building to a plot index, so the layout
-  // is a stable visual fill — buildings settle in building-id order — not a
-  // slot-accurate map.
-  const { plots, unbuilt } = useMemo(() => {
-    const ordered = [...buildingInfo].sort((a, b) => a.config.id - b.config.id);
-    const settled = ordered.filter((b) => b.phase !== "unbuilt");
-    const unbuilt = ordered.filter((b) => b.phase === "unbuilt");
-    const plots: BuildingCardData[][] = [];
-    for (let i = 0; i < plotsOwned; i++) {
-      plots.push(settled.slice(i * SLOTS_PER_PLOT, (i + 1) * SLOTS_PER_PLOT));
-    }
-    // A building beyond the claimed plots' capacity has no parcel to sit on —
-    // fold it back into the ground-to-break set so nothing is dropped.
-    const overflow = settled.slice(plotsOwned * SLOTS_PER_PLOT);
-    return { plots, unbuilt: [...overflow, ...unbuilt] };
-  }, [buildingInfo, plotsOwned]);
+  // Reframe the holding as land: settled buildings settle onto claimed parcels,
+  // four to a plot, in building-id order. `overflow` holds any settled building
+  // beyond capacity (the chain should prevent it; surfaced, never dropped). The
+  // unbuilt set is owned by the picker now, not rendered here.
+  const { plots, overflow } = useMemo(
+    () => splitPlots(buildingInfo, plotsOwned),
+    [buildingInfo, plotsOwned],
+  );
 
   // Construction alerts (compact banner)
   const constructingBuildings = buildingInfo.filter((b) => b.constructing);
 
-  // FLIP reflow root. Spans every plot grid + the ground-to-break grid so a
-  // building that moves between sections (e.g. a parcel completes and the grid
-  // re-sorts) slides across the whole board, not just within one container.
+  // FLIP reflow root. Spans every parcel so a building that moves between
+  // parcels (e.g. a parcel completes and the grid re-sorts by id) slides across
+  // the whole board, not just within one parcel.
   const gridRootRef = useRef<HTMLDivElement>(null);
   const prevRects = useRef(new Map<number, DOMRect>());
-
-  // Live breakpoint for the grid stagger origin. The plot grids are
-  // grid-cols-2 lg:grid-cols-4, so the center-out ripple direction depends on
-  // whether we are at the lg (1024px) breakpoint. Reading the wrong column
-  // count points the ripple the wrong way on resize.
-  const isLg = useMediaQuery("(min-width: 1024px)");
-  const gridCols = isLg ? 4 : 2;
 
   // The order of settled building ids (the thing that actually moves a card to a
   // new slot) plus plots owned. Gating the FLIP measure on this signature keeps
@@ -147,12 +94,14 @@ export function BuildingGrid({
   }, [buildingInfo, plotsOwned]);
 
   // FLIP: First/Last/Invert/Play keyed by building id (NOT DOM index, since the
-  // grid re-sorts cards across plots by id). Measure the new committed layout, invert
-  // each card to its old position, then play the delta back to identity on the
-  // REORDER spring. Stagger ripples out from the keep (grid center). We
-  // cancel() rather than revert() so an overlapping reflow retargets cleanly and
-  // the committed transform is never wiped (the FLIP teardown rule).
-  // biome-ignore lint/correctness/useExhaustiveDependencies: measure is gated on the layout signature; gridCols re-keys the ripple on breakpoint change.
+  // grid re-sorts cards across parcels by id). Measure the new committed layout,
+  // invert each card to its old position, then play the delta back to identity on
+  // the REORDER spring. The ripple staggers out from the grid center on a flat
+  // index (cards now live in per-parcel 2x2s, so a single global grid origin no
+  // longer maps to real positions). We cancel() rather than revert() so an
+  // overlapping reflow retargets cleanly and the committed transform is never
+  // wiped (the FLIP teardown rule).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measure is gated on the layout signature.
   useLayoutEffect(() => {
     const root = gridRootRef.current;
     if (!root) return;
@@ -191,7 +140,7 @@ export function BuildingGrid({
         translateY: [dy, 0],
         ease: REORDER,
         composition: "replace",
-        delay: stagger(28, { from: "center", grid: [gridCols, Math.ceil(cards.length / gridCols)] }),
+        delay: stagger(24, { from: "center" }),
       }),
     );
 
@@ -200,7 +149,30 @@ export function BuildingGrid({
     return () => {
       for (const a of animations) a.cancel();
     };
-  }, [layoutSig, gridCols]);
+  }, [layoutSig]);
+
+  // Parcel-mount stagger: the survey lays itself out parcel by parcel on first
+  // paint, each settling up into place. translateY only (not opacity) so the
+  // dim on ghosted locked parcels is left alone. Runs once; reduced motion snaps
+  // to rest. The FLIP above owns card motion and has no prevRects on mount, so
+  // the two never fight.
+  useAnimeScope({ root: gridRootRef }, ({ reduce }) => {
+    const root = gridRootRef.current;
+    if (!root) return;
+    const parcels = Array.from(root.querySelectorAll<HTMLElement>("[data-parcel]"));
+    if (parcels.length === 0) return;
+    if (reduce) {
+      utils.set(parcels, { translateY: 0 });
+      return;
+    }
+    utils.set(parcels, { translateY: 10 });
+    animate(parcels, {
+      translateY: [10, 0],
+      delay: stagger(STAGGER.tight, { from: "first" }),
+      duration: DUR.base,
+      ease: SETTLE,
+    });
+  });
 
   // Construction-alert muster: the "{N} rising" count rolls up on a spring via a
   // plain-object tween (utils.round for an integer ticker) instead of snapping
@@ -287,16 +259,16 @@ export function BuildingGrid({
         onOpenFeature(id);
         return;
       }
-      // Everything else — under construction, unbuilt, or standing without a
-      // feature — opens the detail panel. The panel reads the building's live
-      // phase and shows speed-up / complete or build / upgrade accordingly.
+      // Everything else — under construction or standing without a feature —
+      // opens the detail panel. The panel reads the building's live phase and
+      // shows speed-up / complete accordingly.
       onSelectBuilding(id);
     },
     [onSelectBuilding, onOpenFeature, router],
   );
 
   return (
-    <div ref={gridRootRef} className="space-y-6">
+    <div ref={gridRootRef} className="space-y-4">
       {/* Construction alerts banner as a live muster. The count rolls up on a
           spring (musterRef), and the rising chips deal in newest-first via a
           from:"last" stagger so the most recent groundbreaking leads the wave. */}
@@ -320,92 +292,54 @@ export function BuildingGrid({
         </div>
       )}
 
-      {/* Claimed plots — the land, parcel by parcel */}
-      {plots.map((buildings, idx) => (
-        <div key={`plot-${idx}`}>
-          <div className="mb-2 flex items-baseline gap-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-text-secondary">
-              Plot {idx + 1}
-            </h2>
-            <span className="text-[10px] tabular-nums text-text-muted">
-              {buildings.length}/{SLOTS_PER_PLOT}
-            </span>
-          </div>
+      {/* The survey: every plot, parcel by parcel — claimed parcels with their
+          built cards and break-ground sites, then the locked ground beyond. The
+          parcels flow in a responsive outer grid; each is a fixed 2x2 inside so
+          it reads as a square of land at every width. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+        {plots.map((buildings, idx) => (
+          <PlotParcel
+            key={`plot-${idx}`}
+            index={idx}
+            buildings={buildings}
+            selectedBuildingId={selectedBuildingId}
+            onCardClick={handleCardClick}
+            onBreakGround={onBreakGround}
+          />
+        ))}
+
+        {/* Land beyond the claim — locked parcels; the next one carries the buy
+            affordance in its frame, the rest are ghosted and inert. */}
+        {plotsOwned < MAX_PLOTS &&
+          Array.from({ length: MAX_PLOTS - plotsOwned }).map((_, idx) => (
+            <LockedParcel
+              key={`locked-${idx}`}
+              index={plotsOwned + idx}
+              claimable={idx === 0}
+              cost={nextPlotCost}
+              onClaim={idx === 0 ? onBuyPlot : undefined}
+            />
+          ))}
+      </div>
+
+      {/* Defensive: settled buildings beyond the claimed plots' capacity. The
+          chain should prevent this, but surface them rather than drop cards. */}
+      {overflow.length > 0 && (
+        <div className="rounded-lg border border-dashed border-danger/50 p-3">
+          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-danger">
+            Unplaced
+          </h2>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {buildings.map((data) => (
-              <BuildingCard
+            {overflow.map((data) => (
+              <button
                 key={data.config.id}
-                data={data}
-                selected={selectedBuildingId === data.config.id}
+                type="button"
                 onClick={() => handleCardClick(data)}
-              />
-            ))}
-            {Array.from({ length: SLOTS_PER_PLOT - buildings.length }).map((_, slotIdx) => (
-              <div
-                key={`empty-${slotIdx}`}
-                className="flex min-h-[5.5rem] items-center justify-center rounded-lg border border-dashed border-border-default/60 p-3 text-[11px] text-text-muted"
+                className="rounded-lg border border-border-default p-3 text-left text-sm font-semibold text-text-primary hover:border-border-gold/40"
               >
-                Open ground <InfoButton>An empty building slot on a plot you already own. Each plot gives 4 slots.</InfoButton>
-              </div>
+                {data.config.name}
+              </button>
             ))}
-          </div>
-        </div>
-      ))}
-
-      {/* Ground still to break — buildings the holding has not yet raised */}
-      {unbuilt.length > 0 && (
-        <div>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Ground to Break <InfoButton>Empty slots ready to build on. Building needs a free slot on an owned plot.</InfoButton>
-          </h2>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {unbuilt.map((data) => (
-              <BuildingCard
-                key={data.config.id}
-                data={data}
-                selected={selectedBuildingId === data.config.id}
-                onClick={() => handleCardClick(data)}
-              />
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Land beyond the claim — plots the holding has not yet bought */}
-      {plotsOwned < MAX_PLOTS && (
-        <div>
-          <h2 className="mb-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Land Beyond Your Claim <InfoButton>Plots you have not bought yet. Each adds 4 slots; you can own up to 5 plots (20 slots).</InfoButton>
-          </h2>
-          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-            {Array.from({ length: MAX_PLOTS - plotsOwned }).map((_, idx) => {
-              const plotNumber = plotsOwned + idx + 1;
-              // Plots claim in sequence — only the next one can be bought now.
-              if (idx === 0) {
-                return (
-                  <TxButton
-                    key={`unclaimed-${idx}`}
-                    onClick={onBuyPlot}
-                    variant="secondary"
-                    className="flex min-h-[5.5rem] w-full flex-col items-center justify-center gap-0.5 rounded-lg border border-dashed border-border-gold/50 bg-accent/10 p-3 text-center transition-colors hover:border-border-gold hover:bg-accent/20"
-                  >
-                    <span className="text-sm font-semibold text-text-gold">Buy Plot</span>
-                    <span className="text-[11px] text-text-muted">
-                      Plot {plotNumber} · {(nextPlotCost / 1000).toFixed(0)}k NOVI
-                    </span>
-                  </TxButton>
-                );
-              }
-              return (
-                <div
-                  key={`unclaimed-${idx}`}
-                  className="flex min-h-[5.5rem] flex-col items-center justify-center rounded-lg border border-dashed border-border-default/40 p-3 text-center opacity-50"
-                >
-                  <span className="text-sm font-semibold text-text-muted">Plot {plotNumber}</span>
-                  <span className="mt-0.5 text-[11px] text-text-muted">Unclaimed ground</span>
-                </div>
-              );
-            })}
           </div>
         </div>
       )}

@@ -174,17 +174,6 @@ export function WorkshopTab() {
               Convert
             </TxButton>
           </div>
-          {!workshopOk && (
-            <div className="mt-2 text-xs text-danger">
-              {fromMat?.name} to {toName} needs Workshop Lv {requiredWorkshop}.
-            </div>
-          )}
-          {workshopOk && convertAmount > maxConversions && maxConversions >= 0 && (
-            <div className="mt-2 text-xs text-red-400">
-              Not enough {fromMat?.name} materials (need {(convertAmount * 100).toLocaleString()},
-              have {availableFrom.toLocaleString()})
-            </div>
-          )}
         </div>
       }
     />

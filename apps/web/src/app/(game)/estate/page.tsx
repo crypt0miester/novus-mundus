@@ -83,6 +83,12 @@ function EstateContent() {
     [setActiveBuilding],
   );
 
+  // A break-ground site opens the global building picker. The chain auto-places
+  // into the next free slot, so any site shows the same list of unbuilt types.
+  const handleBreakGround = useCallback(() => {
+    show("Break Ground", "building-picker");
+  }, [show]);
+
   // The Arrival — onboarding gate. The estate is home; a player without an
   // estate (or no player at all) sees the Arrival before the holding.
   const [arrivalState, setArrivalState] = useState<"pending" | "running" | "done">("pending");
@@ -185,6 +191,7 @@ function EstateContent() {
                 selectedBuildingId={selectedBuildingId}
                 onSelectBuilding={handleSelectBuilding}
                 onOpenFeature={handleOpenFeature}
+                onBreakGround={handleBreakGround}
                 onBuyPlot={handleBuyPlot}
                 nextPlotCost={nextPlotCost}
               />

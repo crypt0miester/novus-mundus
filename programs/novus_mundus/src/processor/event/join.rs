@@ -96,9 +96,9 @@ pub fn process(
 
     // 6. Check Player Eligibility
 
-    // Player cannot be in another event
+    // Player cannot be in another event (one event at a time)
     if player_data.current_event != 0 {
-        return Err(GameError::AlreadyInRally.into()); // Reusing error
+        return Err(GameError::AlreadyInEvent.into());
     }
 
     // Check level requirement

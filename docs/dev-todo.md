@@ -6,30 +6,6 @@ problem, the current state with file references, and the plan. Status keys:
 
 Last touched: 2026-05-29.
 
-## #6 Make spectate actually spectate — `DONE (Phases 0-2, f17cbf8; live feed deferred)`
-
-**Problem.** The landing page's "Spectate the Realm" button just routes to
-`/world`, which is the same static city/team/player browsing available from the
-nav. It is redundant — it does not let you *watch* the game.
-
-**Current state.**
-- `app/(auth)/page.tsx:56` → `trigger(spectateMessage(), "/world")`.
-- `/world` = `RealmMap` + browsable lists. No live gameplay view.
-- The event pipeline exists: `lib/store/events.ts`, `lib/events/classify.ts`,
-  `lib/events/format.ts`, `components/shared/ActivityFeed.tsx`. The city
-  account exposes `activeEncounters` / `totalEncountersSpawned` counters.
-
-**Plan (redefined).** Full design: [`docs/design/SPECTATE_UNIFIED_UI.md`](design/SPECTATE_UNIFIED_UI.md).
-Instead of a second "watch" view, collapse the two UIs into one: delete the
-`/world` tree and let a spectator (no wallet, or a wallet with no player)
-navigate the real `(game)` routes read-only, seeing real on-chain values. The
-two blockers are the redirects in `(game)/layout.tsx:31-42` and the wallet-gated
-account store; the `useWorld*` RPC hooks already give a wallet-less data path.
-Write actions gate through one `useCanAct()` seam on `TxButton`. The world-only
-browse surfaces (players, cities, team detail) move under `(game)`.
-- The original live realm activity feed (attacks/rallies/dungeon clears pinned to
-  the `RealmMap`) is kept as a deferred Phase 3 of that design.
-
 ---
 
 ## #11 Expedition and Castle — `TODO` (playtest)

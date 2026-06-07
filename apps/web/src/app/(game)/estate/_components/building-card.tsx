@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import { createTimeline, spring } from "animejs";
-import { CATEGORY_COLORS, type BuildingFeatureConfig } from "@/lib/config/building-features";
+import { CATEGORY_COLORS, tierColor, type BuildingFeatureConfig } from "@/lib/config/building-features";
 import { InfoButton } from "@/components/shared/InfoButton";
 import { formatTime, prefersReducedMotion } from "@/lib/utils";
 import { hasCenterView } from "./feature-view";
@@ -229,17 +229,7 @@ export function BuildingCard({ data, selected, onClick }: BuildingCardProps) {
     >
       <div className="flex items-center justify-between">
         <span className="text-sm font-semibold text-text-primary">{config.name}</span>
-        <span
-          className={`text-[11px] font-bold ${
-            config.tier === 3
-              ? "text-gold-500"
-              : config.tier === 2
-                ? "text-text-gold"
-                : "text-text-muted"
-          }`}
-        >
-          T{config.tier}
-        </span>
+        <span className={`text-[11px] font-bold ${tierColor(config.tier)}`}>T{config.tier}</span>
       </div>
       <div className="text-xs text-text-muted">{config.desc}</div>
       <div className="mt-1 flex items-baseline justify-between gap-2">

@@ -72,10 +72,6 @@ export function ActivityFeed() {
 
   return (
     <div className="card">
-      <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-        Activity Feed
-      </h3>
-
       {/* Tabs */}
       <div className="mb-3 flex gap-1 rounded-lg bg-surface-sunken p-1">
         {TABS.map(({ scope, label }) => {

@@ -354,6 +354,73 @@ body::before {
   color: var(--color-text-gold);
 }
 
+/* Blueprint parcels (estate redesign). A bounded survey plot: a doubled gold
+   survey border with an inset rule, corner crop marks, and a faint interior
+   gridline texture. Every color comes from a theme token so it holds in paper
+   (the only sub-Epic theme) and dark, and across the tier accents. */
+.blueprint-parcel {
+  position: relative;
+  border: 1px solid color-mix(in srgb, var(--color-border-gold) 55%, transparent);
+  box-shadow: inset 0 0 0 3px color-mix(in srgb, var(--color-border-gold) 11%, transparent);
+  background-color: var(--color-surface-raised);
+}
+
+/* Corner crop marks — short L-ticks on the top-left and bottom-right corners,
+   the classic survey-sheet diagonal. One element carries each tick. */
+.blueprint-parcel::before,
+.blueprint-parcel::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-color: var(--color-border-gold);
+  opacity: 0.7;
+  pointer-events: none;
+}
+.blueprint-parcel::before {
+  top: 3px;
+  left: 3px;
+  border-top: 1.5px solid;
+  border-left: 1.5px solid;
+}
+.blueprint-parcel::after {
+  right: 3px;
+  bottom: 3px;
+  border-right: 1.5px solid;
+  border-bottom: 1.5px solid;
+}
+
+/* Faint survey gridlines behind a parcel interior. */
+.blueprint-grid {
+  background-image:
+    repeating-linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--color-border-gold) 8%, transparent) 0 1px,
+      transparent 1px 20px
+    ),
+    repeating-linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-border-gold) 8%, transparent) 0 1px,
+      transparent 1px 20px
+    );
+}
+
+/* A break-ground site: an empty buildable square drawn as a dashed survey
+   outline with a hatch fill, lifting toward the accent on hover. */
+.blueprint-site {
+  border: 1px dashed color-mix(in srgb, var(--color-border-gold) 45%, transparent);
+  background-image: repeating-linear-gradient(
+    45deg,
+    color-mix(in srgb, var(--color-border-gold) 6%, transparent) 0 6px,
+    transparent 6px 13px
+  );
+  transition: border-color 0.2s ease, background-color 0.2s ease, color 0.2s ease;
+}
+.blueprint-site:hover {
+  border-color: var(--color-border-gold);
+  background-color: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
 /* Free tier: dull accent */
 body[data-tier="0"] .tier-title,
 body:not([data-tier]) .tier-title {

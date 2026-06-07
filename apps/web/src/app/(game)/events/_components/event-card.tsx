@@ -26,16 +26,9 @@ import {
 } from "novus-mundus-sdk";
 import { eventSplashPath } from "@/lib/events/splash";
 
-const STATUS_LABEL: Record<number, string> = {
-  [EventStatus.Pending]: "Upcoming",
-  [EventStatus.Active]: "Active",
-  [EventStatus.Finalized]: "Finalized",
-  [EventStatus.Cancelled]: "Cancelled",
-};
-
 const STATUS_STYLE: Record<number, string> = {
-  [EventStatus.Pending]: "bg-zinc-800 text-text-muted",
-  [EventStatus.Active]: "bg-accent/40 text-text-gold",
+  [EventStatus.Pending]: "bg-primary text-white",
+  [EventStatus.Active]: "bg-accent/40 text-white",
   [EventStatus.Finalized]: "bg-emerald-900/40 text-emerald-300",
   [EventStatus.Cancelled]: "bg-red-900/30 text-red-400",
 };
@@ -93,13 +86,35 @@ export function EventCard({
   const ended = nowSec >= endTime;
   const started = nowSec >= startTime;
 
-  // Join — Pending/Active event the player hasn't joined yet.
-  const canJoin =
+  // One event per player: the chain locks you to a single event
+  // (player.current_event) until its prize is claimed, so a different event is
+  // not joinable while you are entered elsewhere.
+  const playerCurrentEvent = Number(player?.currentEvent ?? 0n);
+  const inAnotherEvent = playerCurrentEvent !== 0 && playerCurrentEvent !== eventId;
+
+  // Join: a Pending/Active event the player hasn't joined yet, and isn't locked
+  // out of by another entry.
+  const joinable =
     (status === EventStatus.Pending || status === EventStatus.Active) && !isJoined && !ended;
-  // Finalize — permissionless, for events past endTime still in Pending/Active.
+  const canJoin = joinable && !inAnotherEvent;
+  // Finalize: permissionless, for events past endTime still in Pending/Active.
   const canFinalize = (status === EventStatus.Pending || status === EventStatus.Active) && ended;
-  // Claim — Finalized event where the player is on the top-10 leaderboard.
+  // Claim: Finalized event where the player is on the top-10 leaderboard.
   const canClaim = status === EventStatus.Finalized && myRank !== null;
+
+  // The badge reflects the live time window, not the lazily-updated on-chain
+  // status (which stays Pending until the first join/score flips it). So an event
+  // whose start has passed reads "Active" right away.
+  const badge =
+    status === EventStatus.Cancelled
+      ? { label: "Cancelled", style: STATUS_STYLE[EventStatus.Cancelled]! }
+      : status === EventStatus.Finalized
+        ? { label: "Finalized", style: STATUS_STYLE[EventStatus.Finalized]! }
+        : ended
+          ? { label: "Ended", style: "bg-surface-overlay text-text-muted" }
+          : started
+            ? { label: "Active", style: STATUS_STYLE[EventStatus.Active]! }
+            : { label: "Upcoming", style: STATUS_STYLE[EventStatus.Pending]! };
 
   const handleJoin = async (reportPhase: (p: TxPhase) => void) => {
     if (!publicKey) throw new Error("Wallet not connected");
@@ -198,9 +213,9 @@ export function EventCard({
         }}
       >
         <span
-          className={`absolute right-2 top-2 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${STATUS_STYLE[status] ?? "bg-zinc-800 text-text-muted"}`}
+          className={`absolute right-2 top-2 rounded px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${badge.style}`}
         >
-          {STATUS_LABEL[status] ?? `Status ${status}`}
+          {badge.label}
         </span>
         <div className="absolute inset-x-0 bottom-0 p-3">
           <div className="font-display text-lg font-bold tracking-wide text-zinc-50 [text-shadow:0_1px_2px_rgba(0,0,0,0.95),0_2px_10px_rgba(0,0,0,0.85)]">
@@ -330,12 +345,6 @@ export function EventCard({
         )}
       </div>
 
-      {/* Hints */}
-      {canJoin && !!player && event.minLevel > (player.level ?? 0) && (
-        <p className="mt-2 text-xs text-red-400">
-          Requires level {event.minLevel} — you are level {player.level ?? 0}.
-        </p>
-      )}
       {canFinalize && (
         <p className="mt-2 text-xs text-text-muted">
           This event has ended. Finalizing is permissionless — it locks the leaderboard so winners
@@ -346,6 +355,11 @@ export function EventCard({
         <p className="mt-2 text-xs text-text-muted">
           Prize claims require an aged, active account. New or low-activity accounts may be rejected
           on-chain by anti-Sybil checks.
+        </p>
+      )}
+      {joinable && inAnotherEvent && (
+        <p className="mt-2 text-xs text-text-muted">
+          You're already entered in another event
         </p>
       )}
     </div>

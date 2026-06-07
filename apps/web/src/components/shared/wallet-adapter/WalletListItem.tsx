@@ -23,20 +23,20 @@ export const WalletListItem: FC<WalletListItemProps> = ({ handleClick, tabIndex,
     <button
       onClick={handleClick}
       tabIndex={tabIndex}
-      className="w-full sm:max-w-64 px-3 py-2.5 sm:px-2.5 sm:py-2.5 flex items-center justify-between bg-neutral-100 dark:bg-neutral-900 hover:bg-neutral-200 dark:hover:bg-neutral-800 rounded-lg transition-colors group cursor-pointer"
+      className="w-full sm:max-w-64 px-3 py-2.5 sm:px-2.5 sm:py-2.5 flex items-center justify-between bg-surface hover:bg-surface-overlay rounded-lg transition-colors group cursor-pointer"
     >
       <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-md flex items-center justify-center overflow-hidden bg-white dark:bg-neutral-800">
+        <div className="w-7 h-7 rounded-md flex items-center justify-center overflow-hidden bg-surface-overlay">
           <WalletIcon wallet={wallet} />
         </div>
-        <span className="font-medium text-sm text-black dark:text-white">{walletName}</span>
+        <span className="font-medium text-sm text-text-primary">{walletName}</span>
       </div>
       <svg
         width="14"
         height="14"
         viewBox="0 0 20 20"
         fill="none"
-        className="text-neutral-400 group-hover:text-[#E56A17] transition-colors"
+        className="text-text-muted group-hover:text-text-gold transition-colors"
       >
         <path
           d="M7.5 15L12.5 10L7.5 5"

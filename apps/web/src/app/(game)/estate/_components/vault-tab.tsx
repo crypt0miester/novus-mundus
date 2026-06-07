@@ -187,7 +187,7 @@ export function VaultTab() {
                   vaultDirection === "deposit" ? "bg-accent/30 text-text-gold" : "text-text-muted"
                 }`}
               >
-                Hand &rarr; Vault
+                Deposit
               </button>
               <button
                 onClick={() => setVaultDirection("withdraw")}
@@ -195,7 +195,7 @@ export function VaultTab() {
                   vaultDirection === "withdraw" ? "bg-accent/30 text-text-gold" : "text-text-muted"
                 }`}
               >
-                Vault &rarr; Hand
+                Withdraw
               </button>
             </div>
             <div className="space-y-3">

@@ -177,6 +177,7 @@ pub enum GameError {
     EventRequiresVerification = 6610,
     TransferRatioTooHigh = 6611,
     NotInEvent = 6612,
+    AlreadyInEvent = 6613, // Already entered an event (only one at a time)
 
     // Subscription Errors (700-799)
     InvalidSubscriptionTier = 6700,

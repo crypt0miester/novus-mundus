@@ -117,94 +117,62 @@ export function MansionTab() {
   return (
     <FeatureLayout
       aside={
-        <div className="card accent-border">
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Daily Reward
-          </h3>
-          <div className="flex items-center gap-4">
-            <ProgressRing percent={cooldownPct} size={84}>
-              {available ? (
-                <span className="text-[10px] font-bold uppercase tracking-wider text-text-gold">
-                  Ready
-                </span>
-              ) : (
-                <span className="font-mono text-sm font-bold tabular-nums text-text-gold">
-                  {Math.floor(cooldownPct)}%
-                </span>
-              )}
-            </ProgressRing>
-            <div className="min-w-0 flex-1">
-              {available ? (
-                <>
-                  <p className="mb-2 text-sm text-text-secondary">
-                    The hall keeps a ledger. Today's entry is yours to take.
-                  </p>
-                  <TxButton onClick={handleClaim} className="w-auto px-4 py-1.5 text-xs">
-                    Claim
-                  </TxButton>
-                </>
-              ) : (
-                <>
-                  <div className="text-xs text-text-muted">Next reward in</div>
-                  <GoldCountdown endsAt={nextMidnight} format="compact" size="sm" />
-                  <p className="mt-2 text-[11px] text-text-muted">
-                    Miss a day and the streak resets to zero.
-                  </p>
-                </>
-              )}
-            </div>
-          </div>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-            <div className="rounded border border-border-default/60 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted">Base</div>
-              <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">
-                50 NOVI
-              </div>
-            </div>
-            <div className="rounded border border-border-default/60 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted">Materials</div>
-              <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">100</div>
-            </div>
-            <div className="rounded border border-border-default/60 px-2 py-1.5">
-              <div className="text-[10px] uppercase tracking-wider text-text-muted">XP</div>
-              <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">10</div>
-            </div>
-          </div>
-        </div>
-      }
-      main={
         <>
-          <BuildingShowcase buildingId={BuildingId.Mansion} icon="nav-estate" />
-
-          <div className="card">
+          <div className="card accent-border">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-              Login Streak
+              Daily Reward
             </h3>
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-text-muted">Current</div>
-                <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-gold">
-                  {streak}
-                </div>
-                <div className="text-[10px] text-text-muted">day{streak === 1 ? "" : "s"}</div>
+            <div className="flex items-center gap-4">
+              <ProgressRing percent={cooldownPct} size={84}>
+                {available ? (
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-text-gold">
+                    Ready
+                  </span>
+                ) : (
+                  <span className="font-mono text-sm font-bold tabular-nums text-text-gold">
+                    {Math.floor(cooldownPct)}%
+                  </span>
+                )}
+              </ProgressRing>
+              <div className="min-w-0 flex-1">
+                {available ? (
+                  <>
+                    <p className="mb-2 text-sm text-text-secondary">
+                      The hall keeps a ledger. Today's entry is yours to take.
+                    </p>
+                    <TxButton onClick={handleClaim} className="w-auto px-4 py-1.5 text-xs">
+                      Claim
+                    </TxButton>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-xs text-text-muted">Next reward in</div>
+                    <GoldCountdown endsAt={nextMidnight} format="compact" size="sm" />
+                    <p className="mt-2 text-[11px] text-text-muted">
+                      Miss a day and the streak resets to zero.
+                    </p>
+                  </>
+                )}
               </div>
-              <div>
+            </div>
+            <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded border border-border-default/60 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Base</div>
+                <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">
+                  50 NOVI
+                </div>
+              </div>
+              <div className="rounded border border-border-default/60 px-2 py-1.5">
                 <div className="text-[10px] uppercase tracking-wider text-text-muted">
-                  Multiplier
+                  Materials
                 </div>
-                <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-gold">
-                  {fmtMultiplier(streakBps)}
+                <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">
+                  100
                 </div>
-                <div className="text-[10px] text-text-muted">streak bonus</div>
               </div>
-              <div>
-                <div className="text-[10px] uppercase tracking-wider text-text-muted">Longest</div>
-                <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-secondary">
-                  {longestStreak}
-                </div>
-                <div className="text-[10px] text-text-muted">
-                  day{longestStreak === 1 ? "" : "s"}
-                </div>
+              <div className="rounded border border-border-default/60 px-2 py-1.5">
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">XP</div>
+                <div className="mt-0.5 font-mono text-xs font-semibold text-text-secondary">10</div>
               </div>
             </div>
           </div>
@@ -247,6 +215,44 @@ export function MansionTab() {
               </p>
             </div>
           )}
+        </>
+      }
+      main={
+        <>
+          <BuildingShowcase buildingId={BuildingId.Mansion} icon="nav-estate" />
+
+          <div className="card">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
+              Login Streak
+            </h3>
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Current</div>
+                <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-gold">
+                  {streak}
+                </div>
+                <div className="text-[10px] text-text-muted">day{streak === 1 ? "" : "s"}</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">
+                  Multiplier
+                </div>
+                <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-gold">
+                  {fmtMultiplier(streakBps)}
+                </div>
+                <div className="text-[10px] text-text-muted">streak bonus</div>
+              </div>
+              <div>
+                <div className="text-[10px] uppercase tracking-wider text-text-muted">Longest</div>
+                <div className="mt-1 font-display text-3xl font-bold tabular-nums text-text-secondary">
+                  {longestStreak}
+                </div>
+                <div className="text-[10px] text-text-muted">
+                  day{longestStreak === 1 ? "" : "s"}
+                </div>
+              </div>
+            </div>
+          </div>
 
           <div className="card">
             <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">

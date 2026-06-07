@@ -1081,7 +1081,7 @@ export function TeamTab() {
                                   </span>
                                 )}
                                 {level > 0 && (
-                                  <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[10px] font-semibold text-text-muted">
+                                  <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-semibold text-white">
                                     Lv {level}
                                   </span>
                                 )}

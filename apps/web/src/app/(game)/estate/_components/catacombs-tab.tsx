@@ -23,7 +23,6 @@ import {
   getCurrentTimeOfDay,
   getTimeOfDayName,
   getActivityMultiplier,
-  ENCOUNTER_STAMINA_COSTS,
   HeroSpecialization,
   DungeonStatus,
 } from "novus-mundus-sdk";
@@ -119,7 +118,6 @@ export function CatacombsTab() {
   const minLevel = selectedTemplate?.minPlayerLevel ?? 0;
   const meetsLevel = !player || player.level >= minLevel;
 
-  const roomStaminaCost = useMemo(() => ENCOUNTER_STAMINA_COSTS[0] ?? 10, []);
 
   const now = useChainNow();
   const timeOfDayInfo = useMemo(() => {
@@ -289,9 +287,6 @@ export function CatacombsTab() {
             {" / "}Current:{" "}
             <span className={hasStamina ? "text-green-400" : "text-red-400"}>{playerStamina}</span>
             {!hasStamina && <span className="ml-2 text-red-400">Insufficient stamina</span>}
-          </div>
-          <div className="mt-1 text-center text-[11px] text-text-muted">
-            Per room: <span className="text-text-secondary">{roomStaminaCost} stamina</span>
           </div>
           {minLevel > 0 && (
             <div className="mt-1 text-center text-[11px]">
