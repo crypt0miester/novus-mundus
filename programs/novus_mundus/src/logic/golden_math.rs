@@ -95,13 +95,22 @@ pub fn calculate_buff_at_level(base: u64, level: u32) -> u64 {
     }
 }
 
-/// Calculate encounter level deterministically
+/// Calculate encounter level deterministically, biased toward the floor.
 ///
-/// Uses golden ratio to distribute levels across spawn indices.
+/// Uses a golden-ratio low-discrepancy sequence for the spread, then squares
+/// the fraction so most encounters spawn near `min_level` and only a few
+/// approach `max_level`. This keeps player-facing levels low — early/free
+/// players meet many beatable encounters and rare tougher ones — instead of
+/// the old uniform spread that filled cities with high-level monsters.
+///
+/// The squared fraction gives a quadratic CDF: ~50% of spawns land in the
+/// bottom quarter of the range and ~75% in the bottom ~56%. The kingdom-aware
+/// ceiling (see `encounter/spawn.rs`) narrows `max_level` to the live player
+/// population before this runs, so the band itself tracks who's playing.
 ///
 /// # Arguments
-/// * `min_level` - City minimum level
-/// * `max_level` - City maximum level
+/// * `min_level` - Effective minimum level (city floor)
+/// * `max_level` - Effective maximum level (city ceiling, after kingdom cap)
 /// * `spawn_index` - Encounter spawn index
 ///
 /// # Returns
@@ -114,8 +123,11 @@ pub fn deterministic_encounter_level(min_level: u8, max_level: u8, spawn_index: 
 
     let range = max_level.saturating_sub(min_level) as u64;
 
-    // Use golden ratio for distribution
-    let position = ((spawn_index as f64 * PHI) % 1.0 * range as f64) as u64;
+    // Golden-ratio low-discrepancy fraction in [0, 1), squared to lean the
+    // distribution toward `min_level`.
+    let frac = (spawn_index as f64 * PHI) % 1.0;
+    let biased = frac * frac;
+    let position = (biased * range as f64) as u64;
 
     min_level.saturating_add(position.min(range) as u8)
 }
@@ -155,6 +167,41 @@ mod tests {
         // Level 10: base × (√φ)^10 = base × φ⁵ ≈ 11.09
         let level10 = calculate_buff_at_level(base, 10);
         assert_eq!(level10, 11090); // 1000 × 11.0901699...
+    }
+
+    #[test]
+    fn deterministic_encounter_level_is_low_biased() {
+        let (min, max) = (1u8, 100u8);
+        let n = 1000u64;
+        let mut sum = 0u64;
+        let mut below_quarter = 0u64;
+        // Bottom quarter of the [1, 100] band → level 25.
+        let quarter = min as u64 + (max - min) as u64 / 4;
+        for i in 0..n {
+            let lvl = deterministic_encounter_level(min, max, i);
+            assert!(lvl >= min && lvl <= max, "level {lvl} out of [{min},{max}]");
+            sum += lvl as u64;
+            if lvl as u64 <= quarter {
+                below_quarter += 1;
+            }
+        }
+        // Uniform spread would mean ~50; the low-bias must pull it well under
+        // the midpoint (theoretical mean ≈ min + range/3 ≈ 34).
+        let mean = sum / n;
+        assert!(mean < 40, "mean {mean} not low-biased");
+        // At least ~45% of spawns should land in the bottom quarter.
+        assert!(
+            below_quarter * 100 / n >= 45,
+            "only {below_quarter}/1000 below quarter"
+        );
+    }
+
+    #[test]
+    fn deterministic_encounter_level_degenerate_range() {
+        // Empty band → floor.
+        assert_eq!(deterministic_encounter_level(20, 20, 7), 20);
+        // Ceiling below floor (kingdom cap clamped under city min) → floor.
+        assert_eq!(deterministic_encounter_level(50, 10, 3), 50);
     }
 
     #[test]

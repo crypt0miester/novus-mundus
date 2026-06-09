@@ -95,6 +95,11 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
   const nearFlag = getFlag(args.flags, '--near');
   const count = parseInt(getFlag(args.flags, '--count') || '1', 10);
   const rarityFlag = (getFlag(args.flags, '--rarity') || 'common').toLowerCase();
+  // Optional kingdom-aware level ceiling for these spawns. 0 = no cap (use the
+  // city's max). The crank computes this automatically from the player
+  // population; here it's a manual override for testing/balance.
+  const maxLevelFlag = getFlag(args.flags, '--max-level');
+  const levelCap = maxLevelFlag ? parseInt(maxLevelFlag, 10) : 0;
 
   const rarity = RARITY_MAP[rarityFlag];
   if (rarity === undefined) {
@@ -191,7 +196,7 @@ async function handleSpawn(ctx: CLIContext, args: ParsedArgs): Promise<void> {
             gridLat,
             gridLong,
           },
-          { encounterType: rarity }
+          { encounterType: rarity, levelCap }
         );
 
         try {

@@ -67,6 +67,19 @@ const RARITIES_TO_SPAWN: EncounterRarity[] = [
   EncounterRarity.Epic,
 ];
 
+/* Kingdom-aware encounter level ceiling. Auto-spawned encounters used to
+ * spread uniformly across each city's full level band (often 1-100), so a
+ * kingdom of low-level players faced encounters far above their level. We
+ * sample the live player population, take a high-percentile level (so stronger
+ * players still get a challenge) plus a little headroom, and pass that to the
+ * chain as a hard ceiling. The chain's low-biased distribution then clusters
+ * most spawns near each city's floor under this cap. A fresh/empty kingdom
+ * falls back to MIN so it isn't seeded with max-level monsters. */
+const KINGDOM_LEVEL_PERCENTILE = 0.75;
+const KINGDOM_LEVEL_HEADROOM = 5;
+const MIN_KINGDOM_LEVEL_CAP = 10;
+const MAX_KINGDOM_LEVEL_CAP = 100;
+
 const GRID_PRECISION = 10000;
 /* Chain error codes we treat as "the cell is no good — try a different
  * one". Anything else (city encounter-limit hit, wrong time of day) is
@@ -142,6 +155,10 @@ async function handle(req: Request): Promise<Response> {
   }
   const startedAt = Date.now();
 
+  /* Kingdom-aware level ceiling, computed once per run from the live player
+   * population and applied to every auto-spawn this run. */
+  const kingdomLevelCap = await computeKingdomLevelCap(client);
+
   /* All cities run in parallel — they don't share state on chain, and
    * `Promise.allSettled` here cuts the wall time from 23×latency to just
    * the single slowest city while keeping one failing city from poisoning
@@ -151,7 +168,7 @@ async function handle(req: Request): Promise<Response> {
    * encounter PDA). */
   const settled = await Promise.allSettled(
     cities.map(({ account: city }) =>
-      processCity({ city, connection, authority, gameEngine: ge, client }),
+      processCity({ city, connection, authority, gameEngine: ge, client, kingdomLevelCap }),
     ),
   );
   const summaries: CitySummary[] = settled.map((s, i) => {
@@ -174,6 +191,7 @@ async function handle(req: Request): Promise<Response> {
   return Response.json({
     ok: true,
     durationMs: Date.now() - startedAt,
+    kingdomLevelCap,
     totals,
     cities: summaries,
   });
@@ -209,6 +227,30 @@ function checkAuth(req: Request): Response | null {
   return null;
 }
 
+/* Compute the kingdom-aware encounter level ceiling from the live player
+ * population. Fetches every player in the kingdom (one getProgramAccounts
+ * call), takes the KINGDOM_LEVEL_PERCENTILE level plus KINGDOM_LEVEL_HEADROOM,
+ * and clamps to [MIN, MAX]. Returns MIN on an empty kingdom or a fetch error
+ * (fail low so a transient RPC blip can't seed high-level encounters). */
+async function computeKingdomLevelCap(client: ReturnType<typeof serverClient>): Promise<number> {
+  let players: Awaited<ReturnType<typeof client.fetchAllPlayers>>;
+  try {
+    players = await client.fetchAllPlayers();
+  } catch {
+    return MIN_KINGDOM_LEVEL_CAP;
+  }
+
+  const levels = players
+    .map((p) => p.account.level)
+    .filter((l) => l > 0)
+    .sort((a, b) => a - b);
+  if (levels.length === 0) return MIN_KINGDOM_LEVEL_CAP;
+
+  const idx = Math.min(levels.length - 1, Math.floor(levels.length * KINGDOM_LEVEL_PERCENTILE));
+  const cap = levels[idx]! + KINGDOM_LEVEL_HEADROOM;
+  return Math.max(MIN_KINGDOM_LEVEL_CAP, Math.min(MAX_KINGDOM_LEVEL_CAP, cap));
+}
+
 /* Process a single city: top-up alive encounters per rarity, then
  * clean up expired ones. Two RPC reads up-front (city already in the
  * caller's snapshot, plus `fetchEncountersInCity`), then a mix of
@@ -220,8 +262,9 @@ async function processCity(args: {
   authority: Keypair;
   gameEngine: PublicKey;
   client: ReturnType<typeof serverClient>;
+  kingdomLevelCap: number;
 }): Promise<CitySummary> {
-  const { city, connection, authority, gameEngine, client } = args;
+  const { city, connection, authority, gameEngine, client, kingdomLevelCap } = args;
   const cityId = city.cityId;
   const summary: CitySummary = {
     cityId,
@@ -303,6 +346,7 @@ async function processCity(args: {
         knobs,
         biomeSeed: city.biomeSeed >>> 0,
         rarities,
+        levelCap: kingdomLevelCap,
         refetchStartIndex: refetchNextIndex,
       });
       summary.spawned += result.placed;
@@ -422,6 +466,7 @@ async function trySpawnBatch(args: {
   knobs: BiomeKnobs;
   biomeSeed: number;
   rarities: EncounterRarity[];
+  levelCap: number;
   refetchStartIndex: () => Promise<number | null>;
 }): Promise<{ placed: number; terminal: boolean; nextStartIndex: number }> {
   if (args.rarities.length === 0) {
@@ -478,7 +523,7 @@ async function trySpawnBatch(args: {
             gridLat: cell.gridLat,
             gridLong: cell.gridLong,
           },
-          { encounterType: args.rarities[i]! },
+          { encounterType: args.rarities[i]!, levelCap: args.levelCap },
         ),
       );
     }

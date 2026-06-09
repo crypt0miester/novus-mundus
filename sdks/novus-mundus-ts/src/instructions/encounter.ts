@@ -52,6 +52,14 @@ export interface SpawnEncounterAccounts {
 export interface SpawnEncounterParams {
   /** Encounter type (0=Common, 1=Uncommon, 2=Rare, 3=Epic, 4=Legendary) */
   encounterType: EncounterRarity;
+  /**
+   * Optional kingdom-aware level ceiling for auto-spawns (1-100). When set, the
+   * chain clamps the encounter's level to this cap so auto-spawned encounters
+   * track the live player population instead of the city's static max. Ignored
+   * for player-initiated spawns. Omit (or 0) for no cap — the trailing cap byte
+   * is only appended when > 0, preserving the original 9-byte layout.
+   */
+  levelCap?: number;
 }
 
 /** ~20,000 CU */
@@ -119,11 +127,15 @@ export async function createSpawnEncounterInstruction(
     { pubkey: spawnLocation, isSigner: false, isWritable: true },
   ];
 
-  // Instruction data: encounter_type (u8), grid_lat (i32 LE), grid_long (i32 LE)
-  const writer = new ByteWriter(9);
+  // Instruction data: encounter_type (u8), grid_lat (i32 LE), grid_long (i32 LE),
+  // optional level_cap (u8). The cap byte is only appended when > 0 so player
+  // spawns and older callers keep the original 9-byte layout.
+  const cap = params.levelCap ?? 0;
+  const writer = new ByteWriter(cap > 0 ? 10 : 9);
   writer.writeU8(params.encounterType);
   writer.writeI32(accounts.gridLat);
   writer.writeI32(accounts.gridLong);
+  if (cap > 0) writer.writeU8(Math.min(100, Math.max(1, Math.floor(cap))));
 
   const data = createInstructionData(DISCRIMINATORS.ENCOUNTER_SPAWN, writer.toBuffer());
 

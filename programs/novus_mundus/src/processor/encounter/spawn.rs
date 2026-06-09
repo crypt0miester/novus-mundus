@@ -103,6 +103,13 @@ pub fn process(
     let client_grid_lat = read_i32(instruction_data, 1, "spawn.grid_lat")?;
     let client_grid_long = read_i32(instruction_data, 5, "spawn.grid_long")?;
 
+    // Optional kingdom-aware level cap (byte 9, auto-spawn only). 
+    let level_cap = if instruction_data.len() > 9 {
+        read_u8(instruction_data, 9, "spawn.level_cap")?
+    } else {
+        0
+    };
+
     // 4. Load GameEngine to Check Auto-Spawn vs Player-Spawn
 
     let game_engine_data =
@@ -113,10 +120,7 @@ pub fn process(
 
     // 5. Validate Encounter Type Based on Spawn Mode
 
-    if is_auto_spawn {
-        // Auto-spawn: Can spawn any encounter type (including Epic/Legendary)
-        // No restrictions
-    } else {
+    if !is_auto_spawn {
         // Player-spawn: Only Common/Uncommon/Rare
         if !encounter_type.is_player_spawnable() {
             return Err(GameError::DaoRequired.into());
@@ -395,7 +399,7 @@ pub fn process(
 
     // Determine encounter level based on city range and player level (if player spawn)
     let encounter_level =
-        calculate_encounter_level(city_data, encounter_type, player_account, is_auto_spawn)?;
+        calculate_encounter_level(city_data, encounter_type, player_account, is_auto_spawn, level_cap)?;
 
     // Level-scaled health, multiplied by rarity. With the rarity multiplier
     // (Common 1×, Legendary 5×, WorldEvent 10×) high-rarity encounters scale
@@ -460,16 +464,19 @@ pub fn process(
 /// Calculate encounter level based on city, rarity, and nearby players (DETERMINISTIC)
 ///
 /// # Strategy
-/// - Use city's level range as bounds
-/// - For player spawns: spawn at player's level (deterministic)
-/// - For auto-spawns: use golden ratio distribution within city range
-/// - Higher rarity = spawns closer to player level
+/// - Use the city's level range as bounds.
+/// - For auto-spawns: narrow the ceiling to the crank-supplied kingdom cap
+///   (derived from the live player population), then draw a low-biased
+///   deterministic level so most encounters sit near the floor.
+/// - For player spawns: spawn at the player's own level (clamped to the city
+///   range); the kingdom cap does not apply.
 ///
 /// # Arguments
 /// - city_data: City where encounter spawns
 /// - encounter_type: Rarity of encounter
 /// - player_account: Player spawning (if player spawn)
 /// - is_auto_spawn: Whether this is an automated spawn
+/// - level_cap: Kingdom-aware level ceiling for auto-spawns (0 = no cap)
 ///
 /// # Returns
 /// Encounter level (1-100)
@@ -478,19 +485,23 @@ fn calculate_encounter_level(
     _encounter_type: EncounterType,
     player_account: &AccountView,
     is_auto_spawn: bool,
+    level_cap: u8,
 ) -> Result<u8, ProgramError> {
     let min = city_data.min_encounter_level;
-    let max = city_data.max_encounter_level;
+    // Kingdom-aware ceiling: never auto-spawn above the population-derived cap
+    // (auto-spawn only; 0 = no cap). When the cap clamps below the city floor,
+    // the distribution helper collapses to `min` (degenerate range), so a
+    // high-floor end-game city still spawns at its floor rather than erroring.
+    let max = if is_auto_spawn && level_cap > 0 {
+        city_data.max_encounter_level.min(level_cap)
+    } else {
+        city_data.max_encounter_level
+    };
 
     if is_auto_spawn {
-        // Auto-spawn: Use deterministic golden ratio distribution
-        // Uses encounter_id for deterministic level assignment
+        // Auto-spawn: deterministic low-biased distribution within the band.
         let spawn_index = city_data.total_encounters_spawned as u64;
-        Ok(crate::logic::deterministic_encounter_level(
-            min,
-            max,
-            spawn_index,
-        ))
+        Ok(crate::logic::deterministic_encounter_level(min, max, spawn_index))
     } else {
         // Player spawn: Spawn at player's level (deterministic, no variance)
         let player_account_data = player_account.try_borrow()?;
