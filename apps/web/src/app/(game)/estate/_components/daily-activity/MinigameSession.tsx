@@ -1,10 +1,13 @@
 "use client";
 
+import { Volume2, VolumeX } from "lucide-react";
 import { type ComponentType, useCallback, useEffect, useRef, useState } from "react";
 import { useDailyActivity, type Archetype, type StartResponse } from "@/lib/hooks/useDailyActivity";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
 import { registerCountdown } from "@/lib/motion/countdownClock";
+import { useSettings } from "@/lib/store/settings";
 import { formatTime } from "@/lib/utils";
+import { GameStage } from "./GameStage";
 import { McqGame } from "./games/McqGame";
 import { MemoryGame } from "./games/MemoryGame";
 import { SetSelectGame } from "./games/SetSelectGame";
@@ -21,6 +24,8 @@ interface MinigameSessionProps {
 interface SingleShotProps {
   presentation: unknown;
   submitting: boolean;
+  /** The building id, so a game can theme itself per building. */
+  building: number;
   onSubmit: (answer: unknown) => void;
 }
 
@@ -105,6 +110,7 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
       <div className="card text-center">
         <p className="mb-3 text-sm text-red-400">{error}</p>
         <button
+          type="button"
           onClick={begin}
           className="rounded-lg border border-border-gold bg-accent/20 px-5 py-2 text-sm font-semibold text-text-gold transition-colors hover:bg-accent/40"
         >
@@ -124,23 +130,50 @@ export function MinigameSession({ building, onComplete }: MinigameSessionProps) 
     <div className="space-y-3">
       <div className="flex items-center justify-between text-[11px] uppercase tracking-wider text-text-muted">
         <span>{session.flavor.title}</span>
-        <Deadline deadlineMs={session.deadline} />
+        <div className="flex items-center gap-3">
+          <SoundToggle />
+          <Deadline deadlineMs={session.deadline} />
+        </div>
       </div>
-      {entry.multiMove ? (
-        <entry.component
-          presentation={session.presentation}
-          submitting={submitting}
-          sendMove={(move) => sendMove(session.sessionId, move)}
-          onComplete={() => submit()}
-        />
-      ) : (
-        <entry.component
-          presentation={session.presentation}
-          submitting={submitting}
-          onSubmit={(answer) => submit(answer)}
-        />
-      )}
+      <GameStage>
+        {entry.multiMove ? (
+          <entry.component
+            presentation={session.presentation}
+            submitting={submitting}
+            sendMove={(move) => sendMove(session.sessionId, move)}
+            onComplete={() => submit()}
+          />
+        ) : (
+          <entry.component
+            presentation={session.presentation}
+            submitting={submitting}
+            building={building}
+            onSubmit={(answer) => submit(answer)}
+          />
+        )}
+      </GameStage>
     </div>
+  );
+}
+
+/**
+ * Speaker toggle for minigame SFX; reflects + flips the `soundEnabled` setting.
+ * Placed inline in the game header (not only in global settings) so players can
+ * mute quickly mid-session; the setting itself is global and persisted.
+ */
+function SoundToggle() {
+  const soundEnabled = useSettings((s) => s.soundEnabled);
+  const setSoundEnabled = useSettings((s) => s.setSoundEnabled);
+  return (
+    <button
+      type="button"
+      onClick={() => setSoundEnabled(!soundEnabled)}
+      aria-label={soundEnabled ? "Mute sound" : "Unmute sound"}
+      aria-pressed={soundEnabled}
+      className="text-text-muted transition-colors hover:text-text-gold"
+    >
+      {soundEnabled ? <Volume2 size={14} /> : <VolumeX size={14} />}
+    </button>
   );
 }
 

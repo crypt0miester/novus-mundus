@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import {
+  buildingAllowedWindows,
   currentTimeWindow,
   dailyDateFor,
   hasBuildingAtLevel,
@@ -63,11 +64,39 @@ export async function POST(req: Request, ctx: { params: Promise<{ building: stri
 
   const now = Math.floor(Date.now() / 1000);
   const precondition = activityPreconditionError(estate, building, now);
-  if (precondition) return fail(precondition.error, 409, precondition.code);
+  // Local-dev preview: ignore the time-of-day window (and the once-per-window
+  // lock) so any built mini-game can be opened regardless of the clock. The
+  // on-chain `daily_activity` gate still enforces the window, so an
+  // out-of-window submit won't claim a reward — this only unblocks playing the
+  // game. NO_MINIGAME / BUILDING_INACTIVE etc. still apply.
+  const devBypass = process.env.NODE_ENV === "development";
+  const WINDOW_BYPASS_CODES = new Set(["WINDOW_EXPIRED", "WRONG_WINDOW", "ALREADY_DONE"]);
+  if (precondition && !(devBypass && WINDOW_BYPASS_CODES.has(precondition.code))) {
+    return fail(precondition.error, 409, precondition.code);
+  }
 
-  const window = currentTimeWindow(estate, now); // gate passed — never "expired"
+  // The real current window when the gate passed; when dev-bypassing an
+  // out-of-window preview, fall back to the building's own first window so the
+  // session, lock, and seeded puzzle stay coherent.
+  const window = precondition
+    ? (buildingAllowedWindows(building)[0] ?? "dawn")
+    : currentTimeWindow(estate, now); // gate passed — never "expired"
   const day = isDailyStateStale(estate, now) ? dailyDateFor(now) : estate.dailyDate;
   const ownerKey = owner.toBase58();
+
+  // Dev preview: the puzzle is deterministic per (building, day, window) in
+  // production (no re-rolling for an easier draw), so it never changes while
+  // you're pinned to one window in dev. Here we mint a fresh, nonce-seeded
+  // session on every Begin so the game actually varies while evaluating. The
+  // session is still used consistently for grading; only the on-chain claim
+  // stays gated.
+  if (process.env.NODE_ENV === "development") {
+    const nonce = `${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
+    const generated = generatePuzzle(building, (await estatePda(owner)).toBase58(), day, window, nonce);
+    const fresh = makeSession(generated, ownerKey, building, window, day);
+    await saveSession(fresh, SESSION_TTL_SECONDS);
+    return NextResponse.json(sessionResponse(fresh, config));
+  }
 
   try {
     // Resume a live session for this window, or start a fresh one.
@@ -94,22 +123,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ building: stri
     // calls for a clean window race the atomic claim, and only the winner
     // persists a session.
     const generated = generatePuzzle(building, (await estatePda(owner)).toBase58(), day, window);
-    const createdAt = Date.now();
-    const fresh: MinigameSession = {
-      id: newSessionId(),
-      owner: ownerKey,
-      building,
-      archetype: generated.archetype,
-      window,
-      day,
-      puzzle: generated.puzzle,
-      progress: generated.progress,
-      presentation: generated.presentation,
-      score: null,
-      status: "active",
-      createdAt,
-      deadline: createdAt + SESSION_TTL_SECONDS * 1000,
-    };
+    const fresh = makeSession(generated, ownerKey, building, window, day);
 
     if (staleLock) {
       // The stale lock makes the atomic claim a no-op, so overwrite it. A
@@ -156,6 +170,32 @@ async function resumeSession(id: string, ownerKey: string): Promise<MinigameSess
     await new Promise((r) => setTimeout(r, 50));
   }
   return null;
+}
+
+/** Build a fresh active session from a generated puzzle. */
+function makeSession(
+  generated: ReturnType<typeof generatePuzzle>,
+  ownerKey: string,
+  building: number,
+  window: MinigameSession["window"],
+  day: number,
+): MinigameSession {
+  const createdAt = Date.now();
+  return {
+    id: newSessionId(),
+    owner: ownerKey,
+    building,
+    archetype: generated.archetype,
+    window,
+    day,
+    puzzle: generated.puzzle,
+    progress: generated.progress,
+    presentation: generated.presentation,
+    score: null,
+    status: "active",
+    createdAt,
+    deadline: createdAt + SESSION_TTL_SECONDS * 1000,
+  };
 }
 
 /** The client-safe `/start` payload — never the answer key. */

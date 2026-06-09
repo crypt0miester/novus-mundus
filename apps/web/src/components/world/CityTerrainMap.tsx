@@ -32,6 +32,7 @@ import {
 import { Radar, RefreshCw, Compass, Rotate3d } from "lucide-react";
 import { OCCUPANT_PLAYER, OCCUPANT_ENCOUNTER, toGrid } from "novus-mundus-sdk";
 import { useSettings, type MapMode } from "@/lib/store/settings";
+import { canUseWebGL2 } from "@/lib/webgl/probe";
 import { useCityOccupied, type OccupiedCell } from "@/lib/hooks/useCityOccupied";
 import styles from "./CityTerrainMap.module.css";
 import {
@@ -77,34 +78,10 @@ const CityTerrainMapWebGL: ComponentType<CityTerrainMapWebGLProps> | null = ENAB
   ? CityTerrainMapWebGLImpl
   : null;
 
-/**
- * One-shot WebGL2 capability probe. The result is cached at module scope —
- * every mount must NOT allocate a fresh canvas + context, because Safari
- * (iOS WKWebView in particular) caps the per-document WebGL context count
- * at ~16 and the loseContext extension doesn't immediately free the
- * canvas element. Repeated mount/unmount cycles (StrictMode, navigation)
- * would otherwise approach that cap and eventually force every CityTerrainMap
- * onto the 2D fallback for the rest of the session.
- */
-let webgl2ProbeResult: boolean | null = null;
-function canUseWebGL2(): boolean {
-  if (typeof window === "undefined") return false;
-  if (webgl2ProbeResult != null) return webgl2ProbeResult;
-  try {
-    const c = document.createElement("canvas");
-    // Detach width/height to keep memory minimal until GC reclaims the node.
-    c.width = 1;
-    c.height = 1;
-    const ctx = c.getContext("webgl2");
-    const lose = ctx?.getExtension("WEBGL_lose_context");
-    lose?.loseContext();
-    webgl2ProbeResult = ctx != null;
-    return webgl2ProbeResult;
-  } catch {
-    webgl2ProbeResult = false;
-    return false;
-  }
-}
+// `canUseWebGL2` (one-shot, module-cached probe) lives in `@/lib/webgl/probe`,
+// shared with the minigame star field so the whole app reuses a single cached
+// context allocation — important for the ~16 per-document WebGL context cap on
+// iOS WKWebView, where repeated probes would creep toward the ceiling.
 
 function detectTouchSupport(): boolean {
   if (typeof window === "undefined") return false;

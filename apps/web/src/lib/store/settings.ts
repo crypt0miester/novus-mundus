@@ -22,6 +22,10 @@ const LEGACY_MAP_MODE_MAP: Record<string, MapMode> = {
 interface SettingsStore {
   numberFormat: NumberFormat;
   animationsEnabled: boolean;
+  /* Master toggle for minigame sound effects (procedural WebAudio). Default
+   * on; audio never starts until a user gesture, so there's no autoplay
+   * surprise on load. */
+  soundEnabled: boolean;
   explorer: Explorer;
   priorityFee: number;
   themePreference: ThemePreference;
@@ -36,6 +40,7 @@ interface SettingsStore {
   broadcastPresence: boolean;
   setNumberFormat: (fmt: NumberFormat) => void;
   setAnimationsEnabled: (enabled: boolean) => void;
+  setSoundEnabled: (enabled: boolean) => void;
   setExplorer: (e: Explorer) => void;
   setPriorityFee: (fee: number) => void;
   setThemePreference: (t: ThemePreference) => void;
@@ -48,6 +53,7 @@ export const useSettings = create<SettingsStore>()(
     (set) => ({
       numberFormat: "compact",
       animationsEnabled: true,
+      soundEnabled: true,
       explorer: "solscan",
       priorityFee: 10_000,
       themePreference: "auto",
@@ -55,6 +61,7 @@ export const useSettings = create<SettingsStore>()(
       broadcastPresence: false,
       setNumberFormat: (fmt) => set({ numberFormat: fmt }),
       setAnimationsEnabled: (enabled) => set({ animationsEnabled: enabled }),
+      setSoundEnabled: (enabled) => set({ soundEnabled: enabled }),
       setExplorer: (e) => set({ explorer: e }),
       setPriorityFee: (fee) => set({ priorityFee: fee }),
       setThemePreference: (t) => set({ themePreference: t }),
@@ -108,6 +115,8 @@ export const useSettings = create<SettingsStore>()(
             typeof p.broadcastPresence === "boolean"
               ? p.broadcastPresence
               : current.broadcastPresence,
+          soundEnabled:
+            typeof p.soundEnabled === "boolean" ? p.soundEnabled : current.soundEnabled,
         };
       },
     },

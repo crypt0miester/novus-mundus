@@ -1,10 +1,13 @@
 "use client";
 
 import { type AnimatableObject, animate, createAnimatable, utils } from "animejs";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { playSfx } from "@/lib/audio/sfx";
 import { BLOOM, DUR, EASE } from "@/lib/motion/tokens";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
 import { prefersReducedMotion } from "@/lib/utils";
+import { useWebGL2Ready } from "@/lib/webgl/useWebGL2Ready";
+import { useFx } from "../GameStage";
 
 /** Client-safe Reflex presentation (server `reflex` archetype). */
 export interface ReflexPresentation {
@@ -61,8 +64,24 @@ function precisionTag(fraction: number): { label: string; tone: string } {
  * stamps every instant on its own clock; this component only renders state and
  * fires `round-start` / `arm` / `tap` | `release`.
  */
-export function ReflexGame({ presentation, submitting, sendMove, onComplete }: ReflexGameProps) {
+// The 3D WebGL arena (lazy). Falls back to the DOM arena below without WebGL2.
+const ReflexGame3D = lazy(() => import("./ReflexGame3D"));
+
+export function ReflexGame(props: ReflexGameProps) {
+  if (useWebGL2Ready()) {
+    return (
+      <Suspense fallback={<ReflexGame2D {...props} />}>
+        <ReflexGame3D {...props} />
+      </Suspense>
+    );
+  }
+  return <ReflexGame2D {...props} />;
+}
+
+function ReflexGame2D({ presentation, submitting, sendMove, onComplete }: ReflexGameProps) {
   const { mode, rounds, instruction } = presentation;
+  const fx = useFx();
+  const arenaRef = useRef<HTMLDivElement>(null);
 
   const [phase, setPhase] = useState<Phase>("intro");
   const [round, setRound] = useState(1); // 1-based, for display
@@ -141,11 +160,24 @@ export function ReflexGame({ presentation, submitting, sendMove, onComplete }: R
       const res = await sendMove({
         kind: mode === "react" ? "tap" : "release",
       });
-      setResult(res.result as RoundResult);
+      const r = res.result as RoundResult;
+      setResult(r);
       setPhase("result");
+      // Verdict juice: a clean strike (sharp reaction or near-optimal heat)
+      // bursts + chimes; a false start or cold release buzzes.
+      const clean =
+        !r.falseStart &&
+        (r.kind === "reaction" ? (r.reactionMs ?? 9999) <= 470 : (r.fraction ?? 0) >= 0.6);
+      if (r.falseStart) playSfx("wrong");
+      else if (clean) {
+        playSfx("correct");
+        fx.burstEl(arenaRef.current);
+      } else playSfx("flip");
       await wait(1500);
       if (res.done) {
         setPhase("done");
+        playSfx("win");
+        fx.confetti();
         onComplete();
       } else {
         setRound((n) => n + 1);
@@ -157,7 +189,7 @@ export function ReflexGame({ presentation, submitting, sendMove, onComplete }: R
       setError(e instanceof Error ? e.message : "the drill was interrupted");
     }
     actingRef.current = false;
-  }, [mode, sendMove, onComplete, runRound]);
+  }, [mode, sendMove, onComplete, runRound, fx]);
 
   // Live reaction counter while GO is showing.
   useEffect(() => {
@@ -211,7 +243,7 @@ export function ReflexGame({ presentation, submitting, sendMove, onComplete }: R
   const completed = phase === "done" ? rounds : round - 1;
 
   return (
-    <div className="space-y-3">
+    <div ref={arenaRef} className="space-y-3">
       {/* Round tracker */}
       <div className="flex items-center justify-between">
         <span className="text-[11px] uppercase tracking-wider text-text-muted">

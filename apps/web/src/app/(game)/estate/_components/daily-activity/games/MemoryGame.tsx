@@ -1,11 +1,14 @@
 "use client";
 
 import { animate, stagger, waapi } from "animejs";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { playSfx } from "@/lib/audio/sfx";
 import { useAnimeScope } from "@/lib/hooks/useAnimeScope";
 import type { MoveResponse } from "@/lib/hooks/useDailyActivity";
 import { BLOOM, DUR, PRESS, SETTLE, STAGGER } from "@/lib/motion/tokens";
 import { prefersReducedMotion } from "@/lib/utils";
+import { useWebGL2Ready } from "@/lib/webgl/useWebGL2Ready";
+import { useFx } from "../GameStage";
 import { GameHeader, GameTimer, ResultBadge, celebrate, tierFromMemoryMoves } from "./_shell";
 
 /** Client-safe Memory presentation (server `memory` archetype). */
@@ -57,8 +60,24 @@ const SUMMARY_BEAT_MS = 1_800;
  * tile tap is a `/move` and the server returns just that tile's face. Matched
  * pairs stay revealed; a mismatch shows both briefly, then flips them back.
  */
-export function MemoryGame({ presentation, submitting, sendMove, onComplete }: MemoryGameProps) {
+// The 3D WebGL board (lazy — three.js stays out of the bundle until a memory
+// game opens). Falls back to the DOM board below when WebGL2 is unavailable.
+const MemoryGame3D = lazy(() => import("./MemoryGame3D"));
+
+export function MemoryGame(props: MemoryGameProps) {
+  if (useWebGL2Ready()) {
+    return (
+      <Suspense fallback={<MemoryGame2D {...props} />}>
+        <MemoryGame3D {...props} />
+      </Suspense>
+    );
+  }
+  return <MemoryGame2D {...props} />;
+}
+
+function MemoryGame2D({ presentation, submitting, sendMove, onComplete }: MemoryGameProps) {
   const { tiles, pairs } = presentation;
+  const fx = useFx();
   const [revealed, setRevealed] = useState<Record<number, number>>({});
   const [matched, setMatched] = useState<Set<number>>(() => new Set());
   const [faceUp, setFaceUp] = useState<number | null>(null);
@@ -122,6 +141,7 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
         if (r.outcome === "first") {
           setFaceUp(r.flipped);
           setBusy(false);
+          playSfx("flip");
         } else if (r.outcome === "match") {
           setMatched((prev) => new Set([...prev, ...r.matched]));
           setFaceUp(null);
@@ -130,14 +150,21 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
           setPulseIdx(pulsePair);
           trackedTimeout(() => setPulseIdx(null), 450);
           setBusy(false);
+          // Juice: gold burst on each matched tile + a light shake.
+          playSfx("match");
+          for (const t of pulsePair) fx.burstEl(flipRefs.current[t]);
+          fx.shake(0.8);
           if (done) {
             setSummary({ moves: r.moves, pairs });
             trackedTimeout(onComplete, SUMMARY_BEAT_MS);
+            playSfx("win");
+            fx.confetti();
           }
         } else {
           // Mismatch — both faces stay up through the flip-back, and the board
           // stays locked (busy) until they turn back down, so a fast tap can't
           // race the timeout that clears `faceUp`.
+          playSfx("wrong");
           const pair = r.pair ?? [r.flipped];
           // Mark the pair so the tiles recoil (outElastic) while both faces are
           // up; cleared on the flip-back below.
@@ -158,7 +185,7 @@ export function MemoryGame({ presentation, submitting, sendMove, onComplete }: M
         setBusy(false);
       }
     },
-    [busy, submitting, matched, faceUp, revealed, sendMove, onComplete, pairs, trackedTimeout],
+    [busy, submitting, matched, faceUp, revealed, sendMove, onComplete, pairs, trackedTimeout, fx],
   );
 
   // Deal-in: tiles ripple out from the grid center, then a cheap waapi

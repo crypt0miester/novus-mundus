@@ -6,6 +6,7 @@ import { ChevronRight } from "lucide-react";
 import { formatTime } from "@/lib/utils";
 import { DailyActivityPanel } from "./DailyActivityPanel";
 import {
+  DEV_WINDOW_BYPASS,
   useDailyActivities,
   WINDOW_GLYPH,
   WINDOW_LABEL,
@@ -44,6 +45,12 @@ export function DailyActivityListPanel() {
           <span>{WINDOW_LABEL[cw]}</span>
         )}
       </div>
+
+      {DEV_WINDOW_BYPASS && (
+        <p className="rounded border border-amber-500/30 bg-amber-500/10 px-2 py-1 text-[10px] text-amber-400/90">
+          dev: all windows open for preview — out-of-window plays won't claim a reward on-chain.
+        </p>
+      )}
 
       <div className="space-y-3">
         {groups.map((g) => (

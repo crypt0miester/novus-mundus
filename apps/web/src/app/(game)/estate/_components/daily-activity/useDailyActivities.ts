@@ -16,6 +16,13 @@ import { DAILY_ACTIVITIES, type ActivityMeta } from "./meta";
 
 export type ActivityStatus = "available" | "done" | "later" | "missed" | "unbuilt";
 
+// Local-dev preview: ignore the time-of-day window so any built activity can be
+// opened and played regardless of the clock (e.g. the dusk-only Observatory
+// star-reading). The on-chain `daily_activity` gate still enforces the window,
+// so an out-of-window submit won't claim a reward — this only unblocks
+// seeing/playing the game.
+export const DEV_WINDOW_BYPASS = process.env.NODE_ENV === "development";
+
 export const WINDOW_ORDER: Record<TimeWindow, number> = {
   dawn: 0,
   midday: 1,
@@ -56,6 +63,10 @@ function activityStatus(
   const stale = isDailyStateStale(estate, now);
   const done = !stale && windows.some((w) => isActivityDoneThisWindow(estate, building, w));
   if (done) return "done";
+
+  // Built and not yet done: in local dev, surface it as playable regardless of
+  // window so every mini-game is reachable for testing (see DEV_WINDOW_BYPASS).
+  if (DEV_WINDOW_BYPASS) return "available";
 
   const cw = currentTimeWindow(estate, now);
   if (cw === "expired") return "missed";

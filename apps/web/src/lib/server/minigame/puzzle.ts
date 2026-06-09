@@ -18,12 +18,18 @@ export function generatePuzzle(
   estatePda: string,
   day: number,
   window: TimeWindow,
+  /** Optional extra seed entropy (dev preview only) so each Begin varies. */
+  nonce?: string,
 ): { archetype: ArchetypeName } & GeneratedPuzzle {
   const config = getBuildingMinigame(building);
   if (!config) {
     throw new Error(`no mini-game configured for building ${building}`);
   }
-  const rng = new Rng("estate.minigame", estatePda, `${building}:${day}:${window}`);
+  const rng = new Rng(
+    "estate.minigame",
+    estatePda,
+    `${building}:${day}:${window}${nonce ? `:${nonce}` : ""}`,
+  );
   const generated = ARCHETYPES[config.archetype].generate(rng, config.difficulty, config.content);
   return { archetype: config.archetype, ...generated };
 }
