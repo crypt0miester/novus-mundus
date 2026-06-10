@@ -185,6 +185,13 @@ export class MarkersLayer {
     this.walks.updateOtherWalks(walks);
   }
 
+  /** Per-paint walk tick (marker glide, fades, animated colours).
+   * Returns true while the walks layer still needs frames so the
+   * paint loop can keep itself scheduled. */
+  animateWalks(nowMs: number): boolean {
+    return this.walks.animate(nowMs);
+  }
+
   /* Proximity grid — power-of-two stride decimation so the visible
    * line density stays bounded at every zoom level. Rebuilt only when
    * stride changes. */

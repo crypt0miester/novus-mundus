@@ -541,6 +541,9 @@
   stroke-linecap: round;
   vector-effect: non-scaling-stroke;
   opacity: 0.4;
+  /* New arcs ease in instead of popping; `backwards` holds opacity 0
+   * for the first frame so late-mounting routes can't flash. */
+  animation: routeFadeIn 0.45s ease-out backwards;
 }
 .routeRally {
   stroke: var(--route-rally);
@@ -555,6 +558,18 @@
   opacity: 0.75;
   stroke-width: 2;
   filter: drop-shadow(0 0 3px var(--seal-glow));
+}
+/* Completed/cancelled marches are retained for one beat by the map with
+ * this class so the arc dissolves instead of vanishing between frames.
+ * Declared after .routeMine so the exit always wins the opacity. */
+.routeExit {
+  opacity: 0;
+  transition: opacity 0.45s ease-out;
+}
+@keyframes routeFadeIn {
+  from {
+    opacity: 0;
+  }
 }
 
 .cityDot {

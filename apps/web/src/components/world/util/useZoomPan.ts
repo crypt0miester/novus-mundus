@@ -125,27 +125,39 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
     [vbWidth, vbHeight, minScale, maxScale],
   );
 
-  const reset = useCallback(() => {
-    // Stop any fling so the rig doesn't keep streaming frames over the reset.
-    rigRef.current?.stop();
-    const rig = ensureRig();
-    if (rig && !prefersReducedMotion()) {
-      rig.set(IDENTITY_CAM(stateRef.current));
-      rig.flyTo({ panX: 0, panY: 0, zoom: 1 }, { duration: 420, ease: "outExpo" });
-      return;
-    }
-    setState(IDENTITY);
-  }, [ensureRig]);
+  // Ease the camera to `next` through the rig (stopping any in-flight fling
+  // first); falls back to a hard set when the rig is unavailable or the user
+  // prefers reduced motion. Shared by reset / focus / smooth zoomAt so the
+  // rig hand-off lives in one place.
+  const easeTo = useCallback(
+    (next: State, durationMs: number) => {
+      rigRef.current?.stop();
+      const rig = ensureRig();
+      if (rig && !prefersReducedMotion()) {
+        rig.set(IDENTITY_CAM(stateRef.current));
+        rig.flyTo(
+          { panX: next.tx, panY: next.ty, zoom: next.scale },
+          { duration: durationMs, ease: "outExpo" },
+        );
+        return;
+      }
+      setState(next);
+    },
+    [ensureRig],
+  );
+
+  const reset = useCallback(() => easeTo(IDENTITY, 420), [easeTo]);
 
   // Center a viewBox point in the viewport at a given scale. Used for the
   // initial "settle into the kingdom" framing on load. Clamped like any pan so
-  // the view never leaves the content.
+  // the view never leaves the content. Eased through the rig (same as reset /
+  // wheel zoom) so the framing reads as settling in, not a hard cut.
   const focus = useCallback(
     (cx: number, cy: number, scale: number) => {
       const s = Math.max(minScale, Math.min(maxScale, scale));
-      setState(clamp({ scale: s, tx: vbWidth / 2 - cx * s, ty: vbHeight / 2 - cy * s }));
+      easeTo(clamp({ scale: s, tx: vbWidth / 2 - cx * s, ty: vbHeight / 2 - cy * s }), 620);
     },
-    [clamp, minScale, maxScale, vbWidth, vbHeight],
+    [clamp, minScale, maxScale, vbWidth, vbHeight, easeTo],
   );
 
   // Zoom around a point in viewBox coords, keeping that point under the cursor.
@@ -162,17 +174,13 @@ export function useZoomPan({ vbWidth, vbHeight, minScale = 1, maxScale = 4 }: Op
         ty: vbY - (vbY - prev.ty) * f,
       });
       if (smooth) {
-        const rig = ensureRig();
-        if (rig && !prefersReducedMotion()) {
-          rig.set(IDENTITY_CAM(prev));
-          rig.flyTo({ panX: next.tx, panY: next.ty, zoom: next.scale }, { duration: 260, ease: "outExpo" });
-          return;
-        }
+        easeTo(next, 260);
+        return;
       }
       rigRef.current?.stop();
       setState(next);
     },
-    [clamp, minScale, maxScale, ensureRig],
+    [clamp, minScale, maxScale, easeTo],
   );
 
   useEffect(() => {

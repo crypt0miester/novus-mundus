@@ -172,6 +172,10 @@ export interface WalkLine {
   toGridLat: number;
   toGridLong: number;
   pct: number;
+  // Constant march rate (pct per second). The 3D renderer extrapolates
+  // the marker between 1 Hz chain pushes with it so the walk glides
+  // instead of stepping once a second.
+  pctRatePerSec?: number;
   /* Walker's equipped cosmetic name color. Tints the line stroke and
    * the moving marker fill so paid identity follows the walker across
    * the disc, not just their static dot. Animated colors drive the

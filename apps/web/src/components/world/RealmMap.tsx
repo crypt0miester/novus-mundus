@@ -177,6 +177,28 @@ const worldY = (lat: number) => PAD + (1 - (lat - WORLD_LAT0) / WORLD_LAT_SPAN) 
 // stays under the parchment-shadow veil until a city is opened near it.
 const DISCOVERY_RADIUS = 85;
 
+// Quadratic campaign-arc path shared by the travel line and the ambient route
+// arcs: a control point pushed perpendicular to the chord, bow proportional to
+// chord length and capped so long routes don't balloon. The control point is
+// clamped into the viewBox so arcs between edge-hugging cities can't bow past
+// the SVG bounds and render visibly cut off.
+const ARC_EDGE_MARGIN = 8;
+function campaignArc(from: { x: number; y: number }, to: { x: number; y: number }): string {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  const len = Math.hypot(dx, dy) || 1;
+  const bow = Math.min(70, len * 0.18);
+  const ctrlX = Math.max(
+    ARC_EDGE_MARGIN,
+    Math.min(VB_W - ARC_EDGE_MARGIN, (from.x + to.x) / 2 + (-dy / len) * bow),
+  );
+  const ctrlY = Math.max(
+    ARC_EDGE_MARGIN,
+    Math.min(VB_H - ARC_EDGE_MARGIN, (from.y + to.y) / 2 + (dx / len) * bow),
+  );
+  return `M ${from.x} ${from.y} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x} ${to.y}`;
+}
+
 // Simplified Natural Earth land, projected once into the viewBox as SVG path
 // strings. Rendered as ink coastline outlines, no fill colour (see render).
 const WORLD_LAND_PATHS: string[] = (worldLand.rings as [number, number][][]).map((ring) => {
@@ -650,19 +672,10 @@ export function RealmMap({
     const from = nodes.find((n) => n.city.cityId === travel.fromCityId);
     const to = nodes.find((n) => n.city.cityId === travel.toCityId);
     if (!from || !to || from === to) return null;
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    const len = Math.hypot(dx, dy) || 1;
-    // Bow proportional to chord length, capped so long routes don't balloon.
-    const bow = Math.min(70, len * 0.18);
-    const mx = (from.x + to.x) / 2;
-    const my = (from.y + to.y) / 2;
-    const ctrlX = mx + (-dy / len) * bow;
-    const ctrlY = my + (dx / len) * bow;
     return {
       from,
       to,
-      d: `M ${from.x} ${from.y} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x} ${to.y}`,
+      d: campaignArc(from, to),
       markerCarriesFlag: travel.fromCityId === homeCity,
     };
   }, [travel, nodes, homeCity]);
@@ -677,23 +690,46 @@ export function RealmMap({
         const from = nodes.find((n) => n.city.cityId === r.fromCityId);
         const to = nodes.find((n) => n.city.cityId === r.toCityId);
         if (!from || !to || from === to) return null;
-        const dx = to.x - from.x;
-        const dy = to.y - from.y;
-        const len = Math.hypot(dx, dy) || 1;
-        const bow = Math.min(70, len * 0.18);
-        const mx = (from.x + to.x) / 2;
-        const my = (from.y + to.y) / 2;
-        const ctrlX = mx + (-dy / len) * bow;
-        const ctrlY = my + (dx / len) * bow;
         return {
           id: r.id,
           kind: r.kind,
           mine: r.mine,
-          d: `M ${from.x} ${from.y} Q ${ctrlX.toFixed(1)} ${ctrlY.toFixed(1)} ${to.x} ${to.y}`,
+          d: campaignArc(from, to),
         };
       })
       .filter((g): g is NonNullable<typeof g> => g !== null);
   }, [routes, nodes]);
+
+  // Exit retention for the ambient route arcs. A march that lands or is
+  // cancelled would otherwise vanish between two frames; keep just-removed
+  // geos around for one beat with the exit class so they fade out. Fresh
+  // arcs fade in via the routeLine mount animation.
+  const ROUTE_EXIT_MS = 450;
+  const [exitingRoutes, setExitingRoutes] = useState<
+    ((typeof routeGeos)[number] & { exitAt: number })[]
+  >([]);
+  const prevRouteGeosRef = useRef<typeof routeGeos>([]);
+  useEffect(() => {
+    const live = new Set(routeGeos.map((g) => g.id));
+    const exited = prevRouteGeosRef.current.filter((g) => !live.has(g.id));
+    prevRouteGeosRef.current = routeGeos;
+    if (exited.length === 0) return;
+    const now = performance.now();
+    setExitingRoutes((prev) => [
+      // Drop anything that re-appeared in the live set or already finished
+      // its exit window before appending the new cohort.
+      ...prev.filter((p) => !live.has(p.id) && now - p.exitAt < ROUTE_EXIT_MS),
+      ...exited.map((g) => ({ ...g, exitAt: now })),
+    ]);
+  }, [routeGeos]);
+  useEffect(() => {
+    if (exitingRoutes.length === 0) return;
+    const t = window.setTimeout(() => {
+      const now = performance.now();
+      setExitingRoutes((prev) => prev.filter((p) => now - p.exitAt < ROUTE_EXIT_MS));
+    }, ROUTE_EXIT_MS + 30);
+    return () => window.clearTimeout(t);
+  }, [exitingRoutes]);
 
   const selected = nodes.find((n) => n.city.cityId === selectedId) ?? null;
 
@@ -1191,9 +1227,9 @@ export function RealmMap({
                   arc and the city groups, color-keyed by kind, brighter when
                   the force is mine. Markerless — these read as ambient activity,
                   not the focused journey. */}
-              {routeGeos.length > 0 && (
+              {(routeGeos.length > 0 || exitingRoutes.length > 0) && (
                 <g className={styles.routesLayer} aria-hidden>
-                  {routeGeos.map((g) => (
+                  {[...routeGeos, ...exitingRoutes].map((g) => (
                     <path
                       key={g.id}
                       d={g.d}
@@ -1206,6 +1242,8 @@ export function RealmMap({
                             ? styles.routeReinforcement
                             : styles.routeTravel,
                         g.mine ? styles.routeMine : "",
+                        // Retained post-removal arcs dissolve via the exit class.
+                        "exitAt" in g ? styles.routeExit : "",
                       ]
                         .filter(Boolean)
                         .join(" ")}

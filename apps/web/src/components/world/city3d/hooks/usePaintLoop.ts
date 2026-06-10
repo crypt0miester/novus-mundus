@@ -76,6 +76,11 @@ export function usePaintLoop(
     r.markers.updateOccupants(p.occupied, p.selectedEntity ?? null, p.myPlayerPubkey, cssPx);
     r.markers.updateLanding(p.selected, cssPx);
 
+    // Walk-line tick: marker glide between chain pushes, fade in/out,
+    // animated cosmetic colours. Returns true while a walk is still
+    // animating so the loop keeps painting through the march.
+    const walksAnimating = r.markers.animateWalks(now);
+
     /* Inspection-band labels — refresh every paint so projected
      * positions track camera motion. The layer short-circuits when
      * the zoom is outside the inspection band. */
@@ -109,8 +114,9 @@ export function usePaintLoop(
     updateCompass(r);
 
     /* If the controller is still smoothing toward a desired state
-     * (gesture in flight or just released), schedule the next paint. */
-    if (moved) {
+     * (gesture in flight or just released) or a walk is mid-march,
+     * schedule the next paint. */
+    if (moved || walksAnimating) {
       r.paintQueued = true;
       requestAnimationFrame((t) => paint(t));
     }

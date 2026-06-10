@@ -2099,6 +2099,10 @@ export function MapTab() {
               toGridLat: toGrid(player.travelingToLat),
               toGridLong: toGrid(player.travelingToLong),
               pct: travel.pct,
+              // March rate lets the 3D disc glide the marker between the
+              // 1 Hz pct ticks instead of stepping once a second.
+              pctRatePerSec:
+                travel.endsAt > travel.startedAt ? 100 / (travel.endsAt - travel.startedAt) : 0,
               nameColorHex: colorEntry?.hex,
               nameColorAnim: colorEntry?.animation,
               frameBorderColor: frameEntry?.ring.borderColor,
@@ -2140,6 +2144,7 @@ export function MapTab() {
           toGridLat: toGrid(a.travelingToLat),
           toGridLong: toGrid(a.travelingToLong),
           pct,
+          pctRatePerSec: total > 0 ? 100 / total : 0,
           nameColorHex: colorEntry?.hex,
           nameColorAnim: colorEntry?.animation,
           frameBorderColor: frameEntry?.ring.borderColor,
